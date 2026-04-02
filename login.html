@@ -27,69 +27,103 @@
     border-radius: 16px;
     padding: 32px 24px;
     width: 100%;
-    max-width: 420px;
+    max-width: 400px;
   }
-  .logo { font-size: 13px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #e94560; margin-bottom: 24px; }
-  h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 8px; }
-  .subtitle { font-size: 14px; color: #666; margin-bottom: 28px; line-height: 1.5; }
+  .logo { font-size: 13px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #e94560; margin-bottom: 28px; }
+  h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .sub { font-size: 14px; color: #666; margin-bottom: 28px; line-height: 1.5; }
+
+  .field { margin-bottom: 16px; }
+  label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 6px; }
+  input[type="email"], input[type="password"] {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #f0f0f0;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 16px; /* 16px prevents iOS zoom */
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+  }
+  input:focus { border-color: #e94560; }
+
   .btn {
-    display: block; width: 100%; background: #e94560; color: #fff; border: none;
-    padding: 16px 20px; border-radius: 10px; font-size: 15px; font-weight: 700;
-    cursor: pointer; text-align: center; text-decoration: none;
-    transition: opacity 0.15s; margin-bottom: 10px;
+    display: block;
+    width: 100%;
+    background: #e94560;
+    color: #fff;
+    border: none;
+    padding: 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 8px;
+    transition: opacity 0.15s;
     -webkit-tap-highlight-color: transparent;
   }
   .btn:active { opacity: 0.8; }
-  .btn-ghost { background: transparent; border: 1px solid #333; color: #aaa; }
-  .btn-green { background: #1a5a1a; border: 1px solid #2a7a2a; color: #5dba5d; }
-  .warn { background: #1a1200; border: 1px solid #3a2f00; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #b8860b; line-height: 1.5; margin-bottom: 20px; }
-  .big-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .error {
+    background: #2a0f0f;
+    border: 1px solid #4a1a1a;
+    color: #e94560;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin-top: 16px;
+    display: none;
+    line-height: 1.4;
+  }
+
+  .success-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
   .back { display: block; text-align: center; margin-top: 20px; font-size: 13px; color: #555; text-decoration: none; }
-  .step-list { margin-bottom: 28px; display: flex; flex-direction: column; gap: 14px; }
-  .step { display: flex; gap: 12px; align-items: flex-start; }
-  .step-n { width: 24px; height: 24px; border-radius: 50%; background: #e94560; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-  .step-text { font-size: 13px; color: #aaa; line-height: 1.5; }
-  .step-text strong { color: #f0f0f0; }
+  .back:hover { color: #888; }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">🚴 Psycle Finder</div>
 
-  <div id="s1">
-    <h1>Connect your account</h1>
-    <p class="subtitle">Two taps to link your Psycle account.</p>
-    <div class="step-list">
-      <div class="step"><div class="step-n">1</div><div class="step-text">Tap below to log in to Psycle — then come <strong>back to this page</strong>.</div></div>
-      <div class="step"><div class="step-n">2</div><div class="step-text">Tap <strong>"Extract token"</strong> to connect automatically.</div></div>
+  <!-- Login form -->
+  <div id="sLogin">
+    <h1>Sign in to Psycle</h1>
+    <p class="sub">Use your Psycle account email and password.</p>
+    <div class="field">
+      <label>Email</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com" inputmode="email">
     </div>
-    <a href="https://psyclelondon.com/account/login" class="btn" onclick="wentToLogin()">Log in to Psycle →</a>
-    <a href="#" class="btn btn-ghost" onclick="event.preventDefault();show('s2')">Already logged in →</a>
+    <div class="field">
+      <label>Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button id="loginBtn" class="btn" onclick="doLogin()">Sign in</button>
+    <div id="errMsg" class="error"></div>
     <a href="./psycle-finder.html" class="back">← Back to Psycle Finder</a>
   </div>
 
-  <div id="s2" style="display:none">
-    <h1>Extract your token</h1>
-    <p class="subtitle">Tap the button below while still logged in to Psycle.</p>
-    <div class="warn">⚠️ You must be logged in to psyclelondon.com for this to work.</div>
-    <a id="extractBtn" href="#" class="btn">🔑 Extract token &amp; connect</a>
-    <a href="#" class="btn btn-ghost" onclick="event.preventDefault();show('s1')">← Back</a>
-    <a href="./psycle-finder.html" class="back">← Back to Psycle Finder</a>
-  </div>
-
-  <div id="s3" style="display:none">
-    <div class="big-icon">✅</div>
+  <!-- Success -->
+  <div id="sDone" style="display:none">
+    <div class="success-icon">✅</div>
     <h1>Connected!</h1>
-    <p class="subtitle">Your account is linked. Taking you back…</p>
-    <a href="./psycle-finder.html" class="btn btn-green">Open Psycle Finder →</a>
-  </div>
-
-  <div id="s4" style="display:none">
-    <div class="big-icon">❌</div>
-    <h1>Not logged in</h1>
-    <p class="subtitle">No Psycle session found. Please log in first, then try again.</p>
-    <a href="https://psyclelondon.com/account/login" class="btn" onclick="wentToLogin()">Log in to Psycle →</a>
-    <a href="#" class="btn btn-ghost" onclick="event.preventDefault();show('s2')">Try again</a>
+    <p class="sub">Signed in successfully. Taking you back…</p>
+    <a href="./psycle-finder.html" class="btn" style="text-decoration:none;margin-top:0">Open Psycle Finder →</a>
   </div>
 </div>
 
@@ -100,56 +134,80 @@ var APP_URL = (function() {
   return base + 'psycle-finder.html';
 })();
 
-function show(id) {
-  ['s1','s2','s3','s4'].forEach(function(s) {
-    document.getElementById(s).style.display = (s === id) ? '' : 'none';
-  });
-}
+var LOGIN_URL = 'https://psycle.codexfit.com/api/v1/customer/auth/login';
 
-function wentToLogin() {
-  sessionStorage.setItem('psycle_went_login', '1');
-}
-
-function buildExtractLink() {
-  var returnUrl = APP_URL;
-  var code = '(function(){'
-    + 'var m=document.cookie.match(/codex_bearer_token=([^;]+)/);'
-    + 'if(!m){alert("Not logged in to Psycle — please log in first.");return;}'
-    + 'var t=decodeURIComponent(m[1]);'
-    + 'window.location="' + returnUrl + '?psycle_token="+encodeURIComponent(t);'
-    + '})();';
-  document.getElementById('extractBtn').href = 'javascript:' + code;
-}
-
-function checkToken() {
-  var match = location.search.match(/[?&]psycle_token=([^&]+)/);
-  if (match) {
-    localStorage.setItem('psycle_bearer_token', decodeURIComponent(match[1]));
-    history.replaceState({}, '', location.pathname);
-    show('s3');
-    setTimeout(function() { location.href = APP_URL; }, 1500);
-    return true;
-  }
-  return false;
-}
-
-document.addEventListener('visibilitychange', function() {
-  if (!document.hidden && sessionStorage.getItem('psycle_went_login')) {
-    sessionStorage.removeItem('psycle_went_login');
-    show('s2');
-  }
+// Allow Enter key to submit
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
 });
 
-window.addEventListener('pageshow', function() {
-  if (sessionStorage.getItem('psycle_went_login')) {
-    sessionStorage.removeItem('psycle_went_login');
-    show('s2');
-  }
-});
+function showError(msg) {
+  var el = document.getElementById('errMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
 
-buildExtractLink();
-if (!checkToken()) {
-  show('s1');
+function hideError() {
+  document.getElementById('errMsg').style.display = 'none';
+}
+
+async function doLogin() {
+  var email = document.getElementById('email').value.trim();
+  var password = document.getElementById('password').value;
+  var btn = document.getElementById('loginBtn');
+
+  if (!email || !password) {
+    showError('Please enter your email and password.');
+    return;
+  }
+
+  hideError();
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Signing in…';
+
+  try {
+    var res = await fetch(LOGIN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ email: email, password: password })
+    });
+
+    var data = await res.json().catch(function() { return {}; });
+
+    if (res.ok) {
+      // Try common token field names
+      var token = data.token || data.access_token || data.bearer_token
+        || (data.data && (data.data.token || data.data.access_token || data.data.bearer_token));
+
+      if (token) {
+        localStorage.setItem('psycle_bearer_token', token);
+        document.getElementById('sLogin').style.display = 'none';
+        document.getElementById('sDone').style.display = '';
+        setTimeout(function() { location.href = APP_URL; }, 1500);
+      } else {
+        // Login succeeded but token field name unknown — log and show raw
+        console.log('[psycle-login] response:', JSON.stringify(data));
+        showError('Logged in but could not find token. Check console and report the field name.');
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    } else {
+      var msg = data.message || data.error || data.errors
+        || (typeof data === 'string' ? data : null)
+        || 'Login failed (' + res.status + ')';
+      if (typeof msg === 'object') msg = JSON.stringify(msg);
+      showError(msg);
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  } catch (e) {
+    showError('Network error — check your connection and try again.');
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
 }
 </script>
 </body>
