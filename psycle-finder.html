@@ -1272,7 +1272,7 @@ async function search() {
         if (!relations) relations = rel;
         else if (rel) mergeRelations(relations, rel);
         done++;
-        render(allEvents, relations, filters, done === total);
+        if (relations) render(allEvents, relations, filters, done === total);
       });
 
       await Promise.all(promises);
@@ -1662,6 +1662,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
 }
 
 function render(events, relations, filters, done) {
+  if (!relations) return; // nothing to map without relation data
   const instrMap = Object.fromEntries((relations.instructors || []).map(i => [i.id, i]));
   const studioMap = Object.fromEntries((relations.studios || []).map(s => [s.id, s]));
   Object.assign(_studioMap, studioMap); // expose globally for bookClass
