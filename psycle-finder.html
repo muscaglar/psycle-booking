@@ -621,36 +621,46 @@
   }
   .date-quick-btn:hover { background: #1a1a1a; color: #fff; border-color: #555; }
   .date-quick-btn.active { background: #e94560; border-color: #e94560; color: #fff; }
-    font-size: 11px;
+
+  .cat-pill {
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 5px 12px;
+    padding: 6px 14px;
     border-radius: 20px;
     border: 1.5px solid;
     cursor: pointer;
     background: transparent;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
     white-space: nowrap;
+    line-height: 1.3;
   }
-  .cat-pill:hover { opacity: 0.85; }
-  .cat-pill.active { color: #fff !important; }
+  .cat-pill:hover { filter: brightness(1.2); box-shadow: 0 0 0 3px rgba(255,255,255,0.06); }
+  .cat-pill.active { color: #fff !important; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
   .sub-pill {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 3px 9px;
+    padding: 5px 12px;
     border-radius: 12px;
-    border: 1px solid;
+    border: 1.5px solid;
     cursor: pointer;
     background: transparent;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
     white-space: nowrap;
+    opacity: 0.6;
   }
-  .sub-pill:hover { opacity: 0.8; }
-  .sub-pill.active { color: #fff !important; }
+  .sub-pill:hover { opacity: 1; }
+  .sub-pill.active { color: #fff !important; opacity: 1; box-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+
+  #strengthSubPills {
+    padding-top: 6px;
+    border-top: 1px solid #1e1e1e;
+    margin-top: 6px !important;
+  }
 
   .type-section-header {
     font-size: 10px;
@@ -852,7 +862,7 @@
   <div class="control-group" style="position:relative">
     <label>Class Type</label>
     <div id="categoryPills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:36px;padding-top:2px"></div>
-    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"></div>
+    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center"></div>
   </div>
 
   <div class="control-group">
@@ -963,7 +973,7 @@ const selectedStrengthSubs = new Set(['UPPER', 'LOWER', 'FULL']);
 function renderStrengthSubPills() {
   const container = document.getElementById('strengthSubPills');
   if (!container) return;
-  const strengthActive = selectedCategories.has('STRENGTH') || selectedCategories.size === 0;
+  const strengthActive = selectedCategories.has('STRENGTH');
   container.style.display = strengthActive ? 'flex' : 'none';
   if (!strengthActive) return;
   container.innerHTML = STRENGTH_SUBS.map(s => {
