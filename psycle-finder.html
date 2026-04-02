@@ -853,17 +853,15 @@
   </div>
 
   <div class="control-group" id="daysAheadGroup">
+    <label>Days ahead</label>
+    <div class="days-control">
+      <input type="number" id="daysAhead" value="7" min="1" max="60" onchange="onDateInputChange()">
     </div>
   </div>
 
-  <div class="control-group" style="justify-content: flex-end;">
-    <label>&nbsp;</label>
-    <button class="btn" id="searchBtn" onclick="search()">Search</button>
-  </div>
-
-  <div class="control-group" style="justify-content: flex-end;">
-    <label>&nbsp;</label>
-    <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+  <div class="control-group" style="justify-content:flex-end;gap:8px;flex-direction:row;align-items:flex-end">
+    <button class="btn btn-ghost" onclick="clearFilters()" style="padding:9px 16px;width:auto;display:inline-block">Clear</button>
+    <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
   </div>
 </div>
 
@@ -1083,17 +1081,10 @@ checkAuth();
 
   renderInstrDropdown();
 
-  // Pre-select favourites if any saved, otherwise fall back to Aanya + Johan
+  // Pre-select favourites if any saved, otherwise start with no selection
   if (favouriteInstructors.size > 0) {
     favouriteInstructors.forEach(id => {
       if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
-    });
-  } else {
-    const defaults = ['aanya', 'johan'];
-    instructors.forEach(i => {
-      if (defaults.some(d => i.full_name.toLowerCase().includes(d))) {
-        selectedInstructors.add(String(i.id));
-      }
     });
   }
   renderInstrChips();
@@ -1154,14 +1145,10 @@ function onDateInputChange() {
 
 function clearFilters() {
   selectedInstructors.clear();
+  // Re-apply favourites if any saved
   if (favouriteInstructors.size > 0) {
     favouriteInstructors.forEach(id => {
       if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
-    });
-  } else {
-    const defaults = ['aanya', 'johan'];
-    instructors.forEach(i => {
-      if (defaults.some(d => i.full_name.toLowerCase().includes(d))) selectedInstructors.add(String(i.id));
     });
   }
   document.getElementById('instrSearch').value = '';
@@ -1222,9 +1209,14 @@ async function search() {
   if (_dateQuickMode === 'today' || _dateQuickMode === 'tomorrow') {
     endDateStr = startDate;
   } else {
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + days);
-    endDateStr = endDate.toISOString().split('T')[0];
+    // Parse YYYY-MM-DD manually to avoid UTC/local timezone shift
+    const [y, m, d] = startDate.split('-').map(Number);
+    const endDate = new Date(y, m - 1, d + days);
+    endDateStr = [
+      endDate.getFullYear(),
+      String(endDate.getMonth() + 1).padStart(2, '0'),
+      String(endDate.getDate()).padStart(2, '0')
+    ].join('-');
   }
 
   const btn = document.getElementById('searchBtn');
