@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Psycle Class Finder</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Psycle">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0a0a;
+    color: #f0f0f0;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #111;
+    border-bottom: 1px solid #222;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+  }
+
+  header span {
+    font-size: 12px;
+    color: #666;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .controls {
+    background: #111;
+    border-bottom: 1px solid #222;
+    padding: 16px 24px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+  }
+
+  select, input[type="date"] {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #f0f0f0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    min-width: 180px;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  select:focus, input:focus {
+    outline: none;
+    border-color: #e94560;
+  }
+
+  .btn {
+    background: #e94560;
+    color: #fff;
+    border: none;
+    padding: 9px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: background 0.2s;
+  }
+
+  .btn:hover { background: #c73650; }
+  .btn:disabled { background: #444; cursor: not-allowed; }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid #333;
+    color: #aaa;
+  }
+
+  .btn-ghost:hover { background: #1a1a1a; color: #fff; }
+
+  .results {
+    padding: 24px;
+  }
+
+  .status {
+    text-align: center;
+    padding: 48px;
+    color: #555;
+    font-size: 14px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #333;
+    border-top-color: #e94560;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .summary {
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    min-height: 28px;
+  }
+
+  .summary strong { color: #f0f0f0; }
+
+  .day-group {
+    margin-bottom: 28px;
+  }
+
+  .day-header {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #e94560;
+    padding: 8px 0;
+    border-bottom: 1px solid #222;
+    margin-bottom: 12px;
+  }
+
+  .class-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 10px;
+  }
+
+  .class-card {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    transition: border-color 0.15s;
+  }
+
+  .class-card.is-booked {
+    border-left: 3px solid #5dba5d;
+    background: #0d1a0d;
+  }
+
+  .class-card.is-booked:hover { border-color: #5dba5d; border-left-color: #5dba5d; }
+
+  .class-card:hover { border-color: #e94560; }
+
+  .class-time {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    min-width: 54px;
+    line-height: 1;
+  }
+
+  .class-time-ampm {
+    font-size: 11px;
+    font-weight: 400;
+    color: #666;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .class-info { flex: 1; }
+
+  .class-type {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f0f0;
+    margin-bottom: 3px;
+  }
+
+  .class-instructor {
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 4px;
+  }
+
+  .class-location {
+    font-size: 12px;
+    color: #666;
+  }
+
+  .class-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: #1d1d1d;
+    color: #888;
+    border: 1px solid #2a2a2a;
+  }
+
+  .badge.full { background: #2a0f0f; color: #e94560; border-color: #4a1a1a; }
+  .badge.waitlist { background: #1a1a0a; color: #b8860b; border-color: #3a3a10; }
+  .badge.highlight { background: #0f1e2a; color: #4a9eff; border-color: #1a3a5a; }
+
+  .no-results {
+    text-align: center;
+    padding: 48px;
+    color: #555;
+  }
+
+  /* Bike picker modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 200;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+
+  .modal {
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 20px;
+  }
+
+  .modal-title { font-size: 16px; font-weight: 700; color: #fff; }
+  .modal-subtitle { font-size: 12px; color: #666; margin-top: 3px; }
+
+  .modal-close {
+    background: none; border: none; color: #666;
+    font-size: 22px; cursor: pointer; line-height: 1; padding: 0;
+  }
+  .modal-close:hover { color: #fff; }
+
+  .bike-map-wrap {
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    overflow: auto;
+  }
+
+  .bike-map-wrap svg { display: block; margin: auto; }
+
+  .bike-slot {
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .bike-slot.available rect { fill: #1a1a1a; stroke: #444; }
+  .bike-slot.available:hover rect { fill: #2a2a2a; stroke: #888; }
+  .bike-slot.taken rect { fill: #2a0a0a; stroke: #4a1a1a; cursor: not-allowed; }
+  .bike-slot.selected rect { fill: #e94560; stroke: #ff6b88; }
+  .bike-slot.mine rect { fill: #0a2a1a; stroke: #2a7a4a; cursor: pointer; }
+  .bike-slot.mine:hover rect { fill: #3a0a0a; stroke: #8a2020; }
+  .bike-slot.mine:hover text { fill: #e94560; }
+
+  .bike-slot text { fill: #888; font-size: 10px; pointer-events: none; }
+  .bike-slot.taken text { fill: #4a1a1a; }
+  .bike-slot.selected text { fill: #fff; }
+  .bike-slot.available:hover text { fill: #fff; }
+  .bike-slot.mine text { fill: #5dba5d; }
+
+  .bike-legend {
+    display: flex; gap: 16px; font-size: 11px; color: #666;
+    margin-bottom: 16px; flex-wrap: wrap;
+  }
+
+  .bike-legend span { display: flex; align-items: center; gap: 5px; }
+  .bike-legend i {
+    display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+  }
+
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  .modal-hint {
+    font-size: 12px; color: #555; text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .days-control {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .days-control input[type="number"] {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #f0f0f0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 70px;
+    text-align: center;
+  }
+
+  .instr-box {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-width: 220px;
+    min-height: 36px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    cursor: text;
+  }
+
+  .instr-box:focus-within { border-color: #e94560; }
+
+  .instr-search {
+    background: transparent;
+    border: none;
+    color: #f0f0f0;
+    font-size: 14px;
+    outline: none;
+    min-width: 80px;
+    flex: 1;
+    padding: 3px 2px;
+  }
+
+  .instr-chip {
+    background: #e94560;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px 2px 8px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .instr-chip button {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .instr-chip button:hover { color: #fff; }
+
+  .instr-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    margin-top: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  }
+
+  .instr-option {
+    padding: 9px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ccc;
+  }
+
+  .instr-option:hover, .instr-option.focused { background: #252525; color: #fff; }
+  .instr-option.selected { color: #e94560; }
+
+  .instr-option .check {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #444;
+    border-radius: 3px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+
+  .instr-option.selected .check {
+    background: #e94560;
+    border-color: #e94560;
+    color: #fff;
+  }
+
+  .auth-pill {
+    margin-left: auto;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .auth-pill .user-name { color: #aaa; }
+  .auth-pill .user-name strong { color: #f0f0f0; }
+
+  .auth-pill a {
+    color: #e94560;
+    text-decoration: none;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+
+  .auth-pill a:hover { text-decoration: underline; }
+
+  .token-dialog {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 300;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+
+  .token-dialog .modal {
+    max-width: 520px;
+  }
+
+  .token-steps {
+    margin: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .token-step {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: #aaa;
+    line-height: 1.5;
+  }
+
+  .token-step-num {
+    background: #e94560;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .token-cmd {
+    display: block;
+    background: #0d0d0d;
+    border: 1px solid #2a2a2a;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #4a9eff;
+    margin-top: 6px;
+    cursor: pointer;
+    user-select: all;
+    word-break: break-all;
+  }
+
+  .token-cmd:hover { border-color: #444; }
+
+  .token-input {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #f0f0f0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: monospace;
+    margin-top: 8px;
+  }
+
+  .token-input:focus { outline: none; border-color: #e94560; }
+
+  .book-btn {
+    margin-top: 10px;
+    width: 100%;
+    background: #e94560;
+    color: #fff;
+    border: none;
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+
+  .book-btn:hover:not(:disabled) { background: #c73650; }
+  .book-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .book-btn.booked { background: #1a4a1a; color: #5dba5d; border: 1px solid #2a6a2a; }
+  .book-btn.waitlist { background: #2a2a00; color: #c8a800; }
+  .book-btn.login-needed { background: transparent; border: 1px solid #444; color: #888; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 13px;
+    max-width: 320px;
+    z-index: 999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .cat-pill {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1.5px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .cat-pill:hover { opacity: 0.85; }
+  .cat-pill.active { color: #fff !important; }
+
+  .type-section-header {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 10px 0 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .type-section-header .type-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Upcoming bookings panel */
+  .upcoming-panel {
+    margin: 20px 24px 0;
+    background: #0d1a0d;
+    border: 1px solid #2a5a2a;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .upcoming-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .upcoming-header h2 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #5dba5d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .upcoming-count {
+    background: #5dba5d;
+    color: #0a1a0a;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+  .upcoming-chevron { color: #5dba5d; font-size: 12px; transition: transform 0.2s; }
+  .upcoming-chevron.collapsed { transform: rotate(-90deg); }
+  .upcoming-body { padding: 0 12px 12px; }
+  .upcoming-list { display: flex; flex-direction: column; gap: 8px; }
+  .upcoming-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #111;
+    border: 1px solid #2a4a2a;
+    border-left: 3px solid #5dba5d;
+    border-radius: 7px;
+  }
+  .up-day {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #5dba5d;
+    min-width: 30px;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .up-time { font-size: 15px; font-weight: 700; color: #fff; min-width: 52px; }
+  .up-info { flex: 1; min-width: 0; }
+  .up-name { font-weight: 600; color: #f0f0f0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .up-sub { font-size: 11px; color: #777; margin-top: 1px; }
+  .up-cancel {
+    background: transparent;
+    border: 1px solid #3a5a3a;
+    color: #5dba5d;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .up-cancel:hover { background: #1a3a1a; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Psycle</h1>
+  <span>Class Finder</span>
+  <div class="auth-pill" id="authPill">
+    <span style="color:#444">Checking login…</span>
+  </div>
+</header>
+
+<div id="toast" class="toast"></div>
+<div id="tokenDialog" class="token-dialog" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Connect your Psycle account</div>
+        <div class="modal-subtitle">One-time setup — saves automatically</div>
+      </div>
+      <button class="modal-close" onclick="closeTokenDialog()">×</button>
+    </div>
+
+    <div class="token-steps">
+      <div class="token-step">
+        <span class="token-step-num">1</span>
+        <div>
+          Drag this button to your <strong style="color:#f0f0f0">bookmarks bar</strong>:
+          <div style="margin-top:10px">
+            <a id="bookmarkletLink" href="" class="btn" style="display:inline-block;text-decoration:none;font-size:12px;cursor:grab">
+              🔑 Connect to Psycle Finder
+            </a>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:#555">(If the bar isn't visible: View → Show Bookmarks Bar)</div>
+        </div>
+      </div>
+      <div class="token-step">
+        <span class="token-step-num">2</span>
+        <span>Go to <a href="https://psyclelondon.com/pages/oxford-circus-timetable" target="_blank" style="color:#e94560">psyclelondon.com</a> and log in</span>
+      </div>
+      <div class="token-step">
+        <span class="token-step-num">3</span>
+        <span>Click <strong style="color:#f0f0f0">🔑 Connect to Psycle Finder</strong> in your bookmarks bar — you'll be sent straight back here, connected.</span>
+      </div>
+    </div>
+
+    <div style="margin:16px 0;border-top:1px solid #1e1e1e;padding-top:16px">
+      <div style="font-size:11px;color:#555;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Or paste token manually</div>
+      <input id="tokenInput" class="token-input" placeholder="Paste token from psyclelondon.com console…" oninput="validateToken()">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTokenDialog()">Cancel</button>
+      <button class="btn" id="saveTokenBtn" disabled onclick="saveToken()">Connect</button>
+    </div>
+  </div>
+</div>
+
+<div id="bikeModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBikePicker()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">Select your bike</div>
+        <div class="modal-subtitle" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeBikePicker()">×</button>
+    </div>
+    <div class="bike-legend">
+      <span><i style="background:#1a1a1a;border:1px solid #444"></i> Available</span>
+      <span><i style="background:#2a0a0a;border:1px solid #4a1a1a"></i> Taken</span>
+      <span><i style="background:#e94560"></i> Your pick</span>
+    </div>
+    <div class="bike-map-wrap">
+      <svg id="bikeSvg" width="600" height="300"></svg>
+    </div>
+    <div class="modal-hint" id="modalHint">Click a bike to select it</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeBikePicker()">Cancel</button>
+      <button class="btn" id="confirmBookBtn" disabled onclick="confirmBikeBooking()">Confirm booking</button>
+    </div>
+  </div>
+</div>
+
+<div id="corsBanner" style="display:none; background:#1a1200; border-bottom:1px solid #3a2f00; padding:10px 24px; font-size:12px; color:#b8860b;">
+  ⚠ Running via <strong>file://</strong> — using CORS proxy (corsproxy.io) for API calls.
+  For direct access: <code style="background:#111;padding:2px 6px;border-radius:4px;">cd /path/to/file && python3 -m http.server 8080</code> then open <code style="background:#111;padding:2px 6px;border-radius:4px;">http://localhost:8080/psycle-finder.html</code>
+</div>
+
+<div class="controls">
+  <div class="control-group" style="position:relative">
+    <label>Instructor</label>
+    <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
+      <div id="instrChips"></div>
+      <input id="instrSearch" class="instr-search" placeholder="Search…" autocomplete="off"
+        oninput="filterInstrDropdown()" onfocus="showInstrDropdown()" onblur="hideInstrDropdown()" onkeydown="instrKeydown(event)">
+    </div>
+    <div id="instrDropdown" class="instr-dropdown" style="display:none"></div>
+  </div>
+
+  <div class="control-group">
+    <label>Location <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
+    <select id="locationSelect" onchange="updateLocationHint()">
+      <option value="">All Studios (slower)</option>
+    </select>
+  </div>
+
+  <div class="control-group" style="position:relative">
+    <label>Class Type</label>
+    <div id="categoryPills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:36px;padding-top:2px"></div>
+  </div>
+
+  <div class="control-group">
+    <label>From</label>
+    <input type="date" id="startDate">
+  </div>
+
+  <div class="control-group">
+    <label>Days ahead</label>
+    <div class="days-control">
+      <input type="number" id="daysAhead" value="14" min="1" max="60">
+    </div>
+  </div>
+
+  <div class="control-group" style="justify-content: flex-end;">
+    <label>&nbsp;</label>
+    <button class="btn" id="searchBtn" onclick="search()">Search</button>
+  </div>
+
+  <div class="control-group" style="justify-content: flex-end;">
+    <label>&nbsp;</label>
+    <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<div id="upcomingPanel" class="upcoming-panel" style="display:none">
+  <div class="upcoming-header" onclick="toggleUpcoming()">
+    <h2>🗓 Your upcoming classes <span class="upcoming-count" id="upcomingCount">0</span></h2>
+    <span class="upcoming-chevron" id="upcomingChevron">▼</span>
+  </div>
+  <div class="upcoming-body" id="upcomingBody">
+    <div class="upcoming-list" id="upcomingList"></div>
+  </div>
+</div>
+
+<div class="results" id="results">
+  <div class="status">Select an instructor or filter, then click Search.</div>
+</div>
+
+<script>
+const DIRECT_API = 'https://psycle.codexfit.com/api/v1/customer';
+const PROXY = 'https://corsproxy.io/?';
+const IS_FILE = location.protocol === 'file:';
+
+function apiUrl(path) {
+  return IS_FILE
+    ? PROXY + encodeURIComponent(DIRECT_API + path)
+    : DIRECT_API + path;
+}
+
+function getBearerToken() {
+  return localStorage.getItem('psycle_bearer_token') || '';
+}
+
+function apiFetch(path, opts = {}) {
+  const token = getBearerToken();
+  const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return fetch(apiUrl(path), { credentials: 'include', ...opts, headers });
+}
+
+let instructors = [], locations = [], eventTypes = [];
+let currentUser = null;
+const _studioMap = {}; // populated during render, used by bookClass
+let _myBookings = {}; // eventId(str) → { bookingId, slots: [Number] }
+
+// ── Category mapping for smart filters ──────────────────────────
+const CATEGORY_MAP = [
+  { key: 'RIDE',     label: 'Ride',     color: '#e94560', prefixes: ['RIDE'] },
+  { key: 'STRENGTH', label: 'Strength', color: '#4a9eff', prefixes: ['STRENGTH', 'LIFT', 'WEIGHTS', 'TREAD'] },
+  { key: 'YOGA',     label: 'Yoga',     color: '#9b59b6', prefixes: ['YOGA', 'FLOW', 'RESTORE', 'MEDITATION'] },
+  { key: 'HIIT',     label: 'HIIT',     color: '#e67e22', prefixes: ['HIIT', 'CIRCUIT', 'INTERVAL'] },
+  { key: 'PILATES',  label: 'Pilates',  color: '#27ae60', prefixes: ['PILATES', 'REFORMER'] },
+  { key: 'BARRE',    label: 'Barre',    color: '#e91e8c', prefixes: ['BARRE'] },
+  { key: 'OTHER',    label: 'Other',    color: '#888',    prefixes: [] },
+];
+
+function getCategory(typeName) {
+  const n = (typeName || '').toUpperCase();
+  for (const cat of CATEGORY_MAP) {
+    if (cat.key === 'OTHER') continue;
+    if (cat.prefixes.some(p => n.startsWith(p) || n.includes(p))) return cat;
+  }
+  return CATEGORY_MAP.find(c => c.key === 'OTHER');
+}
+
+// Active category filters (Set of category keys)
+const selectedCategories = new Set();
+
+async function fetchMyBookings() {
+  if (!getBearerToken()) { _myBookings = {}; return; }
+  try {
+    const res = await apiFetch('/bookings');
+    if (!res.ok) return;
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data.data || []);
+    console.log('[psycle] raw bookings:', list.slice(0, 3)); // log first 3 for structure
+    _myBookings = {};
+    list.forEach(b => {
+      _myBookings[String(b.event_id)] = {
+        bookingId: b.id,
+        slots: (b.slots || b.slot_ids || (b.slot_id != null ? [b.slot_id] : [])).map(Number).filter(Boolean),
+      };
+    });
+    console.log('[psycle] _myBookings:', _myBookings);
+    refreshUpcomingPanel();
+    // Refresh any already-rendered booking buttons
+    Object.entries(_myBookings).forEach(([evtId, booking]) => {
+      const card = document.querySelector(`.class-card[data-id="${evtId}"]`);
+      if (!card) return;
+      const btn = card.querySelector('.book-btn');
+      if (!btn || btn.classList.contains('booked')) return;
+      applyBookedState(btn, Number(evtId), booking);
+    });
+  } catch {}
+}
+
+// Toast
+let toastTimer;
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// Auth check
+async function checkAuth() {
+  const pill = document.getElementById('authPill');
+  if (!getBearerToken()) {
+    currentUser = null;
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();showTokenDialog()">Connect Psycle account →</a>`;
+    return;
+  }
+  try {
+    const res = await apiFetch('/profile');
+    if (res.ok) {
+      const data = await res.json();
+      currentUser = data.data || data;
+      const name = currentUser.first_name || currentUser.email || 'You';
+      pill.innerHTML = `<span class="user-name">Logged in as <strong>${name}</strong></span>
+        <a href="#" onclick="event.preventDefault();clearToken()" style="color:#555">Disconnect</a>`;
+      fetchMyBookings(); // async, non-blocking
+    } else {
+      throw new Error('token invalid');
+    }
+  } catch {
+    currentUser = null;
+    localStorage.removeItem('psycle_bearer_token');
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();showTokenDialog()">Token expired — reconnect →</a>`;
+  }
+}
+
+function showTokenDialog() {
+  document.getElementById('tokenInput').value = '';
+  document.getElementById('saveTokenBtn').disabled = true;
+  document.getElementById('tokenDialog').style.display = 'flex';
+}
+
+function closeTokenDialog() {
+  document.getElementById('tokenDialog').style.display = 'none';
+}
+
+function validateToken() {
+  const val = document.getElementById('tokenInput').value.trim();
+  document.getElementById('saveTokenBtn').disabled = val.length < 10;
+}
+
+async function saveToken() {
+  const token = document.getElementById('tokenInput').value.trim();
+  localStorage.setItem('psycle_bearer_token', token);
+  closeTokenDialog();
+  await checkAuth();
+  if (currentUser) toast(`Connected as ${currentUser.first_name || currentUser.email} 🚴`, 'success');
+  else toast('Token not recognised — try again', 'error');
+}
+
+function clearToken() {
+  localStorage.removeItem('psycle_bearer_token');
+  currentUser = null;
+  checkAuth();
+}
+
+function scheduleAuthRecheck() {
+  setTimeout(checkAuth, 3000);
+  setTimeout(checkAuth, 8000);
+}
+
+// Bookmarklet href
+(function() {
+  const bm = `javascript:(function(){var m=document.cookie.match(/codex_bearer_token=([^;]+)/);if(m){window.location='${location.origin}${location.pathname}?psycle_token='+encodeURIComponent(m[1]);}else{alert('Please log into Psycle first, then try again.');}})();`;
+  const el = document.getElementById('bookmarkletLink');
+  if (el) el.href = bm;
+})();
+
+// Capture token from URL (redirect back from bookmarklet)
+(function() {
+  const params = new URLSearchParams(location.search);
+  const urlToken = params.get('psycle_token');
+  if (urlToken) {
+    localStorage.setItem('psycle_bearer_token', urlToken);
+    history.replaceState({}, '', location.pathname);
+  }
+})();
+
+// Init
+if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
+checkAuth();
+
+(async () => {
+  const fetchJson = path => apiFetch(path).then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+
+  const [iRes, lRes, tRes] = await Promise.all([
+    fetchJson('/instructors'),
+    fetchJson('/locations'),
+    fetchJson('/event-types'),
+  ]).catch(err => {
+    document.getElementById('results').innerHTML = `<div class="status" style="color:#e94560">
+      Failed to load: ${err.message}<br><small style="color:#666">Check the console for details.</small>
+    </div>`;
+    throw err;
+  });
+
+  instructors = iRes.data.filter(i => i.is_visible).sort((a, b) => a.full_name.localeCompare(b.full_name));
+  locations = lRes.data.filter(l => l.is_visible && l.handle !== 'psycle-at-home');
+  eventTypes = tRes.data || [];
+
+  renderInstrDropdown();
+
+  // Prefill Aanya + Johan
+  const defaults = ['aanya', 'johan'];
+  instructors.forEach(i => {
+    if (defaults.some(d => i.full_name.toLowerCase().includes(d))) {
+      selectedInstructors.add(String(i.id));
+    }
+  });
+  renderInstrChips();
+  renderInstrDropdown();
+
+  const lSel = document.getElementById('locationSelect');
+  lSel.innerHTML = '<option value="">All Studios</option>' +
+    locations.map(l => `<option value="${l.id}">${l.name.replace('Psycle ', '')}</option>`).join('');
+
+  renderCategoryPills();
+
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('startDate').value = today;
+  document.getElementById('daysAhead').value = 7;
+})();
+
+function clearFilters() {
+  selectedInstructors.clear();
+  const defaults = ['aanya', 'johan'];
+  instructors.forEach(i => {
+    if (defaults.some(d => i.full_name.toLowerCase().includes(d))) selectedInstructors.add(String(i.id));
+  });
+  document.getElementById('instrSearch').value = '';
+  renderInstrChips();
+  renderInstrDropdown();
+  document.getElementById('locationSelect').value = '';
+  selectedCategories.clear();
+  renderCategoryPills();
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('startDate').value = today;
+  document.getElementById('daysAhead').value = 7;
+  document.getElementById('results').innerHTML = '<div class="status">Select an instructor or filter, then click Search.</div>';
+}
+
+function setStatus(html) {
+  document.getElementById('results').innerHTML = `<div class="status">${html}</div>`;
+}
+
+async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds) {
+  const limit = 200;
+  let windowStart = startDate + ' 00:00:00';
+  const windowEnd  = endDateStr + ' 23:59:59';
+  let locEvents = [], locRelations = null;
+
+  while (true) {
+    if (window._searchAborted) break;
+    const params = new URLSearchParams({ start: windowStart, end: windowEnd, location: locId, limit });
+    const res = await apiFetch(`/events?${params}`).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
+    const batch = res.data || [];
+    const newEvents = batch.filter(e => !seenIds.has(e.id));
+    if (newEvents.length === 0) break;
+    newEvents.forEach(e => seenIds.add(e.id));
+    locEvents = locEvents.concat(newEvents);
+    if (!locRelations) locRelations = res.relations;
+    else mergeRelations(locRelations, res.relations);
+    if (batch.length < limit) break;
+    // Advance start to 1 second after the last event to get the next page
+    const lastTs = batch.map(e => e.start_at).sort().at(-1);
+    const next = new Date(lastTs.replace(' ', 'T') + 'Z');
+    next.setSeconds(next.getSeconds() + 1);
+    windowStart = next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+  }
+  return { events: locEvents, relations: locRelations };
+}
+
+async function search() {
+  const instructorId = [...selectedInstructors];
+  const locationId   = document.getElementById('locationSelect').value;
+  const categoryKeys = new Set(selectedCategories);
+  const startDate    = document.getElementById('startDate').value;
+  const days         = parseInt(document.getElementById('daysAhead').value) || 14;
+
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + days);
+  const endDateStr = endDate.toISOString().split('T')[0];
+
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = false;
+  btn.textContent = 'Stop';
+  btn.onclick = () => { window._searchAborted = true; };
+  window._searchAborted = false;
+
+  setStatus('<span class="spinner"></span>Connecting…');
+
+  const filters = { instructorId, locationId, categoryKeys, startDate, endDateStr };
+  let allEvents = [], relations = null;
+  const seenIds = new Set();
+
+  // Which locations to query
+  const locationsToFetch = locationId
+    ? [{ id: locationId }]
+    : locations.filter(l => l.handle !== 'psycle-at-home');
+
+  try {
+    if (locationId) {
+      // Single location: stream page by page so results appear progressively
+      await (async () => {
+        const limit = 200;
+        let windowStart = startDate + ' 00:00:00';
+        const windowEnd  = endDateStr + ' 23:59:59';
+        while (true) {
+          if (window._searchAborted) break;
+          const params = new URLSearchParams({ start: windowStart, end: windowEnd, location: locationId, limit });
+          const res = await apiFetch(`/events?${params}`).then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+          });
+          const batch = res.data || [];
+          const newEvents = batch.filter(e => !seenIds.has(e.id));
+          if (newEvents.length === 0) break;
+          newEvents.forEach(e => seenIds.add(e.id));
+          allEvents = allEvents.concat(newEvents);
+          if (!relations) relations = res.relations;
+          else mergeRelations(relations, res.relations);
+          const done = batch.length < limit;
+          render(allEvents, relations, filters, done);
+          if (done) break;
+          const lastTs = batch.map(e => e.start_at).sort().at(-1);
+          const next = new Date(lastTs.replace(' ', 'T') + 'Z');
+          next.setSeconds(next.getSeconds() + 1);
+          windowStart = next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+        }
+      })();
+    } else {
+      // All studios: fetch each location concurrently, merge as they arrive
+      const total = locationsToFetch.length;
+      let done = 0;
+
+      const promises = locationsToFetch.map(async loc => {
+        const { events, relations: rel } = await fetchEventsForLocation(loc.id, startDate, endDateStr, seenIds);
+        if (window._searchAborted) return;
+        allEvents = allEvents.concat(events);
+        if (!relations) relations = rel;
+        else if (rel) mergeRelations(relations, rel);
+        done++;
+        render(allEvents, relations, filters, done === total);
+      });
+
+      await Promise.all(promises);
+    }
+
+    if (!relations) setStatus('No classes found.');
+    else render(allEvents, relations, filters, true);
+
+  } catch (e) {
+    setStatus(`<span style="color:#e94560">Error: ${e.message}</span>`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search';
+    btn.onclick = search;
+  }
+}
+
+function mergeRelations(base, incoming) {
+  if (!incoming) return;
+  for (const key of Object.keys(incoming || {})) {
+    const inc = incoming[key];
+    if (!Array.isArray(inc)) continue;
+    if (!Array.isArray(base[key])) { base[key] = inc; continue; }
+    const existingIds = new Set(base[key].map(x => x.id));
+    for (const item of inc) {
+      if (!existingIds.has(item.id)) base[key].push(item);
+    }
+  }
+}
+
+// ── Booking ──────────────────────────────────────────────────────
+const MAX_SEATS = 2;
+let _bookingContext = null;
+let _selectedSlots = []; // up to MAX_SEATS
+
+async function bookClass(eventId, btn, studioId) {
+  if (!currentUser) {
+    toast('Connect your Psycle account first', 'error');
+    showTokenDialog();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  try {
+    const res = await apiFetch(`/events/${eventId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const detail = await res.json();
+    // detail.slots = AVAILABLE (bookable) slot IDs
+    const availableSlotIds = new Set((detail.slots || []).map(Number));
+    console.log('[psycle] available slot IDs from API:', [...availableSlotIds],
+      '| layout slot IDs:', _studioMap[studioId]?.layout?.slots?.map(s => s.id));
+
+    const studio = _studioMap[studioId];
+    const layout = studio?.layout;
+    const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
+
+    if (hasLayout) {
+      btn.disabled = false;
+      btn.textContent = 'Book';
+      let mySlots = new Set((_myBookings[String(eventId)]?.slots || []).map(Number));
+      // If we know there's a booking but no slot IDs cached, fetch the booking detail
+      if (_myBookings[String(eventId)] && mySlots.size === 0) {
+        const bId = _myBookings[String(eventId)]?.bookingId;
+        if (bId) {
+          try {
+            const bRes = await apiFetch(`/bookings/${bId}`);
+            if (bRes.ok) {
+              const bData = await bRes.json();
+              const bDetail = bData.data || bData;
+              const resolvedSlots = (bDetail.slots || bDetail.slot_ids || (bDetail.slot_id != null ? [bDetail.slot_id] : [])).map(Number).filter(Boolean);
+              if (resolvedSlots.length) {
+                _myBookings[String(eventId)].slots = resolvedSlots;
+                mySlots = new Set(resolvedSlots);
+              }
+            }
+          } catch {}
+        }
+      }
+      showBikePicker(eventId, btn, layout, availableSlotIds, mySlots, studio.name);
+    } else {
+      await submitBooking(eventId, null, btn);
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Book';
+    toast(e.message, 'error');
+  }
+}
+
+function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studioName) {
+  _bookingContext = { eventId, btn };
+  _selectedSlots = [];
+
+  const hasMySlots = mySlotIds.size > 0;
+  document.getElementById('modalTitle').textContent = hasMySlots ? 'Your booking' : 'Select your bike(s)';
+  document.getElementById('modalSubtitle').textContent = studioName;
+  document.getElementById('modalHint').textContent = hasMySlots
+    ? `Your bike(s) shown in green — click to cancel. Select another to book.`
+    : `Select up to ${MAX_SEATS} bikes`;
+  document.getElementById('confirmBookBtn').disabled = true;
+
+  const slots = layout.slots;
+  const objects = layout.objects || [];
+  const allX = slots.map(s => s.x).concat(objects.map(o => o.x));
+  const allY = slots.map(s => s.y).concat(objects.map(o => o.y));
+  const minX = Math.min(...allX), maxX = Math.max(...allX);
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const SLOT = 40, PAD = 24;
+  const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+  const svgW = Math.min(580, Math.max(300, slots.length * 24));
+  const svgH = Math.round(svgW * (rangeY / rangeX)) + PAD * 2;
+  const sx = x => PAD + ((x - minX) / rangeX) * (svgW - PAD * 2 - SLOT);
+  const sy = y => PAD + ((y - minY) / rangeY) * (Math.max(120, svgH) - PAD * 2 - SLOT);
+
+  const svg = document.getElementById('bikeSvg');
+  const h = Math.max(120, svgH);
+  svg.setAttribute('width', svgW);
+  svg.setAttribute('height', h);
+  svg.setAttribute('viewBox', `0 0 ${svgW} ${h}`);
+
+  let inner = objects.map(obj =>
+    `<rect x="${sx(obj.x)}" y="${sy(obj.y)}" width="${SLOT}" height="${SLOT}"
+      rx="4" fill="#1a1a0a" stroke="#333" stroke-dasharray="3,3"/>
+    <text x="${sx(obj.x)+SLOT/2}" y="${sy(obj.y)+SLOT/2+4}" text-anchor="middle"
+      fill="#555" font-size="9" font-family="sans-serif">★</text>`
+  ).join('');
+
+  inner += slots.map(slot => {
+    const id = Number(slot.id);
+    const isMine = mySlotIds.has(id);
+    const isAvailable = availableSlotIds.has(id);
+    const label = slot.label ?? slot.id;
+    const cls = isMine ? 'mine' : isAvailable ? 'available' : 'taken';
+    const click = isMine ? `onclick="cancelBikeSlot(${slot.id}, ${eventId})"` : isAvailable ? `onclick="selectBike(${slot.id})"` : '';
+    return `<g class="bike-slot ${cls}" data-slot="${slot.id}" ${click}>
+      <rect x="${sx(slot.x)}" y="${sy(slot.y)}" width="${SLOT}" height="${SLOT}" rx="6" stroke-width="1.5"/>
+      <text x="${sx(slot.x)+SLOT/2}" y="${sy(slot.y)+SLOT/2+4}"
+        text-anchor="middle" font-family="sans-serif" font-size="11">${label}</text>
+    </g>`;
+  }).join('');
+
+  svg.innerHTML = inner;
+  document.getElementById('bikeModal').style.display = 'flex';
+}
+
+function selectBike(slotId) {
+  const id = Number(slotId);
+  const idx = _selectedSlots.indexOf(id);
+  if (idx !== -1) {
+    // deselect
+    _selectedSlots.splice(idx, 1);
+    document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('selected', 'available');
+  } else {
+    if (_selectedSlots.length >= MAX_SEATS) {
+      // deselect oldest
+      const evicted = _selectedSlots.shift();
+      document.querySelector(`.bike-slot[data-slot="${evicted}"]`)?.classList.replace('selected', 'available');
+    }
+    _selectedSlots.push(id);
+    document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('available', 'selected');
+  }
+  const count = _selectedSlots.length;
+  document.getElementById('modalHint').textContent =
+    count === 0 ? `Select up to ${MAX_SEATS} bikes`
+    : count === 1 ? `Bike ${_selectedSlots[0]} selected — pick a second or confirm`
+    : `Bikes ${_selectedSlots.join(' & ')} selected`;
+  document.getElementById('confirmBookBtn').disabled = count === 0;
+}
+
+function closeBikePicker() {
+  document.getElementById('bikeModal').style.display = 'none';
+  _bookingContext = null;
+  _selectedSlots = [];
+}
+
+async function confirmBikeBooking() {
+  if (!_bookingContext || _selectedSlots.length === 0) return;
+  const { eventId, btn } = _bookingContext;
+  const slotsToBook = [..._selectedSlots]; // capture before close
+  closeBikePicker();
+  await submitBooking(eventId, slotsToBook, btn);
+}
+
+async function submitBooking(eventId, slots, btn) {
+  // slots: array of slot IDs, or null for no-layout booking
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const body = { event_id: eventId };
+    if (slots && slots.length) body.slots = slots.map(Number);
+    const res = await apiFetch('/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const label = slots?.length ? `Bikes ${slots.join(' & ')} ✓` : 'Booked ✓';
+      btn.textContent = label;
+      btn.className = 'book-btn booked';
+      const bookingId = data?.data?.id || data?.id;
+      if (bookingId) btn.dataset.bookingId = bookingId;
+      btn.dataset.eventId = eventId;
+      // Update local bookings state
+      _myBookings[String(eventId)] = { bookingId, slots: slots ? slots.map(Number) : [] };
+      btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
+      toast('Booked! See you in class 🚴', 'success');
+      refreshUpcomingPanel();
+    } else if (res.status === 401 || res.status === 403) {
+      btn.textContent = 'Book';
+      btn.disabled = false;
+      localStorage.removeItem('psycle_bearer_token');
+      currentUser = null;
+      checkAuth();
+      showTokenDialog();
+      toast('Token expired — reconnect your account', 'error');
+    } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
+      btn.textContent = 'Already booked ✓';
+      btn.className = 'book-btn booked';
+      btn.disabled = true;
+      toast("You're already in this class", 'info');
+    } else {
+      btn.textContent = 'Failed — retry';
+      btn.disabled = false;
+      toast(data.message || data.error || `Error ${res.status}`, 'error');
+    }
+  } catch (e) {
+    btn.textContent = 'Failed — retry';
+    btn.disabled = false;
+    toast(e.message, 'error');
+  }
+}
+
+async function cancelBikeSlot(slotId, eventId) {
+  const booking = _myBookings[String(eventId)];
+  if (!confirm(`Cancel your Bike ${slotId} booking?`)) return;
+  // update hint immediately
+  document.getElementById('modalHint').textContent = 'Cancelling…';
+  try {
+    const resolvedId = booking?.bookingId;
+    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
+    console.log('[psycle] cancel path:', path, '| booking:', booking);
+    const res = await apiFetch(path, { method: 'DELETE' });
+    const responseText = await res.clone().text().catch(() => '');
+    console.log('[psycle] cancel response:', res.status, responseText);
+    if (res.ok || res.status === 204 || res.status === 200) {
+      // Remove this slot from local state
+      if (booking) {
+        booking.slots = booking.slots.filter(s => s !== Number(slotId));
+        if (booking.slots.length === 0) delete _myBookings[String(eventId)];
+      }
+      // Update the slot visually: mine → available
+      const g = document.querySelector(`#bikeSvg .bike-slot[data-slot="${slotId}"]`);
+      if (g) {
+        g.classList.replace('mine', 'available');
+        g.setAttribute('onclick', `selectBike(${slotId})`);
+      }
+      // Update card button
+      const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
+      if (card) {
+        const btn = card.querySelector('.book-btn');
+        if (btn) {
+          const studioId = card.dataset.studioId || 0;
+          btn.textContent = 'Book';
+          btn.className = 'book-btn';
+          btn.disabled = false;
+          btn.onclick = () => bookClass(eventId, btn, studioId);
+        }
+        card.classList.remove('is-booked');
+      }
+      const remaining = booking?.slots?.length || 0;
+      document.getElementById('modalHint').textContent = remaining
+        ? `Bike ${slotId} cancelled. Select another or close.`
+        : 'Booking cancelled. Select a bike to rebook.';
+      toast(`Bike ${slotId} cancelled`, 'info');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      document.getElementById('modalHint').textContent = 'Cancel failed — try again';
+      toast(data.message || `Cancel failed (${res.status})`, 'error');
+    }
+  } catch (e) {
+    document.getElementById('modalHint').textContent = 'Cancel failed — try again';
+    toast(e.message, 'error');
+  }
+}
+
+async function confirmUnbook(bookingId, eventId, btn) {
+  if (!confirm('Cancel this booking?')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  // Resolve bookingId from _myBookings if not passed directly
+  const resolvedId = bookingId || _myBookings[String(eventId)]?.bookingId;
+  try {
+    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
+    const res = await apiFetch(path, { method: 'DELETE' });
+    if (res.ok || res.status === 204 || res.status === 200) {
+      delete _myBookings[String(eventId)];
+      btn.textContent = 'Book';
+      btn.className = 'book-btn';
+      btn.disabled = false;
+      btn.removeAttribute('data-booking-id');
+      // Restore book onclick
+      const studioId = btn.dataset.studioId || btn.closest('.class-card')?.dataset?.studioId || 0;
+      btn.onclick = () => bookClass(eventId, btn, studioId);
+      btn.closest('.class-card')?.classList.remove('is-booked');
+      refreshUpcomingPanel();
+      toast('Booking cancelled', 'info');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      btn.disabled = false;
+      btn.textContent = resolvedId ? 'Booked ✓' : 'Cancel';
+      toast(data.message || `Cancel failed (${res.status})`, 'error');
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Booked ✓';
+    toast(e.message, 'error');
+  }
+}
+// ─────────────────────────────────────────────────────────────────
+
+function applyBookedState(btn, eventId, booking) {
+  const slotLabel = booking.slots.length ? `Bikes ${booking.slots.join(' & ')} ✓` : 'Booked ✓';
+  btn.textContent = slotLabel;
+  btn.className = 'book-btn booked';
+  btn.disabled = false;
+  btn.dataset.bookingId = booking.bookingId;
+  btn.dataset.eventId = eventId;
+  btn.onclick = () => confirmUnbook(booking.bookingId, eventId, btn);
+  // Apply green card highlight
+  const card = btn.closest('.class-card');
+  if (card) card.classList.add('is-booked');
+}
+
+function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
+  const instr = instrMap[evt.instructor_id];
+  const studio = studioMap[evt.studio_id];
+  const loc = studio ? locationMap[studio.location_id] : null;
+  const type = typeMap[evt.event_type_id];
+
+  const dt = new Date(evt.start_at);
+  const hours = dt.getHours();
+  const mins = dt.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  const h12 = hours % 12 || 12;
+
+  const locName = loc ? loc.name.replace('Psycle ', '') : '';
+  const studioName = studio ? studio.name : '';
+
+  let badges = `<span class="badge">${evt.duration}min</span>`;
+  const isFull = evt.is_fully_booked && !evt.is_waitlistable;
+  const isWaitlist = evt.is_fully_booked && evt.is_waitlistable;
+  if (isFull) badges += `<span class="badge full">Full</span>`;
+  else if (isWaitlist) badges += `<span class="badge waitlist">Waitlist</span>`;
+  if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
+
+  const myBooking = _myBookings[String(evt.id)];
+  let bookLabel, bookCls, bookDisabled, bookOnclick;
+  if (myBooking) {
+    const slotLabel = myBooking.slots.length ? `Bikes ${myBooking.slots.join(' & ')} ✓` : 'Booked ✓';
+    bookLabel = slotLabel;
+    bookCls = 'book-btn booked';
+    bookDisabled = '';
+    // Open picker to show/cancel seats; fall back to direct cancel if no layout
+    const hasLayout = !!(_studioMap[evt.studio_id]?.has_layout);
+    bookOnclick = hasLayout
+      ? `bookClass(${evt.id}, this, ${evt.studio_id})`
+      : `confirmUnbook(${myBooking.bookingId}, ${evt.id}, this)`;
+  } else if (isFull) {
+    bookLabel = 'Full'; bookCls = 'book-btn'; bookDisabled = 'disabled'; bookOnclick = '';
+  } else if (isWaitlist) {
+    bookLabel = 'Join Waitlist'; bookCls = 'book-btn waitlist'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
+  } else {
+    bookLabel = 'Book'; bookCls = 'book-btn'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
+  }
+
+  return `<div class="class-card${myBooking ? ' is-booked' : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}">
+    <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
+    <div class="class-info">
+      <div class="class-type">${type?.name || 'Class'}</div>
+      <div class="class-instructor">${instr?.full_name || '—'}</div>
+      <div class="class-location">${locName}${studioName ? ' · ' + studioName : ''}</div>
+      <div class="class-meta">${badges}</div>
+      <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
+        ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
+        onclick="${bookOnclick}">${bookLabel}</button>
+    </div>
+  </div>`;
+}
+
+function render(events, relations, filters, done) {
+  const instrMap = Object.fromEntries((relations.instructors || []).map(i => [i.id, i]));
+  const studioMap = Object.fromEntries((relations.studios || []).map(s => [s.id, s]));
+  Object.assign(_studioMap, studioMap); // expose globally for bookClass
+
+  // Cache event metadata for the upcoming panel
+  events.forEach(e => {
+    if (!_eventCache[String(e.id)]) {
+      const type = typeMap[e.event_type_id];
+      const instr = instrMap[e.instructor_id];
+      const studio = studioMap[e.studio_id];
+      const loc = studio ? locationMap[studio.location_id] : null;
+      _eventCache[String(e.id)] = {
+        ...e,
+        _typeName: type?.name || 'Class',
+        _instrName: instr?.full_name || '',
+        _locName: loc ? loc.name.replace('Psycle ', '') : '',
+      };
+    }
+  });
+  const locationMap = Object.fromEntries((relations.locations || []).map(l => [l.id, l]));
+  const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
+
+  const filtered = events.filter(e => {
+    if (filters.instructorId.length && !filters.instructorId.includes(String(e.instructor_id))) return false;
+    // Category filter (new)
+    if (filters.categoryKeys && filters.categoryKeys.size > 0) {
+      const typeName = typeMap[e.event_type_id]?.name || '';
+      const cat = getCategory(typeName);
+      if (!filters.categoryKeys.has(cat.key)) return false;
+    }
+    if (filters.locationId) {
+      const studio = studioMap[e.studio_id];
+      if (!studio || String(studio.location_id) !== filters.locationId) return false;
+    }
+    return true;
+  });
+
+  const container = document.getElementById('results');
+
+  if (filtered.length === 0 && done) {
+    container.innerHTML = '<div class="no-results">No classes found for these filters.</div>';
+    return;
+  }
+
+  // Group by day
+  const byDay = {};
+  filtered.forEach(e => {
+    const day = e.start_at.split('T')[0];
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(e);
+  });
+
+  const instructorName = filters.instructorId.length
+    ? filters.instructorId.map(id => instrMap[id]?.full_name || instructors.find(i => i.id == id)?.full_name || id).join(', ')
+    : null;
+
+  // Ensure summary bar exists
+  let summary = container.querySelector('.summary');
+  if (!summary) {
+    container.innerHTML = '<div class="summary"></div>';
+    summary = container.querySelector('.summary');
+  }
+  summary.innerHTML = `${done ? '' : '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:6px;vertical-align:middle"></span>'}
+    <strong>${filtered.length}</strong> class${filtered.length !== 1 ? 'es' : ''}
+    ${instructorName ? `with <strong>${instructorName}</strong>` : ''}
+    ${done ? `— <strong>${filters.startDate}</strong> to <strong>${filters.endDateStr}</strong>` : 'found so far…'}`;
+  if (done) refreshUpcomingPanel();
+  // Incrementally update day groups
+  const sortedDays = Object.keys(byDay).sort();
+  for (const day of sortedDays) {
+    // Sort by time
+    const dayEvents = byDay[day].sort((a, b) => a.start_at.localeCompare(b.start_at));
+    const date = new Date(day + 'T12:00:00');
+    const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    let group = container.querySelector(`[data-day="${day}"]`);
+    if (!group) {
+      group = document.createElement('div');
+      group.className = 'day-group';
+      group.dataset.day = day;
+      group.innerHTML = `<div class="day-header">${dayLabel}</div><div class="day-body"></div>`;
+      const existing = [...container.querySelectorAll('[data-day]')];
+      const after = existing.find(el => el.dataset.day > day);
+      after ? container.insertBefore(group, after) : container.appendChild(group);
+    }
+
+    const body = group.querySelector('.day-body');
+
+    // Group events by category, sorted by time within each category
+    const byCat = {};
+    for (const evt of dayEvents) {
+      const typeName = typeMap[evt.event_type_id]?.name || '';
+      const cat = getCategory(typeName);
+      if (!byCat[cat.key]) byCat[cat.key] = { cat, events: [] };
+      byCat[cat.key].events.push(evt);
+    }
+
+    // Render/update each category section
+    for (const { cat, events: catEvents } of Object.values(byCat)) {
+      let section = body.querySelector(`[data-cat="${cat.key}"]`);
+      if (!section) {
+        section = document.createElement('div');
+        section.dataset.cat = cat.key;
+        section.innerHTML = `
+          <div class="type-section-header">
+            <span class="type-dot" style="background:${cat.color}"></span>
+            <span style="color:${cat.color}">${cat.label}</span>
+          </div>
+          <div class="class-grid"></div>`;
+        // Insert category sections in CATEGORY_MAP order
+        const catOrder = CATEGORY_MAP.map(c => c.key);
+        const insertIdx = catOrder.indexOf(cat.key);
+        const siblings = [...body.querySelectorAll('[data-cat]')];
+        const after = siblings.find(s => catOrder.indexOf(s.dataset.cat) > insertIdx);
+        after ? body.insertBefore(section, after) : body.appendChild(section);
+      }
+
+      const grid = section.querySelector('.class-grid');
+      const existingIds = new Set([...grid.querySelectorAll('[data-id]')].map(el => el.dataset.id));
+
+      // Insert new cards in time-sorted order
+      for (const evt of catEvents.sort((a, b) => a.start_at.localeCompare(b.start_at))) {
+        if (existingIds.has(String(evt.id))) continue;
+        const newCard = document.createElement('div');
+        newCard.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
+        const card = newCard.firstElementChild;
+        // Insert in time order
+        const existing = [...grid.querySelectorAll('[data-id]')];
+        const insertBefore = existing.find(el => {
+          const elEvt = dayEvents.find(e => String(e.id) === el.dataset.id);
+          return elEvt && elEvt.start_at > evt.start_at;
+        });
+        insertBefore ? grid.insertBefore(card, insertBefore) : grid.appendChild(card);
+      }
+    }
+  }
+}
+
+function updateLocationHint() {
+  const hint = document.getElementById('locationHint');
+  hint.textContent = document.getElementById('locationSelect').value ? '' : '— pick one for best results';
+}
+
+// ── Instructor multi-select widget ──────────────────────────────
+const selectedInstructors = new Set();
+let instrFocusIdx = -1;
+
+function getFilteredInstructors() {
+  const q = (document.getElementById('instrSearch')?.value || '').toLowerCase().trim();
+  return q ? instructors.filter(i => i.full_name.toLowerCase().includes(q)) : instructors;
+}
+
+function renderInstrChips() {
+  const chips = document.getElementById('instrChips');
+  if (!chips) return;
+  chips.innerHTML = [...selectedInstructors].map(id => {
+    const instr = instructors.find(i => String(i.id) === String(id));
+    const name = instr?.full_name || id;
+    return `<span class="instr-chip">${name}
+      <button type="button" onmousedown="event.preventDefault();removeInstructor('${id}')" title="Remove">×</button>
+    </span>`;
+  }).join('');
+}
+
+function renderInstrDropdown() {
+  const dd = document.getElementById('instrDropdown');
+  if (!dd) return;
+  const list = getFilteredInstructors();
+  instrFocusIdx = -1;
+  dd.innerHTML = list.length
+    ? list.map((i, idx) => {
+        const sel = selectedInstructors.has(String(i.id));
+        return `<div class="instr-option${sel ? ' selected' : ''}" data-id="${i.id}" data-idx="${idx}"
+          onmousedown="event.preventDefault();toggleInstructor('${i.id}')">
+          <span class="check">${sel ? '✓' : ''}</span>${i.full_name}
+        </div>`;
+      }).join('')
+    : '<div class="instr-option" style="color:#555;cursor:default">No matches</div>';
+}
+
+function toggleInstructor(id) {
+  const sid = String(id);
+  if (selectedInstructors.has(sid)) selectedInstructors.delete(sid);
+  else selectedInstructors.add(sid);
+  document.getElementById('instrSearch').value = '';
+  renderInstrChips();
+  renderInstrDropdown();
+}
+
+function removeInstructor(id) {
+  selectedInstructors.delete(String(id));
+  renderInstrChips();
+  renderInstrDropdown();
+}
+
+function focusInstrSearch(e) {
+  document.getElementById('instrSearch').focus();
+}
+
+function filterInstrDropdown() {
+  renderInstrDropdown();
+  document.getElementById('instrDropdown').style.display = 'block';
+}
+
+function showInstrDropdown() {
+  renderInstrDropdown();
+  document.getElementById('instrDropdown').style.display = 'block';
+}
+
+function hideInstrDropdown() {
+  setTimeout(() => {
+    document.getElementById('instrDropdown').style.display = 'none';
+  }, 150);
+}
+
+function instrKeydown(e) {
+  const dd = document.getElementById('instrDropdown');
+  const opts = [...dd.querySelectorAll('.instr-option[data-id]')];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    instrFocusIdx = Math.min(instrFocusIdx + 1, opts.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    instrFocusIdx = Math.max(instrFocusIdx - 1, 0);
+  } else if (e.key === 'Enter' && instrFocusIdx >= 0) {
+    e.preventDefault();
+    toggleInstructor(opts[instrFocusIdx].dataset.id);
+    return;
+  } else if (e.key === 'Escape') {
+    dd.style.display = 'none';
+    return;
+  } else if (e.key === 'Backspace' && !e.target.value && selectedInstructors.size) {
+    const last = [...selectedInstructors].at(-1);
+    removeInstructor(last);
+    return;
+  }
+  opts.forEach((o, i) => o.classList.toggle('focused', i === instrFocusIdx));
+  if (instrFocusIdx >= 0) opts[instrFocusIdx]?.scrollIntoView({ block: 'nearest' });
+}
+// ── Category pill filter ────────────────────────────────────────
+function renderCategoryPills() {
+  const container = document.getElementById('categoryPills');
+  if (!container) return;
+  // Only show categories that exist in loaded event types
+  const presentCats = new Set();
+  for (const t of eventTypes) {
+    presentCats.add(getCategory(t.name).key);
+  }
+  const catsToShow = CATEGORY_MAP.filter(c => presentCats.has(c.key) || eventTypes.length === 0);
+  container.innerHTML = catsToShow.map(cat => {
+    const active = selectedCategories.has(cat.key);
+    return `<button class="cat-pill${active ? ' active' : ''}"
+      style="color:${cat.color};border-color:${cat.color};${active ? `background:${cat.color}` : ''}"
+      onclick="toggleCategory('${cat.key}')">${cat.label}</button>`;
+  }).join('');
+}
+
+function toggleCategory(key) {
+  if (selectedCategories.has(key)) selectedCategories.delete(key);
+  else selectedCategories.add(key);
+  renderCategoryPills();
+}
+// ────────────────────────────────────────────────────────────────
+
+// Allow pressing Enter to search
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') search();
+});
+
+// ── Upcoming bookings panel ──────────────────────────────────────
+let _upcomingCollapsed = false;
+
+function toggleUpcoming() {
+  _upcomingCollapsed = !_upcomingCollapsed;
+  document.getElementById('upcomingBody').style.display = _upcomingCollapsed ? 'none' : '';
+  document.getElementById('upcomingChevron').classList.toggle('collapsed', _upcomingCollapsed);
+}
+
+function refreshUpcomingPanel() {
+  const panel = document.getElementById('upcomingPanel');
+  const list = document.getElementById('upcomingList');
+  const countEl = document.getElementById('upcomingCount');
+
+  const now = new Date();
+  // Build upcoming: entries in _myBookings that have event data cached in _eventCache
+  const upcoming = Object.entries(_myBookings)
+    .map(([evtId, booking]) => {
+      const evt = _eventCache[evtId];
+      return evt ? { evt, booking, evtId } : null;
+    })
+    .filter(Boolean)
+    .filter(({ evt }) => new Date(evt.start_at) > now)
+    .sort((a, b) => a.evt.start_at.localeCompare(b.evt.start_at));
+
+  countEl.textContent = upcoming.length;
+
+  if (upcoming.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = '';
+  list.innerHTML = upcoming.map(({ evt, booking, evtId }) => {
+    const dt = new Date(evt.start_at);
+    const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    const h = dt.getHours(), m = dt.getMinutes().toString().padStart(2, '0');
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const timeStr = `${h % 12 || 12}:${m}${ampm}`;
+    const typeName = evt._typeName || 'Class';
+    const instrName = evt._instrName || '';
+    const locName = evt._locName || '';
+    const slotLabel = booking.slots.length ? ` · Bike${booking.slots.length > 1 ? 's' : ''} ${booking.slots.join(' & ')}` : '';
+
+    return `<div class="upcoming-item">
+      <div class="up-day">${dayStr.replace(' ', '<br>')}</div>
+      <div class="up-time">${timeStr}</div>
+      <div class="up-info">
+        <div class="up-name">${typeName}</div>
+        <div class="up-sub">${instrName}${locName ? ' · ' + locName : ''}${slotLabel}</div>
+      </div>
+      <button class="up-cancel" onclick="upcomingCancel(${evtId}, this)">Cancel</button>
+    </div>`;
+  }).join('');
+}
+
+async function upcomingCancel(eventId, btn) {
+  const booking = _myBookings[String(eventId)];
+  if (!booking) return;
+  if (!confirm('Cancel this booking?')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  const resolvedId = booking.bookingId;
+  try {
+    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
+    const res = await apiFetch(path, { method: 'DELETE' });
+    if (res.ok || res.status === 204 || res.status === 200) {
+      delete _myBookings[String(eventId)];
+      // Also update any rendered card
+      const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
+      if (card) {
+        card.classList.remove('is-booked');
+        const cardBtn = card.querySelector('.book-btn');
+        if (cardBtn) {
+          cardBtn.textContent = 'Book';
+          cardBtn.className = 'book-btn';
+          cardBtn.disabled = false;
+          const studioId = card.dataset.studioId || 0;
+          cardBtn.onclick = () => bookClass(eventId, cardBtn, studioId);
+        }
+      }
+      refreshUpcomingPanel();
+      toast('Booking cancelled', 'info');
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Cancel';
+      const data = await res.json().catch(() => ({}));
+      toast(data.message || `Cancel failed (${res.status})`, 'error');
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Cancel';
+    toast(e.message, 'error');
+  }
+}
+
+// ── Event cache (for upcoming panel metadata) ────────────────────
+const _eventCache = {};
+
+// ── PWA Service Worker ───────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
