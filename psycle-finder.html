@@ -715,22 +715,14 @@
       <div class="token-step">
         <span class="token-step-num">1</span>
         <div>
-          Drag this button to your <strong style="color:#f0f0f0">bookmarks bar</strong>:
-          <div style="margin-top:10px">
-            <a id="bookmarkletLink" href="" class="btn" style="display:inline-block;text-decoration:none;font-size:12px;cursor:grab">
-              🔑 Connect to Psycle Finder
+          Tap the button below — it opens a login page that extracts your token automatically.
+          <div style="margin-top:12px">
+            <a id="loginPageLink" href="./login.html" class="btn" style="display:inline-block;text-decoration:none;font-size:13px">
+              🔑 Connect Psycle account →
             </a>
           </div>
-          <div style="margin-top:8px;font-size:11px;color:#555">(If the bar isn't visible: View → Show Bookmarks Bar)</div>
+          <div style="margin-top:8px;font-size:11px;color:#555">Works on iPhone and desktop.</div>
         </div>
-      </div>
-      <div class="token-step">
-        <span class="token-step-num">2</span>
-        <span>Go to <a href="https://psyclelondon.com/pages/oxford-circus-timetable" target="_blank" style="color:#e94560">psyclelondon.com</a> and log in</span>
-      </div>
-      <div class="token-step">
-        <span class="token-step-num">3</span>
-        <span>Click <strong style="color:#f0f0f0">🔑 Connect to Psycle Finder</strong> in your bookmarks bar — you'll be sent straight back here, connected.</span>
       </div>
     </div>
 
@@ -986,14 +978,7 @@ function scheduleAuthRecheck() {
   setTimeout(checkAuth, 8000);
 }
 
-// Bookmarklet href
-(function() {
-  const bm = `javascript:(function(){var m=document.cookie.match(/codex_bearer_token=([^;]+)/);if(m){window.location='${location.origin}${location.pathname}?psycle_token='+encodeURIComponent(m[1]);}else{alert('Please log into Psycle first, then try again.');}})();`;
-  const el = document.getElementById('bookmarkletLink');
-  if (el) el.href = bm;
-})();
-
-// Capture token from URL (redirect back from bookmarklet)
+// Capture token from URL (redirect back from login.html)
 (function() {
   const params = new URLSearchParams(location.search);
   const urlToken = params.get('psycle_token');
