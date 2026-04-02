@@ -304,7 +304,16 @@
 
 <script>
 // Detect the app URL dynamically so this works on any host
-const APP_URL = new URL('./psycle-finder.html', location.href).href;
+// Derive app URL robustly — works on GitHub Pages, localhost, and file://
+const APP_URL = (function() {
+  try {
+    // Same directory as login.html
+    const base = location.href.replace(/\/[^/]*$/, '/');
+    return base + 'psycle-finder.html';
+  } catch(e) {
+    return './psycle-finder.html';
+  }
+})();
 
 function showLogin() {
   document.getElementById('stateLogin').style.display = '';
