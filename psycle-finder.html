@@ -446,6 +446,32 @@
     color: #fff;
   }
 
+  .fav-star {
+    font-size: 14px;
+    color: #444;
+    cursor: pointer;
+    padding: 0 2px;
+    transition: color 0.1s;
+    flex-shrink: 0;
+  }
+  .fav-star:hover, .fav-star.fav-on { color: #f5a623; }
+
+  .fav-btn {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #f5a623;
+    background: none;
+    border: 1px solid #3a2e0a;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    white-space: nowrap;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .fav-btn:hover { background: #2a2000; }
+
   .auth-pill {
     margin-left: auto;
     font-size: 12px;
@@ -579,7 +605,22 @@
   }
 
   .toast.show { opacity: 1; transform: translateY(0); }
-  .cat-pill {
+  .date-quick-btn {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 11px;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    white-space: nowrap;
+  }
+  .date-quick-btn:hover { background: #1a1a1a; color: #fff; border-color: #555; }
+  .date-quick-btn.active { background: #e94560; border-color: #e94560; color: #fff; }
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.07em;
@@ -700,6 +741,12 @@
   </div>
 </header>
 
+<div id="sessionBanner" style="display:none;background:#1a0f0a;border-bottom:1px solid #4a2010;padding:10px 24px;font-size:13px;color:#e07040;display:none;align-items:center;gap:12px">
+  <span>⚠️ Your session has expired.</span>
+  <a href="./login.html" style="color:#e94560;font-weight:700;text-decoration:none">Sign in again →</a>
+  <button onclick="document.getElementById('sessionBanner').style.display='none'" style="margin-left:auto;background:none;border:none;color:#666;cursor:pointer;font-size:16px;line-height:1">×</button>
+</div>
+
 <div id="toast" class="toast"></div>
 <div id="tokenDialog" class="token-dialog" style="display:none">
   <div class="modal">
@@ -770,7 +817,7 @@
 
 <div class="controls">
   <div class="control-group" style="position:relative">
-    <label>Instructor</label>
+    <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors">★ Favs</button></label>
     <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
       <div id="instrChips"></div>
       <input id="instrSearch" class="instr-search" placeholder="Search…" autocomplete="off"
@@ -792,14 +839,23 @@
   </div>
 
   <div class="control-group">
+    <label>Date</label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="date-quick-btn" onclick="setDateQuick('today')">Today</button>
+      <button class="date-quick-btn" onclick="setDateQuick('tomorrow')">Tomorrow</button>
+      <button class="date-quick-btn" onclick="setDateQuick('week')">7 days</button>
+    </div>
+  </div>
+
+  <div class="control-group">
     <label>From</label>
-    <input type="date" id="startDate">
+    <input type="date" id="startDate" onchange="onDateInputChange()">
   </div>
 
   <div class="control-group">
     <label>Days ahead</label>
     <div class="days-control">
-      <input type="number" id="daysAhead" value="14" min="1" max="60">
+      <input type="number" id="daysAhead" value="7" min="1" max="60" onchange="onDateInputChange()">
     </div>
   </div>
 
@@ -847,7 +903,12 @@ function apiFetch(path, opts = {}) {
   const token = getBearerToken();
   const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(apiUrl(path), { credentials: 'include', ...opts, headers });
+  return fetch(apiUrl(path), { credentials: 'include', ...opts, headers }).then(res => {
+    if ((res.status === 401 || res.status === 403) && getBearerToken()) {
+      showSessionExpired();
+    }
+    return res;
+  });
 }
 
 let instructors = [], locations = [], eventTypes = [];
@@ -921,25 +982,27 @@ async function checkAuth() {
   const pill = document.getElementById('authPill');
   if (!getBearerToken()) {
     currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();showTokenDialog()">Connect Psycle account →</a>`;
+    pill.innerHTML = `<a href="./login.html">Connect Psycle account →</a>`;
     return;
   }
   try {
-    const res = await apiFetch('/profile');
+    const res = await fetch(apiUrl('/profile'), {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${getBearerToken()}` },
+      credentials: 'include'
+    });
     if (res.ok) {
       const data = await res.json();
       currentUser = data.data || data;
       const name = currentUser.first_name || currentUser.email || 'You';
       pill.innerHTML = `<span class="user-name">Logged in as <strong>${name}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" style="color:#555">Disconnect</a>`;
-      fetchMyBookings(); // async, non-blocking
+      fetchMyBookings();
     } else {
-      throw new Error('token invalid');
+      showSessionExpired();
     }
   } catch {
     currentUser = null;
-    localStorage.removeItem('psycle_bearer_token');
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();showTokenDialog()">Token expired — reconnect →</a>`;
+    pill.innerHTML = `<a href="./login.html" style="color:#e94560">Sign in →</a>`;
   }
 }
 
@@ -971,6 +1034,14 @@ function clearToken() {
   localStorage.removeItem('psycle_bearer_token');
   currentUser = null;
   checkAuth();
+}
+
+function showSessionExpired() {
+  currentUser = null;
+  localStorage.removeItem('psycle_bearer_token');
+  document.getElementById('sessionBanner').style.display = 'flex';
+  const pill = document.getElementById('authPill');
+  pill.innerHTML = `<a href="./login.html" style="color:#e94560;font-weight:700">Sign in →</a>`;
 }
 
 function scheduleAuthRecheck() {
@@ -1015,13 +1086,19 @@ checkAuth();
 
   renderInstrDropdown();
 
-  // Prefill Aanya + Johan
-  const defaults = ['aanya', 'johan'];
-  instructors.forEach(i => {
-    if (defaults.some(d => i.full_name.toLowerCase().includes(d))) {
-      selectedInstructors.add(String(i.id));
-    }
-  });
+  // Pre-select favourites if any saved, otherwise fall back to Aanya + Johan
+  if (favouriteInstructors.size > 0) {
+    favouriteInstructors.forEach(id => {
+      if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
+    });
+  } else {
+    const defaults = ['aanya', 'johan'];
+    instructors.forEach(i => {
+      if (defaults.some(d => i.full_name.toLowerCase().includes(d))) {
+        selectedInstructors.add(String(i.id));
+      }
+    });
+  }
   renderInstrChips();
   renderInstrDropdown();
 
@@ -1034,14 +1111,51 @@ checkAuth();
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('startDate').value = today;
   document.getElementById('daysAhead').value = 7;
+  // Mark "7 days" as the default active quick button
+  document.querySelectorAll('.date-quick-btn').forEach(b => {
+    if (b.textContent.trim() === '7 days') b.classList.add('active');
+  });
 })();
+
+function setDateQuick(mode) {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+  document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  if (mode === 'today') {
+    document.getElementById('startDate').value = todayStr;
+    document.getElementById('daysAhead').value = 1;
+  } else if (mode === 'tomorrow') {
+    document.getElementById('startDate').value = tomorrowStr;
+    document.getElementById('daysAhead').value = 1;
+  } else {
+    document.getElementById('startDate').value = todayStr;
+    document.getElementById('daysAhead').value = 7;
+  }
+}
+
+// Clear active quick-btn highlight when date/days inputs are changed manually
+function onDateInputChange() {
+  document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
+}
 
 function clearFilters() {
   selectedInstructors.clear();
-  const defaults = ['aanya', 'johan'];
-  instructors.forEach(i => {
-    if (defaults.some(d => i.full_name.toLowerCase().includes(d))) selectedInstructors.add(String(i.id));
-  });
+  if (favouriteInstructors.size > 0) {
+    favouriteInstructors.forEach(id => {
+      if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
+    });
+  } else {
+    const defaults = ['aanya', 'johan'];
+    instructors.forEach(i => {
+      if (defaults.some(d => i.full_name.toLowerCase().includes(d))) selectedInstructors.add(String(i.id));
+    });
+  }
   document.getElementById('instrSearch').value = '';
   renderInstrChips();
   renderInstrDropdown();
@@ -1369,23 +1483,19 @@ async function submitBooking(eventId, slots, btn) {
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
       toast('Booked! See you in class 🚴', 'success');
       refreshUpcomingPanel();
-    } else if (res.status === 401 || res.status === 403) {
-      btn.textContent = 'Book';
-      btn.disabled = false;
-      localStorage.removeItem('psycle_bearer_token');
-      currentUser = null;
-      checkAuth();
-      showTokenDialog();
-      toast('Token expired — reconnect your account', 'error');
     } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
       btn.textContent = 'Already booked ✓';
       btn.className = 'book-btn booked';
       btn.disabled = true;
       toast("You're already in this class", 'info');
-    } else {
+    } else if (res.status !== 401 && res.status !== 403) {
+      // 401/403 already handled globally by apiFetch → showSessionExpired()
       btn.textContent = 'Failed — retry';
       btn.disabled = false;
       toast(data.message || data.error || `Error ${res.status}`, 'error');
+    } else {
+      btn.textContent = 'Book';
+      btn.disabled = false;
     }
   } catch (e) {
     btn.textContent = 'Failed — retry';
@@ -1574,7 +1684,10 @@ function render(events, relations, filters, done) {
   const locationMap = Object.fromEntries((relations.locations || []).map(l => [l.id, l]));
   const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
 
+  const now = new Date();
   const filtered = events.filter(e => {
+    // Never show classes that have already started
+    if (new Date(e.start_at) < now) return false;
     if (filters.instructorId.length && !filters.instructorId.includes(String(e.instructor_id))) return false;
     // Category filter (new)
     if (filters.categoryKeys && filters.categoryKeys.size > 0) {
@@ -1699,6 +1812,38 @@ function updateLocationHint() {
 const selectedInstructors = new Set();
 let instrFocusIdx = -1;
 
+// ── Favourite instructors (persisted to localStorage) ────────────
+const FAV_KEY = 'psycle_fav_instructors';
+
+function loadFavourites() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function saveFavourites(favs) {
+  localStorage.setItem(FAV_KEY, JSON.stringify([...favs]));
+}
+
+let favouriteInstructors = loadFavourites();
+
+function toggleFavourite(id, e) {
+  e.stopPropagation();
+  const sid = String(id);
+  if (favouriteInstructors.has(sid)) favouriteInstructors.delete(sid);
+  else favouriteInstructors.add(sid);
+  saveFavourites(favouriteInstructors);
+  renderInstrDropdown();
+  renderInstrChips();
+}
+
+function applyFavouritesAsFilter() {
+  if (favouriteInstructors.size === 0) return;
+  selectedInstructors.clear();
+  favouriteInstructors.forEach(id => selectedInstructors.add(id));
+  renderInstrChips();
+  renderInstrDropdown();
+}
+
 function getFilteredInstructors() {
   const q = (document.getElementById('instrSearch')?.value || '').toLowerCase().trim();
   return q ? instructors.filter(i => i.full_name.toLowerCase().includes(q)) : instructors;
@@ -1721,12 +1866,23 @@ function renderInstrDropdown() {
   if (!dd) return;
   const list = getFilteredInstructors();
   instrFocusIdx = -1;
-  dd.innerHTML = list.length
-    ? list.map((i, idx) => {
+  // Sort: favourites first, then alphabetical
+  const sorted = [...list].sort((a, b) => {
+    const aFav = favouriteInstructors.has(String(a.id));
+    const bFav = favouriteInstructors.has(String(b.id));
+    if (aFav !== bFav) return aFav ? -1 : 1;
+    return 0;
+  });
+  dd.innerHTML = sorted.length
+    ? sorted.map((i, idx) => {
         const sel = selectedInstructors.has(String(i.id));
+        const fav = favouriteInstructors.has(String(i.id));
         return `<div class="instr-option${sel ? ' selected' : ''}" data-id="${i.id}" data-idx="${idx}"
           onmousedown="event.preventDefault();toggleInstructor('${i.id}')">
-          <span class="check">${sel ? '✓' : ''}</span>${i.full_name}
+          <span class="check">${sel ? '✓' : ''}</span>
+          <span style="flex:1">${i.full_name}</span>
+          <span class="fav-star${fav ? ' fav-on' : ''}" title="${fav ? 'Remove favourite' : 'Add favourite'}"
+            onmousedown="event.preventDefault();toggleFavourite('${i.id}',event)">★</span>
         </div>`;
       }).join('')
     : '<div class="instr-option" style="color:#555;cursor:default">No matches</div>';
@@ -1865,7 +2021,7 @@ function refreshUpcomingPanel() {
     const locName = evt._locName || '';
     const slotLabel = booking.slots.length ? ` · Bike${booking.slots.length > 1 ? 's' : ''} ${booking.slots.join(' & ')}` : '';
 
-    return `<div class="upcoming-item">
+    return `<div class="upcoming-item" onclick="scrollToClass(${evtId}, event)" style="cursor:pointer" title="Jump to class in results">
       <div class="up-day">${dayStr.replace(' ', '<br>')}</div>
       <div class="up-time">${timeStr}</div>
       <div class="up-info">
@@ -1875,6 +2031,22 @@ function refreshUpcomingPanel() {
       <button class="up-cancel" onclick="upcomingCancel(${evtId}, this)">Cancel</button>
     </div>`;
   }).join('');
+}
+
+function scrollToClass(eventId, e) {
+  // Don't fire if the cancel button was clicked
+  if (e.target.classList.contains('up-cancel')) return;
+  const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
+  if (!card) {
+    toast('Run a search first to see the class in results', 'info');
+    return;
+  }
+  // Scroll card into view
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Flash highlight
+  card.style.transition = 'box-shadow 0.15s';
+  card.style.boxShadow = '0 0 0 2px #5dba5d, 0 0 16px rgba(93,186,93,0.4)';
+  setTimeout(() => { card.style.boxShadow = ''; }, 1800);
 }
 
 async function upcomingCancel(eventId, btn) {
