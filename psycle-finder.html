@@ -636,6 +636,22 @@
   .cat-pill:hover { opacity: 0.85; }
   .cat-pill.active { color: #fff !important; }
 
+  .sub-pill {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 12px;
+    border: 1px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .sub-pill:hover { opacity: 0.8; }
+  .sub-pill.active { color: #fff !important; }
+
   .type-section-header {
     font-size: 10px;
     text-transform: uppercase;
@@ -836,6 +852,7 @@
   <div class="control-group" style="position:relative">
     <label>Class Type</label>
     <div id="categoryPills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:36px;padding-top:2px"></div>
+    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"></div>
   </div>
 
   <div class="control-group">
@@ -933,6 +950,40 @@ function getCategory(typeName) {
 
 // Active category filters (Set of category keys)
 const selectedCategories = new Set();
+
+// ── Strength sub-filter ──────────────────────────────────────────
+const STRENGTH_SUBS = [
+  { key: 'UPPER', label: 'Upper', match: 'Upper Body', color: '#4a9eff' },
+  { key: 'LOWER', label: 'Lower', match: 'Lower Body', color: '#4a9eff' },
+  { key: 'FULL',  label: 'Full Body', match: 'Full Body',  color: '#4a9eff' },
+];
+// All selected by default means "show all" — deselecting narrows
+const selectedStrengthSubs = new Set(['UPPER', 'LOWER', 'FULL']);
+
+function renderStrengthSubPills() {
+  const container = document.getElementById('strengthSubPills');
+  if (!container) return;
+  const strengthActive = selectedCategories.has('STRENGTH') || selectedCategories.size === 0;
+  container.style.display = strengthActive ? 'flex' : 'none';
+  if (!strengthActive) return;
+  container.innerHTML = STRENGTH_SUBS.map(s => {
+    const active = selectedStrengthSubs.has(s.key);
+    return `<button class="sub-pill${active ? ' active' : ''}"
+      style="color:${s.color};border-color:${s.color};${active ? `background:${s.color}` : ''}"
+      onclick="toggleStrengthSub('${s.key}')">${s.label}</button>`;
+  }).join('');
+}
+
+function toggleStrengthSub(key) {
+  if (selectedStrengthSubs.has(key)) {
+    // Don't allow deselecting all
+    if (selectedStrengthSubs.size === 1) return;
+    selectedStrengthSubs.delete(key);
+  } else {
+    selectedStrengthSubs.add(key);
+  }
+  renderStrengthSubPills();
+}
 
 async function fetchMyBookings() {
   if (!getBearerToken()) { _myBookings = {}; return; }
@@ -1095,8 +1146,7 @@ checkAuth();
     locations.map(l => `<option value="${l.id}">${l.name.replace('Psycle ', '')}</option>`).join('');
 
   renderCategoryPills();
-
-  const today = new Date().toISOString().split('T')[0];
+  renderStrengthSubPills();
   document.getElementById('startDate').value = today;
   document.getElementById('daysAhead').value = 7;
   // Mark "7 days" as the default active quick button
@@ -1156,7 +1206,10 @@ function clearFilters() {
   renderInstrDropdown();
   document.getElementById('locationSelect').value = '';
   selectedCategories.clear();
+  selectedStrengthSubs.clear();
+  selectedStrengthSubs.add('UPPER'); selectedStrengthSubs.add('LOWER'); selectedStrengthSubs.add('FULL');
   renderCategoryPills();
+  renderStrengthSubPills();
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('startDate').value = today;
   document.getElementById('daysAhead').value = 7;
@@ -1227,7 +1280,7 @@ async function search() {
 
   setStatus('<span class="spinner"></span>Connecting…');
 
-  const filters = { instructorId, locationId, categoryKeys, startDate, endDateStr };
+  const filters = { instructorId, locationId, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs) };
   let allEvents = [], relations = null;
   const seenIds = new Set();
 
@@ -1696,11 +1749,20 @@ function render(events, relations, filters, done) {
     // Never show classes that have already started
     if (new Date(e.start_at) < now) return false;
     if (filters.instructorId.length && !filters.instructorId.includes(String(e.instructor_id))) return false;
-    // Category filter (new)
+    // Category filter
+    const typeName = typeMap[e.event_type_id]?.name || '';
     if (filters.categoryKeys && filters.categoryKeys.size > 0) {
-      const typeName = typeMap[e.event_type_id]?.name || '';
       const cat = getCategory(typeName);
       if (!filters.categoryKeys.has(cat.key)) return false;
+    }
+    // Strength sub-filter — only applies when this is a strength class
+    // and not all subs are selected (all = no filtering)
+    if (filters.strengthSubs && filters.strengthSubs.size < 3) {
+      const cat = getCategory(typeName);
+      if (cat.key === 'STRENGTH') {
+        const matchedSub = STRENGTH_SUBS.find(s => typeName.includes(s.match));
+        if (matchedSub && !filters.strengthSubs.has(matchedSub.key)) return false;
+      }
     }
     if (filters.locationId) {
       const studio = studioMap[e.studio_id];
@@ -1976,6 +2038,7 @@ function toggleCategory(key) {
   if (selectedCategories.has(key)) selectedCategories.delete(key);
   else selectedCategories.add(key);
   renderCategoryPills();
+  renderStrengthSubPills();
 }
 // ────────────────────────────────────────────────────────────────
 
