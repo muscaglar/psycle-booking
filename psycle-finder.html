@@ -852,10 +852,7 @@
     <input type="date" id="startDate" onchange="onDateInputChange()">
   </div>
 
-  <div class="control-group">
-    <label>Days ahead</label>
-    <div class="days-control">
-      <input type="number" id="daysAhead" value="7" min="1" max="60" onchange="onDateInputChange()">
+  <div class="control-group" id="daysAheadGroup">
     </div>
   </div>
 
@@ -1117,6 +1114,8 @@ checkAuth();
   });
 })();
 
+let _dateQuickMode = 'week'; // tracks active quick-pick mode
+
 function setDateQuick(mode) {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -1124,24 +1123,33 @@ function setDateQuick(mode) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
+  _dateQuickMode = mode;
   document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
+
+  const daysGroup = document.getElementById('daysAheadGroup');
 
   if (mode === 'today') {
     document.getElementById('startDate').value = todayStr;
     document.getElementById('daysAhead').value = 1;
+    if (daysGroup) daysGroup.style.display = 'none';
   } else if (mode === 'tomorrow') {
     document.getElementById('startDate').value = tomorrowStr;
     document.getElementById('daysAhead').value = 1;
+    if (daysGroup) daysGroup.style.display = 'none';
   } else {
     document.getElementById('startDate').value = todayStr;
     document.getElementById('daysAhead').value = 7;
+    if (daysGroup) daysGroup.style.display = '';
   }
 }
 
 // Clear active quick-btn highlight when date/days inputs are changed manually
 function onDateInputChange() {
+  _dateQuickMode = null;
   document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
+  const daysGroup = document.getElementById('daysAheadGroup');
+  if (daysGroup) daysGroup.style.display = '';
 }
 
 function clearFilters() {
@@ -1209,9 +1217,15 @@ async function search() {
   const startDate    = document.getElementById('startDate').value;
   const days         = parseInt(document.getElementById('daysAhead').value) || 14;
 
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + days);
-  const endDateStr = endDate.toISOString().split('T')[0];
+  // For today/tomorrow quick picks, end = same day (don't bleed into next day)
+  let endDateStr;
+  if (_dateQuickMode === 'today' || _dateQuickMode === 'tomorrow') {
+    endDateStr = startDate;
+  } else {
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + days);
+    endDateStr = endDate.toISOString().split('T')[0];
+  }
 
   const btn = document.getElementById('searchBtn');
   btn.disabled = false;
@@ -1665,6 +1679,8 @@ function render(events, relations, filters, done) {
   if (!relations) return; // nothing to map without relation data
   const instrMap = Object.fromEntries((relations.instructors || []).map(i => [i.id, i]));
   const studioMap = Object.fromEntries((relations.studios || []).map(s => [s.id, s]));
+  const locationMap = Object.fromEntries((relations.locations || []).map(l => [l.id, l]));
+  const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
   Object.assign(_studioMap, studioMap); // expose globally for bookClass
 
   // Cache event metadata for the upcoming panel
@@ -1682,8 +1698,6 @@ function render(events, relations, filters, done) {
       };
     }
   });
-  const locationMap = Object.fromEntries((relations.locations || []).map(l => [l.id, l]));
-  const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
 
   const now = new Date();
   const filtered = events.filter(e => {
