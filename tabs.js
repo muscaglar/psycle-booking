@@ -273,7 +273,10 @@
 
     days.forEach(function (day, idx) {
       var isToday = day.toDateString() === now.toDateString();
-      var dayStr = day.toISOString().split('T')[0];
+      // Use local date string (not toISOString which converts to UTC and can shift days)
+      var dayStr = day.getFullYear() + '-' +
+        String(day.getMonth() + 1).padStart(2, '0') + '-' +
+        String(day.getDate()).padStart(2, '0');
 
       html += '<div class="week-day">';
       html += '<div class="week-day-label' + (isToday ? ' today' : '') + '">' +
@@ -287,10 +290,12 @@
         var booking = entry[1];
         var evt = cache[evtId];
         if (!evt) return;
-        var evtDay = evt.start_at.split('T')[0];
+        // Compare using the raw date portion from the API (local time, no TZ)
+        var evtDay = (evt.start_at || '').split('T')[0].split(' ')[0];
         if (evtDay !== dayStr) return;
 
-        var dt = new Date(evt.start_at);
+        // Parse as local time (API returns no TZ suffix)
+        var dt = new Date(evt.start_at.replace(' ', 'T'));
         var h = dt.getHours();
         var m = dt.getMinutes().toString().padStart(2, '0');
         var ampm = h >= 12 ? 'pm' : 'am';

@@ -316,6 +316,114 @@ select:focus, input:focus { border-color: var(--accent); }
 .up-name { color: var(--text); }
 .up-sub { color: var(--text-dim); }
 
+/* ── My Bookings light mode fixes ──────────────────────────────── */
+.tab-bar {
+  background: var(--bg-panel);
+  border-bottom-color: var(--border);
+}
+.tab-btn { color: var(--text-muted); }
+.tab-btn.active { color: var(--text-heading); }
+
+.up-seat-chip {
+  background: var(--upcoming-bg);
+  border-color: var(--upcoming-border);
+  color: var(--booked-border);
+}
+.up-cancel-all {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+.up-cancel { border-color: var(--upcoming-border); color: var(--booked-border); }
+
+/* Stats cards */
+.stat-card, .cost-card, .reco-card {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.stat-value, .cost-value { color: var(--text-heading); }
+.stat-label, .cost-label { color: var(--text-muted); }
+.stat-detail, .cost-hint { color: var(--text-dim); }
+.cost-card.cost-main {
+  background: var(--upcoming-bg);
+  border-color: var(--upcoming-border);
+}
+.cost-main .cost-value { color: var(--booked-border); }
+.cost-savings {
+  background: var(--upcoming-bg);
+  border-color: var(--upcoming-border);
+  color: var(--booked-border);
+}
+
+/* Subscription bar */
+.sub-bar {
+  background: var(--upcoming-bg);
+  border-color: var(--upcoming-border);
+}
+[data-theme="light"] .sub-bar { color: #1a5a1a; }
+[data-theme="light"] .sub-progress-fill { background: #3a9a3a; }
+[data-theme="light"] .sub-progress { background: #c0e0c0; }
+
+/* Heatmap */
+[data-theme="light"] .hm-level-0 { background: #ebedf0; }
+[data-theme="light"] .hm-level-1 { background: #9be9a8; }
+[data-theme="light"] .hm-level-2 { background: #40c463; }
+[data-theme="light"] .hm-level-3 { background: #30a14e; }
+[data-theme="light"] .hm-level-4 { background: #216e39; }
+
+/* Week view */
+.week-event {
+  background: var(--upcoming-bg);
+  border-color: var(--upcoming-border);
+}
+.week-nav button {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+.week-nav button:hover { background: var(--bg-input); color: var(--text-heading); }
+
+/* Studio map */
+.studio-map-container { background: var(--bg-input); border-color: var(--border); }
+[data-theme="light"] .studio-map-container div[style*="linear-gradient"] { opacity: 0.3; }
+
+/* Section titles */
+.heatmap-title, .cost-title, .week-title, .reco-title, .studio-map-title, .reco-badge {
+  color: var(--text-muted);
+}
+
+/* My Bookings day headers */
+.mb-day-header {
+  color: var(--booked-border);
+  border-bottom-color: var(--upcoming-border);
+}
+
+/* Rebook button */
+.rebook-btn { border-color: var(--border); }
+
+/* Calendar action buttons */
+.cal-btn {
+  border-color: var(--upcoming-border);
+  color: var(--booked-border);
+}
+.cal-btn:hover { background: var(--upcoming-bg); }
+
+/* My Bookings booked cards in light mode */
+[data-theme="light"] .my-booking-card.is-booked {
+  background: var(--booked-bg);
+  border-color: var(--booked-border);
+  border-left: 3px solid var(--booked-border);
+}
+
+/* Countdown badge */
+[data-theme="light"] .mb-countdown {
+  background: #e0f5e0;
+  color: #2a7a2a;
+}
+
+/* Skeleton in light mode */
+[data-theme="light"] .mb-skeleton {
+  background: var(--skeleton-base);
+}
+
 /* Type section headers */
 .type-section-header {
   border-bottom-color: var(--section-border);
