@@ -121,21 +121,21 @@
     _pillTimer = setInterval(updatePill, 30000); // update every 30s
   }
 
-  // Start pill after bookings load
-  var _origRender = window.renderMyBookings;
-  if (_origRender) {
-    window.renderMyBookings = function () {
-      _origRender.apply(this, arguments);
-      updatePill();
-    };
+  // Start pill after bookings load (via PsycleEvents)
+  if (typeof PsycleEvents !== 'undefined') {
+    PsycleEvents.on('bookings:loaded', function () { startPillTimer(); });
+    PsycleEvents.on('booking:complete', function () { updatePill(); });
+    PsycleEvents.on('booking:cancelled', function () { updatePill(); });
+    PsycleEvents.on('seat:cancelled', function () { updatePill(); });
+  } else {
+    // Fallback: poll for bookings
+    var _pollPill = setInterval(function () {
+      if (typeof _myBookings !== 'undefined' && Object.keys(_myBookings).length > 0) {
+        startPillTimer();
+        clearInterval(_pollPill);
+      }
+    }, 1000);
   }
-  // Also poll for renderMyBookings if not ready yet
-  var _pollPill = setInterval(function () {
-    if (typeof _myBookings !== 'undefined' && Object.keys(_myBookings).length > 0) {
-      startPillTimer();
-      clearInterval(_pollPill);
-    }
-  }, 1000);
 
 
   // ═══════════════════════════════════════════════════════════════════

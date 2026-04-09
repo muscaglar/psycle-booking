@@ -119,40 +119,34 @@
     badge.textContent = count > 0 ? count : '';
   }
 
-  // Patch renderMyBookings to update badge
-  var _origRender = window.renderMyBookings;
-  if (_origRender) {
-    window.renderMyBookings = function () {
-      _origRender.apply(this, arguments);
+  // Update badge and extras on booking events (via PsycleEvents)
+  if (typeof PsycleEvents !== 'undefined') {
+    PsycleEvents.on('bookings:loaded', function () {
       updateTabBadge();
       if (_currentTab === 'bookings') renderBookingsExtras();
-    };
-  } else {
-    // renderMyBookings might not exist yet, poll for it
-    var _pollInt = setInterval(function () {
-      if (typeof window.renderMyBookings === 'function' && window.renderMyBookings !== window.switchTab) {
-        _origRender = window.renderMyBookings;
-        window.renderMyBookings = function () {
-          _origRender.apply(this, arguments);
-          updateTabBadge();
-          if (_currentTab === 'bookings') renderBookingsExtras();
-        };
-        clearInterval(_pollInt);
-      }
-    }, 200);
+    });
+    PsycleEvents.on('booking:complete', function () {
+      updateTabBadge();
+      setTimeout(function () { switchTab('bookings'); }, 800);
+    });
+    PsycleEvents.on('booking:cancelled', function () { updateTabBadge(); });
+    PsycleEvents.on('seat:cancelled', function () { updateTabBadge(); });
   }
 
-  // Auto-switch to bookings after successful booking
-  var _origSubmit = window.submitBooking;
-  if (_origSubmit) {
-    window.submitBooking = async function (eventId, slots, btn) {
-      await _origSubmit.call(this, eventId, slots, btn);
-      // If booking succeeded (button shows booked), switch tab
-      if (btn.classList.contains('booked')) {
-        setTimeout(function () { switchTab('bookings'); }, 800);
-      }
-    };
-  }
+  // Also update when renderMyBookings is called directly
+  var _origRender = window.renderMyBookings;
+  var _patchRender = function () {
+    if (!_origRender && typeof window.renderMyBookings === 'function') {
+      _origRender = window.renderMyBookings;
+      window.renderMyBookings = function () {
+        _origRender.apply(this, arguments);
+        updateTabBadge();
+        if (_currentTab === 'bookings') renderBookingsExtras();
+      };
+    }
+  };
+  _patchRender();
+  if (!_origRender) setTimeout(_patchRender, 200);
 
   // ── Render extras when bookings tab is active ──────────────────
 

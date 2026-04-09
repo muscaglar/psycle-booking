@@ -169,6 +169,7 @@ async function fetchMyBookings() {
     }
 
     console.log('[psycle] _myBookings:', _myBookings);
+    PsycleEvents.emit('bookings:loaded', _myBookings);
     renderMyBookings();
     // Refresh any already-rendered search result booking buttons
     Object.entries(_myBookings).forEach(([evtId, booking]) => {
@@ -757,8 +758,9 @@ async function submitBooking(eventId, slots, btn) {
       slotsArr.forEach(s => { slotBookings[s] = bookingId; });
       _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings };
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
-      toast('Booked! See you in class 🚴', 'success');
+      toast('Booked! See you in class', 'success');
       refreshUpcomingPanel();
+      PsycleEvents.emit('booking:complete', eventId, slotsArr, btn);
     } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
       btn.textContent = 'Already booked ✓';
       btn.className = 'book-btn booked';
@@ -821,6 +823,7 @@ async function cancelBikeSlot(slotId, eventId) {
         ? `Bike ${slotId} cancelled. Select another or close.`
         : 'Booking cancelled. Select a bike to rebook.';
       toast(`Bike ${slotId} cancelled`, 'info');
+      PsycleEvents.emit('seat:cancelled', eventId, slotId);
     } else {
       const data = await res.json().catch(() => ({}));
       document.getElementById('modalHint').textContent = 'Cancel failed — try again';
@@ -860,10 +863,12 @@ async function confirmUnbook(bookingId, eventId, btn) {
       btn.closest('.class-card')?.classList.remove('is-booked');
       refreshUpcomingPanel();
       toast('Booking cancelled', 'info');
+      PsycleEvents.emit('booking:cancelled', eventId);
     } else {
       const data = await res.json().catch(() => ({}));
       btn.disabled = false;
-      btn.textContent = resolvedId ? 'Booked ✓' : 'Cancel';
+      btn.textContent = 'Booked ✓';
+      PsycleEvents.emit('booking:cancel_failed', eventId, data);
       toast(data.message || `Cancel failed (${res.status})`, 'error');
     }
   } catch (e) {
@@ -1614,6 +1619,7 @@ async function upcomingCancel(eventId, btn) {
       }
       refreshUpcomingPanel();
       toast('Booking cancelled', 'info');
+      PsycleEvents.emit('booking:cancelled', eventId);
     } else {
       btn.disabled = false;
       btn.textContent = 'Cancel';
@@ -1667,6 +1673,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
       }
       refreshUpcomingPanel();
       toast(`Bike ${slotId} cancelled`, 'info');
+      PsycleEvents.emit('seat:cancelled', eventId, slotId);
     } else {
       btn.disabled = false;
       if (chip) chip.style.opacity = '';

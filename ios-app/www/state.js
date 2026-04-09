@@ -186,5 +186,41 @@ const PsycleState = {
   }
 })();
 
+// ── Event Emitter ──────────────────────────────────────────────
+// Replaces fragile monkey-patching chains. Modules emit events at
+// key moments; other modules subscribe without wrapping functions.
+//
+// Usage:
+//   PsycleEvents.on('booking:complete', (eventId, slots) => { ... })
+//   PsycleEvents.emit('booking:complete', eventId, slots)
+
+const PsycleEvents = {
+  _handlers: {},
+
+  on(event, fn) {
+    if (!this._handlers[event]) this._handlers[event] = [];
+    this._handlers[event].push(fn);
+    return () => this.off(event, fn);
+  },
+
+  off(event, fn) {
+    const list = this._handlers[event];
+    if (!list) return;
+    const idx = list.indexOf(fn);
+    if (idx !== -1) list.splice(idx, 1);
+  },
+
+  emit(event, ...args) {
+    const list = this._handlers[event];
+    if (!list || list.length === 0) return;
+    for (const fn of list) {
+      try { fn(...args); }
+      catch (e) { console.error('[PsycleEvents]', event, e); }
+    }
+  },
+};
+
+window.PsycleEvents = PsycleEvents;
+
 // ── Expose PsycleState globally ─────────────────────────────────
 window.PsycleState = PsycleState;

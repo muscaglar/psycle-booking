@@ -6,6 +6,9 @@
 (function () {
   'use strict';
 
+  // Alias the global escapeHTML from security.js (must be at top for hoisting)
+  var escapeHtml = function (s) { return (window.escapeHTML || function (x) { return x; })(s); };
+
   // Wait for DOM + app.js globals to be available
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -482,8 +485,5 @@
   /* ═══════════════════════════════════════════════════════════════
      UTILITY
      ═══════════════════════════════════════════════════════════════ */
-
-  // Use the global escapeHTML from security.js
-  var escapeHtml = window.escapeHTML;
 
 })();

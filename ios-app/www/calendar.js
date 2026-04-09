@@ -307,54 +307,13 @@ function renderCalendarPanel() {
   document.head.appendChild(style);
 })();
 
-// ── Monkey-patch booking/cancel functions to keep calendar in sync ──
-
-(function patchBookingFunctions() {
-  // Wrap submitBooking
-  const _origSubmitBooking = window.submitBooking;
-  if (_origSubmitBooking) {
-    window.submitBooking = async function(eventId, slots, btn) {
-      await _origSubmitBooking.call(this, eventId, slots, btn);
-      syncCalendarData();
-    };
-  }
-
-  // Wrap confirmUnbook
-  const _origConfirmUnbook = window.confirmUnbook;
-  if (_origConfirmUnbook) {
-    window.confirmUnbook = async function(bookingId, eventId, btn) {
-      await _origConfirmUnbook.call(this, bookingId, eventId, btn);
-      syncCalendarData();
-    };
-  }
-
-  // Wrap cancelBikeSlot
-  const _origCancelBikeSlot = window.cancelBikeSlot;
-  if (_origCancelBikeSlot) {
-    window.cancelBikeSlot = async function(slotId, eventId) {
-      await _origCancelBikeSlot.call(this, slotId, eventId);
-      syncCalendarData();
-    };
-  }
-
-  // Wrap upcomingCancel
-  const _origUpcomingCancel = window.upcomingCancel;
-  if (_origUpcomingCancel) {
-    window.upcomingCancel = async function(eventId, btn) {
-      await _origUpcomingCancel.call(this, eventId, btn);
-      syncCalendarData();
-    };
-  }
-
-  // Wrap fetchMyBookings to sync after initial load
-  const _origFetchMyBookings = window.fetchMyBookings;
-  if (_origFetchMyBookings) {
-    window.fetchMyBookings = async function() {
-      await _origFetchMyBookings.call(this);
-      syncCalendarData();
-    };
-  }
-})();
+// ── Sync calendar on booking events (via PsycleEvents) ──────────
+if (typeof PsycleEvents !== 'undefined') {
+  PsycleEvents.on('booking:complete', syncCalendarData);
+  PsycleEvents.on('booking:cancelled', syncCalendarData);
+  PsycleEvents.on('seat:cancelled', syncCalendarData);
+  PsycleEvents.on('bookings:loaded', syncCalendarData);
+}
 
 // ── Respond to service worker requests for calendar data ────────
 // The SW sends a MessageChannel port asking for localStorage data

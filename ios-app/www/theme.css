@@ -578,3 +578,290 @@ select:focus, input:focus { border-color: var(--accent); }
   max-width: 320px;
   line-height: 1.5;
 }
+
+/* ================================================================
+   Light mode overrides — remaining components
+   ================================================================ */
+
+/* ── tabs.css: Week View ─────────────────────────────────────────── */
+
+.week-day-label { color: var(--text-ghost); }
+.week-day-num { color: var(--text-dim); }
+.week-event-time { color: var(--booked-border); }
+.week-event-name { color: var(--text-muted); }
+.week-event-loc { color: var(--text-ghost); }
+
+[data-theme="light"] .week-event {
+  border-left-color: var(--booked-border);
+}
+[data-theme="light"] .week-event:hover {
+  border-color: var(--booked-border);
+}
+
+/* ── tabs.css: Studio Map ────────────────────────────────────────── */
+
+.studio-pin-label { color: var(--text-muted); }
+.studio-pin-booking { color: var(--booked-border); }
+
+[data-theme="light"] .studio-pin-dot {
+  border-color: #ccc;
+}
+
+/* ── tabs.css: Heatmap ───────────────────────────────────────────── */
+
+.hm-hour-label { color: var(--text-ghost); }
+.hm-day-label { color: var(--text-dim); }
+.hm-legend span { color: var(--text-ghost); }
+
+/* ── tabs.css: Recommendation Cards ──────────────────────────────── */
+
+.reco-class { color: var(--text); }
+.reco-detail { color: var(--text-dim); }
+.reco-action { color: var(--accent); }
+
+[data-theme="light"] .reco-card:hover {
+  border-color: var(--accent);
+}
+
+/* ── features.css: History Modal ─────────────────────────────────── */
+
+.history-btn {
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+.history-btn:hover {
+  background: var(--bg-input);
+  color: var(--text-heading);
+}
+
+[data-theme="light"] .history-modal {
+  background: var(--modal-overlay);
+}
+
+.history-month-header {
+  border-bottom-color: var(--border);
+}
+
+.history-item {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.history-date { color: var(--text-dim); }
+.history-class-name { color: var(--text); }
+.history-sub { color: var(--text-dim); }
+.history-empty { color: var(--text-ghost); }
+
+[data-theme="light"] .history-cancelled-tag {
+  background: var(--badge-full-bg);
+  border-color: var(--badge-full-border);
+  color: var(--badge-full-text);
+}
+
+[data-theme="light"] .history-item.cancelled .history-class-name {
+  color: var(--text-ghost);
+}
+
+/* ── features.css: Instructor Modal ──────────────────────────────── */
+
+.instructor-link {
+  color: var(--text-muted);
+  border-bottom-color: var(--text-ghost);
+}
+
+[data-theme="light"] .instructor-modal {
+  background: var(--modal-overlay);
+}
+
+.instructor-name-title { color: var(--text-heading); }
+
+.instructor-class-item {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+[data-theme="light"] .instructor-class-item:hover {
+  border-color: var(--border-light);
+}
+
+.instructor-class-time { color: var(--text-heading); }
+.instructor-class-type { color: var(--text); }
+.instructor-class-loc { color: var(--text-dim); }
+.instructor-empty { color: var(--text-ghost); }
+
+/* ── features.css: Notify Button ─────────────────────────────────── */
+
+.notify-btn {
+  border-color: var(--border-light);
+  color: var(--text-dim);
+}
+.notify-btn:hover {
+  background: var(--bg-input);
+  border-color: var(--text-ghost);
+}
+
+[data-theme="light"] .notify-btn.watching {
+  background: #fef9e7;
+  border-color: #e0c860;
+  color: #c8930a;
+}
+[data-theme="light"] .notify-btn.watching:hover {
+  background: #fdf3cd;
+}
+
+/* ── settings.css: Settings Panel extras ─────────────────────────── */
+
+[data-theme="light"] .settings-close {
+  color: var(--text-ghost);
+}
+[data-theme="light"] .settings-close:hover {
+  color: var(--text-heading);
+}
+
+[data-theme="light"] .settings-section-title {
+  color: var(--text-dim);
+}
+
+/* ── settings.css: Tier System ───────────────────────────────────── */
+
+[data-theme="light"] .tier-btn {
+  border-color: #ccc;
+  color: #999;
+}
+[data-theme="light"] .tier-btn:hover {
+  border-color: #aaa;
+  color: #666;
+}
+
+/* ── settings.css: Bike Preferences extras ───────────────────────── */
+
+[data-theme="light"] .bike-pref-legend {
+  color: var(--text-dim);
+}
+[data-theme="light"] .bike-pref-slot:hover {
+  border-color: #999;
+  color: var(--text-heading);
+}
+
+/* ── styles.css: Pull-to-Refresh ─────────────────────────────────── */
+
+.pull-indicator {
+  background: var(--toast-bg);
+  border-color: var(--toast-border);
+}
+.pull-text { color: var(--text-muted); }
+.pull-spinner {
+  border-color: var(--spinner-track);
+  border-top-color: var(--accent);
+}
+
+/* ── styles.css: Misc light mode fixes ───────────────────────────── */
+
+.controls-toggle { color: var(--text-dim); }
+.header-subtitle { color: var(--text-dim); }
+.disconnect-link { color: var(--text-ghost); }
+
+[data-theme="light"] .book-btn.booked {
+  background: #e6f5e6;
+  color: #2a7a2a;
+  border-color: #4a9a4a;
+}
+
+[data-theme="light"] .book-btn.waitlist {
+  background: #fef9e7;
+  color: #9a7a0a;
+}
+
+[data-theme="light"] .book-btn.login-needed {
+  border-color: var(--border-light);
+  color: var(--text-dim);
+}
+
+.fav-btn {
+  color: #f5a623;
+  border-color: var(--border-light);
+}
+[data-theme="light"] .fav-btn {
+  border-color: #e0c860;
+  background: #fef9e7;
+}
+[data-theme="light"] .fav-btn:hover {
+  background: #fdf3cd;
+}
+
+[data-theme="light"] .mb-past .class-card {
+  border-left-color: var(--border-light);
+  background: var(--bg);
+}
+
+/* ── styles.css: Bike slot light mode ────────────────────────────── */
+
+[data-theme="light"] .bike-slot.available rect { fill: #f0f0f0; stroke: #ccc; }
+[data-theme="light"] .bike-slot.available:hover rect { fill: #e0e0e0; stroke: #999; }
+[data-theme="light"] .bike-slot.taken rect { fill: #fde8ec; stroke: #f5b3bf; }
+[data-theme="light"] .bike-slot.selected rect { fill: #e94560; stroke: #c73650; }
+[data-theme="light"] .bike-slot.mine rect { fill: #e6f5e6; stroke: #4a9a4a; }
+[data-theme="light"] .bike-slot.mine:hover rect { fill: #fde8ec; stroke: #c73650; }
+[data-theme="light"] .bike-slot text { fill: #888; }
+[data-theme="light"] .bike-slot.taken text { fill: #f5b3bf; }
+[data-theme="light"] .bike-slot.selected text { fill: #fff; }
+[data-theme="light"] .bike-slot.available:hover text { fill: #333; }
+[data-theme="light"] .bike-slot.mine text { fill: #2a7a2a; }
+
+/* ── styles.css: Swipe cancel background ─────────────────────────── */
+
+[data-theme="light"] .swipe-cancel-bg {
+  background: #e74c3c;
+}
+
+/* ── styles.css: Subscription bar extras ─────────────────────────── */
+
+[data-theme="light"] .sub-bar-name { color: #2a7a2a; }
+[data-theme="light"] .sub-bar-count { color: #3a8a3a; }
+
+/* ── styles.css: Instructor dropdown shadow fix ──────────────────── */
+
+[data-theme="light"] .instr-dropdown {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+[data-theme="light"] .instr-option:hover,
+[data-theme="light"] .instr-option.focused {
+  background: #f5f5f5;
+}
+
+/* ── styles.css: Upcoming panel extras ───────────────────────────── */
+
+[data-theme="light"] .upcoming-header h2 { color: #2a7a2a; }
+[data-theme="light"] .upcoming-count { background: #4a9a4a; color: #fff; }
+[data-theme="light"] .upcoming-chevron { color: #2a7a2a; }
+[data-theme="light"] .up-day { color: #2a7a2a; }
+[data-theme="light"] .up-cancel:hover { background: #e6f5e6; }
+[data-theme="light"] .up-seat-chip button { color: rgba(42,122,42,0.7); }
+[data-theme="light"] .up-cancel-all { border-color: #f5b3bf; color: #c73650; }
+[data-theme="light"] .up-cancel-all:hover { background: #fde8ec; }
+
+/* ── tabs.css: Tab badge ─────────────────────────────────────────── */
+
+[data-theme="light"] .tab-badge {
+  background: #4a9a4a;
+  color: #fff;
+}
+
+/* ── settings.css: Floating pill green text ──────────────────────── */
+
+[data-theme="light"] .ncp-countdown { color: #2a7a2a; }
+[data-theme="light"] .ncp-seat { color: #2a7a2a; }
+
+/* ── styles.css: MB skeleton light mode ──────────────────────────── */
+
+[data-theme="light"] .mb-skeleton {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  border-left-color: var(--upcoming-border);
+}
+[data-theme="light"] .mb-skeleton-time,
+[data-theme="light"] .mb-skeleton-line {
+  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+  background-size: 400px 100%;
+}
