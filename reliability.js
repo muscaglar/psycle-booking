@@ -213,7 +213,6 @@
     var queue = getOfflineQueue();
     if (queue.length === 0) return;
 
-    console.log('[psycle] Processing offline queue:', queue.length, 'item(s)');
     var succeeded = 0;
     var failed = 0;
     var remaining = [];
@@ -301,5 +300,4 @@
   window.addEventListener('online', processOfflineQueue);
 
 
-  console.log('[psycle] reliability.js loaded');
 })();

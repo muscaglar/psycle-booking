@@ -7,7 +7,7 @@
 
   // ── Tab Navigation ──────────────────────────────────────────────
 
-  var TABS = ['discover', 'bookings'];
+  var TABS = ['discover', 'bookings', 'insights'];
   var _currentTab = 'discover';
 
   function initTabs() {
@@ -23,7 +23,8 @@
       '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">Discover</button>' +
       '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' +
         'My Bookings <span class="tab-badge" id="tabBadge"></span>' +
-      '</button>';
+      '</button>' +
+      '<button class="tab-btn" data-tab="insights" onclick="switchTab(\'insights\')">Insights</button>';
 
     // Insert tab bar after header
     var header = document.querySelector('header');
@@ -41,16 +42,10 @@
     discoverPanel.appendChild(controls);
     discoverPanel.appendChild(results);
 
-    // Create bookings panel
+    // Create bookings panel (focused: subscription bar + booking cards + calendar actions)
     var bookingsPanel = document.createElement('div');
     bookingsPanel.id = 'tab-bookings';
     bookingsPanel.className = 'tab-panel';
-
-    // Add stats bar placeholder
-    bookingsPanel.innerHTML =
-      '<div id="statsBar" class="stats-bar" style="display:none"></div>' +
-      '<div id="weekView" class="week-view" style="display:none"></div>' +
-      '<div id="recoSection" class="reco-section" style="display:none"></div>';
 
     // Move upcoming panel into bookings tab
     if (upcomingPanel) {
@@ -58,18 +53,25 @@
       bookingsPanel.appendChild(upcomingPanel);
     }
 
-    // Add studio map, heatmap, cost tracker
-    bookingsPanel.innerHTML +=
-      '<div id="studioMapSection" class="studio-map-section" style="display:none"></div>' +
+    // Create insights panel (analytics, stats, heatmap, cost, map, recommendations)
+    var insightsPanel = document.createElement('div');
+    insightsPanel.id = 'tab-insights';
+    insightsPanel.className = 'tab-panel';
+    insightsPanel.innerHTML =
+      '<div id="statsBar" class="stats-bar" style="display:none"></div>' +
+      '<div id="costSection" class="cost-section" style="display:none"></div>' +
       '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>' +
-      '<div id="costSection" class="cost-section" style="display:none"></div>';
+      '<div id="weekView" class="week-view" style="display:none"></div>' +
+      '<div id="recoSection" class="reco-section" style="display:none"></div>' +
+      '<div id="studioMapSection" class="studio-map-section" style="display:none"></div>';
 
-    // Wrap both panels in tab-content
+    // Wrap all panels in tab-content
     var tabContent = document.createElement('div');
     tabContent.className = 'tab-content';
     tabBar.parentNode.insertBefore(tabContent, discoverPanel);
     tabContent.appendChild(discoverPanel);
     tabContent.appendChild(bookingsPanel);
+    tabContent.appendChild(insightsPanel);
 
     // Move banners before tab content (always visible)
     var sessionBanner = document.getElementById('sessionBanner');
@@ -103,8 +105,8 @@
     if (!noHash) {
       history.replaceState(null, '', '#' + tab);
     }
-    if (tab === 'bookings') {
-      renderBookingsExtras();
+    if (tab === 'insights') {
+      renderInsights();
     }
   };
 
@@ -119,21 +121,27 @@
     badge.textContent = count > 0 ? count : '';
   }
 
-  // Update badge and extras on booking events (via PsycleEvents)
+  // Update badge on booking events (via PsycleEvents)
   if (typeof PsycleEvents !== 'undefined') {
     PsycleEvents.on('bookings:loaded', function () {
       updateTabBadge();
-      if (_currentTab === 'bookings') renderBookingsExtras();
+      if (_currentTab === 'insights') renderInsights();
     });
     PsycleEvents.on('booking:complete', function () {
       updateTabBadge();
       setTimeout(function () { switchTab('bookings'); }, 800);
     });
-    PsycleEvents.on('booking:cancelled', function () { updateTabBadge(); });
-    PsycleEvents.on('seat:cancelled', function () { updateTabBadge(); });
+    PsycleEvents.on('booking:cancelled', function () {
+      updateTabBadge();
+      if (_currentTab === 'insights') renderInsights();
+    });
+    PsycleEvents.on('seat:cancelled', function () {
+      updateTabBadge();
+      if (_currentTab === 'insights') renderInsights();
+    });
   }
 
-  // Also update when renderMyBookings is called directly
+  // Also update badge when renderMyBookings is called directly
   var _origRender = window.renderMyBookings;
   var _patchRender = function () {
     if (!_origRender && typeof window.renderMyBookings === 'function') {
@@ -141,22 +149,21 @@
       window.renderMyBookings = function () {
         _origRender.apply(this, arguments);
         updateTabBadge();
-        if (_currentTab === 'bookings') renderBookingsExtras();
       };
     }
   };
   _patchRender();
   if (!_origRender) setTimeout(_patchRender, 200);
 
-  // ── Render extras when bookings tab is active ──────────────────
+  // ── Render insights tab content ────────────────────────────────
 
-  function renderBookingsExtras() {
+  function renderInsights() {
     renderQuickStats();
+    renderCostTracker();
+    renderHeatmap();
     renderWeekView();
     renderRecommendations();
     renderStudioMap();
-    renderHeatmap();
-    renderCostTracker();
   }
 
   // ── Quick Stats ────────────────────────────────────────────────
@@ -224,7 +231,8 @@
   var _weekOffset = 0;
 
   window.weekNav = function (dir) {
-    _weekOffset += dir;
+    if (dir === 0) _weekOffset = 0; // "Today" button
+    else _weekOffset += dir;
     renderWeekView();
   };
 
@@ -308,9 +316,6 @@
 
     html += '</div>';
     container.innerHTML = html;
-
-    // Reset offset if "Today" was clicked
-    if (_weekOffset !== 0 && arguments[0] === 0) _weekOffset = 0;
   }
 
   // ── Recommendations ────────────────────────────────────────────
@@ -626,5 +631,4 @@
     setTimeout(initTabs, 50);
   }
 
-  console.log('[tabs] tabs.js loaded');
 })();

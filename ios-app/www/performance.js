@@ -339,7 +339,6 @@ function _revalidateInBackground(path, cacheKey) {
     instructors.push(...visible);
     // Re-render the dropdown if it exists
     if (typeof renderInstrDropdown === 'function') renderInstrDropdown();
-    console.log('[perf] Pre-populated instructors from cache (%d)', visible.length);
   }
 
   if (cachedLocations && typeof locations !== 'undefined' && locations.length === 0) {
@@ -351,7 +350,6 @@ function _revalidateInBackground(path, cacheKey) {
       lSel.innerHTML = '<option value="">All Studios</option>' +
         visible.map(l => `<option value="${l.id}">${escapeHTML(l.name.replace('Psycle ', ''))}</option>`).join('');
     }
-    console.log('[perf] Pre-populated locations from cache (%d)', visible.length);
   }
 
   if (cachedEventTypes && typeof eventTypes !== 'undefined' && eventTypes.length === 0) {
@@ -359,9 +357,7 @@ function _revalidateInBackground(path, cacheKey) {
     if (Array.isArray(types)) {
       eventTypes.push(...types);
       if (typeof renderCategoryPills === 'function') renderCategoryPills();
-      console.log('[perf] Pre-populated eventTypes from cache (%d)', types.length);
     }
   }
 })();
 
-console.log('[perf] Performance enhancements loaded: debounced search, virtual scroll, API caching');

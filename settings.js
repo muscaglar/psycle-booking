@@ -225,12 +225,16 @@
 
     var query = (document.getElementById('tierSearch')?.value || '').toLowerCase();
     var tiers = loadTiers();
+    // Sort order: S, A, B, C, D, F, then unranked — alphabetical within each tier
+    var tierOrder = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
     var list = (typeof instructors !== 'undefined' ? instructors : [])
       .filter(function (i) { return !query || i.full_name.toLowerCase().includes(query); })
       .sort(function (a, b) {
-        var ta = tiers[String(a.id)] || 'Z';
-        var tb = tiers[String(b.id)] || 'Z';
-        if (ta !== tb) return ta < tb ? -1 : 1;
+        var ta = tiers[String(a.id)];
+        var tb = tiers[String(b.id)];
+        var oa = ta ? tierOrder[ta] : 99;
+        var ob = tb ? tierOrder[tb] : 99;
+        if (oa !== ob) return oa - ob;
         return a.full_name.localeCompare(b.full_name);
       });
 
@@ -263,9 +267,31 @@
   // Bike Preference UI
   // ═══════════════════════════════════════════════════════════════════
 
-  function populateStudioSelect() {
+  async function populateStudioSelect() {
     var select = document.getElementById('bikePrefStudio');
     if (!select) return;
+
+    // Fetch studios from ALL locations (not just ones seen in search)
+    var locs = (typeof locations !== 'undefined') ? locations : [];
+    if (locs.length > 0) {
+      select.innerHTML = '<option value="">Loading studios…</option>';
+      var today = new Date().toISOString().split('T')[0];
+      await Promise.all(locs.map(async function (loc) {
+        try {
+          var res = await apiFetch('/events?start=' + today + '+00:00:00&end=' + today + '+23:59:59&location=' + loc.id + '&limit=1');
+          if (!res.ok) return;
+          var data = await res.json();
+          var rels = data.relations || {};
+          var studios = rels.studios || [];
+          studios.forEach(function (s) {
+            if (!_studioMap[s.id]) {
+              _studioMap[s.id] = s;
+            }
+          });
+        } catch (e) {}
+      }));
+    }
+
     var studios = _studioMap || {};
     var seen = {};
 
@@ -274,10 +300,9 @@
     Object.values(studios).forEach(function (s) {
       if (!s.has_layout || seen[s.id]) return;
       seen[s.id] = true;
-      // Resolve branch name from locations
       var branchName = '';
-      if (typeof locations !== 'undefined') {
-        var loc = locations.find(function (l) { return l.id === s.location_id; });
+      if (locs.length > 0) {
+        var loc = locs.find(function (l) { return l.id === s.location_id; });
         if (loc) branchName = loc.name.replace('Psycle ', '');
       }
       studioList.push({ id: s.id, branch: branchName, name: s.name });
@@ -367,7 +392,8 @@
   // ═══════════════════════════════════════════════════════════════════
 
   var _origShowBikePicker = window.showBikePicker;
-  if (_origShowBikePicker) {
+  if (_origShowBikePicker && !window._bikePickerPrefsPatched) {
+    window._bikePickerPrefsPatched = true;
     window.showBikePicker = function (eventId, btn, layout, availableSlotIds, mySlotIds, studioName) {
       _origShowBikePicker.apply(this, arguments);
 
@@ -406,7 +432,8 @@
   // ═══════════════════════════════════════════════════════════════════
 
   var _origEventCard = window.eventCard;
-  if (_origEventCard) {
+  if (_origEventCard && !window._eventCardTierPatched) {
+    window._eventCardTierPatched = true;
     window.eventCard = function (evt, instrMap, studioMap, locationMap, typeMap) {
       var html = _origEventCard.apply(this, arguments);
       // Inject tier badge after instructor name
@@ -494,5 +521,4 @@
   };
 
 
-  console.log('[settings] settings.js loaded');
 })();

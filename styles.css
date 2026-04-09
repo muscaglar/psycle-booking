@@ -99,7 +99,12 @@ select:focus, input:focus {
 
 .results {
   padding: 24px;
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+
+/* All tab panels need bottom clearance for the floating pill */
+.tab-panel {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
 }
 
 .status {

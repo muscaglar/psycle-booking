@@ -260,5 +260,4 @@
   });
 
 
-  console.log('[security] security.js loaded');
 })();

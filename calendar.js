@@ -60,7 +60,6 @@ function syncCalendarData() {
       lon: geo ? geo.lon : null,
     });
   }
-  console.log('[calendar] syncing', entries.length, 'entries:', entries.map(e => ({ id: e.eventId, slots: e.slots, loc: e.locName, addr: e.address })));
   try {
     localStorage.setItem(CALENDAR_DATA_KEY, JSON.stringify(entries));
   } catch (e) {
@@ -271,11 +270,6 @@ function renderCalendarActions() {
   </div>`;
 }
 
-// Remove legacy standalone panel if it exists
-function renderCalendarPanel() {
-  const old = document.getElementById('calendarPanel');
-  if (old) old.remove();
-}
 
 // Inject styles
 (function() {
@@ -330,9 +324,3 @@ navigator.serviceWorker?.addEventListener('message', evt => {
   }
 });
 
-// Render the calendar panel once the DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', renderCalendarPanel);
-} else {
-  renderCalendarPanel();
-}

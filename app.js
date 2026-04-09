@@ -110,7 +110,6 @@ async function fetchMyBookings() {
     if (!res.ok) return;
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.data || []);
-    console.log('[psycle] raw bookings:', list.slice(0, 3));
 
     // The API returns one record per seat. Multiple seats for the same
     // event_id appear as separate booking records, each with its own
@@ -137,7 +136,6 @@ async function fetchMyBookings() {
     // This makes "My Bookings" self-sufficient — no search required.
     const uncached = Object.keys(_myBookings).filter(id => !_eventCache[id]);
     if (uncached.length > 0) {
-      console.log('[psycle] fetching event details for', uncached.length, 'booked events');
       showBookingSkeleton(uncached.length);
       await Promise.all(uncached.map(async evtId => {
         try {
@@ -168,7 +166,6 @@ async function fetchMyBookings() {
       }));
     }
 
-    console.log('[psycle] _myBookings:', _myBookings);
     PsycleEvents.emit('bookings:loaded', _myBookings);
     renderMyBookings();
     // Refresh any already-rendered search result booking buttons
@@ -456,7 +453,7 @@ async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds) {
     else mergeRelations(locRelations, res.relations);
     if (batch.length < limit) break;
     // Advance start to 1 second after the last event to get the next page
-    const lastTs = batch.map(e => e.start_at).sort().at(-1);
+    const sorted = batch.map(e => e.start_at).sort(); const lastTs = sorted[sorted.length - 1];
     const next = new Date(lastTs.replace(' ', 'T') + 'Z');
     next.setSeconds(next.getSeconds() + 1);
     windowStart = next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
@@ -527,7 +524,7 @@ async function search() {
           const done = batch.length < limit;
           render(allEvents, relations, filters, done);
           if (done) break;
-          const lastTs = batch.map(e => e.start_at).sort().at(-1);
+          const sorted = batch.map(e => e.start_at).sort(); const lastTs = sorted[sorted.length - 1];
           const next = new Date(lastTs.replace(' ', 'T') + 'Z');
           next.setSeconds(next.getSeconds() + 1);
           windowStart = next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
@@ -596,7 +593,6 @@ async function bookClass(eventId, btn, studioId) {
     const detail = await res.json();
     // detail.slots = AVAILABLE (bookable) slot IDs
     const availableSlotIds = new Set((detail.slots || []).map(Number));
-    console.log('[psycle] available slot IDs from API:', [...availableSlotIds],
       '| layout slot IDs:', _studioMap[studioId]?.layout?.slots?.map(s => s.id));
 
     const studio = _studioMap[studioId];
@@ -790,7 +786,6 @@ async function cancelBikeSlot(slotId, eventId) {
   try {
     const resolvedId = booking?.slotBookings?.[slotId] || booking?.bookingId;
     const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
-    console.log('[psycle] cancel path:', path, '| slot:', slotId, '| booking:', booking);
     const res = await apiFetch(path, { method: 'DELETE' });
     if (res.ok || res.status === 204 || res.status === 200) {
       // Remove this slot from local state
@@ -1243,7 +1238,7 @@ function instrKeydown(e) {
     dd.style.display = 'none';
     return;
   } else if (e.key === 'Backspace' && !e.target.value && selectedInstructors.size) {
-    const last = [...selectedInstructors].at(-1);
+    const instrArr = [...selectedInstructors]; const last = instrArr[instrArr.length - 1];
     removeInstructor(last);
     return;
   }
