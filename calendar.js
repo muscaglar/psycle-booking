@@ -4,43 +4,18 @@
 
 const CALENDAR_DATA_KEY = 'psycle_calendar_data';
 
-// ── Psycle studio geo data ──────────────────────────────────────
-// Maps the UI-stripped location name (e.g. "Canary Wharf") to its
-// physical address and coordinates so calendar apps can show travel
-// time, maps, and directions.  Add new studios here as they open.
+// ── Psycle studio geo coordinates ────────────────────────────────
+// Addresses come from the API (relations.locations.address).
+// This map only stores lat/lon for map pins and travel time.
+// Keys match against both "Psycle X" and stripped "X" names.
 const STUDIO_GEO = {
-  'oxford circus': {
-    address: '76 Mortimer Street, London W1W 7SA',
-    lat: 51.5188, lon: -0.1402,
-  },
-  'mortimer street': {
-    address: '76 Mortimer Street, London W1W 7SA',
-    lat: 51.5188, lon: -0.1402,
-  },
-  'bank': {
-    address: '40 Coleman Street, London EC2R 5EH',
-    lat: 51.5155, lon: -0.0870,
-  },
-  'victoria': {
-    address: '27 Eccleston Place, London SW1W 9NF',
-    lat: 51.4955, lon: -0.1480,
-  },
-  'notting hill': {
-    address: '37-41 Westbourne Grove, London W2 4UA',
-    lat: 51.5154, lon: -0.1910,
-  },
-  'london bridge': {
-    address: '20-26 London Bridge Street, London SE1 9SG',
-    lat: 51.5055, lon: -0.0860,
-  },
-  'shoreditch': {
-    address: '17-23 Whitby Street, London E1 6JU',
-    lat: 51.5215, lon: -0.0735,
-  },
-  'clapham': {
-    address: '82-84 Battersea Rise, London SW11 1EH',
-    lat: 51.4622, lon: -0.1680,
-  },
+  'oxford circus':  { lat: 51.5188, lon: -0.1402 },
+  'bank':           { lat: 51.5155, lon: -0.0870 },
+  'victoria':       { lat: 51.4955, lon: -0.1480 },
+  'notting hill':   { lat: 51.5154, lon: -0.1910 },
+  'london bridge':  { lat: 51.5055, lon: -0.0860 },
+  'shoreditch':     { lat: 51.5215, lon: -0.0735 },
+  'clapham':        { lat: 51.4622, lon: -0.1680 },
 };
 
 function _lookupGeo(locName) {
@@ -58,23 +33,19 @@ function syncCalendarData() {
   for (const [evtId, booking] of Object.entries(_myBookings)) {
     const evt = _eventCache[evtId];
     if (!evt) continue;
-    // Resolve full location + studio name for calendar events
-    // Use the full "Psycle X" name (not the UI-stripped version) for calendar LOCATION
-    let locationName = '';
-    const studio = _studioMap[evt.studio_id];
-    if (studio) {
-      // Try to get the parent location's full name from relations
-      const locId = studio.location_id;
-      // _eventCache stores the stripped name; reconstruct full name
-      const stripped = evt._locName || '';
-      locationName = stripped ? 'Psycle ' + stripped : '';
-      // Append studio/room name if different from location
-      if (studio.name && studio.name !== locationName) {
-        locationName = locationName ? locationName + ' — ' + studio.name : studio.name;
-      }
+    // Use the API-provided address (from relations.locations) for calendar events
+    const locFullName = evt._locFullName || ('Psycle ' + (evt._locName || ''));
+    const apiAddress = evt._locAddress || '';
+    const studioName = evt._studioName || '';
+    // Display name: "Psycle Oxford Circus — Ride Studio 1"
+    let locationDisplay = locFullName;
+    if (studioName && studioName !== locFullName) {
+      locationDisplay += ' — ' + studioName;
     }
-    if (!locationName) locationName = evt._locName || '';
-    const geo = _lookupGeo(locationName) || _lookupGeo(evt._locName);
+    // Full address for calendar LOCATION field
+    const fullAddress = apiAddress ? (locFullName + ', ' + apiAddress) : locationDisplay;
+    // Geo coordinates for travel time / map pin
+    const geo = _lookupGeo(locFullName) || _lookupGeo(evt._locName);
     entries.push({
       eventId: evtId,
       bookingId: booking.bookingId,
@@ -83,12 +54,13 @@ function syncCalendarData() {
       duration: evt.duration,
       typeName: evt._typeName || 'Class',
       instrName: evt._instrName || '',
-      locName: locationName,
-      address: geo ? geo.address : '',
+      locName: locationDisplay,
+      address: fullAddress,
       lat: geo ? geo.lat : null,
       lon: geo ? geo.lon : null,
     });
   }
+  console.log('[calendar] syncing', entries.length, 'entries:', entries.map(e => ({ id: e.eventId, slots: e.slots, loc: e.locName, addr: e.address })));
   try {
     localStorage.setItem(CALENDAR_DATA_KEY, JSON.stringify(entries));
   } catch (e) {

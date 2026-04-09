@@ -85,6 +85,23 @@ function toggleStrengthSub(key) {
   renderStrengthSubPills();
 }
 
+// Extract slot numbers from any API format:
+//   [7, 15]                          → [7, 15]
+//   [{id:7, label:"12"}, ...]        → [12, ...]  (prefer label for display)
+//   [{slot_id:7, number:12}, ...]    → [12, ...]
+//   "7"                              → [7]
+function _parseSlots(raw) {
+  if (!raw) return [];
+  if (!Array.isArray(raw)) raw = [raw];
+  return raw.map(s => {
+    if (s == null) return 0;
+    if (typeof s === 'number') return s;
+    if (typeof s === 'string') return Number(s) || 0;
+    // Object: prefer label/number for display, fall back to id
+    return Number(s.label ?? s.number ?? s.slot_number ?? s.id ?? s.slot_id ?? 0);
+  }).filter(Boolean);
+}
+
 async function fetchMyBookings() {
   if (!getBearerToken()) { _myBookings = {}; return; }
   try {
@@ -92,36 +109,30 @@ async function fetchMyBookings() {
     if (!res.ok) return;
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.data || []);
-    console.log('[psycle] raw bookings:', list.slice(0, 3)); // log first 3 for structure
+    console.log('[psycle] raw bookings:', list.slice(0, 3));
+
+    // The API returns one record per seat. Multiple seats for the same
+    // event_id appear as separate booking records, each with its own
+    // id (bookingId) and slot number.  We accumulate them.
     _myBookings = {};
     list.forEach(b => {
-      _myBookings[String(b.event_id)] = {
-        bookingId: b.id,
-        slots: (b.slots || b.slot_ids || (b.slot_id != null ? [b.slot_id] : [])).map(Number).filter(Boolean),
-      };
+      const evtId = String(b.event_id);
+      const slotNum = Number(b.slot) || 0; // API field is "slot" (singular)
+
+      if (!_myBookings[evtId]) {
+        _myBookings[evtId] = {
+          bookingId: b.id,          // first booking ID (used as fallback)
+          slots: [],                // accumulated slot numbers
+          slotBookings: {},         // slot → bookingId for per-seat cancel
+        };
+      }
+      if (slotNum) {
+        _myBookings[evtId].slots.push(slotNum);
+        _myBookings[evtId].slotBookings[slotNum] = b.id;
+      }
     });
 
-    // Resolve slot details for bookings that have an ID but no slots
-    // (the /bookings list endpoint often omits individual slot IDs)
-    const needSlots = Object.entries(_myBookings)
-      .filter(([, b]) => b.bookingId && b.slots.length === 0);
-    if (needSlots.length > 0) {
-      await Promise.all(needSlots.map(async ([evtId, booking]) => {
-        try {
-          const bRes = await apiFetch(`/bookings/${booking.bookingId}`);
-          if (!bRes.ok) return;
-          const bData = await bRes.json();
-          const detail = bData.data || bData;
-          const resolved = (detail.slots || detail.slot_ids || (detail.slot_id != null ? [detail.slot_id] : []))
-            .map(Number).filter(Boolean);
-          if (resolved.length) {
-            _myBookings[evtId].slots = resolved;
-          }
-        } catch {}
-      }));
-    }
-
-    console.log('[psycle] _myBookings (with slots):', _myBookings);
+    console.log('[psycle] _myBookings:', _myBookings);
     refreshUpcomingPanel();
     // Refresh any already-rendered booking buttons
     Object.entries(_myBookings).forEach(([evtId, booking]) => {
@@ -541,7 +552,7 @@ async function bookClass(eventId, btn, studioId) {
             if (bRes.ok) {
               const bData = await bRes.json();
               const bDetail = bData.data || bData;
-              const resolvedSlots = (bDetail.slots || bDetail.slot_ids || (bDetail.slot_id != null ? [bDetail.slot_id] : [])).map(Number).filter(Boolean);
+              const resolvedSlots = _parseSlots(bDetail.slots || bDetail.slot_ids || (bDetail.slot_id != null ? [bDetail.slot_id] : []));
               if (resolvedSlots.length) {
                 _myBookings[String(eventId)].slots = resolvedSlots;
                 mySlots = new Set(resolvedSlots);
@@ -676,7 +687,12 @@ async function submitBooking(eventId, slots, btn) {
       if (bookingId) btn.dataset.bookingId = bookingId;
       btn.dataset.eventId = eventId;
       // Update local bookings state
-      _myBookings[String(eventId)] = { bookingId, slots: slots ? slots.map(Number) : [] };
+      const slotsArr = slots ? slots.map(Number) : [];
+      const slotBookings = {};
+      // The API creates one booking per slot; after a fresh book we only know the
+      // returned bookingId — map all slots to it (fetchMyBookings will correct later)
+      slotsArr.forEach(s => { slotBookings[s] = bookingId; });
+      _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings };
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
       toast('Booked! See you in class 🚴', 'success');
       refreshUpcomingPanel();
@@ -707,16 +723,15 @@ async function cancelBikeSlot(slotId, eventId) {
   // update hint immediately
   document.getElementById('modalHint').textContent = 'Cancelling…';
   try {
-    const resolvedId = booking?.bookingId;
+    const resolvedId = booking?.slotBookings?.[slotId] || booking?.bookingId;
     const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
-    console.log('[psycle] cancel path:', path, '| booking:', booking);
+    console.log('[psycle] cancel path:', path, '| slot:', slotId, '| booking:', booking);
     const res = await apiFetch(path, { method: 'DELETE' });
-    const responseText = await res.clone().text().catch(() => '');
-    console.log('[psycle] cancel response:', res.status, responseText);
     if (res.ok || res.status === 204 || res.status === 200) {
       // Remove this slot from local state
       if (booking) {
         booking.slots = booking.slots.filter(s => s !== Number(slotId));
+        if (booking.slotBookings) delete booking.slotBookings[slotId];
         if (booking.slots.length === 0) delete _myBookings[String(eventId)];
       }
       // Update the slot visually: mine → available
@@ -758,12 +773,19 @@ async function confirmUnbook(bookingId, eventId, btn) {
   if (!confirm('Cancel this booking?')) return;
   btn.disabled = true;
   btn.textContent = '…';
-  // Resolve bookingId from _myBookings if not passed directly
-  const resolvedId = bookingId || _myBookings[String(eventId)]?.bookingId;
+  const booking = _myBookings[String(eventId)];
   try {
-    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
-    const res = await apiFetch(path, { method: 'DELETE' });
-    if (res.ok || res.status === 204 || res.status === 200) {
+    // Cancel ALL booking records for this event (one per seat)
+    const bookingIds = booking?.slotBookings
+      ? Object.values(booking.slotBookings)
+      : (bookingId ? [bookingId] : (booking?.bookingId ? [booking.bookingId] : []));
+    if (bookingIds.length === 0) bookingIds.push(null);
+    const results = await Promise.all(bookingIds.map(bid => {
+      const path = bid ? `/bookings/${bid}` : `/bookings?event_id=${eventId}`;
+      return apiFetch(path, { method: 'DELETE' });
+    }));
+    const allOk = results.every(r => r.ok || r.status === 204 || r.status === 200);
+    if (allOk) {
       delete _myBookings[String(eventId)];
       btn.textContent = 'Book';
       btn.className = 'book-btn';
@@ -878,6 +900,9 @@ function render(events, relations, filters, done) {
         _typeName: type?.name || 'Class',
         _instrName: instr?.full_name || '',
         _locName: loc ? loc.name.replace('Psycle ', '') : '',
+        _locFullName: loc ? loc.name : '',
+        _locAddress: loc ? (loc.address || '') : '',
+        _studioName: studio ? studio.name : '',
       };
     }
   });
@@ -1276,11 +1301,18 @@ async function upcomingCancel(eventId, btn) {
   if (!confirm('Cancel this booking?')) return;
   btn.disabled = true;
   btn.textContent = '…';
-  const resolvedId = booking.bookingId;
   try {
-    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
-    const res = await apiFetch(path, { method: 'DELETE' });
-    if (res.ok || res.status === 204 || res.status === 200) {
+    // Cancel ALL booking records for this event (one per seat)
+    const bookingIds = booking.slotBookings
+      ? Object.values(booking.slotBookings)
+      : (booking.bookingId ? [booking.bookingId] : []);
+    if (bookingIds.length === 0) bookingIds.push(null); // fallback
+    const results = await Promise.all(bookingIds.map(bid => {
+      const path = bid ? `/bookings/${bid}` : `/bookings?event_id=${eventId}`;
+      return apiFetch(path, { method: 'DELETE' });
+    }));
+    const allOk = results.every(r => r.ok || r.status === 204 || r.status === 200);
+    if (allOk) {
       delete _myBookings[String(eventId)];
       // Also update any rendered card
       const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
@@ -1317,13 +1349,15 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
   btn.disabled = true;
   const chip = btn.closest('.up-seat-chip');
   if (chip) chip.style.opacity = '0.5';
-  const resolvedId = booking.bookingId;
+  // Use the per-slot booking ID for precise cancellation
+  const slotBookingId = booking.slotBookings?.[slotId] || booking.bookingId;
   try {
-    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
+    const path = slotBookingId ? `/bookings/${slotBookingId}` : `/bookings?event_id=${eventId}`;
     const res = await apiFetch(path, { method: 'DELETE' });
     if (res.ok || res.status === 204 || res.status === 200) {
       // Remove this slot from local state
       booking.slots = booking.slots.filter(s => s !== Number(slotId));
+      if (booking.slotBookings) delete booking.slotBookings[slotId];
       if (booking.slots.length === 0) {
         delete _myBookings[String(eventId)];
       }
