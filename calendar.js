@@ -152,14 +152,16 @@ function generateICS(entriesArg) {
     // Geo coordinates for travel time / map integration
     if (entry.lat != null && entry.lon != null) {
       lines.push('GEO:' + entry.lat + ';' + entry.lon);
-      // Apple Calendar structured location — enables travel time alerts & map pin
-      lines.push(_icsFold(
-        'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=' +
-        '"' + locDisplay.replace(/"/g, '\\"') + '"' +
-        ';X-APPLE-RADIUS=100' +
-        ';X-TITLE="' + (entry.locName || '').replace(/"/g, '\\"') + '"' +
+      // Apple Calendar structured location — enables travel time alerts & map pin.
+      // Apple requires: no wrapping quotes, commas escaped as \, in param values.
+      const esc = s => (s || '').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, ' ');
+      const appleAddr = esc(entry.address || locDisplay);
+      const appleTitle = esc(entry.locName || '');
+      lines.push(
+        'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=' + appleAddr +
+        ';X-APPLE-RADIUS=72;X-TITLE=' + appleTitle +
         ':geo:' + entry.lat + ',' + entry.lon
-      ));
+      );
     }
 
     lines.push('STATUS:CONFIRMED');

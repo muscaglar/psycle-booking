@@ -93,13 +93,12 @@ function _swGenerateICS(entries) {
     lines.push(_swIcsFold('DESCRIPTION:' + description));
     if (entry.lat != null && entry.lon != null) {
       lines.push('GEO:' + entry.lat + ';' + entry.lon);
-      lines.push(_swIcsFold(
-        'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=' +
-        '"' + locDisplay.replace(/"/g, '\\"') + '"' +
-        ';X-APPLE-RADIUS=100' +
-        ';X-TITLE="' + (entry.locName || '').replace(/"/g, '\\"') + '"' +
+      var esc = function(s) { return (s || '').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, ' '); };
+      lines.push(
+        'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=' + esc(entry.address || locDisplay) +
+        ';X-APPLE-RADIUS=72;X-TITLE=' + esc(entry.locName || '') +
         ':geo:' + entry.lat + ',' + entry.lon
-      ));
+      );
     }
     lines.push('STATUS:CONFIRMED');
     lines.push('END:VEVENT');

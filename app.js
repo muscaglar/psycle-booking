@@ -121,9 +121,9 @@ async function fetchMyBookings() {
 
       if (!_myBookings[evtId]) {
         _myBookings[evtId] = {
-          bookingId: b.id,          // first booking ID (used as fallback)
-          slots: [],                // accumulated slot numbers
-          slotBookings: {},         // slot → bookingId for per-seat cancel
+          bookingId: b.id,
+          slots: [],
+          slotBookings: {},
         };
       }
       if (slotNum) {
@@ -132,17 +132,51 @@ async function fetchMyBookings() {
       }
     });
 
+    // Fetch event details for any bookings not yet in _eventCache.
+    // This makes "My Bookings" self-sufficient — no search required.
+    const uncached = Object.keys(_myBookings).filter(id => !_eventCache[id]);
+    if (uncached.length > 0) {
+      console.log('[psycle] fetching event details for', uncached.length, 'booked events');
+      await Promise.all(uncached.map(async evtId => {
+        try {
+          const r = await apiFetch(`/events/${evtId}`);
+          if (!r.ok) return;
+          const d = await r.json();
+          const evt = d.data || d;
+          const rels = d.relations || {};
+          const instrMap = Object.fromEntries((rels.instructors || []).map(i => [i.id, i]));
+          const studioMap = Object.fromEntries((rels.studios || []).map(s => [s.id, s]));
+          const locationMap = Object.fromEntries((rels.locations || []).map(l => [l.id, l]));
+          const typeMap = Object.fromEntries((rels.event_types || []).map(t => [t.id, t]));
+          Object.assign(_studioMap, studioMap);
+          const type = typeMap[evt.event_type_id];
+          const instr = instrMap[evt.instructor_id];
+          const studio = studioMap[evt.studio_id];
+          const loc = studio ? locationMap[studio.location_id] : null;
+          _eventCache[evtId] = {
+            ...evt,
+            _typeName: type?.name || 'Class',
+            _instrName: instr?.full_name || '',
+            _locName: loc ? loc.name.replace('Psycle ', '') : '',
+            _locFullName: loc ? loc.name : '',
+            _locAddress: loc ? (loc.address || '') : '',
+            _studioName: studio ? studio.name : '',
+          };
+        } catch (e) { console.warn('[psycle] event detail failed:', evtId, e); }
+      }));
+    }
+
     console.log('[psycle] _myBookings:', _myBookings);
-    refreshUpcomingPanel();
-    // Refresh any already-rendered booking buttons
+    renderMyBookings();
+    // Refresh any already-rendered search result booking buttons
     Object.entries(_myBookings).forEach(([evtId, booking]) => {
-      const card = document.querySelector(`.class-card[data-id="${evtId}"]`);
+      const card = document.querySelector(`.class-card[data-id="${evtId}"]:not(.my-booking-card)`);
       if (!card) return;
       const btn = card.querySelector('.book-btn');
       if (!btn || btn.classList.contains('booked')) return;
       applyBookedState(btn, Number(evtId), booking);
     });
-  } catch {}
+  } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); }
 }
 
 // Toast (toastTimer managed by state.js)
@@ -1219,62 +1253,126 @@ function toggleUpcoming() {
   document.getElementById('upcomingChevron').classList.toggle('collapsed', _upcomingCollapsed);
 }
 
-function refreshUpcomingPanel() {
+// Keep backward compat — other modules call refreshUpcomingPanel
+function refreshUpcomingPanel() { renderMyBookings(); }
+
+let _showPastBookings = false;
+
+function togglePastBookings() {
+  _showPastBookings = !_showPastBookings;
+  renderMyBookings();
+}
+
+function renderMyBookings() {
   const panel = document.getElementById('upcomingPanel');
   const list = document.getElementById('upcomingList');
   const countEl = document.getElementById('upcomingCount');
 
   const now = new Date();
-  // Build upcoming: entries in _myBookings that have event data cached in _eventCache
-  const upcoming = Object.entries(_myBookings)
+  const all = Object.entries(_myBookings)
     .map(([evtId, booking]) => {
       const evt = _eventCache[evtId];
       return evt ? { evt, booking, evtId } : null;
     })
     .filter(Boolean)
-    .filter(({ evt }) => new Date(evt.start_at) > now)
     .sort((a, b) => a.evt.start_at.localeCompare(b.evt.start_at));
+
+  const upcoming = all.filter(({ evt }) => new Date(evt.start_at) > now);
+  const past = all.filter(({ evt }) => new Date(evt.start_at) <= now);
 
   countEl.textContent = upcoming.length;
 
-  if (upcoming.length === 0) {
+  if (all.length === 0) {
     panel.style.display = 'none';
     return;
   }
 
   panel.style.display = '';
-  list.innerHTML = upcoming.map(({ evt, booking, evtId }) => {
-    const dt = new Date(evt.start_at);
-    const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-    const h = dt.getHours(), m = dt.getMinutes().toString().padStart(2, '0');
-    const ampm = h >= 12 ? 'pm' : 'am';
-    const timeStr = `${h % 12 || 12}:${m}${ampm}`;
-    const typeName = evt._typeName || 'Class';
-    const instrName = evt._instrName || '';
-    const locName = evt._locName || '';
+  const items = _showPastBookings ? [...upcoming, ...past] : upcoming;
 
-    // Build seat area: per-seat chips with individual cancel, or a plain Cancel button
-    let seatArea = '';
-    if (booking.slots.length > 0) {
-      const chips = booking.slots.map(slot =>
-        `<span class="up-seat-chip">Bike ${slot}<button onclick="upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel Bike ${slot}">&times;</button></span>`
-      ).join('');
-      seatArea = `<div class="up-seats">${chips}<button class="up-cancel-all" onclick="upcomingCancel(${evtId}, this)">Cancel All</button></div>`;
-    } else {
-      seatArea = `<button class="up-cancel" onclick="upcomingCancel(${evtId}, this)">Cancel</button>`;
-    }
+  // Group by day
+  const byDay = {};
+  items.forEach(item => {
+    const day = item.evt.start_at.split('T')[0];
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(item);
+  });
 
-    return `<div class="upcoming-item" onclick="scrollToClass(${evtId}, event)" style="cursor:pointer" title="Jump to class in results">
-      <div class="up-day">${dayStr.replace(' ', '<br>')}</div>
-      <div class="up-time">${timeStr}</div>
-      <div class="up-info">
-        <div class="up-name">${escapeHTML(typeName)}</div>
-        <div class="up-sub">${escapeHTML(instrName)}${locName ? ' · ' + escapeHTML(locName) : ''}</div>
-        ${booking.slots.length > 0 ? seatArea : ''}
-      </div>
-      ${booking.slots.length === 0 ? seatArea : ''}
+  let html = '';
+
+  // Past bookings toggle
+  if (past.length > 0) {
+    html += `<div style="padding:0 4px 10px;text-align:right">
+      <button class="btn-ghost" onclick="togglePastBookings()" style="font-size:11px;padding:4px 10px;border:1px solid #3a5a3a;border-radius:5px;color:#5dba5d;background:none;cursor:pointer">
+        ${_showPastBookings ? 'Hide' : 'Show'} ${past.length} past class${past.length !== 1 ? 'es' : ''}
+      </button>
     </div>`;
-  }).join('');
+  }
+
+  const sortedDays = Object.keys(byDay).sort();
+  for (const day of sortedDays) {
+    const dayItems = byDay[day];
+    const date = new Date(day + 'T12:00:00');
+    const isPast = date < now && day !== now.toISOString().split('T')[0];
+    const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    html += `<div class="mb-day-group${isPast ? ' mb-past' : ''}">`;
+    html += `<div class="mb-day-header">${dayLabel}</div>`;
+    html += `<div class="class-grid">`;
+
+    for (const { evt, booking, evtId } of dayItems) {
+      const dt = new Date(evt.start_at);
+      const hours = dt.getHours();
+      const mins = dt.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'pm' : 'am';
+      const h12 = hours % 12 || 12;
+      const typeName = evt._typeName || 'Class';
+      const instrName = evt._instrName || '';
+      const locName = evt._locName || '';
+      const studioName = evt._studioName || '';
+      const eventPast = dt <= now;
+
+      let badges = `<span class="badge">${evt.duration}min</span>`;
+      if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
+      if (eventPast) badges += `<span class="badge" style="background:#1a1a1a;color:#555">Attended</span>`;
+
+      // Seat chips + cancel
+      let seatHtml = '';
+      if (booking.slots.length > 0) {
+        const chips = booking.slots.map(slot => {
+          if (eventPast) return `<span class="up-seat-chip" style="opacity:0.5">Bike ${slot}</span>`;
+          return `<span class="up-seat-chip">Bike ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel Bike ${slot}">&times;</button></span>`;
+        }).join('');
+        seatHtml = `<div class="up-seats" style="margin-top:8px">${chips}`;
+        if (!eventPast && booking.slots.length > 1) {
+          seatHtml += `<button class="up-cancel-all" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">Cancel All</button>`;
+        }
+        seatHtml += `</div>`;
+      }
+
+      // Cancel button for no-slot bookings
+      let cancelBtn = '';
+      if (!eventPast && booking.slots.length === 0) {
+        cancelBtn = `<button class="book-btn booked" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)" style="margin-top:10px;width:100%">Cancel booking</button>`;
+      }
+
+      html += `<div class="class-card is-booked my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
+        onclick="scrollToClass(${evtId}, event)" style="cursor:pointer" title="Jump to class in search results">
+        <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
+        <div class="class-info">
+          <div class="class-type">${escapeHTML(typeName)}</div>
+          <div class="class-instructor">${escapeHTML(instrName)}</div>
+          <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
+          <div class="class-meta">${badges}</div>
+          ${seatHtml}
+          ${cancelBtn}
+        </div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  list.innerHTML = html;
 }
 
 function scrollToClass(eventId, e) {
