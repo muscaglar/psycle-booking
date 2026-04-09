@@ -195,7 +195,7 @@ async function checkAuth() {
   const pill = document.getElementById('authPill');
   if (!getBearerToken()) {
     currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()">Connect Psycle account →</a>`;
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>`;
     return;
   }
   try {
@@ -210,15 +210,15 @@ async function checkAuth() {
       const subs = currentUser.subscriptions || [];
       _activeSubscription = subs.find(s => s.status === 'active' && s.max_bookings > 0) || null;
       const name = currentUser.first_name || currentUser.email || 'You';
-      pill.innerHTML = `<span class="user-name">Logged in as <strong>${escapeHTML(name)}</strong></span>
-        <a href="#" onclick="event.preventDefault();clearToken()" style="color:#555">Disconnect</a>`;
+      pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
+        <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Disconnect</span><span class="auth-icon">✕</span></a>`;
       fetchMyBookings();
     } else {
       showSessionExpired();
     }
   } catch {
     currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" style="color:#e94560">Sign in →</a>`;
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>`;
   }
 }
 
@@ -393,6 +393,17 @@ function onDateInputChange() {
   const daysGroup = document.getElementById('daysAheadGroup');
   if (daysGroup) daysGroup.style.display = '';
   triggerAutoSearch();
+}
+
+// ── Collapsible filters (mobile) ─────────────────────────────────
+let _filtersCollapsed = false;
+
+function toggleFilters() {
+  _filtersCollapsed = !_filtersCollapsed;
+  const body = document.getElementById('controlsBody');
+  const chevron = document.getElementById('controlsChevron');
+  if (body) body.style.display = _filtersCollapsed ? 'none' : '';
+  if (chevron) chevron.classList.toggle('collapsed', _filtersCollapsed);
 }
 
 function clearFilters() {

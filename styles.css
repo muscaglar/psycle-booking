@@ -1022,3 +1022,155 @@ select:focus, input:focus {
 .mb-skeleton-line.short {
   height: 10px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Mobile Polish
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Collapsible filters toggle — hidden on desktop, shown on mobile */
+.controls-toggle {
+  display: none;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  cursor: pointer;
+  padding: 0 0 8px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.controls-chevron {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.controls-chevron.collapsed { transform: rotate(-90deg); }
+
+/* Auth pill — compact on mobile */
+.auth-icon { display: none; }
+.auth-link, .disconnect-link {
+  color: #e94560;
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.disconnect-link { color: #555; }
+
+/* Header subtitle — hide on very small screens */
+.header-subtitle {
+  font-size: 12px;
+  color: #666;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  /* Header: compact */
+  header {
+    padding: 10px 16px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    gap: 8px;
+  }
+
+  header h1 { font-size: 16px; }
+  .header-subtitle { display: none; }
+
+  /* Auth pill: icon only on mobile */
+  .auth-full { display: none; }
+  .auth-icon { display: inline; font-size: 16px; }
+  .auth-pill { gap: 6px; }
+  .user-name { font-size: 11px; }
+
+  /* Show filter toggle */
+  .controls-toggle { display: flex; }
+
+  /* Controls: tighter on mobile */
+  .controls {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+
+  .controls-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  /* Smaller inputs */
+  select, input[type="date"] {
+    min-width: 140px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .instr-box { min-width: 180px; min-height: 32px; }
+  .instr-search { font-size: 13px; }
+
+  /* Category pills: smaller, horizontal scroll */
+  .cat-pill {
+    font-size: 10px;
+    padding: 5px 10px;
+    border-radius: 16px;
+  }
+
+  .sub-pill {
+    font-size: 9px;
+    padding: 4px 9px;
+  }
+
+  /* Date buttons smaller */
+  .date-quick-btn {
+    font-size: 10px;
+    padding: 4px 9px;
+  }
+
+  /* Search/Clear buttons */
+  .btn { font-size: 12px; padding: 8px 16px; }
+
+  /* Results: tighter padding */
+  .results { padding: 16px; }
+
+  /* Class cards: full width */
+  .class-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .class-card { padding: 12px 14px; gap: 12px; }
+
+  /* Day headers */
+  .day-header { font-size: 11px; padding: 6px 0; }
+
+  /* Upcoming panel */
+  .upcoming-panel { margin: 12px 16px 0; }
+
+  /* Toast: full width on mobile */
+  .toast {
+    left: 16px;
+    right: 16px;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    max-width: none;
+  }
+
+  /* Tab bar: compact */
+  .tab-bar { padding: 0 16px; }
+  .tab-btn { font-size: 12px; padding: 10px 14px; }
+
+  /* Floating pill: make room for it */
+  .next-class-pill {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    padding: 8px 16px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+  .ncp-countdown { font-size: 16px; }
+  .ncp-class { font-size: 12px; }
+}

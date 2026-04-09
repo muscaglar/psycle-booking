@@ -19,9 +19,9 @@
 
 <header>
   <h1>Psycle</h1>
-  <span>Class Finder</span>
+  <span class="header-subtitle">Class Finder</span>
   <div class="auth-pill" id="authPill">
-    <span style="color:#444">Checking login…</span>
+    <span style="color:#444">…</span>
   </div>
 </header>
 
@@ -99,7 +99,12 @@
   For secure access, serve locally: <code style="background:#111;padding:2px 6px;border-radius:4px;color:#4a9eff">npx serve -l 8080</code> then open <code style="background:#111;padding:2px 6px;border-radius:4px;color:#4a9eff">http://localhost:8080</code>
 </div>
 
-<div class="controls">
+<div class="controls" id="controlsPanel">
+  <div class="controls-toggle" id="controlsToggle" onclick="toggleFilters()">
+    <span>Filters</span>
+    <span class="controls-chevron" id="controlsChevron">▼</span>
+  </div>
+  <div class="controls-body" id="controlsBody">
   <div class="control-group" style="position:relative">
     <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors">★ Favs</button></label>
     <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
@@ -147,6 +152,7 @@
   <div class="control-group" style="justify-content:flex-end;gap:8px;flex-direction:row;align-items:flex-end">
     <button class="btn btn-ghost" onclick="clearFilters()" style="padding:9px 16px;width:auto;display:inline-block">Clear</button>
     <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
+  </div>
   </div>
 </div>
 
