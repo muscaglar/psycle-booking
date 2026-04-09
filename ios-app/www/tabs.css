@@ -1,0 +1,525 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Tab Navigation System
+   ═══════════════════════════════════════════════════════════════════ */
+
+.tab-bar {
+  display: flex;
+  background: #111;
+  border-bottom: 1px solid #222;
+  padding: 0 24px;
+  gap: 0;
+}
+
+.tab-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-btn:hover { color: #aaa; }
+
+.tab-btn.active {
+  color: #fff;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  background: #e94560;
+  border-radius: 2px 2px 0 0;
+}
+
+.tab-badge {
+  background: #5dba5d;
+  color: #0a1a0a;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.tab-badge:empty { display: none; }
+
+/* Tab content panels */
+.tab-content {
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-panel {
+  display: none;
+  animation: tabFadeIn 0.2s ease-out;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Quick Stats Bar (inside My Bookings tab)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.stats-bar {
+  display: flex;
+  gap: 16px;
+  padding: 12px 24px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.stats-bar::-webkit-scrollbar { display: none; }
+
+.stat-card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+
+.stat-detail {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Weekly Calendar View
+   ═══════════════════════════════════════════════════════════════════ */
+
+.week-view {
+  padding: 0 24px 16px;
+}
+
+.week-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.week-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+}
+
+.week-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.week-nav button {
+  background: none;
+  border: 1px solid #333;
+  color: #aaa;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.week-nav button:hover { background: #1a1a1a; color: #fff; }
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.week-day {
+  min-height: 80px;
+}
+
+.week-day-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #555;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.week-day-label.today { color: #e94560; font-weight: 700; }
+
+.week-day-num {
+  display: block;
+  font-size: 14px;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.week-day-num.today { color: #e94560; }
+
+.week-event {
+  background: #0d1a0d;
+  border: 1px solid #2a5a2a;
+  border-left: 3px solid #5dba5d;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.week-event:hover { border-color: #5dba5d; }
+
+.week-event-time {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5dba5d;
+}
+
+.week-event-name {
+  font-size: 10px;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.week-event-loc {
+  font-size: 9px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Recommendation Cards
+   ═══════════════════════════════════════════════════════════════════ */
+
+.reco-section {
+  padding: 0 24px 16px;
+}
+
+.reco-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 10px;
+}
+
+.reco-cards {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+
+.reco-cards::-webkit-scrollbar { display: none; }
+
+.reco-card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 220px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.reco-card:hover { border-color: #e94560; }
+
+.reco-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #e94560;
+  margin-bottom: 6px;
+}
+
+.reco-class {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f0f0;
+  margin-bottom: 2px;
+}
+
+.reco-detail {
+  font-size: 12px;
+  color: #888;
+}
+
+.reco-action {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e94560;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Studio Map
+   ═══════════════════════════════════════════════════════════════════ */
+
+.studio-map-section {
+  padding: 0 24px 16px;
+}
+
+.studio-map-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 10px;
+}
+
+.studio-map-container {
+  background: #0d0d0d;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 16px;
+  position: relative;
+  height: 280px;
+  overflow: hidden;
+}
+
+.studio-pin {
+  position: absolute;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.studio-pin:hover { transform: scale(1.2); }
+
+.studio-pin-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e94560;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(233,69,96,0.4);
+}
+
+.studio-pin-dot.has-booking {
+  background: #5dba5d;
+  box-shadow: 0 2px 8px rgba(93,186,93,0.4);
+}
+
+.studio-pin-label {
+  font-size: 10px;
+  color: #aaa;
+  white-space: nowrap;
+  margin-top: 2px;
+  text-align: center;
+  transform: translateX(-50%);
+  margin-left: 6px;
+}
+
+.studio-pin-booking {
+  font-size: 9px;
+  color: #5dba5d;
+  white-space: nowrap;
+  text-align: center;
+  transform: translateX(-50%);
+  margin-left: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Activity Heatmap
+   ═══════════════════════════════════════════════════════════════════ */
+
+.heatmap-section {
+  padding: 0 24px 20px;
+}
+
+.heatmap-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 36px repeat(18, 1fr);
+  gap: 3px;
+  max-width: 600px;
+}
+
+.hm-corner { }
+
+.hm-hour-label {
+  font-size: 9px;
+  color: #555;
+  text-align: center;
+  line-height: 1;
+  padding-bottom: 4px;
+}
+
+.hm-day-label {
+  font-size: 10px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+}
+
+.hm-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  min-width: 0;
+  transition: transform 0.1s;
+}
+
+.hm-cell:hover { transform: scale(1.3); z-index: 1; }
+
+.hm-level-0 { background: #161b22; }
+.hm-level-1 { background: #0e4429; }
+.hm-level-2 { background: #006d32; }
+.hm-level-3 { background: #26a641; }
+.hm-level-4 { background: #39d353; }
+
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  justify-content: flex-end;
+  max-width: 600px;
+}
+
+.hm-legend span {
+  font-size: 10px;
+  color: #555;
+}
+
+.hm-legend .hm-cell {
+  border-radius: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Cost Per Class Tracker
+   ═══════════════════════════════════════════════════════════════════ */
+
+.cost-section {
+  padding: 0 24px 20px;
+}
+
+.cost-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.cost-cards {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+
+.cost-cards::-webkit-scrollbar { display: none; }
+
+.cost-card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 16px 20px;
+  min-width: 130px;
+  flex-shrink: 0;
+}
+
+.cost-card.cost-main {
+  background: #0d1a0d;
+  border-color: #2a5a2a;
+}
+
+.cost-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.cost-main .cost-value { color: #5dba5d; }
+
+.cost-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+.cost-hint {
+  font-size: 11px;
+  color: #444;
+  margin-top: 6px;
+  line-height: 1.3;
+}
+
+.cost-savings {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #5dba5d;
+  padding: 10px 14px;
+  background: #0d1a0d;
+  border: 1px solid #2a5a2a;
+  border-radius: 8px;
+}

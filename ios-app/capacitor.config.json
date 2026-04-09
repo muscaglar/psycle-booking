@@ -1,0 +1,19 @@
+{
+  "appId": "com.psyclefinder.app",
+  "appName": "Psycle Finder",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Preferences": {
+      "group": "PsycleFinderSettings"
+    }
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "allowsLinkPreview": false,
+    "backgroundColor": "#0a0a0a",
+    "preferredContentMode": "mobile"
+  }
+}

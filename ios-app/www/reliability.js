@@ -1,0 +1,305 @@
+/**
+ * reliability.js — Reliability enhancements for Psycle Booking PWA
+ *
+ * Adds: retry with exponential backoff, optimistic UI for bookings,
+ *       silent token refresh, offline booking queue, global error tracking.
+ *
+ * Loaded AFTER app.js — monkey-patches global functions.
+ */
+
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // E. Global Error Tracking (register first so it catches everything)
+  // ═══════════════════════════════════════════════════════════════════
+
+  const ERROR_LOG_KEY = 'psycle_error_log';
+  const MAX_ERRORS = 20;
+
+  function pushError(msg) {
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) || '[]'); } catch {}
+    log.push({ timestamp: new Date().toISOString(), message: String(msg) });
+    if (log.length > MAX_ERRORS) log = log.slice(log.length - MAX_ERRORS);
+    try { localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log)); } catch {}
+    console.error('[psycle-error]', msg);
+  }
+
+  window.onerror = function (message, source, lineno, colno, error) {
+    const detail = error && error.stack
+      ? error.stack
+      : `${message} at ${source}:${lineno}:${colno}`;
+    pushError(detail);
+  };
+
+  window.onunhandledrejection = function (event) {
+    const reason = event.reason;
+    const msg = reason instanceof Error
+      ? (reason.stack || reason.message)
+      : String(reason);
+    pushError('UnhandledRejection: ' + msg);
+  };
+
+  /** Retrieve the error log for debugging. */
+  window.getErrorLog = function () {
+    try { return JSON.parse(localStorage.getItem(ERROR_LOG_KEY) || '[]'); } catch { return []; }
+  };
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // A. Retry with Exponential Backoff
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Wraps fetch() with automatic retries on network errors and 5xx
+   * responses. Does NOT retry 4xx (client errors).
+   *
+   * @param {string}  url
+   * @param {object}  opts       - standard fetch options
+   * @param {number}  maxRetries - default 3
+   * @returns {Promise<Response>}
+   */
+  window.fetchWithRetry = async function fetchWithRetry(url, opts, maxRetries = 3) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, opts);
+
+        // Don't retry client errors (4xx)
+        if (res.status >= 400 && res.status < 500) return res;
+
+        // Retry on server errors (5xx)
+        if (res.status >= 500) {
+          lastError = new Error(`Server error ${res.status}`);
+          if (attempt < maxRetries) {
+            await _backoff(attempt);
+            continue;
+          }
+          // Final attempt — return the response as-is so callers can handle it
+          return res;
+        }
+
+        // 2xx / 3xx — success
+        return res;
+      } catch (err) {
+        // Network / CORS / DNS errors
+        lastError = err;
+        if (attempt < maxRetries) {
+          await _backoff(attempt);
+          continue;
+        }
+      }
+    }
+    throw lastError;
+  };
+
+  /** Exponential delay with jitter: base * 2^attempt + random 0-500ms */
+  function _backoff(attempt) {
+    const base = 1000; // 1 second
+    const delay = base * Math.pow(2, attempt) + Math.random() * 500;
+    return new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  // Wrap the global apiFetch to use fetchWithRetry instead of raw fetch
+  if (typeof apiFetch === 'function') {
+    const _originalApiFetch = apiFetch;
+
+    // Rebuild apiFetch with retry logic.  We reproduce the same header /
+    // auth logic from app.js but swap fetch() for fetchWithRetry().
+    window.apiFetch = function apiFetchWithRetry(path, opts) {
+      if (opts === undefined) opts = {};
+      var token = getBearerToken();
+      var headers = Object.assign({ 'Accept': 'application/json' }, opts.headers || {});
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+
+      return fetchWithRetry(apiUrl(path), Object.assign({ credentials: 'include' }, opts, { headers: headers }))
+        .then(function (res) {
+          if ((res.status === 401 || res.status === 403) && getBearerToken()) {
+            showSessionExpired();
+          }
+          return res;
+        });
+    };
+    // Keep a reference for internal use
+    window._originalApiFetch = _originalApiFetch;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // B. Optimistic UI for Bookings
+  // ═══════════════════════════════════════════════════════════════════
+
+  if (typeof submitBooking === 'function') {
+    const _originalSubmitBooking = submitBooking;
+
+    window.submitBooking = async function optimisticSubmitBooking(eventId, slots, btn) {
+      // 1. Capture original state so we can revert on failure
+      const origText = btn.textContent;
+      const origClass = btn.className;
+      const origDisabled = btn.disabled;
+      const origOnclick = btn.onclick;
+      const hadBooking = !!_myBookings[String(eventId)];
+      const prevBooking = _myBookings[String(eventId)]
+        ? JSON.parse(JSON.stringify(_myBookings[String(eventId)]))
+        : undefined;
+
+      // 2. Optimistically update UI immediately
+      const optimisticLabel = (slots && slots.length)
+        ? 'Bikes ' + slots.join(' & ') + ' \u2713'
+        : 'Booked \u2713';
+      btn.textContent = optimisticLabel;
+      btn.className = 'book-btn booked';
+      btn.disabled = true;
+
+      // Optimistically add to _myBookings
+      _myBookings[String(eventId)] = {
+        bookingId: null, // unknown until server responds
+        slots: slots ? slots.map(Number) : [],
+      };
+
+      // 3. Call the real submitBooking
+      try {
+        await _originalSubmitBooking(eventId, slots, btn);
+        // On success the original function already sets the correct state,
+        // so nothing more to do.
+      } catch (err) {
+        // 4. Revert on failure
+        btn.textContent = origText;
+        btn.className = origClass;
+        btn.disabled = origDisabled;
+        if (origOnclick) btn.onclick = origOnclick;
+
+        // Revert _myBookings
+        if (hadBooking && prevBooking) {
+          _myBookings[String(eventId)] = prevBooking;
+        } else {
+          delete _myBookings[String(eventId)];
+        }
+
+        toast('Booking failed \u2014 please try again', 'error');
+      }
+    };
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // C. Session Expiry Handling
+  // ═══════════════════════════════════════════════════════════════════
+  // Plaintext credential storage has been removed for security.
+  // Token refresh is now handled via JWT expiry monitoring in security.js.
+  // The showSessionExpired wrapper simply clears stale state and shows
+  // the re-login banner.
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // D. Offline Booking Queue
+  // ═══════════════════════════════════════════════════════════════════
+
+  var OFFLINE_QUEUE_KEY = 'psycle_offline_queue';
+
+  function getOfflineQueue() {
+    try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]'); } catch { return []; }
+  }
+
+  function saveOfflineQueue(queue) {
+    try { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue)); } catch {}
+  }
+
+  /**
+   * Process all queued offline bookings when connectivity is restored.
+   */
+  async function processOfflineQueue() {
+    var queue = getOfflineQueue();
+    if (queue.length === 0) return;
+
+    console.log('[psycle] Processing offline queue:', queue.length, 'item(s)');
+    var succeeded = 0;
+    var failed = 0;
+    var remaining = [];
+
+    for (var i = 0; i < queue.length; i++) {
+      var item = queue[i];
+      try {
+        var body = { event_id: item.eventId };
+        if (item.slots && item.slots.length) body.slots = item.slots.map(Number);
+
+        var res = await apiFetch('/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+          succeeded++;
+          // Update local bookings
+          var data = await res.json().catch(function () { return {}; });
+          var bookingId = (data.data && data.data.id) || data.id;
+          _myBookings[String(item.eventId)] = {
+            bookingId: bookingId,
+            slots: item.slots ? item.slots.map(Number) : [],
+          };
+        } else if (res.status >= 400 && res.status < 500) {
+          // Client error — don't retry (e.g., class is full, already booked)
+          failed++;
+        } else {
+          // Server error — keep in queue for later retry
+          remaining.push(item);
+          failed++;
+        }
+      } catch (err) {
+        // Network error — keep in queue
+        remaining.push(item);
+        failed++;
+      }
+    }
+
+    saveOfflineQueue(remaining);
+
+    if (succeeded > 0) {
+      toast(succeeded + ' queued booking' + (succeeded !== 1 ? 's' : '') + ' confirmed!', 'success');
+      if (typeof refreshUpcomingPanel === 'function') refreshUpcomingPanel();
+      if (typeof fetchMyBookings === 'function') fetchMyBookings();
+    }
+    if (failed > 0 && remaining.length > 0) {
+      toast(remaining.length + ' queued booking' + (remaining.length !== 1 ? 's' : '') + ' still pending', 'info');
+    } else if (failed > 0) {
+      toast(failed + ' queued booking' + (failed !== 1 ? 's' : '') + ' could not be completed', 'error');
+    }
+  }
+  window.processOfflineQueue = processOfflineQueue;
+
+  // Intercept submitBooking (already wrapped for optimistic UI above)
+  // to catch offline state and queue instead of hitting the network.
+  if (typeof window.submitBooking === 'function') {
+    var _submitAfterOptimistic = window.submitBooking;
+
+    window.submitBooking = async function offlineAwareSubmitBooking(eventId, slots, btn) {
+      if (!navigator.onLine) {
+        // Queue booking for later
+        var queue = getOfflineQueue();
+        queue.push({
+          eventId: eventId,
+          slots: slots ? slots.map(Number) : [],
+          timestamp: new Date().toISOString(),
+        });
+        saveOfflineQueue(queue);
+
+        // Show queued state on button
+        btn.textContent = 'Queued';
+        btn.className = 'book-btn booked';
+        btn.disabled = true;
+        toast("You're offline \u2014 booking queued", 'info');
+        return;
+      }
+
+      return _submitAfterOptimistic(eventId, slots, btn);
+    };
+  }
+
+  // When connection comes back, process the queue
+  window.addEventListener('online', processOfflineQueue);
+
+
+  console.log('[psycle] reliability.js loaded');
+})();

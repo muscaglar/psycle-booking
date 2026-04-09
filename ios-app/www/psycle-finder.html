@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Psycle Class Finder</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="features.css">
+<link rel="stylesheet" href="tabs.css">
+<link rel="stylesheet" href="settings.css">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Psycle">
+</head>
+<body>
+
+<header>
+  <h1>Psycle</h1>
+  <span>Class Finder</span>
+  <div class="auth-pill" id="authPill">
+    <span style="color:#444">Checking login…</span>
+  </div>
+</header>
+
+<div id="sessionBanner" style="display:none;background:#1a0f0a;border-bottom:1px solid #4a2010;padding:10px 24px;font-size:13px;color:#e07040;display:none;align-items:center;gap:12px">
+  <span>⚠️ Your session has expired.</span>
+  <a href="#" onclick="event.preventDefault();openLoginPopup()" style="color:#e94560;font-weight:700;text-decoration:none">Sign in again →</a>
+  <button onclick="document.getElementById('sessionBanner').style.display='none'" style="margin-left:auto;background:none;border:none;color:#666;cursor:pointer;font-size:16px;line-height:1">×</button>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="tokenDialog" class="token-dialog" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Connect your Psycle account</div>
+        <div class="modal-subtitle">One-time setup — saves automatically</div>
+      </div>
+      <button class="modal-close" onclick="closeTokenDialog()">×</button>
+    </div>
+
+    <div class="token-steps">
+      <div class="token-step">
+        <span class="token-step-num">1</span>
+        <div>
+          Tap the button below — it opens a login page that extracts your token automatically.
+          <div style="margin-top:12px">
+            <a id="loginPageLink" href="#" onclick="event.preventDefault();openLoginPopup()" class="btn" style="display:inline-block;text-decoration:none;font-size:13px;cursor:pointer">
+              Connect Psycle account →
+            </a>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:#555">Works on iPhone and desktop.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin:16px 0;border-top:1px solid #1e1e1e;padding-top:16px">
+      <div style="font-size:11px;color:#555;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Or paste token manually</div>
+      <input id="tokenInput" class="token-input" placeholder="Paste token from psyclelondon.com console…" oninput="validateToken()">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTokenDialog()">Cancel</button>
+      <button class="btn" id="saveTokenBtn" disabled onclick="saveToken()">Connect</button>
+    </div>
+  </div>
+</div>
+
+<div id="bikeModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBikePicker()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">Select your bike</div>
+        <div class="modal-subtitle" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeBikePicker()">×</button>
+    </div>
+    <div class="bike-legend">
+      <span><i style="background:#1a1a1a;border:1px solid #444"></i> Available</span>
+      <span><i style="background:#2a0a0a;border:1px solid #4a1a1a"></i> Taken</span>
+      <span><i style="background:#e94560"></i> Your pick</span>
+    </div>
+    <div class="bike-map-wrap">
+      <svg id="bikeSvg" width="600" height="300"></svg>
+    </div>
+    <div class="modal-hint" id="modalHint">Click a bike to select it</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeBikePicker()">Cancel</button>
+      <button class="btn" id="confirmBookBtn" disabled onclick="confirmBikeBooking()">Confirm booking</button>
+    </div>
+  </div>
+</div>
+
+<div id="corsBanner" style="display:none; background:#2a0f0f; border-bottom:1px solid #4a1a1a; padding:12px 24px; font-size:12px; color:#e94560;">
+  <strong>Security warning:</strong> Running via <code>file://</code> — API requests are routed through a third-party CORS proxy (corsproxy.io). <strong>Your auth token is visible to this proxy.</strong>
+  For secure access, serve locally: <code style="background:#111;padding:2px 6px;border-radius:4px;color:#4a9eff">npx serve -l 8080</code> then open <code style="background:#111;padding:2px 6px;border-radius:4px;color:#4a9eff">http://localhost:8080</code>
+</div>
+
+<div class="controls">
+  <div class="control-group" style="position:relative">
+    <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors">★ Favs</button></label>
+    <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
+      <div id="instrChips"></div>
+      <input id="instrSearch" class="instr-search" placeholder="Search…" autocomplete="off"
+        oninput="filterInstrDropdown()" onfocus="showInstrDropdown()" onblur="hideInstrDropdown()" onkeydown="instrKeydown(event)">
+    </div>
+    <div id="instrDropdown" class="instr-dropdown" style="display:none"></div>
+  </div>
+
+  <div class="control-group">
+    <label>Location <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
+    <select id="locationSelect" onchange="updateLocationHint()">
+      <option value="">All Studios (slower)</option>
+    </select>
+  </div>
+
+  <div class="control-group" style="position:relative">
+    <label>Class Type</label>
+    <div id="categoryPills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:36px;padding-top:2px"></div>
+    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center"></div>
+  </div>
+
+  <div class="control-group">
+    <label>Date</label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="date-quick-btn" onclick="setDateQuick('today')">Today</button>
+      <button class="date-quick-btn" onclick="setDateQuick('tomorrow')">Tomorrow</button>
+      <button class="date-quick-btn" onclick="setDateQuick('week')">7 days</button>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label>From</label>
+    <input type="date" id="startDate" onchange="onDateInputChange()">
+  </div>
+
+  <div class="control-group" id="daysAheadGroup">
+    <label>Days ahead</label>
+    <div class="days-control">
+      <input type="number" id="daysAhead" value="7" min="1" max="60" onchange="onDateInputChange()">
+    </div>
+  </div>
+
+  <div class="control-group" style="justify-content:flex-end;gap:8px;flex-direction:row;align-items:flex-end">
+    <button class="btn btn-ghost" onclick="clearFilters()" style="padding:9px 16px;width:auto;display:inline-block">Clear</button>
+    <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
+  </div>
+</div>
+
+<div id="upcomingPanel" class="upcoming-panel" style="display:none">
+  <div class="upcoming-header" onclick="toggleUpcoming()">
+    <h2>My Bookings <span class="upcoming-count" id="upcomingCount">0</span></h2>
+    <span class="upcoming-chevron" id="upcomingChevron">▼</span>
+  </div>
+  <div class="upcoming-body" id="upcomingBody">
+    <div class="upcoming-list" id="upcomingList"></div>
+  </div>
+</div>
+
+<div class="results" id="results">
+  <div class="status">Select an instructor or filter, then click Search.</div>
+</div>
+
+<script src="state.js"></script>
+<script src="security.js"></script>
+<script src="theme.js"></script>
+<script src="app.js"></script>
+<script src="reliability.js"></script>
+<script src="interactions.js"></script>
+<script src="performance.js"></script>
+<script src="calendar.js"></script>
+<script src="features.js"></script>
+<script src="tabs.js"></script>
+<script src="settings.js"></script>
+<script src="native-bridge.js"></script>
+</body>
+</html>
