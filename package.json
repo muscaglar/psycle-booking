@@ -1,0 +1,12 @@
+{
+  "name": "psycle-class-finder",
+  "version": "1.0.0",
+  "description": "Find and book Psycle fitness classes",
+  "private": true,
+  "scripts": {
+    "start": "npx serve -l 8080",
+    "dev": "npx serve -l 8080 --cors"
+  },
+  "keywords": ["psycle", "fitness", "booking", "pwa"],
+  "license": "MIT"
+}

@@ -1,0 +1,472 @@
+/* ================================================================
+   theme.css — CSS custom-property layer for Psycle dark/light mode
+   + skeleton loading cards + empty-state styles
+   Loads AFTER styles.css to override hardcoded values with var().
+   ================================================================ */
+
+/* ── Dark theme (default) ─────────────────────────────────────── */
+:root {
+  --bg: #0a0a0a;
+  --bg-panel: #111;
+  --bg-input: #1a1a1a;
+  --bg-deep: #0d0d0d;
+  --border: #222;
+  --border-light: #333;
+  --border-subtle: #2a2a2a;
+  --text: #f0f0f0;
+  --text-heading: #fff;
+  --text-muted: #aaa;
+  --text-dim: #888;
+  --text-faint: #666;
+  --text-ghost: #555;
+  --text-off: #444;
+  --accent: #e94560;
+  --accent-hover: #c73650;
+  --badge-bg: #1d1d1d;
+  --badge-border: #2a2a2a;
+  --badge-text: #888;
+  --badge-full-bg: #2a0f0f;
+  --badge-full-text: #e94560;
+  --badge-full-border: #4a1a1a;
+  --badge-waitlist-bg: #1a1a0a;
+  --badge-waitlist-text: #b8860b;
+  --badge-waitlist-border: #3a3a10;
+  --badge-highlight-bg: #0f1e2a;
+  --badge-highlight-text: #4a9eff;
+  --badge-highlight-border: #1a3a5a;
+  --booked-bg: #0d1a0d;
+  --booked-border: #5dba5d;
+  --spinner-track: #333;
+  --modal-overlay: rgba(0,0,0,0.85);
+  --toast-bg: #1a1a1a;
+  --toast-border: #333;
+  --skeleton-base: #1a1a1a;
+  --skeleton-shine: #2a2a2a;
+  --section-border: #1a1a1a;
+  --upcoming-bg: #0d1a0d;
+  --upcoming-border: #2a5a2a;
+  --shadow-overlay: rgba(0,0,0,0.6);
+}
+
+/* ── Light theme ──────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg: #f5f5f5;
+  --bg-panel: #fff;
+  --bg-input: #eee;
+  --bg-deep: #e8e8e8;
+  --border: #e0e0e0;
+  --border-light: #d0d0d0;
+  --border-subtle: #ddd;
+  --text: #1a1a1a;
+  --text-heading: #111;
+  --text-muted: #555;
+  --text-dim: #666;
+  --text-faint: #888;
+  --text-ghost: #999;
+  --text-off: #bbb;
+  --accent: #e94560;
+  --accent-hover: #c73650;
+  --badge-bg: #f0f0f0;
+  --badge-border: #ddd;
+  --badge-text: #666;
+  --badge-full-bg: #fde8ec;
+  --badge-full-text: #c73650;
+  --badge-full-border: #f5b3bf;
+  --badge-waitlist-bg: #fef9e7;
+  --badge-waitlist-text: #9a7a0a;
+  --badge-waitlist-border: #f0dda0;
+  --badge-highlight-bg: #e6f0ff;
+  --badge-highlight-text: #2a6abf;
+  --badge-highlight-border: #a0c4f0;
+  --booked-bg: #e6f5e6;
+  --booked-border: #4a9a4a;
+  --spinner-track: #ddd;
+  --modal-overlay: rgba(0,0,0,0.45);
+  --toast-bg: #fff;
+  --toast-border: #ddd;
+  --skeleton-base: #e0e0e0;
+  --skeleton-shine: #f0f0f0;
+  --section-border: #e8e8e8;
+  --upcoming-bg: #e8f5e8;
+  --upcoming-border: #a0d0a0;
+  --shadow-overlay: rgba(0,0,0,0.15);
+}
+
+/* ── Override styles.css with var() ───────────────────────────── */
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  background: var(--bg-panel);
+  border-bottom-color: var(--border);
+}
+
+header h1 { color: var(--text-heading); }
+header span { color: var(--text-faint); }
+
+.controls {
+  background: var(--bg-panel);
+  border-bottom-color: var(--border);
+}
+
+label { color: var(--text-dim); }
+
+select, input[type="date"] {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+  color: var(--text);
+}
+
+select:focus, input:focus { border-color: var(--accent); }
+
+.btn { background: var(--accent); }
+.btn:hover { background: var(--accent-hover); }
+.btn:disabled { background: var(--text-off); }
+
+.btn-ghost {
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+.btn-ghost:hover {
+  background: var(--bg-input);
+  color: var(--text-heading);
+}
+
+.status { color: var(--text-ghost); }
+
+.spinner {
+  border-color: var(--spinner-track);
+  border-top-color: var(--accent);
+}
+
+.summary { color: var(--text-faint); }
+.summary strong { color: var(--text); }
+
+.day-header {
+  color: var(--accent);
+  border-bottom-color: var(--border);
+}
+
+.class-card {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.class-card:hover { border-color: var(--accent); }
+
+.class-card.is-booked {
+  border-left-color: var(--booked-border);
+  background: var(--booked-bg);
+}
+.class-card.is-booked:hover {
+  border-color: var(--booked-border);
+  border-left-color: var(--booked-border);
+}
+
+.class-time { color: var(--text-heading); }
+.class-time-ampm { color: var(--text-faint); }
+.class-type { color: var(--text); }
+.class-instructor { color: var(--text-muted); }
+.class-location { color: var(--text-faint); }
+
+.badge {
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  border-color: var(--badge-border);
+}
+.badge.full {
+  background: var(--badge-full-bg);
+  color: var(--badge-full-text);
+  border-color: var(--badge-full-border);
+}
+.badge.waitlist {
+  background: var(--badge-waitlist-bg);
+  color: var(--badge-waitlist-text);
+  border-color: var(--badge-waitlist-border);
+}
+.badge.highlight {
+  background: var(--badge-highlight-bg);
+  color: var(--badge-highlight-text);
+  border-color: var(--badge-highlight-border);
+}
+
+.no-results { color: var(--text-ghost); }
+
+/* Modal */
+.modal-overlay { background: var(--modal-overlay); }
+.modal {
+  background: var(--bg-panel);
+  border-color: var(--border-subtle);
+}
+.modal-title { color: var(--text-heading); }
+.modal-subtitle { color: var(--text-faint); }
+.modal-close { color: var(--text-faint); }
+.modal-close:hover { color: var(--text-heading); }
+.modal-hint { color: var(--text-ghost); }
+
+.bike-map-wrap {
+  background: var(--bg-deep);
+  border-color: var(--border);
+}
+.bike-legend { color: var(--text-faint); }
+
+/* Inputs */
+.days-control input[type="number"] {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+  color: var(--text);
+}
+
+.instr-box {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+}
+.instr-box:focus-within { border-color: var(--accent); }
+.instr-search { color: var(--text); }
+.instr-chip { background: var(--accent); }
+
+.instr-dropdown {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+  box-shadow: 0 8px 24px var(--shadow-overlay);
+}
+
+.instr-option { color: var(--text-muted); }
+.instr-option:hover, .instr-option.focused {
+  background: var(--bg-panel);
+  color: var(--text-heading);
+}
+.instr-option.selected { color: var(--accent); }
+.instr-option .check { border-color: var(--text-off); }
+.instr-option.selected .check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.fav-star { color: var(--text-off); }
+
+/* Date quick buttons */
+.date-quick-btn {
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+.date-quick-btn:hover {
+  background: var(--bg-input);
+  color: var(--text-heading);
+}
+.date-quick-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Auth */
+.auth-pill .user-name { color: var(--text-muted); }
+.auth-pill .user-name strong { color: var(--text); }
+.auth-pill a { color: var(--accent); }
+
+/* Token dialog */
+.token-dialog { background: var(--modal-overlay); }
+.token-input {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+  color: var(--text);
+}
+.token-input:focus { border-color: var(--accent); }
+.token-cmd {
+  background: var(--bg-deep);
+  border-color: var(--border-subtle);
+}
+.token-cmd:hover { border-color: var(--text-off); }
+.token-step { color: var(--text-muted); }
+.token-step-num { background: var(--accent); }
+
+/* Booking buttons */
+.book-btn { background: var(--accent); }
+.book-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.book-btn.booked {
+  background: #1a4a1a;
+  color: #5dba5d;
+  border-color: #2a6a2a;
+}
+.book-btn.login-needed {
+  background: transparent;
+  border-color: var(--text-off);
+  color: var(--text-dim);
+}
+
+/* Toast */
+.toast {
+  background: var(--toast-bg);
+  border-color: var(--toast-border);
+  color: var(--text);
+}
+
+/* Upcoming panel */
+.upcoming-panel {
+  background: var(--upcoming-bg);
+  border-color: var(--upcoming-border);
+}
+.upcoming-item {
+  background: var(--bg-panel);
+  border-color: var(--upcoming-border);
+}
+.up-time { color: var(--text-heading); }
+.up-name { color: var(--text); }
+.up-sub { color: var(--text-dim); }
+
+/* Type section headers */
+.type-section-header {
+  border-bottom-color: var(--section-border);
+}
+
+#strengthSubPills {
+  border-top-color: var(--section-border);
+}
+
+/* ── Theme toggle button ──────────────────────────────────────── */
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-input);
+  color: var(--text-heading);
+  border-color: var(--text-dim);
+}
+
+/* ── Skeleton loading cards ───────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.skeleton-bar {
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 0%,
+    var(--skeleton-shine) 40%,
+    var(--skeleton-base) 80%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-time {
+  width: 54px;
+  flex-shrink: 0;
+}
+
+.skeleton-time .skeleton-bar:first-child {
+  width: 42px;
+  height: 22px;
+  margin-bottom: 4px;
+}
+
+.skeleton-time .skeleton-bar:last-child {
+  width: 24px;
+  height: 12px;
+}
+
+.skeleton-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skeleton-info .skeleton-bar:nth-child(1) {
+  width: 60%;
+  height: 14px;
+}
+
+.skeleton-info .skeleton-bar:nth-child(2) {
+  width: 45%;
+  height: 13px;
+}
+
+.skeleton-info .skeleton-bar:nth-child(3) {
+  width: 35%;
+  height: 12px;
+}
+
+.skeleton-info .skeleton-bar:nth-child(4) {
+  width: 50px;
+  height: 18px;
+  margin-top: 4px;
+  border-radius: 4px;
+}
+
+.skeleton-info .skeleton-bar:nth-child(5) {
+  width: 100%;
+  height: 30px;
+  margin-top: 6px;
+  border-radius: 5px;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+
+/* Stagger the animation for each card */
+.skeleton-card:nth-child(2) .skeleton-bar { animation-delay: 0.1s; }
+.skeleton-card:nth-child(3) .skeleton-bar { animation-delay: 0.2s; }
+.skeleton-card:nth-child(4) .skeleton-bar { animation-delay: 0.3s; }
+.skeleton-card:nth-child(5) .skeleton-bar { animation-delay: 0.4s; }
+.skeleton-card:nth-child(6) .skeleton-bar { animation-delay: 0.5s; }
+
+/* ── Empty state ──────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.empty-state svg {
+  opacity: 0.5;
+}
+
+.empty-state .empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.empty-state .empty-subtitle {
+  font-size: 13px;
+  color: var(--text-ghost);
+  max-width: 320px;
+  line-height: 1.5;
+}

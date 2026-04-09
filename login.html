@@ -136,6 +136,52 @@ var APP_URL = (function() {
 
 var LOGIN_URL = 'https://psycle.codexfit.com/api/v1/customer/auth/login';
 
+// ── Rate limiting ────────────────────────────────────────────────
+var MAX_ATTEMPTS = 3;
+var COOLDOWN_BASE = 30; // seconds
+var _failCount = 0;
+var _lockedUntil = 0;
+var _cooldownInterval = null;
+
+function checkRateLimit() {
+  if (Date.now() < _lockedUntil) {
+    var secs = Math.ceil((_lockedUntil - Date.now()) / 1000);
+    showError('Too many failed attempts. Try again in ' + secs + 's.');
+    return false;
+  }
+  return true;
+}
+
+function onLoginFailure() {
+  _failCount++;
+  if (_failCount >= MAX_ATTEMPTS) {
+    var cooldown = COOLDOWN_BASE * Math.pow(2, Math.floor((_failCount - MAX_ATTEMPTS) / MAX_ATTEMPTS));
+    _lockedUntil = Date.now() + cooldown * 1000;
+    var btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    var updateCountdown = function() {
+      var secs = Math.ceil((_lockedUntil - Date.now()) / 1000);
+      if (secs <= 0) {
+        clearInterval(_cooldownInterval);
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+        hideError();
+        return;
+      }
+      btn.textContent = 'Wait ' + secs + 's';
+    };
+    updateCountdown();
+    _cooldownInterval = setInterval(updateCountdown, 1000);
+  }
+}
+
+function onLoginSuccess() {
+  _failCount = 0;
+  _lockedUntil = 0;
+  if (_cooldownInterval) clearInterval(_cooldownInterval);
+}
+// ─────────────────────────────────────────────────────────────────
+
 // Allow Enter key to submit
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter') doLogin();
@@ -152,6 +198,8 @@ function hideError() {
 }
 
 async function doLogin() {
+  if (!checkRateLimit()) return;
+
   var email = document.getElementById('email').value.trim();
   var password = document.getElementById('password').value;
   var btn = document.getElementById('loginBtn');
@@ -183,30 +231,52 @@ async function doLogin() {
         || (data.data && (data.data.token || data.data.access_token || data.data.bearer_token));
 
       if (token) {
+        onLoginSuccess();
+
+        // Send token to opener via postMessage (secure, no URL exposure)
+        if (window.opener) {
+          window.opener.postMessage({ type: 'PSYCLE_LOGIN_TOKEN', token: token }, '*');
+        }
+        // Also store in localStorage as fallback (for direct navigation)
         localStorage.setItem('psycle_bearer_token', token);
+
+        // Clear password from memory
+        document.getElementById('password').value = '';
+
         document.getElementById('sLogin').style.display = 'none';
         document.getElementById('sDone').style.display = '';
-        setTimeout(function() { location.href = APP_URL; }, 1500);
+
+        // If opened as popup, close after token is sent
+        if (window.opener) {
+          setTimeout(function() { window.close(); }, 1200);
+        } else {
+          setTimeout(function() { location.href = APP_URL; }, 1500);
+        }
       } else {
-        // Login succeeded but token field name unknown — log and show raw
         console.log('[psycle-login] response:', JSON.stringify(data));
         showError('Logged in but could not find token. Check console and report the field name.');
         btn.disabled = false;
         btn.textContent = 'Sign in';
       }
     } else {
+      onLoginFailure();
       var msg = data.message || data.error || data.errors
         || (typeof data === 'string' ? data : null)
         || 'Login failed (' + res.status + ')';
       if (typeof msg === 'object') msg = JSON.stringify(msg);
       showError(msg);
+      if (Date.now() >= _lockedUntil) {
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    }
+  } catch (e) {
+    onLoginFailure();
+    showError('Network error — check your connection and try again.');
+    if (Date.now() >= _lockedUntil) {
       btn.disabled = false;
       btn.textContent = 'Sign in';
     }
-  } catch (e) {
-    showError('Network error — check your connection and try again.');
-    btn.disabled = false;
-    btn.textContent = 'Sign in';
   }
 }
 </script>
