@@ -260,79 +260,52 @@ function addToGoogleCalendar() {
 }
 
 /**
- * Render the calendar panel UI and append it after the upcoming panel.
+ * Render calendar sync actions inside the My Bookings panel.
+ * Called by renderMyBookings — only shows when there are bookings.
  */
-function renderCalendarPanel() {
-  // Don't render twice
-  if (document.getElementById('calendarPanel')) return;
-
-  const panel = document.createElement('div');
-  panel.id = 'calendarPanel';
-  panel.className = 'calendar-panel';
-  panel.innerHTML = `
-    <div class="calendar-header">
-      <h2>Calendar Sync</h2>
-    </div>
-    <div class="calendar-body">
-      <p class="calendar-desc">Add your booked Psycle classes to your calendar. Re-download after booking or cancelling to keep it in sync.</p>
-      <div class="calendar-actions">
-        <button class="btn" onclick="openICSInCalendar()">Add to Calendar</button>
-        <button class="btn btn-ghost" onclick="addToGoogleCalendar()">Google Calendar</button>
-        <button class="btn btn-ghost" onclick="downloadICS()">Download .ics</button>
-      </div>
-    </div>
-  `;
-
-  // Insert after upcomingPanel
-  const upcoming = document.getElementById('upcomingPanel');
-  if (upcoming && upcoming.parentNode) {
-    upcoming.parentNode.insertBefore(panel, upcoming.nextSibling);
-  } else {
-    // Fallback: insert before #results
-    const results = document.getElementById('results');
-    if (results && results.parentNode) {
-      results.parentNode.insertBefore(panel, results);
-    } else {
-      document.body.appendChild(panel);
-    }
-  }
-
-  // Inject minimal styles for the calendar panel
-  if (!document.getElementById('calendarPanelStyles')) {
-    const style = document.createElement('style');
-    style.id = 'calendarPanelStyles';
-    style.textContent = `
-      .calendar-panel {
-        margin: 0 auto;
-        max-width: 800px;
-        padding: 16px 24px;
-        border-bottom: 1px solid #1e1e1e;
-      }
-      .calendar-header h2 {
-        font-size: 15px;
-        font-weight: 600;
-        color: #ccc;
-        margin: 0 0 8px 0;
-      }
-      .calendar-desc {
-        font-size: 13px;
-        color: #666;
-        margin: 0 0 12px 0;
-      }
-      .calendar-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .calendar-actions .btn {
-        padding: 8px 16px;
-        font-size: 13px;
-        width: auto;
-      }
-    `;
-    document.head.appendChild(style);
-  }
+function renderCalendarActions() {
+  return `<div class="cal-actions">
+    <button class="cal-btn" onclick="event.stopPropagation();openICSInCalendar()" title="Open in Calendar app">📅 Add to Calendar</button>
+    <button class="cal-btn" onclick="event.stopPropagation();addToGoogleCalendar()" title="Open in Google Calendar">Google Cal</button>
+    <button class="cal-btn" onclick="event.stopPropagation();downloadICS()" title="Download .ics file">Download</button>
+  </div>`;
 }
+
+// Remove legacy standalone panel if it exists
+function renderCalendarPanel() {
+  const old = document.getElementById('calendarPanel');
+  if (old) old.remove();
+}
+
+// Inject styles
+(function() {
+  if (document.getElementById('calendarPanelStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'calendarPanelStyles';
+  style.textContent = `
+    .cal-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 8px 4px 4px;
+      border-top: 1px solid #1a3a1a;
+      margin-top: 12px;
+    }
+    .cal-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      border: 1px solid #3a5a3a;
+      background: transparent;
+      color: #5dba5d;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .cal-btn:hover { background: #1a3a1a; }
+  `;
+  document.head.appendChild(style);
+})();
 
 // ── Monkey-patch booking/cancel functions to keep calendar in sync ──
 

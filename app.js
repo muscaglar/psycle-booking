@@ -83,6 +83,7 @@ function toggleStrengthSub(key) {
     selectedStrengthSubs.add(key);
   }
   renderStrengthSubPills();
+  triggerAutoSearch();
 }
 
 // Extract slot numbers from any API format:
@@ -137,6 +138,7 @@ async function fetchMyBookings() {
     const uncached = Object.keys(_myBookings).filter(id => !_eventCache[id]);
     if (uncached.length > 0) {
       console.log('[psycle] fetching event details for', uncached.length, 'booked events');
+      showBookingSkeleton(uncached.length);
       await Promise.all(uncached.map(async evtId => {
         try {
           const r = await apiFetch(`/events/${evtId}`);
@@ -204,6 +206,9 @@ async function checkAuth() {
     if (res.ok) {
       const data = await res.json();
       currentUser = data.data || data;
+      // Extract active subscription info
+      const subs = currentUser.subscriptions || [];
+      _activeSubscription = subs.find(s => s.status === 'active' && s.max_bookings > 0) || null;
       const name = currentUser.first_name || currentUser.email || 'You';
       pill.innerHTML = `<span class="user-name">Logged in as <strong>${escapeHTML(name)}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" style="color:#555">Disconnect</a>`;
@@ -341,6 +346,17 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 
 // _dateQuickMode managed by state.js (default: 'week')
 
+// ── Auto-search on filter change (debounced) ───────────────────
+let _autoSearchTimer = null;
+function triggerAutoSearch() {
+  clearTimeout(_autoSearchTimer);
+  _autoSearchTimer = setTimeout(() => {
+    if (!window._searchAborted) search();
+  }, 500);
+}
+// Auto-search when location dropdown changes
+document.getElementById('locationSelect')?.addEventListener('change', triggerAutoSearch);
+
 function setDateQuick(mode) {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -367,6 +383,7 @@ function setDateQuick(mode) {
     document.getElementById('daysAhead').value = 7;
     if (daysGroup) daysGroup.style.display = '';
   }
+  triggerAutoSearch();
 }
 
 // Clear active quick-btn highlight when date/days inputs are changed manually
@@ -375,6 +392,7 @@ function onDateInputChange() {
   document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
   const daysGroup = document.getElementById('daysAheadGroup');
   if (daysGroup) daysGroup.style.display = '';
+  triggerAutoSearch();
 }
 
 function clearFilters() {
@@ -1108,6 +1126,7 @@ function applyFavouritesAsFilter() {
   favouriteInstructors.forEach(id => selectedInstructors.add(id));
   renderInstrChips();
   renderInstrDropdown();
+  triggerAutoSearch();
 }
 
 function getFilteredInstructors() {
@@ -1161,12 +1180,14 @@ function toggleInstructor(id) {
   document.getElementById('instrSearch').value = '';
   renderInstrChips();
   renderInstrDropdown();
+  triggerAutoSearch();
 }
 
 function removeInstructor(id) {
   selectedInstructors.delete(String(id));
   renderInstrChips();
   renderInstrDropdown();
+  triggerAutoSearch();
 }
 
 function focusInstrSearch(e) {
@@ -1236,6 +1257,7 @@ function toggleCategory(key) {
   else selectedCategories.add(key);
   renderCategoryPills();
   renderStrengthSubPills();
+  triggerAutoSearch();
 }
 // ────────────────────────────────────────────────────────────────
 
@@ -1261,6 +1283,57 @@ let _showPastBookings = false;
 function togglePastBookings() {
   _showPastBookings = !_showPastBookings;
   renderMyBookings();
+}
+
+// ── Skeleton loading for My Bookings ────────────────────────────
+function showBookingSkeleton(count) {
+  const panel = document.getElementById('upcomingPanel');
+  const list = document.getElementById('upcomingList');
+  if (!panel || !list) return;
+  panel.style.display = '';
+  const n = Math.min(count, 6);
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += `<div class="mb-skeleton">
+      <div class="mb-skeleton-time"></div>
+      <div class="mb-skeleton-body">
+        <div class="mb-skeleton-line" style="width:60%"></div>
+        <div class="mb-skeleton-line" style="width:40%"></div>
+        <div class="mb-skeleton-line short" style="width:30%"></div>
+      </div>
+    </div>`;
+  }
+  list.innerHTML = html;
+}
+
+// ── Countdown helper for imminent classes ────────────────────────
+function getCountdownText(eventDate, now) {
+  const diff = eventDate.getTime() - now.getTime();
+  if (diff <= 0) return null; // past
+
+  const diffHours = diff / (1000 * 60 * 60);
+  const todayStr = now.toISOString().split('T')[0];
+  const eventDayStr = eventDate.toISOString().split('T')[0];
+
+  // Check if tomorrow
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+  if (eventDayStr === todayStr) {
+    const hrs = Math.floor(diffHours);
+    const mins = Math.round((diffHours - hrs) * 60);
+    if (hrs === 0) return `In ${mins}min`;
+    if (mins === 0) return `In ${hrs}h`;
+    return `In ${hrs}h ${mins}m`;
+  } else if (eventDayStr === tomorrowStr) {
+    const h = eventDate.getHours();
+    const m = eventDate.getMinutes().toString().padStart(2, '0');
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 || 12;
+    return `Tomorrow ${h12}:${m}${ampm}`;
+  }
+  return null; // not today or tomorrow
 }
 
 function renderMyBookings() {
@@ -1300,6 +1373,22 @@ function renderMyBookings() {
 
   let html = '';
 
+  // Subscription info bar
+  if (_activeSubscription) {
+    const made = Number(_activeSubscription.bookings_made) || 0;
+    const max = _activeSubscription.max_bookings || 0;
+    const pct = max > 0 ? Math.round((made / max) * 100) : 0;
+    const planName = _activeSubscription.name || 'Subscription';
+    const interval = _activeSubscription.billing_interval || 'month';
+    html += `<div class="sub-bar">
+      <div class="sub-bar-text">
+        <span class="sub-bar-name">${escapeHTML(planName)}</span>
+        <span class="sub-bar-count">${made}/${max} classes this ${escapeHTML(interval)}</span>
+      </div>
+      <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
+    </div>`;
+  }
+
   // Past bookings toggle
   if (past.length > 0) {
     html += `<div style="padding:0 4px 10px;text-align:right">
@@ -1309,6 +1398,7 @@ function renderMyBookings() {
     </div>`;
   }
 
+  let _countdownShown = 0; // track how many countdown badges we've shown
   const sortedDays = Object.keys(byDay).sort();
   for (const day of sortedDays) {
     const dayItems = byDay[day];
@@ -1336,6 +1426,15 @@ function renderMyBookings() {
       if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
       if (eventPast) badges += `<span class="badge" style="background:#1a1a1a;color:#555">Attended</span>`;
 
+      // Countdown badge for the next 2 upcoming classes
+      if (!eventPast && _countdownShown < 2) {
+        const cdText = getCountdownText(dt, now);
+        if (cdText) {
+          badges += `<span class="mb-countdown">${cdText}</span>`;
+          _countdownShown++;
+        }
+      }
+
       // Seat chips + cancel
       let seatHtml = '';
       if (booking.slots.length > 0) {
@@ -1356,6 +1455,12 @@ function renderMyBookings() {
         cancelBtn = `<button class="book-btn booked" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)" style="margin-top:10px;width:100%">Cancel booking</button>`;
       }
 
+      // Rebook next week button (upcoming only)
+      let rebookBtn = '';
+      if (!eventPast) {
+        rebookBtn = `<button class="rebook-btn" onclick="event.stopPropagation();rebookNextWeek(${evtId})" title="Find this class next week">↻ Next week</button>`;
+      }
+
       html += `<div class="class-card is-booked my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
         onclick="scrollToClass(${evtId}, event)" style="cursor:pointer" title="Jump to class in search results">
         <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
@@ -1366,19 +1471,26 @@ function renderMyBookings() {
           <div class="class-meta">${badges}</div>
           ${seatHtml}
           ${cancelBtn}
+          ${rebookBtn}
         </div>
       </div>`;
     }
     html += `</div></div>`;
   }
 
+  // Calendar sync actions (only when bookings exist)
+  if (upcoming.length > 0 && typeof renderCalendarActions === 'function') {
+    html += renderCalendarActions();
+  }
+
   list.innerHTML = html;
 }
 
 function scrollToClass(eventId, e) {
-  // Don't fire if any cancel/seat-chip button was clicked
+  // Don't fire if any cancel/seat-chip/rebook button was clicked
   if (e.target.classList.contains('up-cancel') ||
       e.target.classList.contains('up-cancel-all') ||
+      e.target.classList.contains('rebook-btn') ||
       e.target.closest('.up-seat-chip')) return;
   const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
   if (!card) {
@@ -1391,6 +1503,70 @@ function scrollToClass(eventId, e) {
   card.style.transition = 'box-shadow 0.15s';
   card.style.boxShadow = '0 0 0 2px #5dba5d, 0 0 16px rgba(93,186,93,0.4)';
   setTimeout(() => { card.style.boxShadow = ''; }, 1800);
+}
+
+async function rebookNextWeek(eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt) { toast('Event data not available', 'error'); return; }
+
+  // Calculate same time one week later
+  const origDate = new Date(evt.start_at);
+  const nextWeek = new Date(origDate);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const dayStr = nextWeek.toISOString().split('T')[0];
+
+  toast('Searching for next week...', 'info');
+
+  // Search for events on that day at the same location
+  const studio = _studioMap[evt.studio_id];
+  const locationId = studio ? studio.location_id : '';
+
+  const params = new URLSearchParams({
+    start: dayStr + ' 00:00:00',
+    end: dayStr + ' 23:59:59',
+    location: locationId,
+    limit: 200
+  });
+
+  const res = await apiFetch('/events?' + params);
+  if (!res.ok) { toast('Search failed', 'error'); return; }
+  const data = await res.json();
+  const events = data.data || [];
+
+  // Find exact match: same event_type_id, same instructor_id, similar time (within 30min)
+  const origMinutes = origDate.getHours() * 60 + origDate.getMinutes();
+  const exact = events.find(e =>
+    e.event_type_id === evt.event_type_id &&
+    e.instructor_id === evt.instructor_id &&
+    Math.abs((new Date(e.start_at).getHours() * 60 + new Date(e.start_at).getMinutes()) - origMinutes) < 30
+  );
+
+  if (exact) {
+    // Found exact match — go straight to booking
+    const btn = document.createElement('button');
+    btn.className = 'book-btn';
+    btn.textContent = 'Book';
+    document.body.appendChild(btn);
+    await bookClass(exact.id, btn, exact.studio_id);
+    btn.remove();
+    return;
+  }
+
+  // No exact match — find same type at similar time
+  const similar = events.filter(e =>
+    e.event_type_id === evt.event_type_id &&
+    Math.abs((new Date(e.start_at).getHours() * 60 + new Date(e.start_at).getMinutes()) - origMinutes) < 120
+  );
+
+  if (similar.length > 0) {
+    // Show alternatives — set date filters and trigger search
+    document.getElementById('startDate').value = dayStr;
+    document.getElementById('daysAhead').value = 1;
+    search();
+    toast('No exact match — showing alternatives for ' + dayStr, 'info');
+  } else {
+    toast('No matching class found next week at this location', 'info');
+  }
 }
 
 async function upcomingCancel(eventId, btn) {

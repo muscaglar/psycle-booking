@@ -892,3 +892,133 @@ select:focus, input:focus {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
+
+.rebook-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid #2a4a5a;
+  background: transparent;
+  color: #4a9eff;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-top: 6px;
+  transition: background 0.15s;
+}
+.rebook-btn:hover { background: #1a2a3a; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Subscription Info Bar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sub-bar {
+  background: #0d1f0d;
+  border: 1px solid #1a3a1a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.sub-bar-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sub-bar-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #5dba5d;
+}
+
+.sub-bar-count {
+  font-size: 12px;
+  color: #8cbc8c;
+  font-weight: 600;
+}
+
+.sub-progress {
+  height: 4px;
+  background: #1a2a1a;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sub-progress-fill {
+  height: 100%;
+  background: #5dba5d;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Countdown Badge
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mb-countdown {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #1a2a0a;
+  color: #b8d85b;
+  border: 1px solid #2a4a1a;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Skeleton Loading for My Bookings
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes mb-shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+
+.mb-skeleton {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: #111;
+  border: 1px solid #222;
+  border-left: 3px solid #2a4a2a;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.mb-skeleton-time {
+  width: 54px;
+  height: 28px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+  background-size: 400px 100%;
+  animation: mb-shimmer 1.4s ease infinite;
+  flex-shrink: 0;
+}
+
+.mb-skeleton-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mb-skeleton-line {
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+  background-size: 400px 100%;
+  animation: mb-shimmer 1.4s ease infinite;
+}
+
+.mb-skeleton-line.short {
+  height: 10px;
+}

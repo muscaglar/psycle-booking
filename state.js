@@ -20,6 +20,9 @@ const PsycleState = {
   // ── Event metadata cache (for upcoming panel) ─────────────────
   _eventCache: {},
 
+  // ── Active subscription info ──────────────────────────────────
+  _activeSubscription: null,
+
   // ── Filter state ──────────────────────────────────────────────
   selectedInstructors: new Set(),
   selectedCategories: new Set(),
@@ -115,6 +118,7 @@ const PsycleState = {
     'eventTypes',
     'currentUser',
     '_myBookings',
+    '_activeSubscription',
     '_bookingContext',
     '_selectedSlots',
     '_upcomingCollapsed',
@@ -158,6 +162,7 @@ const PsycleState = {
     '_studioMap',
     '_myBookings',
     '_eventCache',
+    '_activeSubscription',
     'selectedInstructors',
     'selectedCategories',
     'selectedStrengthSubs',

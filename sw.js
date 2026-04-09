@@ -1,4 +1,4 @@
-const CACHE = 'psycle-v5';
+const CACHE = 'psycle-v6';
 const SHELL = [
   './psycle-finder.html',
   './styles.css',
@@ -13,6 +13,8 @@ const SHELL = [
   './performance.js',
   './calendar.js',
   './features.js',
+  './tabs.css',
+  './tabs.js',
   './manifest.json'
 ];
 
