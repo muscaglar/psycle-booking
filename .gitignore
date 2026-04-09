@@ -1,0 +1,8 @@
+# Dependencies (reproducible from package-lock.json via npm install)
+node_modules/
+
+# macOS
+.DS_Store
+
+# CocoaPods (reproducible from Podfile.lock via pod install)
+ios-app/ios/App/Pods/
