@@ -100,7 +100,28 @@ async function fetchMyBookings() {
         slots: (b.slots || b.slot_ids || (b.slot_id != null ? [b.slot_id] : [])).map(Number).filter(Boolean),
       };
     });
-    console.log('[psycle] _myBookings:', _myBookings);
+
+    // Resolve slot details for bookings that have an ID but no slots
+    // (the /bookings list endpoint often omits individual slot IDs)
+    const needSlots = Object.entries(_myBookings)
+      .filter(([, b]) => b.bookingId && b.slots.length === 0);
+    if (needSlots.length > 0) {
+      await Promise.all(needSlots.map(async ([evtId, booking]) => {
+        try {
+          const bRes = await apiFetch(`/bookings/${booking.bookingId}`);
+          if (!bRes.ok) return;
+          const bData = await bRes.json();
+          const detail = bData.data || bData;
+          const resolved = (detail.slots || detail.slot_ids || (detail.slot_id != null ? [detail.slot_id] : []))
+            .map(Number).filter(Boolean);
+          if (resolved.length) {
+            _myBookings[evtId].slots = resolved;
+          }
+        } catch {}
+      }));
+    }
+
+    console.log('[psycle] _myBookings (with slots):', _myBookings);
     refreshUpcomingPanel();
     // Refresh any already-rendered booking buttons
     Object.entries(_myBookings).forEach(([evtId, booking]) => {

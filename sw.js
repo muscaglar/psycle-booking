@@ -70,9 +70,10 @@ function _swGenerateICS(entries) {
     const start = new Date(entry.startAt);
     const end = new Date(start.getTime() + (entry.duration || 45) * 60 * 1000);
     const slots = _swSlotLabel(entry.slots);
-    const summary = entry.instrName
+    let summary = entry.instrName
       ? entry.typeName + ' - ' + entry.instrName
       : entry.typeName;
+    if (slots) summary += ' (' + slots + ')';
 
     const descParts = [];
     if (entry.instrName) descParts.push('Instructor: ' + entry.instrName);
@@ -80,14 +81,26 @@ function _swGenerateICS(entries) {
     descParts.push('Duration: ' + (entry.duration || 45) + 'min');
     const description = descParts.join('\\n');
 
+    var locDisplay = entry.address || entry.locName || '';
+
     lines.push('BEGIN:VEVENT');
     lines.push('UID:psycle-event-' + entry.eventId + '@psyclefinder');
     lines.push('DTSTAMP:' + _swIcsTimestamp(new Date()));
     lines.push('DTSTART:' + _swIcsTimestamp(start));
     lines.push('DTEND:' + _swIcsTimestamp(end));
     lines.push(_swIcsFold('SUMMARY:' + summary));
-    lines.push(_swIcsFold('LOCATION:' + (entry.locName || '')));
+    lines.push(_swIcsFold('LOCATION:' + locDisplay));
     lines.push(_swIcsFold('DESCRIPTION:' + description));
+    if (entry.lat != null && entry.lon != null) {
+      lines.push('GEO:' + entry.lat + ';' + entry.lon);
+      lines.push(_swIcsFold(
+        'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=' +
+        '"' + locDisplay.replace(/"/g, '\\"') + '"' +
+        ';X-APPLE-RADIUS=100' +
+        ';X-TITLE="' + (entry.locName || '').replace(/"/g, '\\"') + '"' +
+        ':geo:' + entry.lat + ',' + entry.lon
+      ));
+    }
     lines.push('STATUS:CONFIRMED');
     lines.push('END:VEVENT');
   }

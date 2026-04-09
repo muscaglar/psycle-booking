@@ -4,6 +4,51 @@
 
 const CALENDAR_DATA_KEY = 'psycle_calendar_data';
 
+// ── Psycle studio geo data ──────────────────────────────────────
+// Maps the UI-stripped location name (e.g. "Canary Wharf") to its
+// physical address and coordinates so calendar apps can show travel
+// time, maps, and directions.  Add new studios here as they open.
+const STUDIO_GEO = {
+  'oxford circus': {
+    address: '76 Mortimer Street, London W1W 7SA',
+    lat: 51.5188, lon: -0.1402,
+  },
+  'mortimer street': {
+    address: '76 Mortimer Street, London W1W 7SA',
+    lat: 51.5188, lon: -0.1402,
+  },
+  'bank': {
+    address: '40 Coleman Street, London EC2R 5EH',
+    lat: 51.5155, lon: -0.0870,
+  },
+  'victoria': {
+    address: '27 Eccleston Place, London SW1W 9NF',
+    lat: 51.4955, lon: -0.1480,
+  },
+  'notting hill': {
+    address: '37-41 Westbourne Grove, London W2 4UA',
+    lat: 51.5154, lon: -0.1910,
+  },
+  'london bridge': {
+    address: '20-26 London Bridge Street, London SE1 9SG',
+    lat: 51.5055, lon: -0.0860,
+  },
+  'shoreditch': {
+    address: '17-23 Whitby Street, London E1 6JU',
+    lat: 51.5215, lon: -0.0735,
+  },
+  'clapham': {
+    address: '82-84 Battersea Rise, London SW11 1EH',
+    lat: 51.4622, lon: -0.1680,
+  },
+};
+
+function _lookupGeo(locName) {
+  if (!locName) return null;
+  const key = locName.toLowerCase().replace(/^psycle\s+/, '').trim();
+  return STUDIO_GEO[key] || null;
+}
+
 /**
  * Persist current bookings + event metadata to localStorage so the
  * service worker can generate the .ics without access to page globals.
@@ -13,12 +58,23 @@ function syncCalendarData() {
   for (const [evtId, booking] of Object.entries(_myBookings)) {
     const evt = _eventCache[evtId];
     if (!evt) continue;
-    // Resolve full location name (prefer _locName, fall back to studio lookup)
-    let locationName = evt._locName || '';
-    if (!locationName) {
-      const studio = _studioMap[evt.studio_id];
-      if (studio) locationName = studio.name || '';
+    // Resolve full location + studio name for calendar events
+    // Use the full "Psycle X" name (not the UI-stripped version) for calendar LOCATION
+    let locationName = '';
+    const studio = _studioMap[evt.studio_id];
+    if (studio) {
+      // Try to get the parent location's full name from relations
+      const locId = studio.location_id;
+      // _eventCache stores the stripped name; reconstruct full name
+      const stripped = evt._locName || '';
+      locationName = stripped ? 'Psycle ' + stripped : '';
+      // Append studio/room name if different from location
+      if (studio.name && studio.name !== locationName) {
+        locationName = locationName ? locationName + ' — ' + studio.name : studio.name;
+      }
     }
+    if (!locationName) locationName = evt._locName || '';
+    const geo = _lookupGeo(locationName) || _lookupGeo(evt._locName);
     entries.push({
       eventId: evtId,
       bookingId: booking.bookingId,
@@ -28,6 +84,9 @@ function syncCalendarData() {
       typeName: evt._typeName || 'Class',
       instrName: evt._instrName || '',
       locName: locationName,
+      address: geo ? geo.address : '',
+      lat: geo ? geo.lat : null,
+      lon: geo ? geo.lon : null,
     });
   }
   try {
@@ -95,9 +154,10 @@ function generateICS(entriesArg) {
     const start = new Date(entry.startAt);
     const end = new Date(start.getTime() + (entry.duration || 45) * 60 * 1000);
     const slots = _slotLabel(entry.slots);
-    const summary = entry.instrName
+    let summary = entry.instrName
       ? `${entry.typeName} - ${entry.instrName}`
       : entry.typeName;
+    if (slots) summary += ` (${slots})`;
 
     const descParts = [];
     if (entry.instrName) descParts.push('Instructor: ' + entry.instrName);
@@ -105,14 +165,31 @@ function generateICS(entriesArg) {
     descParts.push('Duration: ' + (entry.duration || 45) + 'min');
     const description = descParts.join('\\n');
 
+    // Use full street address for LOCATION if available, otherwise display name
+    const locDisplay = entry.address || entry.locName || '';
+
     lines.push('BEGIN:VEVENT');
     lines.push('UID:psycle-event-' + entry.eventId + '@psyclefinder');
     lines.push('DTSTAMP:' + _icsTimestamp(new Date()));
     lines.push('DTSTART:' + _icsTimestamp(start));
     lines.push('DTEND:' + _icsTimestamp(end));
     lines.push(_icsFold('SUMMARY:' + summary));
-    lines.push(_icsFold('LOCATION:' + (entry.locName || '')));
+    lines.push(_icsFold('LOCATION:' + locDisplay));
     lines.push(_icsFold('DESCRIPTION:' + description));
+
+    // Geo coordinates for travel time / map integration
+    if (entry.lat != null && entry.lon != null) {
+      lines.push('GEO:' + entry.lat + ';' + entry.lon);
+      // Apple Calendar structured location — enables travel time alerts & map pin
+      lines.push(_icsFold(
+        'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=' +
+        '"' + locDisplay.replace(/"/g, '\\"') + '"' +
+        ';X-APPLE-RADIUS=100' +
+        ';X-TITLE="' + (entry.locName || '').replace(/"/g, '\\"') + '"' +
+        ':geo:' + entry.lat + ',' + entry.lon
+      ));
+    }
+
     lines.push('STATUS:CONFIRMED');
     lines.push('END:VEVENT');
   }
@@ -189,7 +266,7 @@ function addToGoogleCalendar() {
   const end = new Date(start.getTime() + (e.duration || 45) * 60 * 1000);
   const fmt = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const title = encodeURIComponent(e.instrName ? e.typeName + ' - ' + e.instrName : e.typeName);
-  const loc = encodeURIComponent(e.locName || '');
+  const loc = encodeURIComponent(e.address || e.locName || '');
   const slots = _slotLabel(e.slots);
   const details = encodeURIComponent(
     (e.instrName ? 'Instructor: ' + e.instrName + '\n' : '') +
