@@ -287,6 +287,21 @@ function scheduleAuthRecheck() {
   }
 })();
 
+// Re-check auth when tab becomes visible — handles the case where the login
+// popup stored a token in localStorage but postMessage was lost because this
+// tab was suspended by the OS (common on mobile).
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState !== 'visible' || currentUser) return;
+  var legacy = localStorage.getItem('psycle_bearer_token');
+  if (legacy) {
+    if (window._secureTokenStore) {
+      window._secureTokenStore.set(legacy).then(function() { checkAuth(); });
+    } else {
+      checkAuth();
+    }
+  }
+});
+
 // Init — wait for security module to decrypt stored token
 if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 (window.securityReady || Promise.resolve()).then(function() {
