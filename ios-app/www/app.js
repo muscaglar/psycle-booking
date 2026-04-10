@@ -18,7 +18,7 @@ function apiFetch(path, opts = {}) {
   const token = getBearerToken();
   const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(apiUrl(path), { credentials: 'include', ...opts, headers }).then(res => {
+  return fetch(apiUrl(path), { ...opts, headers }).then(res => {
     if ((res.status === 401 || res.status === 403) && getBearerToken()) {
       showSessionExpired();
     }
@@ -198,8 +198,7 @@ async function checkAuth() {
   }
   try {
     const res = await fetch(apiUrl('/profile'), {
-      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${getBearerToken()}` },
-      credentials: 'include'
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${getBearerToken()}` }
     });
     if (res.ok) {
       const data = await res.json();
@@ -271,7 +270,7 @@ function showSessionExpired() {
   else localStorage.removeItem('psycle_bearer_token');
   document.getElementById('sessionBanner').style.display = 'flex';
   const pill = document.getElementById('authPill');
-  pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" style="color:#e94560;font-weight:700">Sign in →</a>`;
+  pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link" style="color:#e94560;font-weight:700"><span class="auth-full">Sign in →</span><span class="auth-icon">👤</span></a>`;
 }
 
 function scheduleAuthRecheck() {

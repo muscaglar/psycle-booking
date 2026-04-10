@@ -113,7 +113,7 @@
       var headers = Object.assign({ 'Accept': 'application/json' }, opts.headers || {});
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
-      return fetchWithRetry(apiUrl(path), Object.assign({ credentials: 'include' }, opts, { headers: headers }))
+      return fetchWithRetry(apiUrl(path), Object.assign({}, opts, { headers: headers }))
         .then(function (res) {
           if ((res.status === 401 || res.status === 403) && getBearerToken()) {
             showSessionExpired();
