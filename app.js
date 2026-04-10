@@ -607,7 +607,6 @@ async function bookClass(eventId, btn, studioId) {
     const detail = await res.json();
     // detail.slots = AVAILABLE (bookable) slot IDs
     const availableSlotIds = new Set((detail.slots || []).map(Number));
-      '| layout slot IDs:', _studioMap[studioId]?.layout?.slots?.map(s => s.id));
 
     const studio = _studioMap[studioId];
     const layout = studio?.layout;
