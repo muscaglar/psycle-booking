@@ -155,13 +155,21 @@
 
   // ── Initialization: decrypt stored token ───────────────────────
 
+  // Timeout wrapper: if crypto init takes >3s, fall back to legacy storage
+  function _withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, reject) { setTimeout(function () { reject(new Error('timeout')); }, ms); })
+    ]);
+  }
+
   window.securityReady = (async function () {
     try {
       if (_cryptoAvailable) {
-        _cryptoKey = await _getOrCreateKey();
+        _cryptoKey = await _withTimeout(_getOrCreateKey(), 3000);
       }
     } catch (e) {
-      console.warn('[security] SubtleCrypto unavailable, using fallback');
+      console.warn('[security] Crypto init failed/timed out, using fallback');
       _cryptoAvailable = false;
     }
 

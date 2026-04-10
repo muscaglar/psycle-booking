@@ -1090,8 +1090,12 @@ select:focus, input:focus {
   /* Auth pill: icon only on mobile */
   .auth-full { display: none; }
   .auth-icon { display: inline; font-size: 16px; }
-  .auth-pill { gap: 6px; }
+  .auth-pill { gap: 6px; flex-shrink: 0; }
   .user-name { font-size: 11px; }
+
+  /* Compact header buttons on mobile */
+  .theme-toggle { width: 28px; height: 28px; font-size: 14px; }
+  .history-btn { font-size: 10px; padding: 4px 8px; }
 
   /* Show filter toggle */
   .controls-toggle { display: flex; }
