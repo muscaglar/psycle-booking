@@ -50,6 +50,31 @@ function getCategory(typeName) {
   return CATEGORY_MAP.find(c => c.key === 'OTHER');
 }
 
+/**
+ * Get the slot label for a class type.
+ * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
+ */
+/**
+ * Get the slot label for a class type.
+ * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
+ */
+function slotLabel(typeName) {
+  const n = (typeName || '').toUpperCase();
+  if (n.includes('REFORMER')) return 'Bed';
+  const cat = getCategory(typeName);
+  if (!cat) return 'Spot';
+  if (cat.key === 'RIDE') return 'Bike';
+  if (cat.key === 'PILATES') return 'Bed';
+  if (cat.key === 'STRENGTH') return 'Bench';
+  return 'Spot';
+}
+
+/** Get slot label from an event ID via the cache */
+function slotLabelForEvent(eventId) {
+  const evt = _eventCache[String(eventId)];
+  return evt ? slotLabel(evt._typeName) : 'Spot';
+}
+
 // selectedCategories is managed by state.js
 
 // ── Strength sub-filter ──────────────────────────────────────────
@@ -650,11 +675,13 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   _selectedSlots = [];
 
   const hasMySlots = mySlotIds.size > 0;
-  document.getElementById('modalTitle').textContent = hasMySlots ? 'Your booking' : 'Select your bike(s)';
+  const _sl = slotLabelForEvent(eventId).toLowerCase();
+  const _SL = slotLabelForEvent(eventId);
+  document.getElementById('modalTitle').textContent = hasMySlots ? 'Your booking' : `Select your ${_sl}(s)`;
   document.getElementById('modalSubtitle').textContent = studioName;
   document.getElementById('modalHint').textContent = hasMySlots
-    ? `Your bike(s) shown in green — click to cancel. Select another to book.`
-    : `Select up to ${MAX_SEATS} bikes`;
+    ? `Your ${_sl}(s) shown in green — click to cancel. Select another to book.`
+    : `Select up to ${MAX_SEATS} ${_sl}s`;
   document.getElementById('confirmBookBtn').disabled = true;
 
   const slots = layout.slots;
@@ -718,10 +745,11 @@ function selectBike(slotId) {
     document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('available', 'selected');
   }
   const count = _selectedSlots.length;
+  const _sl2 = _bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot';
   document.getElementById('modalHint').textContent =
-    count === 0 ? `Select up to ${MAX_SEATS} bikes`
-    : count === 1 ? `Bike ${_selectedSlots[0]} selected — pick a second or confirm`
-    : `Bikes ${_selectedSlots.join(' & ')} selected`;
+    count === 0 ? `Select up to ${MAX_SEATS} ${_sl2.toLowerCase()}s`
+    : count === 1 ? `${_sl2} ${_selectedSlots[0]} selected — pick a second or confirm`
+    : `${_sl2}s ${_selectedSlots.join(' & ')} selected`;
   document.getElementById('confirmBookBtn').disabled = count === 0;
 }
 
@@ -793,7 +821,8 @@ async function submitBooking(eventId, slots, btn) {
 
 async function cancelBikeSlot(slotId, eventId) {
   const booking = _myBookings[String(eventId)];
-  if (!confirm(`Cancel your Bike ${slotId} booking?`)) return;
+  const _sl3 = slotLabelForEvent(eventId);
+  if (!confirm(`Cancel your ${_sl3} ${slotId} booking?`)) return;
   // update hint immediately
   document.getElementById('modalHint').textContent = 'Cancelling…';
   try {
@@ -828,9 +857,9 @@ async function cancelBikeSlot(slotId, eventId) {
       }
       const remaining = booking?.slots?.length || 0;
       document.getElementById('modalHint').textContent = remaining
-        ? `Bike ${slotId} cancelled. Select another or close.`
-        : 'Booking cancelled. Select a bike to rebook.';
-      toast(`Bike ${slotId} cancelled`, 'info');
+        ? `${_sl3} ${slotId} cancelled. Select another or close.`
+        : `Booking cancelled. Select a ${_sl3.toLowerCase()} to rebook.`;
+      toast(`${_sl3} ${slotId} cancelled`, 'info');
       PsycleEvents.emit('seat:cancelled', eventId, slotId);
     } else {
       const data = await res.json().catch(() => ({}));
@@ -1462,9 +1491,10 @@ function renderMyBookings() {
       // Seat chips + cancel
       let seatHtml = '';
       if (booking.slots.length > 0) {
+        const _slUp = slotLabelForEvent(evtId);
         const chips = booking.slots.map(slot => {
-          if (eventPast) return `<span class="up-seat-chip" style="opacity:0.5">Bike ${slot}</span>`;
-          return `<span class="up-seat-chip">Bike ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel Bike ${slot}">&times;</button></span>`;
+          if (eventPast) return `<span class="up-seat-chip" style="opacity:0.5">${_slUp} ${slot}</span>`;
+          return `<span class="up-seat-chip">${_slUp} ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel ${_slUp} ${slot}">&times;</button></span>`;
         }).join('');
         seatHtml = `<div class="up-seats" style="margin-top:8px">${chips}`;
         if (!eventPast && booking.slots.length > 1) {
@@ -1644,7 +1674,8 @@ async function upcomingCancel(eventId, btn) {
 async function upcomingSeatCancel(eventId, slotId, btn) {
   const booking = _myBookings[String(eventId)];
   if (!booking) return;
-  if (!confirm(`Cancel Bike ${slotId}?`)) return;
+  const _sl4 = slotLabelForEvent(eventId);
+  if (!confirm(`Cancel ${_sl4} ${slotId}?`)) return;
   btn.disabled = true;
   const chip = btn.closest('.up-seat-chip');
   if (chip) chip.style.opacity = '0.5';
@@ -1680,7 +1711,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
         }
       }
       refreshUpcomingPanel();
-      toast(`Bike ${slotId} cancelled`, 'info');
+      toast(`${_sl4} ${slotId} cancelled`, 'info');
       PsycleEvents.emit('seat:cancelled', eventId, slotId);
     } else {
       btn.disabled = false;

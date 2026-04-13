@@ -547,6 +547,22 @@
   margin-top: 4px; white-space: nowrap;
 }
 
+/* ── Share Button ─────────────────────────────────────────────────── */
+
+.share-insights-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 12px 20px;
+  background: var(--bg-panel, #111); border: 1px solid var(--border, #222);
+  border-radius: 10px; color: var(--text-muted, #aaa);
+  font-size: 13px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.share-insights-btn::before { content: '↗'; font-size: 16px; }
+.share-insights-btn:hover {
+  border-color: var(--accent, #e94560); color: var(--text-heading, #fff);
+}
+
 @media (max-width: 640px) {
   .insights-section { padding: 0 16px 16px; }
   .ct-label { min-width: 56px; font-size: 11px; }

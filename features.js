@@ -125,7 +125,8 @@
           const ampm = h >= 12 ? 'pm' : 'am';
           const timeStr = (h % 12 || 12) + ':' + m + ampm;
           const isCancelled = !!entry.cancelledAt;
-          const slotsStr = entry.slots && entry.slots.length > 0 ? ' | Bike' + (entry.slots.length > 1 ? 's ' : ' ') + entry.slots.join(' & ') : '';
+          const _slH = (typeof slotLabel === 'function') ? slotLabel(entry.typeName) : 'Bike';
+          const slotsStr = entry.slots && entry.slots.length > 0 ? ' | ' + _slH + (entry.slots.length > 1 ? 's ' : ' ') + entry.slots.join(' & ') : '';
           bodyHtml += `
             <div class="history-item${isCancelled ? ' cancelled' : ''}">
               <div class="history-date">${dayStr.replace(' ', '<br>')}</div>

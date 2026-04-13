@@ -66,7 +66,8 @@
       '<div id="recoSection" class="reco-section" style="display:none"></div>' +
       '<div id="classTypeSection" class="insights-section" style="display:none"></div>' +
       '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
-      '<div id="varietySection" class="insights-section" style="display:none"></div>';
+      '<div id="varietySection" class="insights-section" style="display:none"></div>' +
+      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>';
 
     // Create explore panel (instructor discovery)
     var explorePanel = document.createElement('div');
@@ -811,6 +812,217 @@
     html += '</div>';
     container.innerHTML = html;
   }
+
+
+  // ── Share Insights Card ─────────────────────────────────────────
+
+  window.shareInsights = async function () {
+    var history = getFullHistory().filter(function (h) { return !h.cancelledAt; });
+    if (history.length === 0) { toast('No history to share yet', 'info'); return; }
+
+    var now = new Date();
+    var userName = '';
+    if (typeof currentUser !== 'undefined' && currentUser) {
+      userName = currentUser.first_name || currentUser.email || '';
+    }
+
+    // Gather stats
+    var totalClasses = history.length;
+    var soloCount = 0, socialCount = 0;
+    var instrCount = {}, studioCount = {}, catCount = {};
+    var firstDate = history[history.length - 1]?.date;
+    var cats = (typeof CATEGORY_MAP !== 'undefined') ? CATEGORY_MAP : [];
+
+    history.forEach(function (h) {
+      if (h.slots && h.slots.length > 1) socialCount++; else soloCount++;
+      if (h.instrName) instrCount[h.instrName] = (instrCount[h.instrName] || 0) + 1;
+      if (h.locName) studioCount[h.locName] = (studioCount[h.locName] || 0) + 1;
+      var cat = (typeof getCategory === 'function') ? getCategory(h.typeName) : null;
+      var key = cat ? cat.key : 'OTHER';
+      catCount[key] = (catCount[key] || 0) + 1;
+    });
+
+    var topInstr = Object.entries(instrCount).sort(function (a, b) { return b[1] - a[1]; })[0];
+    var topStudio = Object.entries(studioCount).sort(function (a, b) { return b[1] - a[1]; })[0];
+    var catSorted = cats
+      .map(function (c) { return { key: c.key, label: c.label, color: c.color, count: catCount[c.key] || 0 }; })
+      .filter(function (c) { return c.count > 0; })
+      .sort(function (a, b) { return b.count - a.count; });
+    var catMax = catSorted.length > 0 ? catSorted[0].count : 1;
+
+    // Unique instructors
+    var uniqueInstrs = Object.keys(instrCount).length;
+
+    // Render to canvas
+    var W = 640, H = 820;
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle border
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, W - 2, H - 2);
+
+    var y = 40;
+
+    // Header
+    ctx.fillStyle = '#e94560';
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.letterSpacing = '3px';
+    ctx.fillText('PSYCLE', 32, y);
+    ctx.fillStyle = '#555';
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('CLASS FINDER', 96, y);
+    y += 12;
+
+    // Divider
+    ctx.strokeStyle = '#222';
+    ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
+    y += 28;
+
+    // Title
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(userName ? userName + "'s Stats" : 'My Psycle Stats', 32, y);
+    y += 14;
+
+    // Date range
+    if (firstDate) {
+      ctx.fillStyle = '#666';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      var fd = new Date(firstDate);
+      ctx.fillText(
+        fd.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) + ' — ' +
+        now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
+        32, y
+      );
+    }
+    y += 32;
+
+    // Big stat cards
+    var cardW = 130, cardH = 72, cardGap = 12, cardX = 32;
+    var statCards = [
+      { value: String(totalClasses), label: 'CLASSES' },
+      { value: String(uniqueInstrs), label: 'INSTRUCTORS' },
+      { value: String(soloCount), label: 'SOLO' },
+    ];
+    if (socialCount > 0) statCards.push({ value: String(socialCount), label: 'WITH A FRIEND' });
+
+    statCards.forEach(function (card, i) {
+      var cx = cardX + i * (cardW + cardGap);
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.roundRect(cx, y, cardW, cardH, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#222';
+      ctx.beginPath();
+      ctx.roundRect(cx, y, cardW, cardH, 8);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(card.value, cx + 14, y + 34);
+      ctx.fillStyle = '#666';
+      ctx.font = '600 9px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(card.label, cx + 14, y + 52);
+    });
+    y += cardH + 28;
+
+    // Top instructor & studio
+    if (topInstr) {
+      ctx.fillStyle = '#888';
+      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText('TOP INSTRUCTOR', 32, y);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topInstr[0], 32, y + 22);
+      ctx.fillStyle = '#888';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topInstr[1] + ' classes', 32, y + 40);
+    }
+    if (topStudio) {
+      ctx.fillStyle = '#888';
+      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText('TOP STUDIO', W / 2, y);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topStudio[0], W / 2, y + 22);
+      ctx.fillStyle = '#888';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topStudio[1] + ' classes', W / 2, y + 40);
+    }
+    y += 64;
+
+    // Class type bars
+    ctx.fillStyle = '#888';
+    ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('CLASS TYPES', 32, y);
+    y += 14;
+
+    catSorted.slice(0, 6).forEach(function (cat) {
+      var barMaxW = W - 200;
+      var barW = Math.max(6, Math.round(cat.count / catMax * barMaxW));
+
+      ctx.fillStyle = '#666';
+      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(cat.label, 100, y + 14);
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = '#0d0d0d';
+      ctx.beginPath(); ctx.roundRect(112, y + 2, barMaxW, 16, 3); ctx.fill();
+      ctx.fillStyle = cat.color;
+      ctx.beginPath(); ctx.roundRect(112, y + 2, barW, 16, 3); ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(String(cat.count), 112 + barMaxW + 8, y + 14);
+
+      y += 24;
+    });
+    y += 16;
+
+    // Footer
+    ctx.strokeStyle = '#222';
+    ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
+    y += 20;
+    ctx.fillStyle = '#444';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Generated by Psycle Class Finder · ' + now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), 32, y);
+
+    // Export and share
+    try {
+      var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+      var file = new File([blob], 'psycle-stats.png', { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'My Psycle Stats',
+          text: totalClasses + ' classes · ' + uniqueInstrs + ' instructors · Top: ' + (topInstr ? topInstr[0] : ''),
+          files: [file],
+        });
+      } else {
+        // Fallback: download
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'psycle-stats.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('Image saved — share it from your downloads', 'success');
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        toast('Share failed: ' + e.message, 'error');
+      }
+    }
+  };
 
 
   // ── Init ───────────────────────────────────────────────────────
