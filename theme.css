@@ -783,19 +783,34 @@ select:focus, input:focus { border-color: var(--accent); }
   background: var(--bg);
 }
 
-/* ── styles.css: Bike slot light mode ────────────────────────────── */
+/* ── styles.css: Bike slot light mode — high contrast, distinct states ── */
 
-[data-theme="light"] .bike-slot.available rect { fill: #f0f0f0; stroke: #ccc; }
-[data-theme="light"] .bike-slot.available:hover rect { fill: #e0e0e0; stroke: #999; }
-[data-theme="light"] .bike-slot.taken rect { fill: #fde8ec; stroke: #f5b3bf; }
+/* Available: white, clickable */
+[data-theme="light"] .bike-slot.available rect { fill: #fff; stroke: #bbb; }
+[data-theme="light"] .bike-slot.available:hover rect { fill: #e8e8e8; stroke: #666; }
+[data-theme="light"] .bike-slot.available text { fill: #555; }
+[data-theme="light"] .bike-slot.available:hover text { fill: #111; }
+
+/* Taken: grayed out, clearly unavailable */
+[data-theme="light"] .bike-slot.taken rect { fill: #e8e8e8; stroke: #ddd; cursor: not-allowed; }
+[data-theme="light"] .bike-slot.taken text { fill: #bbb; }
+
+/* Your pick: bold red fill */
 [data-theme="light"] .bike-slot.selected rect { fill: #e94560; stroke: #c73650; }
-[data-theme="light"] .bike-slot.mine rect { fill: #fde8ec; stroke: #e94560; }
-[data-theme="light"] .bike-slot.mine:hover rect { fill: #fde8ec; stroke: #c73650; }
-[data-theme="light"] .bike-slot text { fill: #888; }
-[data-theme="light"] .bike-slot.taken text { fill: #f5b3bf; }
 [data-theme="light"] .bike-slot.selected text { fill: #fff; }
-[data-theme="light"] .bike-slot.available:hover text { fill: #333; }
-[data-theme="light"] .bike-slot.mine text { fill: #e94560; }
+
+/* Your existing booking: solid red */
+[data-theme="light"] .bike-slot.mine rect { fill: #e94560; stroke: #c73650; }
+[data-theme="light"] .bike-slot.mine:hover rect { fill: #c73650; stroke: #a02a40; }
+[data-theme="light"] .bike-slot.mine text { fill: #fff; }
+
+/* Prefer: green fill, clearly marked */
+[data-theme="light"] .bike-slot.pref-prefer rect { fill: #e6f7e6 !important; stroke: #2a9a2a !important; stroke-width: 2px !important; }
+[data-theme="light"] .bike-slot.pref-prefer text { fill: #1a7a1a !important; }
+
+/* Avoid: red dashed, clearly warned */
+[data-theme="light"] .bike-slot.pref-avoid rect { fill: #fff0f0 !important; stroke: #e94560 !important; stroke-dasharray: 4,2 !important; }
+[data-theme="light"] .bike-slot.pref-avoid text { fill: #c73650 !important; }
 
 /* ── styles.css: Swipe cancel background ─────────────────────────── */
 

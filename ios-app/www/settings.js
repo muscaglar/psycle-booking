@@ -208,7 +208,13 @@
       settingsBtn.onclick = function () { openSettings(); };
       // Check if a settings button already exists
       if (!document.querySelector('[title="Settings"]')) {
-        themeToggle.parentNode.insertBefore(settingsBtn, themeToggle);
+        // Place settings gear next to the auth pill (right side of header)
+        var authPill = document.getElementById('authPill');
+        if (authPill) {
+          authPill.parentNode.insertBefore(settingsBtn, authPill);
+        } else {
+          themeToggle.parentNode.insertBefore(settingsBtn, themeToggle);
+        }
       }
     }
   }, 500);
@@ -486,6 +492,13 @@
       var html = _origEventCard.apply(this, arguments);
       // Inject tier badge after instructor name
       var tier = getInstructorTier(evt.instructor_id);
+      if (!tier && evt.instructor_id) {
+        var allTiers = loadTiers();
+        var keys = Object.keys(allTiers);
+        if (keys.length > 0) {
+          console.log('[tier-debug] ID:', evt.instructor_id, 'type:', typeof evt.instructor_id, '| stored keys sample:', keys.slice(0,5), '| match:', allTiers[String(evt.instructor_id)]);
+        }
+      }
       if (tier) {
         var badge = '<span class="tier-badge tier-' + tier + '">' + tier + '</span>';
         html = html.replace(/(class-instructor">)(.*?)(<\/div>)/, function (match, p1, p2, p3) {

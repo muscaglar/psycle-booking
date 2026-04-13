@@ -348,16 +348,7 @@
     if (!orig) return;
     window.eventCard = function (evt, instrMap, studioMap, locationMap, typeMap) {
       let html = orig.call(this, evt, instrMap, studioMap, locationMap, typeMap);
-      const instr = instrMap[evt.instructor_id];
-      if (instr) {
-        const plainName = instr.full_name;
-        const escapedName = escapeHtml(plainName);
-        // Replace the plain text instructor name with a clickable link
-        // The eventCard renders: <div class="class-instructor">Name</div>
-        const searchStr = `<div class="class-instructor">${escapedName}</div>`;
-        const replaceStr = `<div class="class-instructor"><span class="instructor-link" onclick="event.stopPropagation();window._features_openInstructorModal('${plainName.replace(/'/g, "\\'")}', '${instr.id}')">${escapedName}</span></div>`;
-        html = html.replace(searchStr, replaceStr);
-      }
+      // Instructor names are already clickable via instrLink() in the base eventCard.
 
       // C. Add notify button for fully-booked classes
       const isFull = evt.is_fully_booked && !evt.is_waitlistable;
