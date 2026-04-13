@@ -182,7 +182,7 @@
 }
 
 .week-day {
-  min-height: 28px;
+  min-height: 0;
 }
 
 .week-day-label {

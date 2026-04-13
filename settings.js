@@ -158,7 +158,7 @@
           '<button class="settings-close" onclick="closeSettings()">×</button>' +
         '</div>' +
         '<div class="settings-section">' +
-          '<div class="settings-section-title">Instructor Rankings</div>' +
+          '<div class="settings-section-title">Instructor Rankings & Favourites</div>' +
           '<input class="tier-search" id="tierSearch" placeholder="Search instructors…" oninput="filterTierList()">' +
           '<div class="tier-list" id="tierList"></div>' +
         '</div>' +
@@ -239,18 +239,35 @@
         return a.full_name.localeCompare(b.full_name);
       });
 
+    var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
+
     container.innerHTML = list.map(function (instr) {
-      var currentTier = tiers[String(instr.id)] || '';
+      var sid = String(instr.id);
+      var currentTier = tiers[sid] || '';
+      var isFav = favs.has(sid);
       var btns = TIERS.map(function (t) {
         var cls = currentTier === t ? ' active-' + t : '';
         return '<button class="tier-btn' + cls + '" onclick="setInstructorTier(' + instr.id + ',\'' + t + '\')">' + t + '</button>';
       }).join('');
       return '<div class="tier-row">' +
+        '<button class="tier-fav' + (isFav ? ' is-fav' : '') + '" onclick="toggleFavFromSettings(' + instr.id + ')" title="' + (isFav ? 'Remove from favourites' : 'Add to favourites') + '"></button>' +
         '<span class="tier-name">' + escapeHTML(instr.full_name) + '</span>' +
         '<div class="tier-btns">' + btns + '</div>' +
       '</div>';
     }).join('');
   }
+
+  window.toggleFavFromSettings = function (instrId) {
+    var sid = String(instrId);
+    if (typeof favouriteInstructors === 'undefined') return;
+    if (favouriteInstructors.has(sid)) {
+      favouriteInstructors.delete(sid);
+    } else {
+      favouriteInstructors.add(sid);
+    }
+    if (typeof saveFavourites === 'function') saveFavourites(favouriteInstructors);
+    renderTierList();
+  };
 
   window.setInstructorTier = function (instrId, tier) {
     var tiers = loadTiers();

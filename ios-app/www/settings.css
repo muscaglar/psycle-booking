@@ -197,6 +197,23 @@
 
 [data-theme="light"] .tier-name { color: #1a1a1a; }
 
+.tier-fav {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+  padding: 0;
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+.tier-fav::before { content: '★'; color: #888; }
+.tier-fav:hover { opacity: 0.6; }
+.tier-fav.is-fav { opacity: 1; }
+.tier-fav.is-fav::before { color: #f5c518; }
+
 .tier-btns {
   display: flex;
   gap: 3px;
