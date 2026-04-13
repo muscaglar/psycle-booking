@@ -740,8 +740,12 @@
         toast('Synced ' + newEntries.length + ' past booking' + (newEntries.length !== 1 ? 's' : '') + ' (' + merged.length + ' total in history)', 'success');
       }
 
-      // Re-render everything
+      // Re-render all tabs that use history
       markDirtyAndMaybeRender();
+      // Also re-render Insights if it has been rendered
+      if (typeof renderInsights === 'function') renderInsights();
+      // Emit event so any other listeners can react
+      if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('history:synced');
 
     } catch (e) {
       console.error('[explore] sync failed:', e);

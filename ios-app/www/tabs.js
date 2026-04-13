@@ -188,7 +188,7 @@
     catch (e) { return []; }
   }
 
-  function renderInsights() {
+  window.renderInsights = function () {
     renderQuickStats();
     renderCostTracker();
     renderClassTypeDistribution();
@@ -816,6 +816,25 @@
 
   // ── Share Insights Card ─────────────────────────────────────────
 
+  // roundRect polyfill for older browsers/WebKit
+  if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+      if (typeof r === 'number') r = [r, r, r, r];
+      var tl = r[0] || 0;
+      this.moveTo(x + tl, y);
+      this.lineTo(x + w - tl, y);
+      this.quadraticCurveTo(x + w, y, x + w, y + tl);
+      this.lineTo(x + w, y + h - tl);
+      this.quadraticCurveTo(x + w, y + h, x + w - tl, y + h);
+      this.lineTo(x + tl, y + h);
+      this.quadraticCurveTo(x, y + h, x, y + h - tl);
+      this.lineTo(x, y + tl);
+      this.quadraticCurveTo(x, y, x + tl, y);
+      this.closePath();
+      return this;
+    };
+  }
+
   window.shareInsights = async function () {
     var history = getFullHistory().filter(function (h) { return !h.cancelledAt; });
     if (history.length === 0) { toast('No history to share yet', 'info'); return; }
@@ -873,11 +892,10 @@
     // Header
     ctx.fillStyle = '#e94560';
     ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.letterSpacing = '3px';
-    ctx.fillText('PSYCLE', 32, y);
+    ctx.fillText('P S Y C L E', 32, y);
     ctx.fillStyle = '#555';
     ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('CLASS FINDER', 96, y);
+    ctx.fillText('CLASS FINDER', 130, y);
     y += 12;
 
     // Divider
@@ -996,31 +1014,48 @@
 
     // Export and share
     try {
-      var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
-      var file = new File([blob], 'psycle-stats.png', { type: 'image/png' });
+      console.log('[share] rendering canvas', W, 'x', H);
+      var blob = await new Promise(function (resolve, reject) {
+        canvas.toBlob(function (b) {
+          if (b) resolve(b); else reject(new Error('toBlob returned null'));
+        }, 'image/png');
+      });
+      console.log('[share] blob created:', blob.size, 'bytes');
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: 'My Psycle Stats',
-          text: totalClasses + ' classes · ' + uniqueInstrs + ' instructors · Top: ' + (topInstr ? topInstr[0] : ''),
-          files: [file],
-        });
-      } else {
-        // Fallback: download
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'psycle-stats.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast('Image saved — share it from your downloads', 'success');
+      // Try native share (mobile/Capacitor only — desktop share is unreliable)
+      var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || !!window.Capacitor;
+      if (isMobile && navigator.share) {
+        try {
+          var file = new File([blob], 'psycle-stats.png', { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            console.log('[share] using native share');
+            await navigator.share({
+              title: 'My Psycle Stats',
+              text: totalClasses + ' classes · ' + uniqueInstrs + ' instructors · Top: ' + (topInstr ? topInstr[0] : ''),
+              files: [file],
+            });
+            return;
+          }
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') return; // user cancelled
+          console.log('[share] native share failed, falling back:', shareErr.message);
+        }
       }
+
+      // Fallback: download
+      console.log('[share] downloading as file');
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'psycle-stats.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast('Image saved — share it from your downloads', 'success');
     } catch (e) {
-      if (e.name !== 'AbortError') {
-        toast('Share failed: ' + e.message, 'error');
-      }
+      console.error('[share] failed:', e);
+      toast('Share failed: ' + e.message, 'error');
     }
   };
 
