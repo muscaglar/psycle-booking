@@ -655,7 +655,7 @@
       try { existing = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) {}
       var existingIds = new Set(existing.map(function (e) { return e.eventId; }));
       var newEntries = [];
-      var batchSize = 5;
+      var batchSize = 30;
 
       // Deduplicate bookings by event_id (multiple slots = multiple records)
       var seenEvents = new Set();

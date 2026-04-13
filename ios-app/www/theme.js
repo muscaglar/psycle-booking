@@ -7,25 +7,57 @@
 
 const THEME_KEY = 'psycle_theme';
 
-function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'light') {
+function _applyTheme(mode) {
+  if (mode === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
   } else {
     document.documentElement.removeAttribute('data-theme');
   }
+}
+
+function _resolveTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  // 'light' or 'dark' = explicit override. Anything else (null, 'system') = follow system.
+  if (saved === 'light' || saved === 'dark') return saved;
+  // Follow system preference
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+  return 'dark';
+}
+
+function initTheme() {
+  _applyTheme(_resolveTheme());
   injectThemeToggle();
   updateThemeIcon();
+
+  // Listen for system theme changes (auto-follows when no manual override)
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
+      var saved = localStorage.getItem(THEME_KEY);
+      if (!saved || saved === 'system') {
+        _applyTheme(_resolveTheme());
+        updateThemeIcon();
+      }
+    });
+  }
 }
 
 function toggleTheme() {
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  if (isLight) {
-    document.documentElement.removeAttribute('data-theme');
-    localStorage.setItem(THEME_KEY, 'dark');
-  } else {
-    document.documentElement.setAttribute('data-theme', 'light');
+  const current = _resolveTheme();
+  const saved = localStorage.getItem(THEME_KEY);
+
+  // Cycle: system → light → dark → system
+  if (!saved || saved === 'system') {
+    // Was following system → switch to explicit light
     localStorage.setItem(THEME_KEY, 'light');
+    _applyTheme('light');
+  } else if (saved === 'light') {
+    // Was explicit light → switch to explicit dark
+    localStorage.setItem(THEME_KEY, 'dark');
+    _applyTheme('dark');
+  } else {
+    // Was explicit dark → back to system
+    localStorage.setItem(THEME_KEY, 'system');
+    _applyTheme(_resolveTheme());
   }
   updateThemeIcon();
   haptic('tap');
@@ -52,11 +84,26 @@ function injectThemeToggle() {
 function updateThemeIcon() {
   const btn = document.getElementById('themeToggleBtn');
   if (!btn) return;
+  const saved = localStorage.getItem(THEME_KEY);
+  const isSystem = !saved || saved === 'system';
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  // Sun icon for dark mode (click to go light), moon for light mode (click to go dark)
-  btn.innerHTML = isLight
-    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
-    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+
+  // Sun = currently light, Moon = currently dark, Auto = following system
+  const sunSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  const moonSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  // Auto icon: half sun/half moon
+  const autoSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><path d="M12 7a5 5 0 0 1 0 10" fill="currentColor" stroke="none"/></svg>';
+
+  if (isSystem) {
+    btn.innerHTML = autoSvg;
+    btn.title = 'Theme: auto (following system) — click for light';
+  } else if (saved === 'light') {
+    btn.innerHTML = sunSvg;
+    btn.title = 'Theme: light — click for dark';
+  } else {
+    btn.innerHTML = moonSvg;
+    btn.title = 'Theme: dark — click for auto';
+  }
 }
 
 
