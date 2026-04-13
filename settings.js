@@ -460,6 +460,7 @@
     'psycle_saved_filters',
     'psycle_theme',
     'psycle_class_history',
+    'psycle_history_synced',
     'psycle_notify_watchlist',
   ];
 

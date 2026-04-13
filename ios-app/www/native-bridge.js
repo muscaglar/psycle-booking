@@ -73,7 +73,7 @@
     'psycle_bearer_token', 'psycle_bearer_token_enc',
     'psycle_fav_instructors', 'psycle_saved_filters',
     'psycle_instructor_tiers', 'psycle_bike_prefs',
-    'psycle_theme', 'psycle_class_history',
+    'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
     'psycle_notify_watchlist', 'psycle_calendar_data',
     'psycle_error_log', 'psycle_offline_queue',
   ];
