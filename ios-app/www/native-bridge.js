@@ -159,10 +159,14 @@
 
   // ── Native Calendar Integration ─────────────────────────────────
   // Auto-add events to iOS Calendar on booking, auto-remove on cancel.
-  // Uses @ebarooni/capacitor-calendar plugin for EventKit access.
+  // Uses @ebarooni/capacitor-calendar v8 plugin for EventKit access.
+  // Production-hardened: dedicated calendar, reminders, proper error handling.
 
   var Calendar = Capacitor.Plugins.CapacitorCalendar;
   var CAL_EVENT_MAP_KEY = 'psycle_native_cal_events'; // { eventId: nativeCalEventId }
+  var CAL_ID_KEY = 'psycle_native_cal_id';            // dedicated calendar ID
+  var PSYCLE_CAL_TITLE = 'Psycle';
+  var PSYCLE_CAL_COLOR = '#e94560';
 
   function _loadCalMap() {
     try { return JSON.parse(localStorage.getItem(CAL_EVENT_MAP_KEY) || '{}'); } catch (e) { return {}; }
@@ -171,78 +175,151 @@
     localStorage.setItem(CAL_EVENT_MAP_KEY, JSON.stringify(map));
   }
 
-  // Geo data for studios (same as calendar.js)
-  var STUDIO_GEO_NATIVE = {
-    'oxford circus':  { lat: 51.5188, lon: -0.1402 },
-    'bank':           { lat: 51.5155, lon: -0.0870 },
-    'victoria':       { lat: 51.4955, lon: -0.1480 },
-    'notting hill':   { lat: 51.5154, lon: -0.1910 },
-    'london bridge':  { lat: 51.5055, lon: -0.0860 },
-    'shoreditch':     { lat: 51.5215, lon: -0.0735 },
-    'clapham':        { lat: 51.4622, lon: -0.1680 },
-  };
+  /**
+   * Get the slot label for a class type (matches app.js slotLabel).
+   * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
+   */
+  function _nativeSlotLabel(typeName) {
+    var n = (typeName || '').toUpperCase();
+    if (n.includes('REFORMER')) return 'Bed';
+    if (n.includes('RIDE')) return 'Bike';
+    if (n.includes('PILATES')) return 'Bed';
+    if (n.includes('STRENGTH') || n.includes('LIFT') || n.includes('WEIGHTS') || n.includes('TREAD')) return 'Bench';
+    return 'Spot';
+  }
+
+  // ── Permissions ──────────────────────────────────────────────────
+
+  var _calPermissionGranted = false;
 
   async function _ensureCalendarPermission() {
+    if (_calPermissionGranted) return true;
+    if (!Calendar) return false;
     try {
-      var status = await Calendar.checkAllPermissions();
-      if (status.readCalendar !== 'granted' || status.writeCalendar !== 'granted') {
-        await Calendar.requestAllPermissions();
+      var check = await Calendar.checkAllPermissions();
+      var perms = check.result || check;
+      if (perms.readCalendar === 'granted' && perms.writeCalendar === 'granted') {
+        _calPermissionGranted = true;
+        return true;
       }
-      return true;
+      var req = await Calendar.requestAllPermissions();
+      var reqPerms = req.result || req;
+      _calPermissionGranted = reqPerms.readCalendar === 'granted' && reqPerms.writeCalendar === 'granted';
+      return _calPermissionGranted;
     } catch (e) {
-      console.warn('[native-cal] permission denied:', e);
+      console.warn('[native-cal] permission error:', e);
       return false;
     }
   }
 
-  async function addBookingToCalendar(eventId) {
-    if (!Calendar) return;
-    var evt = (_eventCache || {})[String(eventId)];
-    if (!evt) return;
-    var booking = (_myBookings || {})[String(eventId)];
-    if (!booking) return;
+  // ── Dedicated Psycle Calendar ────────────────────────────────────
 
-    var ok = await _ensureCalendarPermission();
-    if (!ok) return;
+  async function _ensurePsycleCalendar() {
+    // Return cached calendar ID if we have one
+    var cachedId = localStorage.getItem(CAL_ID_KEY);
+    if (cachedId) return cachedId;
+
+    try {
+      // Check if "Psycle" calendar already exists
+      var calendars = await Calendar.listCalendars();
+      var list = calendars.result || calendars || [];
+      var existing = list.find(function (c) {
+        return c.title === PSYCLE_CAL_TITLE || c.title === 'Psycle';
+      });
+      if (existing) {
+        localStorage.setItem(CAL_ID_KEY, existing.id);
+        return existing.id;
+      }
+
+      // Create a new dedicated calendar
+      var created = await Calendar.createCalendar({
+        title: PSYCLE_CAL_TITLE,
+        color: PSYCLE_CAL_COLOR,
+      });
+      var calId = (created.result || created).id || created.id;
+      if (calId) {
+        localStorage.setItem(CAL_ID_KEY, calId);
+        console.log('[native-cal] created Psycle calendar:', calId);
+        return calId;
+      }
+    } catch (e) {
+      console.warn('[native-cal] calendar creation failed (using default):', e);
+    }
+    return null; // fallback to default calendar
+  }
+
+  // ── Add / Update / Remove Events ─────────────────────────────────
+
+  function _buildCalEventData(eventId) {
+    var evt = (_eventCache || {})[String(eventId)];
+    if (!evt) return null;
+    var booking = (_myBookings || {})[String(eventId)];
+    if (!booking) return null;
 
     var start = new Date(evt.start_at);
     var end = new Date(start.getTime() + (evt.duration || 45) * 60 * 1000);
     var slots = booking.slots || [];
-    var slotStr = slots.length === 1 ? 'Bike ' + slots[0]
-      : slots.length > 1 ? 'Bikes ' + slots.join(' & ') : '';
+    var label = _nativeSlotLabel(evt._typeName);
+    var slotStr = slots.length === 1 ? label + ' ' + slots[0]
+      : slots.length > 1 ? label + 's ' + slots.join(' & ') : '';
 
     var title = (evt._typeName || 'Class') +
-      (evt._instrName ? ' - ' + evt._instrName : '') +
+      (evt._instrName ? ' — ' + evt._instrName : '') +
       (slotStr ? ' (' + slotStr + ')' : '');
 
     var location = evt._locAddress
       ? (evt._locFullName || 'Psycle') + ', ' + evt._locAddress
       : evt._locFullName || evt._locName || '';
 
-    var notes = [];
-    if (evt._instrName) notes.push('Instructor: ' + evt._instrName);
-    if (slotStr) notes.push(slotStr);
-    if (evt._studioName) notes.push('Studio: ' + evt._studioName);
-    notes.push('Duration: ' + (evt.duration || 45) + 'min');
+    var desc = [];
+    if (evt._instrName) desc.push('Instructor: ' + evt._instrName);
+    if (slotStr) desc.push(slotStr);
+    if (evt._studioName) desc.push('Studio: ' + evt._studioName);
+    desc.push('Duration: ' + (evt.duration || 45) + 'min');
+
+    return {
+      title: title,
+      location: location,
+      startDate: start.getTime(),
+      endDate: end.getTime(),
+      description: desc.join('\n'),
+      isAllDay: false,
+      alerts: [-60, -15], // 1 hour and 15 minutes before class
+    };
+  }
+
+  async function addBookingToCalendar(eventId) {
+    if (!Calendar) return;
+    var ok = await _ensureCalendarPermission();
+    if (!ok) return;
+
+    var data = _buildCalEventData(eventId);
+    if (!data) return;
+
+    // Add to dedicated Psycle calendar if available
+    var calId = await _ensurePsycleCalendar();
+    if (calId) data.calendarId = calId;
 
     try {
-      var result = await Calendar.createEvent({
-        title: title,
-        location: location,
-        startDate: start.getTime(),
-        endDate: end.getTime(),
-        notes: notes.join('\n'),
-        isAllDay: false,
-      });
-
-      if (result && result.id) {
+      var result = await Calendar.createEvent(data);
+      var nativeId = (result.result || result).id || result.id;
+      if (nativeId) {
         var map = _loadCalMap();
-        map[String(eventId)] = result.id;
+        map[String(eventId)] = nativeId;
         _saveCalMap(map);
-        console.log('[native-cal] added event:', eventId, '→', result.id);
+        console.log('[native-cal] added:', eventId, '→', nativeId);
       }
     } catch (e) {
-      console.warn('[native-cal] failed to add event:', e);
+      console.warn('[native-cal] create failed:', e);
+    }
+  }
+
+  async function updateBookingInCalendar(eventId) {
+    // Remove old entry and re-add with updated data (slot changes etc.)
+    await removeBookingFromCalendar(eventId);
+    // Only re-add if booking still exists
+    if ((_myBookings || {})[String(eventId)]) {
+      await addBookingToCalendar(eventId);
     }
   }
 
@@ -254,20 +331,21 @@
 
     try {
       await Calendar.deleteEvent({ id: calEventId });
-      delete map[String(eventId)];
-      _saveCalMap(map);
-      console.log('[native-cal] removed event:', eventId);
+      console.log('[native-cal] removed:', eventId);
     } catch (e) {
-      console.warn('[native-cal] failed to remove event:', e);
+      // Event may already be deleted by user — that's fine
+      console.log('[native-cal] remove skipped (may not exist):', eventId);
     }
+    delete map[String(eventId)];
+    _saveCalMap(map);
   }
 
-  // Hook into booking/cancel functions
+  // ── Hook into booking / cancel / seat-cancel flows ────────────────
+
   var _origSubmitBookingNative = window.submitBooking;
   if (_origSubmitBookingNative) {
     window.submitBooking = async function (eventId, slots, btn) {
       await _origSubmitBookingNative.call(this, eventId, slots, btn);
-      // If booking succeeded, add to native calendar
       if (btn.classList.contains('booked')) {
         addBookingToCalendar(eventId);
       }
@@ -278,7 +356,6 @@
   if (_origConfirmUnbookNative) {
     window.confirmUnbook = async function (bookingId, eventId, btn) {
       await _origConfirmUnbookNative.call(this, bookingId, eventId, btn);
-      // If cancel succeeded (booking removed from _myBookings)
       if (!_myBookings[String(eventId)]) {
         removeBookingFromCalendar(eventId);
       }
@@ -295,26 +372,70 @@
     };
   }
 
-  // Sync all existing bookings to calendar on first load
+  // Seat cancel: booking still exists but title needs updating
+  var _origCancelBikeSlotNative = window.cancelBikeSlot;
+  if (_origCancelBikeSlotNative) {
+    window.cancelBikeSlot = async function (slotId, eventId) {
+      await _origCancelBikeSlotNative.call(this, slotId, eventId);
+      var booking = _myBookings[String(eventId)];
+      if (booking) {
+        updateBookingInCalendar(eventId); // still booked, update title
+      } else {
+        removeBookingFromCalendar(eventId); // all seats cancelled
+      }
+    };
+  }
+
+  var _origUpcomingSeatCancelNative = window.upcomingSeatCancel;
+  if (_origUpcomingSeatCancelNative) {
+    window.upcomingSeatCancel = async function (eventId, slotId, btn) {
+      await _origUpcomingSeatCancelNative.call(this, eventId, slotId, btn);
+      var booking = _myBookings[String(eventId)];
+      if (booking) {
+        updateBookingInCalendar(eventId);
+      } else {
+        removeBookingFromCalendar(eventId);
+      }
+    };
+  }
+
+  // ── Full Calendar Sync on Startup ─────────────────────────────────
+
   async function syncAllBookingsToCalendar() {
     var ok = await _ensureCalendarPermission();
     if (!ok) return;
     var map = _loadCalMap();
     var bookings = _myBookings || {};
+    var now = Date.now();
 
-    // Add any bookings not yet in calendar
+    // Add upcoming bookings not yet in calendar
     for (var evtId of Object.keys(bookings)) {
-      if (!map[evtId] && _eventCache[evtId]) {
+      var evt = _eventCache[evtId];
+      if (!evt) continue;
+      // Skip past events
+      if (new Date(evt.start_at).getTime() < now) continue;
+      if (!map[evtId]) {
         await addBookingToCalendar(evtId);
       }
     }
 
-    // Remove calendar events for cancelled bookings
+    // Remove calendar entries for cancelled or past bookings
     for (var calEvtId of Object.keys(map)) {
       if (!bookings[calEvtId]) {
         await removeBookingFromCalendar(calEvtId);
       }
     }
+
+    // Clean stale entries (events older than 7 days)
+    var cleanedMap = _loadCalMap();
+    var staleThreshold = now - 7 * 86400000;
+    for (var sEvtId of Object.keys(cleanedMap)) {
+      var sEvt = _eventCache[sEvtId];
+      if (sEvt && new Date(sEvt.start_at).getTime() < staleThreshold) {
+        delete cleanedMap[sEvtId];
+      }
+    }
+    _saveCalMap(cleanedMap);
   }
 
   // Run sync after bookings load
@@ -330,8 +451,80 @@
     };
   }
 
-  // Expose for manual trigger
   window.syncAllBookingsToCalendar = syncAllBookingsToCalendar;
+
+
+  // ── Weekly Booking Reminder ─────────────────────────────────────
+  // Local notification at 11:59 AM UK time every Monday to signal
+  // the new booking week opening at noon.
+
+  var LocalNotifications = Capacitor.Plugins.LocalNotifications;
+  var REMINDER_ID = 9999;
+
+  /**
+   * Compute the device-local hour that corresponds to 11:59 UK time.
+   * UK is UTC+0 in winter (GMT) and UTC+1 in summer (BST).
+   */
+  function _ukHourInLocalTime(ukHour) {
+    // Create a date for next Monday in UK and read the offset
+    var now = new Date();
+    // Use Intl to get the current UK offset
+    try {
+      var ukStr = now.toLocaleString('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hour12: false });
+      var localStr = now.toLocaleString('en-GB', { hour: 'numeric', hour12: false });
+      var ukNow = parseInt(ukStr);
+      var localNow = parseInt(localStr);
+      var diff = localNow - ukNow; // positive if ahead of UK
+      return ukHour + diff;
+    } catch (e) {
+      // Fallback: assume device is in UK
+      return ukHour;
+    }
+  }
+
+  async function scheduleWeeklyReminder() {
+    if (!LocalNotifications) return;
+
+    try {
+      var perm = await LocalNotifications.requestPermissions();
+      if (perm.display !== 'granted') {
+        console.log('[native] notification permission denied');
+        return;
+      }
+
+      // Cancel existing to reschedule (handles timezone/DST changes)
+      try {
+        await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
+      } catch (e) { /* may not exist */ }
+
+      var localHour = _ukHourInLocalTime(11);
+
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: REMINDER_ID,
+          title: 'New booking week opens now',
+          body: 'Psycle classes for next week are available — grab your favourite spots!',
+          schedule: {
+            on: {
+              weekday: 2,  // Monday (1=Sunday, 2=Monday)
+              hour: localHour,
+              minute: 59,
+            },
+            every: 'week',
+            allowWhileIdle: true,
+          },
+          sound: 'default',
+        }],
+      });
+
+      console.log('[native] weekly reminder scheduled: Mondays at ' + localHour + ':59 local (11:59 UK)');
+    } catch (e) {
+      console.warn('[native] failed to schedule weekly reminder:', e);
+    }
+  }
+
+  // Schedule on every app launch (re-calculates timezone offset for DST)
+  setTimeout(scheduleWeeklyReminder, 3000);
 
 
   // ── Status Bar ─────────────────────────────────────────────────
