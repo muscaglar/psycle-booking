@@ -210,7 +210,7 @@
     var ids = Object.keys(profiles);
     for (var i = 0; i < ids.length; i++) {
       var p = profiles[ids[i]];
-      if (refIds.has(p.id) || favs.has(p.id)) continue;
+      if (refIds.has(p.id) || favs.has(p.id) || booked.has(p.id)) continue;
 
       var typeMatches = [];
       p.classTypes.forEach(function (ct) { if (refClassTypes.has(ct)) typeMatches.push(ct); });
@@ -324,6 +324,7 @@
 
     // Tier distribution
     var tierCounts = { S: 0, A: 0, B: 0, C: 0, D: 0, F: 0, unranked: 0 };
+    var unrankedList = []; // { id, name, count }
     var tiers = {};
     try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
     var sIds = Object.keys(instrStats);
@@ -333,8 +334,10 @@
         tierCounts[tier]++;
       } else {
         tierCounts.unranked++;
+        unrankedList.push({ id: sIds[s], name: instrStats[sIds[s]].name, count: instrStats[sIds[s]].count });
       }
     }
+    unrankedList.sort(function (a, b) { return b.count - a.count; });
 
     // Top 3 most booked
     var sorted = Object.entries(instrStats).sort(function (a, b) { return b[1].count - a[1].count; });
@@ -351,6 +354,7 @@
       totalBookings: sorted.reduce(function (sum, e) { return sum + e[1].count; }, 0),
       soloCount: soloCount,
       socialCount: socialCount,
+      unrankedList: unrankedList,
     };
   }
 
@@ -419,6 +423,21 @@
           tierKeys[tl] + ' (' + data.tierCounts[tierKeys[tl]] + ')</span>';
       }
       html += '</div>';
+      html += '</div>';
+    }
+
+    // Unranked instructors — prompt to rank them
+    if (data.unrankedList.length > 0) {
+      html += '<div class="explore-tier-bar-label" style="margin-bottom:8px">Unranked (' + data.unrankedList.length + ')</div>';
+      html += '<div class="explore-unranked-list">';
+      for (var u = 0; u < data.unrankedList.length; u++) {
+        var ui = data.unrankedList[u];
+        html += '<button class="explore-unranked-item" onclick="window._explore_openSettingsForInstructor(\'' +
+          escapeHtml(ui.name).replace(/'/g, "\\'") + '\')">' +
+          '<span class="explore-unranked-name">' + escapeHtml(ui.name) + '</span>' +
+          '<span class="explore-unranked-count">' + ui.count + ' class' + (ui.count !== 1 ? 'es' : '') + '</span>' +
+        '</button>';
+      }
       html += '</div>';
     }
 
@@ -547,6 +566,19 @@
    * Probe the API for past bookings using common codexfit patterns.
    * Tries multiple approaches and uses whatever returns data.
    */
+  window._explore_openSettingsForInstructor = function (name) {
+    if (typeof openSettings === 'function') openSettings();
+    // Wait for settings panel to render, then pre-fill the search
+    setTimeout(function () {
+      var search = document.getElementById('tierSearch');
+      if (search) {
+        search.value = name;
+        search.dispatchEvent(new Event('input'));
+        search.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 200);
+  };
+
   window._explore_resetSync = function () {
     localStorage.removeItem(SYNC_KEY);
     _exploreDirty = true;

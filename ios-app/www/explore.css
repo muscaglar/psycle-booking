@@ -302,6 +302,43 @@
   border-radius: 2px;
 }
 
+/* ── Unranked instructors ─────────────────────────────────────────── */
+
+.explore-unranked-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.explore-unranked-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-panel, #111);
+  border: 1px dashed var(--border, #333);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.explore-unranked-item:hover {
+  border-color: var(--accent, #e94560);
+  border-style: solid;
+  background: var(--bg-input, #1a1a1a);
+}
+
+.explore-unranked-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-heading, #f0f0f0);
+}
+
+.explore-unranked-count {
+  font-size: 10px;
+  color: var(--text-ghost, #555);
+}
+
 /* ── Most booked list ────────────────────────────────────────────── */
 
 .explore-top-list {

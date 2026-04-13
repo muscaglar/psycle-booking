@@ -34,8 +34,8 @@
   --badge-highlight-bg: #0f1e2a;
   --badge-highlight-text: #4a9eff;
   --badge-highlight-border: #1a3a5a;
-  --booked-bg: #0d1a0d;
-  --booked-border: #5dba5d;
+  --booked-bg: #111;
+  --booked-border: #e94560;
   --spinner-track: #333;
   --modal-overlay: rgba(0,0,0,0.85);
   --toast-bg: #1a1a1a;
@@ -43,8 +43,8 @@
   --skeleton-base: #1a1a1a;
   --skeleton-shine: #2a2a2a;
   --section-border: #1a1a1a;
-  --upcoming-bg: #0d1a0d;
-  --upcoming-border: #2a5a2a;
+  --upcoming-bg: #111;
+  --upcoming-border: #222;
   --shadow-overlay: rgba(0,0,0,0.6);
 }
 
@@ -78,8 +78,8 @@
   --badge-highlight-bg: #e6f0ff;
   --badge-highlight-text: #2a6abf;
   --badge-highlight-border: #a0c4f0;
-  --booked-bg: #e6f5e6;
-  --booked-border: #4a9a4a;
+  --booked-bg: #fff;
+  --booked-border: #e94560;
   --spinner-track: #ddd;
   --modal-overlay: rgba(0,0,0,0.45);
   --toast-bg: #fff;
@@ -87,8 +87,8 @@
   --skeleton-base: #e0e0e0;
   --skeleton-shine: #f0f0f0;
   --section-border: #e8e8e8;
-  --upcoming-bg: #e8f5e8;
-  --upcoming-border: #a0d0a0;
+  --upcoming-bg: #fff;
+  --upcoming-border: #e0e0e0;
   --shadow-overlay: rgba(0,0,0,0.15);
 }
 
@@ -286,9 +286,9 @@ select:focus, input:focus { border-color: var(--accent); }
 .book-btn { background: var(--accent); }
 .book-btn:hover:not(:disabled) { background: var(--accent-hover); }
 .book-btn.booked {
-  background: #1a4a1a;
-  color: #5dba5d;
-  border-color: #2a6a2a;
+  background: #1a1020;
+  color: #e94560;
+  border-color: #3a1a2a;
 }
 .book-btn.login-needed {
   background: transparent;
@@ -325,15 +325,15 @@ select:focus, input:focus { border-color: var(--accent); }
 .tab-btn.active { color: var(--text-heading); }
 
 .up-seat-chip {
-  background: var(--upcoming-bg);
-  border-color: var(--upcoming-border);
-  color: var(--booked-border);
+  background: var(--bg-input);
+  border-color: var(--border);
+  color: var(--text-muted);
 }
 .up-cancel-all {
   border-color: var(--border);
   color: var(--text-dim);
 }
-.up-cancel { border-color: var(--upcoming-border); color: var(--booked-border); }
+.up-cancel { border-color: var(--border); color: var(--text-dim); }
 
 /* Stats cards */
 .stat-card, .cost-card, .reco-card {
@@ -344,24 +344,24 @@ select:focus, input:focus { border-color: var(--accent); }
 .stat-label, .cost-label { color: var(--text-muted); }
 .stat-detail, .cost-hint { color: var(--text-dim); }
 .cost-card.cost-main {
-  background: var(--upcoming-bg);
-  border-color: var(--upcoming-border);
+  background: var(--bg-panel);
+  border-color: var(--border);
 }
-.cost-main .cost-value { color: var(--booked-border); }
+.cost-main .cost-value { color: var(--accent); }
 .cost-savings {
-  background: var(--upcoming-bg);
-  border-color: var(--upcoming-border);
-  color: var(--booked-border);
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--accent);
 }
 
 /* Subscription bar */
 .sub-bar {
-  background: var(--upcoming-bg);
-  border-color: var(--upcoming-border);
+  background: var(--bg-panel);
+  border-color: var(--border);
 }
-[data-theme="light"] .sub-bar { color: #1a5a1a; }
-[data-theme="light"] .sub-progress-fill { background: #3a9a3a; }
-[data-theme="light"] .sub-progress { background: #c0e0c0; }
+[data-theme="light"] .sub-bar { color: var(--text); }
+[data-theme="light"] .sub-progress-fill { background: #e94560; }
+[data-theme="light"] .sub-progress { background: #e0e0e0; }
 
 /* Heatmap */
 [data-theme="light"] .hm-level-0 { background: #ebedf0; }
@@ -372,8 +372,8 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* Week view */
 .week-event {
-  background: var(--upcoming-bg);
-  border-color: var(--upcoming-border);
+  background: var(--bg-panel);
+  border-color: var(--border);
 }
 .week-nav button {
   border-color: var(--border);
@@ -388,8 +388,8 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* My Bookings day headers */
 .mb-day-header {
-  color: var(--booked-border);
-  border-bottom-color: var(--upcoming-border);
+  color: var(--accent);
+  border-bottom-color: var(--border);
 }
 
 /* Rebook button */
@@ -397,22 +397,22 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* Calendar action buttons */
 .cal-btn {
-  border-color: var(--upcoming-border);
-  color: var(--booked-border);
+  border-color: var(--border);
+  color: var(--text-dim);
 }
-.cal-btn:hover { background: var(--upcoming-bg); }
+.cal-btn:hover { background: var(--bg-input); }
 
 /* My Bookings booked cards in light mode */
 [data-theme="light"] .my-booking-card.is-booked {
-  background: var(--booked-bg);
-  border-color: var(--booked-border);
-  border-left: 3px solid var(--booked-border);
+  background: var(--bg-panel);
+  border-color: var(--border);
+  border-left: 3px solid var(--accent);
 }
 
 /* Countdown badge */
 [data-theme="light"] .mb-countdown {
-  background: #e0f5e0;
-  color: #2a7a2a;
+  background: #fde8ec;
+  color: #c73650;
 }
 
 /* Skeleton in light mode */
@@ -751,9 +751,9 @@ select:focus, input:focus { border-color: var(--accent); }
 .disconnect-link { color: var(--text-ghost); }
 
 [data-theme="light"] .book-btn.booked {
-  background: #e6f5e6;
-  color: #2a7a2a;
-  border-color: #4a9a4a;
+  background: #fde8ec;
+  color: #c73650;
+  border-color: #f5b3bf;
 }
 
 [data-theme="light"] .book-btn.waitlist {
@@ -789,13 +789,13 @@ select:focus, input:focus { border-color: var(--accent); }
 [data-theme="light"] .bike-slot.available:hover rect { fill: #e0e0e0; stroke: #999; }
 [data-theme="light"] .bike-slot.taken rect { fill: #fde8ec; stroke: #f5b3bf; }
 [data-theme="light"] .bike-slot.selected rect { fill: #e94560; stroke: #c73650; }
-[data-theme="light"] .bike-slot.mine rect { fill: #e6f5e6; stroke: #4a9a4a; }
+[data-theme="light"] .bike-slot.mine rect { fill: #fde8ec; stroke: #e94560; }
 [data-theme="light"] .bike-slot.mine:hover rect { fill: #fde8ec; stroke: #c73650; }
 [data-theme="light"] .bike-slot text { fill: #888; }
 [data-theme="light"] .bike-slot.taken text { fill: #f5b3bf; }
 [data-theme="light"] .bike-slot.selected text { fill: #fff; }
 [data-theme="light"] .bike-slot.available:hover text { fill: #333; }
-[data-theme="light"] .bike-slot.mine text { fill: #2a7a2a; }
+[data-theme="light"] .bike-slot.mine text { fill: #e94560; }
 
 /* ── styles.css: Swipe cancel background ─────────────────────────── */
 
@@ -805,8 +805,8 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* ── styles.css: Subscription bar extras ─────────────────────────── */
 
-[data-theme="light"] .sub-bar-name { color: #2a7a2a; }
-[data-theme="light"] .sub-bar-count { color: #3a8a3a; }
+[data-theme="light"] .sub-bar-name { color: var(--accent); }
+[data-theme="light"] .sub-bar-count { color: var(--text-muted); }
 
 /* ── styles.css: Instructor dropdown shadow fix ──────────────────── */
 
@@ -820,33 +820,32 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* ── styles.css: Upcoming panel extras ───────────────────────────── */
 
-[data-theme="light"] .upcoming-header h2 { color: #2a7a2a; }
-[data-theme="light"] .upcoming-count { background: #4a9a4a; color: #fff; }
-[data-theme="light"] .upcoming-chevron { color: #2a7a2a; }
-[data-theme="light"] .up-day { color: #2a7a2a; }
-[data-theme="light"] .up-cancel:hover { background: #e6f5e6; }
-[data-theme="light"] .up-seat-chip button { color: rgba(42,122,42,0.7); }
+[data-theme="light"] .upcoming-header h2 { color: var(--text-muted); }
+[data-theme="light"] .upcoming-count { background: var(--accent); color: #fff; }
+[data-theme="light"] .up-day { color: var(--accent); }
+[data-theme="light"] .up-cancel:hover { background: #f5f5f5; }
+[data-theme="light"] .up-seat-chip button { color: rgba(233,69,96,0.7); }
 [data-theme="light"] .up-cancel-all { border-color: #f5b3bf; color: #c73650; }
 [data-theme="light"] .up-cancel-all:hover { background: #fde8ec; }
 
 /* ── tabs.css: Tab badge ─────────────────────────────────────────── */
 
 [data-theme="light"] .tab-badge {
-  background: #4a9a4a;
+  background: var(--accent);
   color: #fff;
 }
 
 /* ── settings.css: Floating pill green text ──────────────────────── */
 
-[data-theme="light"] .ncp-countdown { color: #2a7a2a; }
-[data-theme="light"] .ncp-seat { color: #2a7a2a; }
+[data-theme="light"] .ncp-countdown { color: var(--accent); }
+[data-theme="light"] .ncp-seat { color: var(--accent); }
 
 /* ── styles.css: MB skeleton light mode ──────────────────────────── */
 
 [data-theme="light"] .mb-skeleton {
   background: var(--bg-panel);
   border-color: var(--border);
-  border-left-color: var(--upcoming-border);
+  border-left-color: var(--border);
 }
 [data-theme="light"] .mb-skeleton-time,
 [data-theme="light"] .mb-skeleton-line {

@@ -21,7 +21,7 @@
      INIT — wire everything up
      ═══════════════════════════════════════════════════════════════ */
   function init() {
-    injectHistoryButton();
+    // History button is now in the My Bookings tab (tabs.js), no header injection needed.
     patchSubmitBooking();
     patchCancelFunctions();
     patchEventCard();
@@ -76,17 +76,8 @@
     if (changed) saveHistory(history);
   }
 
-  // ── History button in header ──────────────────────────────────
-  function injectHistoryButton() {
-    const pill = document.getElementById('authPill');
-    if (!pill) return;
-    const btn = document.createElement('button');
-    btn.className = 'history-btn';
-    btn.textContent = 'History';
-    btn.title = 'View class history';
-    btn.onclick = openHistoryModal;
-    pill.parentElement.insertBefore(btn, pill);
-  }
+  // Expose openHistoryModal so the My Bookings tab button can call it
+  window.openHistoryModal = openHistoryModal;
 
   function openHistoryModal() {
     // Remove any existing modal
@@ -240,6 +231,17 @@
     overlay.className = 'instructor-modal';
     overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
 
+    // Find instructor data from the global array
+    const instrs = (typeof instructors !== 'undefined') ? instructors : [];
+    const instr = instrs.find(i => String(i.id) === String(instrId));
+    const photo = instr?.photo || instr?.image_1 || '';
+    const meta = instr?.metafields || {};
+    const bio = meta.description || '';
+    const keywords = (meta.keywords || '').split(/[,|]/).map(k => k.trim()).filter(Boolean);
+    const instagram = meta.instagram_handle || '';
+    const handle = instr?.handle || instrName.toLowerCase().replace(/\s+/g, '-');
+    const tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
+
     // Gather upcoming classes for this instructor from _eventCache
     const now = new Date();
     const upcoming = [];
@@ -251,46 +253,74 @@
     }
     upcoming.sort((a, b) => a.start_at.localeCompare(b.start_at));
 
+    // Profile section
+    let profileHtml = '<div class="instructor-profile">';
+    if (photo) {
+      profileHtml += `<img class="instructor-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(instrName)}" loading="eager">`;
+    }
+    profileHtml += '<div class="instructor-profile-info">';
+    profileHtml += `<div class="instructor-name-title">${escapeHtml(instrName)} ${tierBadge}</div>`;
+    if (keywords.length > 0) {
+      profileHtml += '<div class="instructor-keywords">' +
+        keywords.map(k => `<span class="instructor-keyword">${escapeHtml(k)}</span>`).join('') +
+        '</div>';
+    }
+    profileHtml += `<div class="modal-subtitle">${upcoming.length} upcoming class${upcoming.length !== 1 ? 'es' : ''}</div>`;
+    if (instagram) {
+      profileHtml += `<a class="instructor-ig" href="https://instagram.com/${escapeHtml(instagram)}" target="_blank" rel="noopener">@${escapeHtml(instagram)}</a>`;
+    }
+    profileHtml += '</div></div>';
+
+    // Bio
+    let bioHtml = '';
+    if (bio) {
+      bioHtml = `<div class="instructor-bio">${escapeHtml(bio)}</div>`;
+    }
+
+    // Class list
     let listHtml = '';
     if (upcoming.length === 0) {
-      listHtml = '<div class="instructor-empty">No upcoming classes found in cached results. Run a search to load more data.</div>';
+      listHtml = '<div class="instructor-empty">No upcoming classes in cache. Run a search to load more.</div>';
     } else {
       listHtml = '<div class="instructor-class-list">';
-      for (const evt of upcoming.slice(0, 30)) {
+      for (const evt of upcoming.slice(0, 20)) {
         const dt = new Date(evt.start_at);
         const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
         const h = dt.getHours(), m = dt.getMinutes().toString().padStart(2, '0');
         const ampm = h >= 12 ? 'pm' : 'am';
         const timeStr = (h % 12 || 12) + ':' + m + ampm;
-        const typeName = evt._typeName || 'Class';
-        const locName = evt._locName || '';
         listHtml += `
           <div class="instructor-class-item">
             <div class="instructor-class-day">${dayStr.replace(' ', '<br>')}</div>
             <div class="instructor-class-time">${timeStr}</div>
             <div class="instructor-class-info">
-              <div class="instructor-class-type">${escapeHtml(typeName)}</div>
-              <div class="instructor-class-loc">${escapeHtml(locName)}</div>
+              <div class="instructor-class-type">${escapeHtml(evt._typeName || 'Class')}</div>
+              <div class="instructor-class-loc">${escapeHtml(evt._locName || '')}</div>
             </div>
           </div>`;
       }
       listHtml += '</div>';
     }
 
+    const psycleUrl = `https://psyclelondon.com/pages/timetable-instructor-page/${encodeURIComponent(handle)}`;
+
     overlay.innerHTML = `
       <div class="modal">
-        <div class="modal-header">
-          <div>
-            <div class="instructor-name-title">${escapeHtml(instrName)}</div>
-            <div class="modal-subtitle">${upcoming.length} upcoming class${upcoming.length !== 1 ? 'es' : ''}</div>
-          </div>
+        <div class="modal-header" style="justify-content:flex-end">
           <button class="modal-close" onclick="document.getElementById('instructorModalOverlay').remove()">&times;</button>
         </div>
+        ${profileHtml}
+        ${bioHtml}
         ${listHtml}
-        <button class="instructor-view-schedule"
-          onclick="window._features_filterByInstructor('${String(instrId).replace(/'/g, "\\'")}'); document.getElementById('instructorModalOverlay').remove();">
-          View Full Schedule
-        </button>
+        <div class="instructor-actions">
+          <button class="instructor-view-schedule"
+            onclick="window._features_filterByInstructor('${String(instrId).replace(/'/g, "\\'")}'); document.getElementById('instructorModalOverlay').remove();">
+            View schedule
+          </button>
+          <a class="instructor-view-schedule instructor-psycle-link" href="${psycleUrl}" target="_blank" rel="noopener">
+            View on Psycle
+          </a>
+        </div>
       </div>`;
 
     document.body.appendChild(overlay);

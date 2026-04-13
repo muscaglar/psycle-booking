@@ -1372,13 +1372,8 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Upcoming bookings panel ──────────────────────────────────────
-// _upcomingCollapsed managed by state.js
-
-function toggleUpcoming() {
-  _upcomingCollapsed = !_upcomingCollapsed;
-  document.getElementById('upcomingBody').style.display = _upcomingCollapsed ? 'none' : '';
-  document.getElementById('upcomingChevron').classList.toggle('collapsed', _upcomingCollapsed);
-}
+// Bookings are always visible — no collapse toggle needed.
+function toggleUpcoming() { /* no-op */ }
 
 // Keep backward compat — other modules call refreshUpcomingPanel
 function refreshUpcomingPanel() { renderMyBookings(); }
@@ -1487,7 +1482,7 @@ function renderMyBookings() {
     const interval = _activeSubscription.billing_interval || 'month';
     html += `<div class="sub-bar">
       <div class="sub-bar-text">
-        <span class="sub-bar-name">${escapeHTML(planName)}</span>
+        <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
         <span class="sub-bar-count">${made}/${max} classes this ${escapeHTML(interval)}</span>
       </div>
       <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
@@ -1620,6 +1615,27 @@ async function rebookNextWeek(eventId) {
   const nextWeek = new Date(origDate);
   nextWeek.setDate(nextWeek.getDate() + 7);
   const dayStr = nextWeek.toISOString().split('T')[0];
+
+  // Check if user already has a booking for the same class next week
+  const origMinutesCheck = origDate.getHours() * 60 + origDate.getMinutes();
+  const alreadyBooked = Object.keys(_myBookings).some(bookedId => {
+    const bookedEvt = _eventCache[bookedId];
+    if (!bookedEvt) return false;
+    const bookedDate = new Date(bookedEvt.start_at);
+    // Same day-of-week, same instructor, same event type
+    if (bookedEvt.instructor_id !== evt.instructor_id) return false;
+    if (bookedEvt.event_type_id !== evt.event_type_id) return false;
+    // Must be on the target next-week date
+    if (bookedDate.toISOString().split('T')[0] !== dayStr) return false;
+    // Similar time (within 30 minutes)
+    const bookedMinutes = bookedDate.getHours() * 60 + bookedDate.getMinutes();
+    if (Math.abs(bookedMinutes - origMinutesCheck) >= 30) return false;
+    return true;
+  });
+  if (alreadyBooked) {
+    toast('Already booked for next week', 'info');
+    return;
+  }
 
   toast('Searching for next week...', 'info');
 

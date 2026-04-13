@@ -54,6 +54,12 @@
       bookingsPanel.appendChild(upcomingPanel);
     }
 
+    // Add "View full history" button at the bottom of the bookings panel
+    var historyBtnHtml = '<button class="history-in-bookings-btn" onclick="openHistoryModal()" style="display:block;width:calc(100% - 48px);margin:12px 24px;padding:10px;background:var(--bg-panel,#111);border:1px solid var(--border,#222);border-radius:8px;color:var(--text-muted,#aaa);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">View full history</button>';
+    var historyBtnContainer = document.createElement('div');
+    historyBtnContainer.innerHTML = historyBtnHtml;
+    bookingsPanel.appendChild(historyBtnContainer.firstChild);
+
     // Create insights panel (analytics, stats, heatmap, cost, map, recommendations)
     var insightsPanel = document.createElement('div');
     insightsPanel.id = 'tab-insights';

@@ -365,15 +365,45 @@
     var avoidSet = new Set(prefs.avoid.map(Number));
     var preferSet = new Set(prefs.prefer.map(Number));
 
-    var slots = studio.layout.slots.sort(function (a, b) { return a.id - b.id; });
-    grid.innerHTML = slots.map(function (slot) {
-      var label = slot.label || slot.id;
-      var cls = avoidSet.has(slot.id) ? ' pref-avoid' : preferSet.has(slot.id) ? ' pref-prefer' : '';
-      return '<div class="bike-pref-slot' + cls + '" data-slot="' + slot.id + '" ' +
-        'onclick="toggleBikePref(' + studioId + ',' + slot.id + ')" ' +
-        'title="Slot ' + label + (cls ? (avoidSet.has(slot.id) ? ' (avoid)' : ' (prefer)') : '') + '">' +
-        label + '</div>';
+    // Use spatial layout from the API (same as the bike picker SVG)
+    var slots = studio.layout.slots;
+    var objects = studio.layout.objects || [];
+    var allX = slots.map(function (s) { return s.x; }).concat(objects.map(function (o) { return o.x; }));
+    var allY = slots.map(function (s) { return s.y; }).concat(objects.map(function (o) { return o.y; }));
+    var minX = Math.min.apply(null, allX), maxX = Math.max.apply(null, allX);
+    var minY = Math.min.apply(null, allY), maxY = Math.max.apply(null, allY);
+    var SLOT = 36, PAD = 16;
+    var rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+    var svgW = Math.min(520, Math.max(280, slots.length * 20));
+    var svgH = Math.round(svgW * (rangeY / rangeX)) + PAD * 2;
+    var sx = function (x) { return PAD + ((x - minX) / rangeX) * (svgW - PAD * 2 - SLOT); };
+    var sy = function (y) { return PAD + ((y - minY) / rangeY) * (Math.max(100, svgH) - PAD * 2 - SLOT); };
+    var h = Math.max(100, svgH);
+
+    var inner = '';
+
+    // Objects (instructor podium etc.)
+    inner += objects.map(function (obj) {
+      return '<rect x="' + sx(obj.x) + '" y="' + sy(obj.y) + '" width="' + SLOT + '" height="' + SLOT + '"' +
+        ' rx="4" fill="#1a1a0a" stroke="#333" stroke-dasharray="3,3"/>';
     }).join('');
+
+    // Slots
+    inner += slots.map(function (slot) {
+      var id = Number(slot.id);
+      var label = slot.label ?? slot.id;
+      var cls = avoidSet.has(id) ? 'pref-avoid' : preferSet.has(id) ? 'pref-prefer' : '';
+      return '<g class="bike-pref-svg-slot ' + cls + '" data-slot="' + id + '" ' +
+        'onclick="toggleBikePref(' + studioId + ',' + id + ')" style="cursor:pointer">' +
+        '<rect x="' + sx(slot.x) + '" y="' + sy(slot.y) + '" width="' + SLOT + '" height="' + SLOT + '"' +
+        ' rx="6" stroke-width="1.5"/>' +
+        '<text x="' + (sx(slot.x) + SLOT / 2) + '" y="' + (sy(slot.y) + SLOT / 2 + 4) + '"' +
+        ' text-anchor="middle" font-family="sans-serif" font-size="11">' + label + '</text>' +
+      '</g>';
+    }).join('');
+
+    grid.innerHTML = '<svg width="' + svgW + '" height="' + h + '" viewBox="0 0 ' + svgW + ' ' + h + '"' +
+      ' style="display:block;margin:0 auto">' + inner + '</svg>';
   };
 
   window.toggleBikePref = function (studioId, slotId) {

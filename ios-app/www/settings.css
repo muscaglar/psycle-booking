@@ -8,7 +8,7 @@
   left: 50%;
   transform: translateX(-50%);
   background: #111;
-  border: 1px solid #2a5a2a;
+  border: 1px solid #222;
   border-radius: 14px;
   padding: 10px 20px;
   display: flex;
@@ -27,7 +27,7 @@
 .ncp-countdown {
   font-size: 18px;
   font-weight: 700;
-  color: #5dba5d;
+  color: #e94560;
   white-space: nowrap;
   min-width: 60px;
 }
@@ -56,7 +56,7 @@
 
 .ncp-seat {
   font-size: 11px;
-  color: #5dba5d;
+  color: #e94560;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -298,50 +298,42 @@
 }
 
 .bike-pref-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   padding: 12px;
   background: #0d0d0d;
   border: 1px solid #222;
   border-radius: 8px;
+  overflow-x: auto;
 }
 
 [data-theme="light"] .bike-pref-grid { background: #f8f8f8; border-color: #ddd; }
 
-.bike-pref-slot {
-  width: 40px;
-  height: 36px;
-  border: 1.5px solid #333;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  cursor: pointer;
+/* SVG-based spatial layout (matches actual studio) */
+.bike-pref-svg-slot rect {
+  fill: #1a1a1a;
+  stroke: #333;
   transition: all 0.12s;
-  background: #1a1a1a;
 }
-
-.bike-pref-slot:hover { border-color: #888; color: #fff; }
-
-.bike-pref-slot.pref-avoid {
-  background: #2a0a0a;
-  border-color: #e94560;
-  color: #e94560;
+.bike-pref-svg-slot text {
+  fill: #666;
+  font-weight: 600;
+  pointer-events: none;
 }
+.bike-pref-svg-slot:hover rect { stroke: #888; }
+.bike-pref-svg-slot:hover text { fill: #fff; }
 
-.bike-pref-slot.pref-prefer {
-  background: #0a2a1a;
-  border-color: #5dba5d;
-  color: #5dba5d;
-}
+.bike-pref-svg-slot.pref-avoid rect { fill: #2a0a0a; stroke: #e94560; }
+.bike-pref-svg-slot.pref-avoid text { fill: #e94560; }
+.bike-pref-svg-slot.pref-prefer rect { fill: #0a2a1a; stroke: #5dba5d; }
+.bike-pref-svg-slot.pref-prefer text { fill: #5dba5d; }
 
-[data-theme="light"] .bike-pref-slot { background: #fff; border-color: #ccc; color: #888; }
-[data-theme="light"] .bike-pref-slot.pref-avoid { background: #fff0f0; border-color: #e94560; }
-[data-theme="light"] .bike-pref-slot.pref-prefer { background: #f0fff0; border-color: #3a9a3a; }
+[data-theme="light"] .bike-pref-svg-slot rect { fill: #fff; stroke: #ccc; }
+[data-theme="light"] .bike-pref-svg-slot text { fill: #888; }
+[data-theme="light"] .bike-pref-svg-slot:hover rect { stroke: #999; }
+[data-theme="light"] .bike-pref-svg-slot:hover text { fill: #333; }
+[data-theme="light"] .bike-pref-svg-slot.pref-avoid rect { fill: #fff0f0; stroke: #e94560; }
+[data-theme="light"] .bike-pref-svg-slot.pref-avoid text { fill: #e94560; }
+[data-theme="light"] .bike-pref-svg-slot.pref-prefer rect { fill: #f0fff0; stroke: #3a9a3a; }
+[data-theme="light"] .bike-pref-svg-slot.pref-prefer text { fill: #3a9a3a; }
 
 /* Bike picker overlay for preferences */
 .bike-slot.pref-avoid rect { stroke: #e94560 !important; stroke-dasharray: 4,2; }
