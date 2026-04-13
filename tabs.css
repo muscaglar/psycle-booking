@@ -8,6 +8,13 @@
   border-bottom: 1px solid var(--border, #222);
   padding: 0 24px;
   gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-x;
 }
 
 .tab-btn {

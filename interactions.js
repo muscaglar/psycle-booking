@@ -62,7 +62,7 @@
   document.addEventListener('touchstart', function (e) {
     if (window.scrollY !== 0) return;
     // Don't capture if inside a scrollable modal
-    if (e.target.closest('.modal-overlay') || e.target.closest('.modal')) return;
+    if (e.target.closest('.modal-overlay') || e.target.closest('.modal') || e.target.closest('.tab-bar')) return;
     pullStartY = e.touches[0].clientY;
     isPulling = true;
     createPullIndicator();
