@@ -1169,9 +1169,17 @@ select:focus, input:focus {
     max-width: none;
   }
 
-  /* Tab bar: compact */
-  .tab-bar { padding: 0 16px; }
-  .tab-btn { font-size: 12px; padding: 10px 14px; }
+  /* Tab bar: compact, scroll horizontally for 4 tabs */
+  .tab-bar {
+    padding: 0 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-btn { font-size: 11px; padding: 10px 12px; white-space: nowrap; flex-shrink: 0; }
 
   /* Floating pill: make room for it */
   .next-class-pill {

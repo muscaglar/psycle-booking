@@ -4,7 +4,7 @@
   "description": "Psycle Class Finder — iOS app via Capacitor",
   "private": true,
   "scripts": {
-    "sync": "cp ../index.html ../psycle-finder.html ../login.html ../manifest.json ../app.js ../calendar.js ../features.js ../interactions.js ../performance.js ../reliability.js ../security.js ../settings.js ../state.js ../tabs.js ../theme.js ../styles.css ../theme.css ../features.css ../tabs.css ../settings.css www/ && sed -i '' 's|</body>|<script src=\"native-bridge.js\"></script>\\n</body>|' www/psycle-finder.html && npx cap sync ios",
+    "sync": "cp ../index.html ../psycle-finder.html ../login.html ../manifest.json ../app.js ../calendar.js ../features.js ../interactions.js ../performance.js ../reliability.js ../security.js ../settings.js ../state.js ../tabs.js ../theme.js ../explore.js ../styles.css ../theme.css ../features.css ../tabs.css ../settings.css ../explore.css ../sw.js www/ && sed -i '' 's|</body>|<script src=\"native-bridge.js\"></script>\\n</body>|' www/psycle-finder.html && npx cap sync ios",
     "open": "npx cap open ios",
     "build": "npm run sync && npx cap open ios",
     "update-web": "npm run sync"

@@ -97,8 +97,9 @@
       countdown = mins + 'm';
     }
 
+    var _slPill = (typeof slotLabelForEvent === 'function') ? slotLabelForEvent(nextEvtId) : 'Bike';
     var slots = (booking && booking.slots && booking.slots.length)
-      ? 'Bike' + (booking.slots.length > 1 ? 's ' : ' ') + booking.slots.join(' & ')
+      ? _slPill + (booking.slots.length > 1 ? 's ' : ' ') + booking.slots.join(' & ')
       : '';
 
     _pillEl.innerHTML =
@@ -460,6 +461,7 @@
     'psycle_saved_filters',
     'psycle_theme',
     'psycle_class_history',
+    'psycle_history_synced',
     'psycle_notify_watchlist',
   ];
 

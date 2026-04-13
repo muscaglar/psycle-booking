@@ -381,12 +381,8 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 .week-nav button:hover { background: var(--bg-input); color: var(--text-heading); }
 
-/* Studio map */
-.studio-map-container { background: var(--bg-input); border-color: var(--border); }
-[data-theme="light"] .studio-map-container div[style*="linear-gradient"] { opacity: 0.3; }
-
 /* Section titles */
-.heatmap-title, .cost-title, .week-title, .reco-title, .studio-map-title, .reco-badge {
+.heatmap-title, .cost-title, .week-title, .reco-title, .reco-badge {
   color: var(--text-muted);
 }
 
@@ -598,14 +594,6 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--booked-border);
 }
 
-/* ── tabs.css: Studio Map ────────────────────────────────────────── */
-
-.studio-pin-label { color: var(--text-muted); }
-.studio-pin-booking { color: var(--booked-border); }
-
-[data-theme="light"] .studio-pin-dot {
-  border-color: #ccc;
-}
 
 /* ── tabs.css: Heatmap ───────────────────────────────────────────── */
 
@@ -865,3 +853,33 @@ select:focus, input:focus { border-color: var(--accent); }
   background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
   background-size: 400px 100%;
 }
+
+/* ── explore.css: Explore Tab ──────────────────────────────────────── */
+
+.explore-title { color: var(--text-dim); }
+.explore-subtitle { color: var(--text-ghost); }
+.explore-card {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.explore-card-name { color: var(--text-heading); }
+.explore-loc-tag { color: var(--text-ghost); }
+.explore-empty { color: var(--text-ghost); }
+.explore-loading { color: var(--text-ghost); }
+.explore-map-stat {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.explore-map-stat-value { color: var(--text-heading); }
+.explore-map-stat-label { color: var(--text-faint); }
+.explore-tier-bar-label { color: var(--text-faint); }
+.explore-tier-legend-item { color: var(--text-dim); }
+.explore-top-item {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.explore-top-rank { color: var(--text-ghost); }
+.explore-top-name { color: var(--text-heading); }
+.explore-top-count { color: var(--text-dim); }
+[data-theme="light"] .explore-tier-bar { background: #ebedf0; }
+[data-theme="light"] .explore-tier-seg.tier-unranked { background: #d0d0d0; color: #888; }

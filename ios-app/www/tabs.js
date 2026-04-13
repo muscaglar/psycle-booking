@@ -7,7 +7,7 @@
 
   // ── Tab Navigation ──────────────────────────────────────────────
 
-  var TABS = ['discover', 'bookings', 'insights'];
+  var TABS = ['discover', 'bookings', 'insights', 'explore'];
   var _currentTab = 'discover';
 
   function initTabs() {
@@ -24,7 +24,8 @@
       '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' +
         'My Bookings <span class="tab-badge" id="tabBadge"></span>' +
       '</button>' +
-      '<button class="tab-btn" data-tab="insights" onclick="switchTab(\'insights\')">Insights</button>';
+      '<button class="tab-btn" data-tab="insights" onclick="switchTab(\'insights\')">Insights</button>' +
+      '<button class="tab-btn" data-tab="explore" onclick="switchTab(\'explore\')">Explore</button>';
 
     // Insert tab bar after header
     var header = document.querySelector('header');
@@ -63,7 +64,20 @@
       '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>' +
       '<div id="weekView" class="week-view" style="display:none"></div>' +
       '<div id="recoSection" class="reco-section" style="display:none"></div>' +
-      '<div id="studioMapSection" class="studio-map-section" style="display:none"></div>';
+      '<div id="classTypeSection" class="insights-section" style="display:none"></div>' +
+      '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
+      '<div id="varietySection" class="insights-section" style="display:none"></div>' +
+      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>';
+
+    // Create explore panel (instructor discovery)
+    var explorePanel = document.createElement('div');
+    explorePanel.id = 'tab-explore';
+    explorePanel.className = 'tab-panel';
+    explorePanel.innerHTML =
+      '<div id="exploreSyncSection" class="explore-section" style="display:none"></div>' +
+      '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
+      '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>' +
+      '<div id="exploreMapSection" class="explore-section" style="display:none"></div>';
 
     // Wrap all panels in tab-content
     var tabContent = document.createElement('div');
@@ -72,6 +86,7 @@
     tabContent.appendChild(discoverPanel);
     tabContent.appendChild(bookingsPanel);
     tabContent.appendChild(insightsPanel);
+    tabContent.appendChild(explorePanel);
 
     // Move banners before tab content (always visible)
     var sessionBanner = document.getElementById('sessionBanner');
@@ -97,6 +112,10 @@
     var btns = document.querySelectorAll('.tab-btn');
     btns.forEach(function (b) {
       b.classList.toggle('active', b.dataset.tab === tab);
+      // Auto-scroll active tab into view on narrow screens
+      if (b.dataset.tab === tab) {
+        b.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+      }
     });
     var panels = document.querySelectorAll('.tab-panel');
     panels.forEach(function (p) {
@@ -107,6 +126,9 @@
     }
     if (tab === 'insights') {
       renderInsights();
+    }
+    if (tab === 'explore') {
+      if (typeof renderExplore === 'function') renderExplore();
     }
   };
 
@@ -157,13 +179,24 @@
 
   // ── Render insights tab content ────────────────────────────────
 
+  /**
+   * Get the full class history from localStorage (synced + locally tracked).
+   * Each entry has: { eventId, typeName, instrName, locName, date, cancelledAt? }
+   */
+  function getFullHistory() {
+    try { return JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); }
+    catch (e) { return []; }
+  }
+
   function renderInsights() {
     renderQuickStats();
     renderCostTracker();
+    renderClassTypeDistribution();
     renderHeatmap();
     renderWeekView();
     renderRecommendations();
-    renderStudioMap();
+    renderLapsedFavourites();
+    renderVarietyTrend();
   }
 
   // ── Quick Stats ────────────────────────────────────────────────
@@ -175,18 +208,49 @@
     var now = new Date();
     var bookings = _myBookings || {};
     var cache = _eventCache || {};
+    var history = getFullHistory();
 
+    // Upcoming from current bookings
     var upcoming = 0;
+    Object.entries(bookings).forEach(function (entry) {
+      var evt = cache[entry[0]];
+      if (evt && new Date(evt.start_at) > now) upcoming++;
+    });
+
+    // Use full history for aggregate stats
     var thisMonth = 0;
+    var totalClasses = 0;
+    var soloClasses = 0;
+    var socialClasses = 0;
     var studioCount = {};
     var instrCount = {};
 
+    history.forEach(function (h) {
+      if (h.cancelledAt) return;
+      totalClasses++;
+      var isSocial = h.slots && h.slots.length > 1;
+      if (isSocial) socialClasses++; else soloClasses++;
+      var dt = new Date(h.date);
+      if (dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear()) {
+        thisMonth++;
+      }
+      var loc = h.locName || 'Unknown';
+      studioCount[loc] = (studioCount[loc] || 0) + 1;
+      var instr = h.instrName || '';
+      if (instr) instrCount[instr] = (instrCount[instr] || 0) + 1;
+    });
+
+    // Also count current bookings not yet in history
     Object.entries(bookings).forEach(function (entry) {
-      var evtId = entry[0];
-      var evt = cache[evtId];
+      var evt = cache[entry[0]];
       if (!evt) return;
+      var inHistory = history.some(function (h) { return h.eventId === entry[0]; });
+      if (inHistory) return;
+      totalClasses++;
+      var booking = bookings[entry[0]];
+      var isSocial = booking && booking.slots && booking.slots.length > 1;
+      if (isSocial) socialClasses++; else soloClasses++;
       var dt = new Date(evt.start_at);
-      if (dt > now) upcoming++;
       if (dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear()) {
         thisMonth++;
       }
@@ -199,13 +263,13 @@
     var favStudio = Object.entries(studioCount).sort(function (a, b) { return b[1] - a[1]; })[0];
     var favInstr = Object.entries(instrCount).sort(function (a, b) { return b[1] - a[1]; })[0];
 
-    if (Object.keys(bookings).length === 0) {
+    if (totalClasses === 0 && upcoming === 0) {
       container.style.display = 'none';
       return;
     }
 
     container.style.display = '';
-    container.innerHTML =
+    var html =
       '<div class="stat-card">' +
         '<div class="stat-value">' + upcoming + '</div>' +
         '<div class="stat-label">Upcoming</div>' +
@@ -214,6 +278,26 @@
         '<div class="stat-value">' + thisMonth + '</div>' +
         '<div class="stat-label">This month</div>' +
       '</div>' +
+      '<div class="stat-card">' +
+        '<div class="stat-value">' + totalClasses + '</div>' +
+        '<div class="stat-label">All time</div>' +
+      '</div>';
+
+    // Solo vs Social breakdown
+    if (socialClasses > 0) {
+      html +=
+        '<div class="stat-card">' +
+          '<div class="stat-value">' + soloClasses + '</div>' +
+          '<div class="stat-label">Solo</div>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<div class="stat-value">' + socialClasses + '</div>' +
+          '<div class="stat-label">With a friend</div>' +
+          '<div class="stat-detail">' + Math.round(socialClasses / totalClasses * 100) + '% of classes</div>' +
+        '</div>';
+    }
+
+    html +=
       (favStudio ? '<div class="stat-card">' +
         '<div class="stat-value" style="font-size:16px">' + escapeHTML(favStudio[0]) + '</div>' +
         '<div class="stat-label">Top studio</div>' +
@@ -224,6 +308,8 @@
         '<div class="stat-label">Top instructor</div>' +
         '<div class="stat-detail">' + favInstr[1] + ' classes</div>' +
       '</div>' : '');
+
+    container.innerHTML = html;
   }
 
   // ── Weekly Calendar View ───────────────────────────────────────
@@ -242,7 +328,8 @@
 
     var bookings = _myBookings || {};
     var cache = _eventCache || {};
-    if (Object.keys(bookings).length === 0) { container.style.display = 'none'; return; }
+    var history = getFullHistory();
+    if (Object.keys(bookings).length === 0 && history.length === 0) { container.style.display = 'none'; return; }
     container.style.display = '';
 
     var now = new Date();
@@ -286,17 +373,16 @@
         '<span class="week-day-num' + (isToday ? ' today' : '') + '">' + day.getDate() + '</span>' +
       '</div>';
 
-      // Find bookings on this day
+      // Find bookings on this day — current bookings first, then history
+      var shownEventIds = new Set();
       Object.entries(bookings).forEach(function (entry) {
         var evtId = entry[0];
-        var booking = entry[1];
         var evt = cache[evtId];
         if (!evt) return;
-        // Compare using the raw date portion from the API (local time, no TZ)
         var evtDay = (evt.start_at || '').split('T')[0].split(' ')[0];
         if (evtDay !== dayStr) return;
+        shownEventIds.add(evtId);
 
-        // Parse as local time (API returns no TZ suffix)
         var dt = new Date(evt.start_at.replace(' ', 'T'));
         var h = dt.getHours();
         var m = dt.getMinutes().toString().padStart(2, '0');
@@ -308,6 +394,26 @@
           '<div class="week-event-time">' + timeStr + '</div>' +
           '<div class="week-event-name">' + escapeHTML(evt._typeName || 'Class') + '</div>' +
           '<div class="week-event-loc">' + escapeHTML(evt._locName || '') + '</div>' +
+        '</div>';
+      });
+
+      // History entries not already shown from current bookings
+      history.forEach(function (h) {
+        if (h.cancelledAt || !h.date || shownEventIds.has(h.eventId)) return;
+        var hDay = (h.date || '').split('T')[0].split(' ')[0];
+        if (hDay !== dayStr) return;
+
+        var dt = new Date(h.date.replace(' ', 'T'));
+        var hh = dt.getHours();
+        var mm = dt.getMinutes().toString().padStart(2, '0');
+        var ap = hh >= 12 ? 'pm' : 'am';
+        var ts = (hh % 12 || 12) + ':' + mm + ap;
+
+        html += '<div class="week-event" style="opacity:0.7" title="' +
+          escapeHTML(h.typeName || '') + ' · ' + escapeHTML(h.instrName || '') + '">' +
+          '<div class="week-event-time">' + ts + '</div>' +
+          '<div class="week-event-name">' + escapeHTML(h.typeName || 'Class') + '</div>' +
+          '<div class="week-event-loc">' + escapeHTML(h.locName || '') + '</div>' +
         '</div>';
       });
 
@@ -324,17 +430,15 @@
     var container = document.getElementById('recoSection');
     if (!container) return;
 
-    var bookings = _myBookings || {};
-    var cache = _eventCache || {};
-    if (Object.keys(bookings).length < 2) { container.style.display = 'none'; return; }
+    var history = getFullHistory();
+    if (history.length < 2) { container.style.display = 'none'; return; }
 
-    // Analyse booking patterns
+    // Analyse booking patterns from full history
     var daySlots = {}; // "friday-730" => { type, instr, loc, count }
-    var now = new Date();
 
-    Object.values(cache).forEach(function (evt) {
-      if (!bookings[String(evt.id)]) return;
-      var dt = new Date(evt.start_at);
+    history.forEach(function (h) {
+      if (h.cancelledAt || !h.date) return;
+      var dt = new Date(h.date);
       var dayName = dt.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
       var timeKey = dt.getHours() * 100 + dt.getMinutes();
       var key = dayName + '-' + timeKey;
@@ -344,9 +448,9 @@
           time: dt.getHours() + ':' + dt.getMinutes().toString().padStart(2, '0'),
           timeAmPm: (dt.getHours() % 12 || 12) + ':' + dt.getMinutes().toString().padStart(2, '0') +
             (dt.getHours() >= 12 ? 'pm' : 'am'),
-          type: evt._typeName || 'Class',
-          instr: evt._instrName || '',
-          loc: evt._locName || '',
+          type: h.typeName || 'Class',
+          instr: h.instrName || '',
+          loc: h.locName || '',
           count: 0,
         };
       }
@@ -375,88 +479,6 @@
     html += '</div>';
     container.innerHTML = html;
   }
-
-  // ── Studio Map ─────────────────────────────────────────────────
-
-  // London bounding box for mapping lat/lon to pixel positions
-  var MAP_BOUNDS = {
-    north: 51.53,
-    south: 51.455,
-    east: -0.01,
-    west: -0.20,
-  };
-
-  var STUDIOS = {
-    'Oxford Circus':  { lat: 51.5188, lon: -0.1402 },
-    'Bank':           { lat: 51.5155, lon: -0.0870 },
-    'Victoria':       { lat: 51.4955, lon: -0.1480 },
-    'Notting Hill':   { lat: 51.5154, lon: -0.1910 },
-    'London Bridge':  { lat: 51.5055, lon: -0.0860 },
-    'Shoreditch':     { lat: 51.5215, lon: -0.0735 },
-    'Clapham':        { lat: 51.4622, lon: -0.1680 },
-  };
-
-  function renderStudioMap() {
-    var container = document.getElementById('studioMapSection');
-    if (!container) return;
-
-    var bookings = _myBookings || {};
-    var cache = _eventCache || {};
-    if (Object.keys(bookings).length === 0) { container.style.display = 'none'; return; }
-    container.style.display = '';
-
-    var now = new Date();
-    // Find next booking per studio
-    var nextByStudio = {};
-    Object.entries(bookings).forEach(function (entry) {
-      var evtId = entry[0];
-      var evt = cache[evtId];
-      if (!evt || new Date(evt.start_at) <= now) return;
-      var loc = evt._locName || '';
-      if (!nextByStudio[loc] || evt.start_at < nextByStudio[loc].start_at) {
-        nextByStudio[loc] = evt;
-      }
-    });
-
-    var html = '<div class="studio-map-title">Your studios</div>' +
-      '<div class="studio-map-container">';
-
-    // Draw the Thames as a subtle line
-    html += '<div style="position:absolute;top:60%;left:0;right:0;height:2px;' +
-      'background:linear-gradient(90deg,transparent,#1a2a3a 20%,#1a2a3a 80%,transparent);' +
-      'opacity:0.5"></div>';
-
-    Object.entries(STUDIOS).forEach(function (entry) {
-      var name = entry[0];
-      var geo = entry[1];
-      // Map lat/lon to % position
-      var x = ((geo.lon - MAP_BOUNDS.west) / (MAP_BOUNDS.east - MAP_BOUNDS.west)) * 100;
-      var y = ((MAP_BOUNDS.north - geo.lat) / (MAP_BOUNDS.north - MAP_BOUNDS.south)) * 100;
-      x = Math.max(5, Math.min(95, x));
-      y = Math.max(5, Math.min(90, y));
-
-      var hasBooking = !!nextByStudio[name];
-      var nextEvt = nextByStudio[name];
-      var bookingLabel = '';
-      if (nextEvt) {
-        var dt = new Date(nextEvt.start_at);
-        var dayStr = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-        var h = dt.getHours();
-        var m = dt.getMinutes().toString().padStart(2, '0');
-        bookingLabel = dayStr + ' ' + (h % 12 || 12) + ':' + m + (h >= 12 ? 'pm' : 'am');
-      }
-
-      html += '<div class="studio-pin" style="left:' + x + '%;top:' + y + '%">' +
-        '<div class="studio-pin-dot' + (hasBooking ? ' has-booking' : '') + '"></div>' +
-        '<div class="studio-pin-label">' + escapeHTML(name) + '</div>' +
-        (bookingLabel ? '<div class="studio-pin-booking">' + bookingLabel + '</div>' : '') +
-      '</div>';
-    });
-
-    html += '</div>';
-    container.innerHTML = html;
-  }
-
 
   // ── Activity Heatmap ────────────────────────────────────────────
   // GitHub-style grid: rows = hours (5am–10pm), columns = days of week
@@ -620,6 +642,387 @@
     var endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     return Math.max(0, endOfMonth.getDate() - now.getDate());
   }
+
+
+  // ── Class Type Distribution ─────────────────────────────────────
+
+  function renderClassTypeDistribution() {
+    var container = document.getElementById('classTypeSection');
+    if (!container) return;
+
+    var history = getFullHistory();
+    if (history.length === 0) { container.style.display = 'none'; return; }
+
+    // Count by category
+    var catCounts = {};
+    var total = 0;
+    history.forEach(function (h) {
+      if (h.cancelledAt) return;
+      var cat = (typeof getCategory === 'function') ? getCategory(h.typeName) : null;
+      var key = cat ? cat.key : 'OTHER';
+      catCounts[key] = (catCounts[key] || 0) + 1;
+      total++;
+    });
+
+    if (total === 0) { container.style.display = 'none'; return; }
+    container.style.display = '';
+
+    // Sort by count descending
+    var cats = (typeof CATEGORY_MAP !== 'undefined') ? CATEGORY_MAP : [];
+    var sorted = cats
+      .map(function (c) { return { key: c.key, label: c.label, color: c.color, count: catCounts[c.key] || 0 }; })
+      .filter(function (c) { return c.count > 0; })
+      .sort(function (a, b) { return b.count - a.count; });
+
+    var maxCount = sorted.length > 0 ? sorted[0].count : 1;
+
+    var html = '<div class="insights-title">Class types</div>';
+    html += '<div class="class-type-bars">';
+    for (var i = 0; i < sorted.length; i++) {
+      var c = sorted[i];
+      var pct = Math.round(c.count / total * 100);
+      var barW = Math.max(4, Math.round(c.count / maxCount * 100));
+      html += '<div class="ct-row">' +
+        '<span class="ct-label">' + c.label + '</span>' +
+        '<div class="ct-bar-wrap">' +
+          '<div class="ct-bar" style="width:' + barW + '%;background:' + c.color + '"></div>' +
+        '</div>' +
+        '<span class="ct-count">' + c.count + '</span>' +
+        '<span class="ct-pct">' + pct + '%</span>' +
+      '</div>';
+    }
+
+    // Show gaps — class types with 0 bookings
+    var gaps = cats
+      .filter(function (c) { return c.key !== 'OTHER' && !catCounts[c.key]; })
+      .map(function (c) { return c.label; });
+    if (gaps.length > 0) {
+      html += '<div class="ct-gaps">Never tried: ' + gaps.join(', ') + '</div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  // ── Lapsed Favourites ──────────────────────────────────────────
+
+  function renderLapsedFavourites() {
+    var container = document.getElementById('lapsedSection');
+    if (!container) return;
+
+    var history = getFullHistory();
+    if (history.length < 5) { container.style.display = 'none'; return; }
+
+    var now = new Date();
+    var LAPSE_DAYS = 60;
+    var MIN_BOOKINGS = 3;
+
+    // Build per-instructor stats from history
+    var instrStats = {}; // name -> { count, lastDate }
+    history.forEach(function (h) {
+      if (h.cancelledAt || !h.instrName) return;
+      var name = h.instrName;
+      if (!instrStats[name]) instrStats[name] = { count: 0, lastDate: null, instrId: h.instrId || '' };
+      instrStats[name].count++;
+      if (!instrStats[name].lastDate || h.date > instrStats[name].lastDate) {
+        instrStats[name].lastDate = h.date;
+      }
+    });
+
+    // Find lapsed: booked MIN_BOOKINGS+ times, last booking > LAPSE_DAYS ago
+    var cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - LAPSE_DAYS);
+    var lapsed = Object.entries(instrStats)
+      .filter(function (e) {
+        return e[1].count >= MIN_BOOKINGS && new Date(e[1].lastDate) < cutoff;
+      })
+      .sort(function (a, b) { return b[1].count - a[1].count; })
+      .slice(0, 6);
+
+    if (lapsed.length === 0) { container.style.display = 'none'; return; }
+    container.style.display = '';
+
+    var html = '<div class="insights-title">Lapsed favourites</div>';
+    html += '<div class="insights-subtitle">Instructors you used to book regularly</div>';
+    html += '<div class="lapsed-list">';
+    for (var i = 0; i < lapsed.length; i++) {
+      var name = lapsed[i][0];
+      var stat = lapsed[i][1];
+      var lastDt = new Date(stat.lastDate);
+      var daysAgo = Math.round((now - lastDt) / 86400000);
+      var lastStr = lastDt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      var tierBadge = stat.instrId && (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(stat.instrId) : '';
+
+      html += '<div class="lapsed-item">' +
+        '<div class="lapsed-name">' + escapeHTML(name) + ' ' + tierBadge + '</div>' +
+        '<div class="lapsed-detail">' + stat.count + ' classes · Last booked ' + lastStr + ' (' + daysAgo + 'd ago)</div>' +
+      '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  // ── Instructor Variety Trend ───────────────────────────────────
+
+  function renderVarietyTrend() {
+    var container = document.getElementById('varietySection');
+    if (!container) return;
+
+    var history = getFullHistory();
+    if (history.length < 5) { container.style.display = 'none'; return; }
+
+    // Group by month, count unique instructors and total classes
+    var months = {}; // "2025-03" -> { instructors: Set, total: number }
+    history.forEach(function (h) {
+      if (h.cancelledAt || !h.date) return;
+      var key = h.date.substring(0, 7); // "YYYY-MM"
+      if (!months[key]) months[key] = { instructors: new Set(), total: 0 };
+      months[key].total++;
+      if (h.instrName) months[key].instructors.add(h.instrName);
+    });
+
+    var sorted = Object.entries(months).sort(function (a, b) { return a[0].localeCompare(b[0]); });
+    // Show last 12 months max
+    if (sorted.length > 12) sorted = sorted.slice(sorted.length - 12);
+    if (sorted.length < 2) { container.style.display = 'none'; return; }
+
+    var maxInstr = Math.max.apply(null, sorted.map(function (e) { return e[1].instructors.size; }));
+    var maxTotal = Math.max.apply(null, sorted.map(function (e) { return e[1].total; }));
+
+    container.style.display = '';
+    var html = '<div class="insights-title">Instructor variety</div>';
+    html += '<div class="insights-subtitle">Unique instructors per month</div>';
+    html += '<div class="variety-chart">';
+    for (var i = 0; i < sorted.length; i++) {
+      var key = sorted[i][0];
+      var data = sorted[i][1];
+      var instrH = Math.max(4, Math.round(data.instructors.size / maxInstr * 80));
+      var label = key.substring(5); // "03" from "2025-03"
+      var monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      var monthLabel = monthNames[parseInt(label)] || label;
+
+      html += '<div class="variety-col" title="' + monthLabel + ': ' + data.instructors.size + ' instructors, ' + data.total + ' classes">' +
+        '<div class="variety-bar-area">' +
+          '<span class="variety-value">' + data.instructors.size + '</span>' +
+          '<div class="variety-bar" style="height:' + instrH + 'px"></div>' +
+        '</div>' +
+        '<div class="variety-label">' + monthLabel + '</div>' +
+      '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+
+  // ── Share Insights Card ─────────────────────────────────────────
+
+  window.shareInsights = async function () {
+    var history = getFullHistory().filter(function (h) { return !h.cancelledAt; });
+    if (history.length === 0) { toast('No history to share yet', 'info'); return; }
+
+    var now = new Date();
+    var userName = '';
+    if (typeof currentUser !== 'undefined' && currentUser) {
+      userName = currentUser.first_name || currentUser.email || '';
+    }
+
+    // Gather stats
+    var totalClasses = history.length;
+    var soloCount = 0, socialCount = 0;
+    var instrCount = {}, studioCount = {}, catCount = {};
+    var firstDate = history[history.length - 1]?.date;
+    var cats = (typeof CATEGORY_MAP !== 'undefined') ? CATEGORY_MAP : [];
+
+    history.forEach(function (h) {
+      if (h.slots && h.slots.length > 1) socialCount++; else soloCount++;
+      if (h.instrName) instrCount[h.instrName] = (instrCount[h.instrName] || 0) + 1;
+      if (h.locName) studioCount[h.locName] = (studioCount[h.locName] || 0) + 1;
+      var cat = (typeof getCategory === 'function') ? getCategory(h.typeName) : null;
+      var key = cat ? cat.key : 'OTHER';
+      catCount[key] = (catCount[key] || 0) + 1;
+    });
+
+    var topInstr = Object.entries(instrCount).sort(function (a, b) { return b[1] - a[1]; })[0];
+    var topStudio = Object.entries(studioCount).sort(function (a, b) { return b[1] - a[1]; })[0];
+    var catSorted = cats
+      .map(function (c) { return { key: c.key, label: c.label, color: c.color, count: catCount[c.key] || 0 }; })
+      .filter(function (c) { return c.count > 0; })
+      .sort(function (a, b) { return b.count - a.count; });
+    var catMax = catSorted.length > 0 ? catSorted[0].count : 1;
+
+    // Unique instructors
+    var uniqueInstrs = Object.keys(instrCount).length;
+
+    // Render to canvas
+    var W = 640, H = 820;
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle border
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, W - 2, H - 2);
+
+    var y = 40;
+
+    // Header
+    ctx.fillStyle = '#e94560';
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.letterSpacing = '3px';
+    ctx.fillText('PSYCLE', 32, y);
+    ctx.fillStyle = '#555';
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('CLASS FINDER', 96, y);
+    y += 12;
+
+    // Divider
+    ctx.strokeStyle = '#222';
+    ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
+    y += 28;
+
+    // Title
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(userName ? userName + "'s Stats" : 'My Psycle Stats', 32, y);
+    y += 14;
+
+    // Date range
+    if (firstDate) {
+      ctx.fillStyle = '#666';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      var fd = new Date(firstDate);
+      ctx.fillText(
+        fd.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) + ' — ' +
+        now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
+        32, y
+      );
+    }
+    y += 32;
+
+    // Big stat cards
+    var cardW = 130, cardH = 72, cardGap = 12, cardX = 32;
+    var statCards = [
+      { value: String(totalClasses), label: 'CLASSES' },
+      { value: String(uniqueInstrs), label: 'INSTRUCTORS' },
+      { value: String(soloCount), label: 'SOLO' },
+    ];
+    if (socialCount > 0) statCards.push({ value: String(socialCount), label: 'WITH A FRIEND' });
+
+    statCards.forEach(function (card, i) {
+      var cx = cardX + i * (cardW + cardGap);
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.roundRect(cx, y, cardW, cardH, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#222';
+      ctx.beginPath();
+      ctx.roundRect(cx, y, cardW, cardH, 8);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(card.value, cx + 14, y + 34);
+      ctx.fillStyle = '#666';
+      ctx.font = '600 9px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(card.label, cx + 14, y + 52);
+    });
+    y += cardH + 28;
+
+    // Top instructor & studio
+    if (topInstr) {
+      ctx.fillStyle = '#888';
+      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText('TOP INSTRUCTOR', 32, y);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topInstr[0], 32, y + 22);
+      ctx.fillStyle = '#888';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topInstr[1] + ' classes', 32, y + 40);
+    }
+    if (topStudio) {
+      ctx.fillStyle = '#888';
+      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText('TOP STUDIO', W / 2, y);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topStudio[0], W / 2, y + 22);
+      ctx.fillStyle = '#888';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(topStudio[1] + ' classes', W / 2, y + 40);
+    }
+    y += 64;
+
+    // Class type bars
+    ctx.fillStyle = '#888';
+    ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('CLASS TYPES', 32, y);
+    y += 14;
+
+    catSorted.slice(0, 6).forEach(function (cat) {
+      var barMaxW = W - 200;
+      var barW = Math.max(6, Math.round(cat.count / catMax * barMaxW));
+
+      ctx.fillStyle = '#666';
+      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(cat.label, 100, y + 14);
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = '#0d0d0d';
+      ctx.beginPath(); ctx.roundRect(112, y + 2, barMaxW, 16, 3); ctx.fill();
+      ctx.fillStyle = cat.color;
+      ctx.beginPath(); ctx.roundRect(112, y + 2, barW, 16, 3); ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(String(cat.count), 112 + barMaxW + 8, y + 14);
+
+      y += 24;
+    });
+    y += 16;
+
+    // Footer
+    ctx.strokeStyle = '#222';
+    ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
+    y += 20;
+    ctx.fillStyle = '#444';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Generated by Psycle Class Finder · ' + now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), 32, y);
+
+    // Export and share
+    try {
+      var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+      var file = new File([blob], 'psycle-stats.png', { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'My Psycle Stats',
+          text: totalClasses + ' classes · ' + uniqueInstrs + ' instructors · Top: ' + (topInstr ? topInstr[0] : ''),
+          files: [file],
+        });
+      } else {
+        // Fallback: download
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'psycle-stats.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('Image saved — share it from your downloads', 'success');
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        toast('Share failed: ' + e.message, 'error');
+      }
+    }
+  };
 
 
   // ── Init ───────────────────────────────────────────────────────

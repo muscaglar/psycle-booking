@@ -235,6 +235,8 @@ async function checkAuth() {
       pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Disconnect</span><span class="auth-icon">✕</span></a>`;
       fetchMyBookings();
+      // After first login, offer to sync booking history
+      setTimeout(function () { showHistorySyncPrompt(); }, 1500);
     } else {
       showSessionExpired();
     }
@@ -242,6 +244,56 @@ async function checkAuth() {
     currentUser = null;
     pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>`;
   }
+}
+
+function showHistorySyncPrompt() {
+  // Only show if history hasn't been synced and we have a token
+  if (localStorage.getItem('psycle_history_synced')) return;
+  if (!getBearerToken()) return;
+  var history = [];
+  try { history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch (e) {}
+  if (history.length > 10) return; // already has substantial history
+
+  // Remove any existing prompt
+  document.getElementById('syncPromptOverlay')?.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'syncPromptOverlay';
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+
+  var userName = (currentUser && currentUser.first_name) ? currentUser.first_name : '';
+
+  overlay.innerHTML =
+    '<div class="modal" style="max-width:400px">' +
+      '<div class="modal-header">' +
+        '<div>' +
+          '<div class="modal-title">Welcome' + (userName ? ', ' + escapeHTML(userName) : '') + '!</div>' +
+          '<div class="modal-subtitle">One more step to get the most out of your experience</div>' +
+        '</div>' +
+        '<button class="modal-close" onclick="document.getElementById(\'syncPromptOverlay\').remove()">&times;</button>' +
+      '</div>' +
+      '<div style="padding:0 20px 8px;font-size:13px;color:var(--text-muted,#aaa);line-height:1.6">' +
+        'Import your full booking history from Psycle to unlock personalised insights, instructor discovery, and class analytics.' +
+      '</div>' +
+      '<div class="modal-actions" style="gap:8px">' +
+        '<button class="btn btn-ghost" onclick="document.getElementById(\'syncPromptOverlay\').remove()">Skip for now</button>' +
+        '<button class="btn" id="syncPromptBtn" onclick="startSyncFromPrompt()">Sync my history</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+}
+
+async function startSyncFromPrompt() {
+  var btn = document.getElementById('syncPromptBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing...'; }
+  if (typeof window._explore_syncHistory === 'function') {
+    await window._explore_syncHistory();
+  }
+  var overlay = document.getElementById('syncPromptOverlay');
+  if (overlay) overlay.remove();
 }
 
 function openLoginPopup() {
