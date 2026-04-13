@@ -75,6 +75,22 @@ function slotLabelForEvent(eventId) {
   return evt ? slotLabel(evt._typeName) : 'Spot';
 }
 
+/**
+ * Wrap an instructor name in a clickable link that opens their profile modal.
+ */
+function instrLink(name, instrId) {
+  if (!name) return '';
+  var safeName = escapeHTML(name).replace(/'/g, "\\'");
+  var sid = instrId ? String(instrId) : '';
+  if (!sid && typeof instructors !== 'undefined') {
+    var match = instructors.find(function (i) { return i.full_name === name; });
+    if (match) sid = String(match.id);
+  }
+  if (!sid) return escapeHTML(name);
+  return '<span class="instructor-link" onclick="event.stopPropagation();window._features_openInstructorModal(\'' +
+    safeName + '\',\'' + sid + '\')">' + escapeHTML(name) + '</span>';
+}
+
 // selectedCategories is managed by state.js
 
 // ── Strength sub-filter ──────────────────────────────────────────
@@ -233,7 +249,7 @@ async function checkAuth() {
       _activeSubscription = subs.find(s => s.status === 'active' && s.max_bookings > 0) || null;
       const name = currentUser.first_name || currentUser.email || 'You';
       pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
-        <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Disconnect</span><span class="auth-icon">✕</span></a>`;
+        <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
       fetchMyBookings();
       // After first login, offer to sync booking history
       setTimeout(function () { showHistorySyncPrompt(); }, 1500);
@@ -1027,7 +1043,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
     <div class="class-info">
       <div class="class-type">${escapeHTML(type?.name || 'Class')}</div>
-      <div class="class-instructor">${escapeHTML(instr?.full_name || '—')}</div>
+      <div class="class-instructor">${instrLink(instr?.full_name, instr?.id)}</div>
       <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
       <div class="class-meta">${badges}</div>
       <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
@@ -1567,7 +1583,7 @@ function renderMyBookings() {
         <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
         <div class="class-info">
           <div class="class-type">${escapeHTML(typeName)}</div>
-          <div class="class-instructor">${escapeHTML(instrName)}</div>
+          <div class="class-instructor">${instrLink(instrName, evt.instructor_id)}</div>
           <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
           <div class="class-meta">${badges}</div>
           ${seatHtml}

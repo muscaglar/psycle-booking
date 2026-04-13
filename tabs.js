@@ -55,7 +55,7 @@
     }
 
     // Add "View full history" button at the bottom of the bookings panel
-    var historyBtnHtml = '<button class="history-in-bookings-btn" onclick="openHistoryModal()" style="display:block;width:calc(100% - 48px);margin:12px 24px;padding:10px;background:var(--bg-panel,#111);border:1px solid var(--border,#222);border-radius:8px;color:var(--text-muted,#aaa);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">View full history</button>';
+    var historyBtnHtml = '<button class="history-in-bookings-btn" onclick="openHistoryModal()">View full history</button>';
     var historyBtnContainer = document.createElement('div');
     historyBtnContainer.innerHTML = historyBtnHtml;
     bookingsPanel.appendChild(historyBtnContainer.firstChild);
@@ -478,7 +478,7 @@
       html += '<div class="reco-card">' +
         '<div class="reco-badge">' + dayCapital + 's at ' + p.timeAmPm + '</div>' +
         '<div class="reco-class">' + escapeHTML(p.type) + '</div>' +
-        '<div class="reco-detail">' + escapeHTML(p.instr) + (p.loc ? ' · ' + escapeHTML(p.loc) : '') + '</div>' +
+        '<div class="reco-detail">' + instrLink(p.instr) + (p.loc ? ' · ' + escapeHTML(p.loc) : '') + '</div>' +
         '<div class="reco-detail" style="color:#555">' + p.count + 'x booked</div>' +
       '</div>';
     });
@@ -760,7 +760,7 @@
       var tierBadge = stat.instrId && (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(stat.instrId) : '';
 
       html += '<div class="lapsed-item">' +
-        '<div class="lapsed-name">' + escapeHTML(name) + ' ' + tierBadge + '</div>' +
+        '<div class="lapsed-name">' + instrLink(name, stat.instrId) + ' ' + tierBadge + '</div>' +
         '<div class="lapsed-detail">' + stat.count + ' classes · Last booked ' + lastStr + ' (' + daysAgo + 'd ago)</div>' +
       '</div>';
     }

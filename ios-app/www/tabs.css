@@ -425,8 +425,8 @@
 }
 
 .cost-card.cost-main {
-  background: #111;
-  border-color: #222;
+  background: var(--bg-panel, #111);
+  border-color: var(--accent, #e94560);
 }
 
 .cost-value {
@@ -456,10 +456,10 @@
 .cost-savings {
   margin-top: 12px;
   font-size: 13px;
-  color: #e94560;
+  color: var(--accent, #e94560);
   padding: 10px 14px;
-  background: #111;
-  border: 1px solid #222;
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
   border-radius: 8px;
 }
 
@@ -552,6 +552,29 @@
   font-size: 9px; color: var(--text-ghost, #555);
   text-transform: uppercase; letter-spacing: 0.04em;
   margin-top: 4px; white-space: nowrap;
+}
+
+/* ── History Button in Bookings ───────────────────────────────────── */
+
+.history-in-bookings-btn {
+  display: block;
+  width: calc(100% - 48px);
+  margin: 12px 24px;
+  padding: 10px;
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-radius: 8px;
+  color: var(--text-muted, #aaa);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.history-in-bookings-btn:hover {
+  border-color: var(--accent, #e94560);
+  color: var(--text-heading, #fff);
 }
 
 /* ── Share Button ─────────────────────────────────────────────────── */

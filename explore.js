@@ -210,7 +210,9 @@
     var ids = Object.keys(profiles);
     for (var i = 0; i < ids.length; i++) {
       var p = profiles[ids[i]];
-      if (refIds.has(p.id) || favs.has(p.id) || booked.has(p.id)) continue;
+      // Skip favourites, reference instructors, and anyone already ranked
+      var hasTier = !!tiers[p.id];
+      if (refIds.has(p.id) || favs.has(p.id) || hasTier) continue;
 
       var typeMatches = [];
       p.classTypes.forEach(function (ct) { if (refClassTypes.has(ct)) typeMatches.push(ct); });
@@ -452,7 +454,7 @@
         var tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
         html += '<div class="explore-top-item">' +
           '<span class="explore-top-rank">' + (m + 1) + '</span>' +
-          '<span class="explore-top-name">' + escapeHtml(stat.name) + ' ' + tierBadge + '</span>' +
+          '<span class="explore-top-name">' + ((typeof instrLink === 'function') ? instrLink(stat.name, instrId) : escapeHtml(stat.name)) + ' ' + tierBadge + '</span>' +
           '<span class="explore-top-count">' + stat.count + ' class' + (stat.count !== 1 ? 'es' : '') + '</span>' +
         '</div>';
       }

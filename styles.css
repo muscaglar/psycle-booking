@@ -1201,6 +1201,8 @@ select:focus, input:focus {
   #tab-discover.active {
     display: grid;
     grid-template-columns: 320px 1fr;
+    grid-template-rows: auto;
+    align-items: start;
     gap: 0;
     max-width: 1280px;
   }
