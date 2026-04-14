@@ -781,13 +781,11 @@ select:focus, input:focus { border-color: var(--accent); }
 [data-theme="light"] .bike-slot.mine:hover rect { fill: #c73650; stroke: #a02a40; }
 [data-theme="light"] .bike-slot.mine text { fill: #fff; }
 
-/* Prefer: green fill, clearly marked */
-[data-theme="light"] .bike-slot.pref-prefer rect { fill: #e6f7e6 !important; stroke: #2a9a2a !important; stroke-width: 2px !important; }
+/* Light mode: preference text colors (no fill/stroke override) */
 [data-theme="light"] .bike-slot.pref-prefer text { fill: #1a7a1a !important; }
-
-/* Avoid: red dashed, clearly warned */
-[data-theme="light"] .bike-slot.pref-avoid rect { fill: #fff0f0 !important; stroke: #e94560 !important; stroke-dasharray: 4,2 !important; }
 [data-theme="light"] .bike-slot.pref-avoid text { fill: #c73650 !important; }
+[data-theme="light"] .bike-slot.taken.pref-prefer text { fill: #8ac08a !important; }
+[data-theme="light"] .bike-slot.taken.pref-avoid text { fill: #e0a0a0 !important; }
 
 /* ── styles.css: Swipe cancel background ─────────────────────────── */
 

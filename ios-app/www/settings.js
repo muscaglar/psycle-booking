@@ -486,16 +486,42 @@
 
         document.querySelectorAll('#bikeSvg .bike-slot').forEach(function (g) {
           var slot = Number(g.dataset.slot);
-          if (avoidSet.has(slot)) g.classList.add('pref-avoid');
-          if (preferSet.has(slot)) g.classList.add('pref-prefer');
+          var rect = g.querySelector('rect');
+          if (!rect) return;
+          var rx = Number(rect.getAttribute('x'));
+          var ry = Number(rect.getAttribute('y'));
+          var rw = Number(rect.getAttribute('width'));
+
+          if (preferSet.has(slot)) {
+            g.classList.add('pref-prefer');
+            // Green dot in top-right corner
+            var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', rx + rw - 5);
+            dot.setAttribute('cy', ry + 5);
+            dot.setAttribute('r', '3');
+            dot.setAttribute('fill', '#5dba5d');
+            dot.classList.add('pref-dot');
+            g.appendChild(dot);
+          }
+          if (avoidSet.has(slot)) {
+            g.classList.add('pref-avoid');
+            // Red dot in top-right corner
+            var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', rx + rw - 5);
+            dot.setAttribute('cy', ry + 5);
+            dot.setAttribute('r', '3');
+            dot.setAttribute('fill', '#e94560');
+            dot.classList.add('pref-dot');
+            g.appendChild(dot);
+          }
         });
 
         // Update legend if prefs exist
         if (prefs.avoid.length || prefs.prefer.length) {
           var legend = document.querySelector('.bike-legend');
           if (legend && !legend.querySelector('.pref-legend')) {
-            legend.innerHTML += '<span class="pref-legend"><i style="background:#0a2a1a;border:1px solid #5dba5d"></i> Your fav</span>' +
-              '<span class="pref-legend"><i style="background:#2a0a0a;border:1px solid #e94560"></i> Avoid</span>';
+            legend.innerHTML += '<span class="pref-legend"><i style="background:#5dba5d;border-radius:50%;width:8px;height:8px"></i> Your fav</span>' +
+              '<span class="pref-legend"><i style="background:#e94560;border-radius:50%;width:8px;height:8px"></i> Avoid</span>';
           }
         }
       }, 50);

@@ -335,6 +335,13 @@
 [data-theme="light"] .bike-pref-svg-slot.pref-prefer rect { fill: #f0fff0; stroke: #3a9a3a; }
 [data-theme="light"] .bike-pref-svg-slot.pref-prefer text { fill: #3a9a3a; }
 
-/* Bike picker overlay for preferences */
-.bike-slot.pref-avoid rect { stroke: #e94560 !important; stroke-dasharray: 4,2; }
-.bike-slot.pref-prefer rect { stroke: #5dba5d !important; stroke-width: 2px; }
+/* Bike picker: preferences shown via text color only.
+   Rect fill/stroke stays controlled by booking state (available/taken/selected/mine). */
+.bike-slot.pref-prefer text { fill: #5dba5d !important; font-weight: 900; }
+.bike-slot.pref-avoid text { fill: #e94560 !important; }
+/* Taken slots: dim the preference text */
+.bike-slot.taken.pref-prefer text { fill: #2a5a2a !important; }
+.bike-slot.taken.pref-avoid text { fill: #5a1a2a !important; }
+/* Selected or mine: white text always wins */
+.bike-slot.selected.pref-prefer text, .bike-slot.selected.pref-avoid text,
+.bike-slot.mine.pref-prefer text, .bike-slot.mine.pref-avoid text { fill: #fff !important; }
