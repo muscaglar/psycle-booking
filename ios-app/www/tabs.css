@@ -73,7 +73,7 @@
 
 .tab-panel {
   display: none;
-  animation: tabFadeIn 0.2s ease-out;
+  animation: tabFadeIn 0.25s ease-out;
 }
 
 .tab-panel.active {
@@ -81,9 +81,21 @@
 }
 
 @keyframes tabFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.998); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* Stat card stagger */
+.stats-bar .stat-card {
+  animation: cardEnter 0.3s ease-out both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.stats-bar .stat-card:nth-child(1) { animation-delay: 0s; }
+.stats-bar .stat-card:nth-child(2) { animation-delay: 0.06s; }
+.stats-bar .stat-card:nth-child(3) { animation-delay: 0.12s; }
+.stats-bar .stat-card:nth-child(4) { animation-delay: 0.18s; }
+.stats-bar .stat-card:nth-child(5) { animation-delay: 0.24s; }
+.stats-bar .stat-card:nth-child(n+6) { animation-delay: 0.3s; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Quick Stats Bar (inside My Bookings tab)
@@ -135,7 +147,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 .week-view {
-  padding: 0 24px 16px;
+  padding: 12px 24px 16px;
 }
 
 .week-header {
@@ -162,11 +174,13 @@
   background: none;
   border: 1px solid var(--border-light, #333);
   color: var(--text-muted, #aaa);
-  width: 28px;
+  min-width: 28px;
   height: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 11px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,9 +222,9 @@
 .week-day-num.today { color: #e94560; }
 
 .week-event {
-  background: #111;
-  border: 1px solid #222;
-  border-left: 3px solid #e94560;
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-left: 3px solid var(--accent, #e94560);
   border-radius: 6px;
   padding: 6px 8px;
   margin-bottom: 4px;
@@ -223,7 +237,20 @@
 .week-event-time {
   font-size: 11px;
   font-weight: 700;
-  color: #e94560;
+  color: var(--accent, #e94560);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.week-event-social {
+  font-size: 8px;
+  font-weight: 800;
+  background: var(--accent, #e94560);
+  color: #fff;
+  padding: 1px 4px;
+  border-radius: 6px;
+  line-height: 1.2;
 }
 
 .week-event-name {
@@ -345,7 +372,7 @@
 
 .hm-cell {
   aspect-ratio: 1;
-  border-radius: 3px;
+  border-radius: 4px;
   min-width: 0;
   transition: transform 0.1s;
 }
@@ -582,7 +609,52 @@
   border-color: var(--accent, #e94560); color: var(--text-heading, #fff);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Profile Tab Divider (between Insights and Explore sections)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.profile-divider {
+  height: 1px;
+  background: var(--border, #222);
+  margin: 16px 24px 20px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Interactive Weekly Planner — empty day "Find a class" slot
+   ═══════════════════════════════════════════════════════════════════ */
+
+.week-add-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px dashed var(--border-light, #333);
+  border-radius: 6px;
+  padding: 8px 4px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-ghost, #555);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.week-add-slot:hover {
+  border-color: var(--accent, #e94560);
+  color: var(--accent, #e94560);
+  background: rgba(233, 69, 96, 0.05);
+}
+
+.week-add-icon {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 @media (max-width: 640px) {
   .insights-section { padding: 0 16px 16px; }
   .ct-label { min-width: 56px; font-size: 11px; }
+  .week-add-slot { font-size: 9px; padding: 6px 2px; }
 }

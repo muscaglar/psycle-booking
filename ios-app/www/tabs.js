@@ -1,22 +1,23 @@
 /**
  * tabs.js — Tab navigation and Insights analytics
  *
- * Self-contained IIFE that creates the Discover / My Bookings / Insights / Explore
- * tab system. Renders analytics: quick stats, cost tracker, activity heatmap,
+ * Self-contained IIFE that creates the Discover / My Bookings / Profile
+ * 3-tab system. Profile merges Insights + Explore content.
+ * Renders analytics: quick stats, cost tracker, activity heatmap,
  * weekly calendar, class type distribution, lapsed favourites, variety trend,
  * and a canvas-based share image.
  *
  * Depends on: app.js (all globals), features.js (openHistoryModal),
  *             explore.js (renderExplore), state.js (PsycleEvents)
  * Exposes on window:
- *   switchTab, renderInsights, weekNav, shareInsights
+ *   switchTab, renderInsights, weekNav, shareInsights, planDay
  */
 (function () {
   'use strict';
 
   // ── Tab Navigation ──────────────────────────────────────────────
 
-  var TABS = ['discover', 'bookings', 'insights', 'explore'];
+  var TABS = ['discover', 'bookings', 'profile'];
   var _currentTab = 'discover';
 
   function initTabs() {
@@ -25,16 +26,15 @@
     var results = document.getElementById('results');
     if (!controls || !results) return;
 
-    // Create tab bar
+    // Create tab bar (3 tabs: Discover, Bookings, Profile)
     var tabBar = document.createElement('div');
     tabBar.className = 'tab-bar';
     tabBar.innerHTML =
-      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">Discover</button>' +
+      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">Book a Class</button>' +
       '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' +
         'My Bookings <span class="tab-badge" id="tabBadge"></span>' +
       '</button>' +
-      '<button class="tab-btn" data-tab="insights" onclick="switchTab(\'insights\')">Insights</button>' +
-      '<button class="tab-btn" data-tab="explore" onclick="switchTab(\'explore\')">Explore</button>';
+      '<button class="tab-btn" data-tab="profile" onclick="switchTab(\'profile\')">Profile</button>';
 
     // Insert tab bar after header
     var header = document.querySelector('header');
@@ -49,19 +49,28 @@
 
     // Move session banner, CORS banner inside discover too (they stay visible)
     controls.parentNode.insertBefore(discoverPanel, controls);
+
+    // Add "My week" view at top of Discover (interactive weekly planner)
+    var discoverWeekView = document.createElement('div');
+    discoverWeekView.id = 'weekView';
+    discoverWeekView.className = 'week-view';
+    discoverWeekView.style.display = 'none';
+    discoverPanel.appendChild(discoverWeekView);
+
     discoverPanel.appendChild(controls);
     discoverPanel.appendChild(results);
 
-    // Create bookings panel (focused: subscription bar + booking cards + calendar actions)
+    // Create bookings panel with upcoming bookings + history
     var bookingsPanel = document.createElement('div');
     bookingsPanel.id = 'tab-bookings';
     bookingsPanel.className = 'tab-panel';
 
     // Move upcoming panel into bookings tab
     if (upcomingPanel) {
-      discoverPanel.parentNode.insertBefore(bookingsPanel, discoverPanel.nextSibling);
       bookingsPanel.appendChild(upcomingPanel);
     }
+
+    discoverPanel.parentNode.insertBefore(bookingsPanel, discoverPanel.nextSibling);
 
     // Add "View full history" button at the bottom of the bookings panel
     var historyBtnHtml = '<button class="history-in-bookings-btn" onclick="openHistoryModal()">View full history</button>';
@@ -69,26 +78,23 @@
     historyBtnContainer.innerHTML = historyBtnHtml;
     bookingsPanel.appendChild(historyBtnContainer.firstChild);
 
-    // Create insights panel (analytics, stats, heatmap, cost, map, recommendations)
-    var insightsPanel = document.createElement('div');
-    insightsPanel.id = 'tab-insights';
-    insightsPanel.className = 'tab-panel';
-    insightsPanel.innerHTML =
+    // Create profile panel (merged Insights + Explore)
+    var profilePanel = document.createElement('div');
+    profilePanel.id = 'tab-profile';
+    profilePanel.className = 'tab-panel';
+    profilePanel.innerHTML =
+      // -- Insights sections --
       '<div id="statsBar" class="stats-bar" style="display:none"></div>' +
       '<div id="costSection" class="cost-section" style="display:none"></div>' +
       '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>' +
-      '<div id="weekView" class="week-view" style="display:none"></div>' +
       '<div id="recoSection" class="reco-section" style="display:none"></div>' +
       '<div id="classTypeSection" class="insights-section" style="display:none"></div>' +
       '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
       '<div id="varietySection" class="insights-section" style="display:none"></div>' +
-      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>';
-
-    // Create explore panel (instructor discovery)
-    var explorePanel = document.createElement('div');
-    explorePanel.id = 'tab-explore';
-    explorePanel.className = 'tab-panel';
-    explorePanel.innerHTML =
+      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>' +
+      // -- Divider between Insights and Explore --
+      '<div class="profile-divider"></div>' +
+      // -- Explore sections --
       '<div id="exploreSyncSection" class="explore-section" style="display:none"></div>' +
       '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
       '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>' +
@@ -100,8 +106,7 @@
     tabBar.parentNode.insertBefore(tabContent, discoverPanel);
     tabContent.appendChild(discoverPanel);
     tabContent.appendChild(bookingsPanel);
-    tabContent.appendChild(insightsPanel);
-    tabContent.appendChild(explorePanel);
+    tabContent.appendChild(profilePanel);
 
     // Move banners before tab content (always visible)
     var sessionBanner = document.getElementById('sessionBanner');
@@ -112,8 +117,9 @@
     // Also move toast and modals out (they're global overlays)
     // They're already positioned fixed so they work regardless
 
-    // Read hash
+    // Read hash (map legacy hashes to new tabs)
     var hash = location.hash.replace('#', '');
+    if (hash === 'insights' || hash === 'explore') hash = 'profile';
     if (TABS.indexOf(hash) !== -1) {
       switchTab(hash, true);
     }
@@ -139,10 +145,11 @@
     if (!noHash) {
       history.replaceState(null, '', '#' + tab);
     }
-    if (tab === 'insights') {
-      renderInsights();
+    if (tab === 'discover') {
+      renderWeekView(); // My week at top of Book a Class
     }
-    if (tab === 'explore') {
+    if (tab === 'profile') {
+      renderInsights();
       if (typeof renderExplore === 'function') renderExplore();
     }
   };
@@ -162,7 +169,8 @@
   if (typeof PsycleEvents !== 'undefined') {
     PsycleEvents.on('bookings:loaded', function () {
       updateTabBadge();
-      if (_currentTab === 'insights') renderInsights();
+      renderWeekView(); // Always update the week view (it's on Discover)
+      if (_currentTab === 'profile') renderInsights();
     });
     PsycleEvents.on('booking:complete', function () {
       updateTabBadge();
@@ -170,11 +178,11 @@
     });
     PsycleEvents.on('booking:cancelled', function () {
       updateTabBadge();
-      if (_currentTab === 'insights') renderInsights();
+      if (_currentTab === 'profile') renderInsights();
     });
     PsycleEvents.on('seat:cancelled', function () {
       updateTabBadge();
-      if (_currentTab === 'insights') renderInsights();
+      if (_currentTab === 'profile') renderInsights();
     });
   }
 
@@ -337,6 +345,16 @@
     renderWeekView();
   };
 
+  // Interactive weekly planner: tap an empty day to search for classes on that date
+  window.planDay = function (dateStr) {
+    var startDateEl = document.getElementById('startDate');
+    var daysAheadEl = document.getElementById('daysAhead');
+    if (startDateEl) startDateEl.value = dateStr;
+    if (daysAheadEl) daysAheadEl.value = 1;
+    switchTab('discover');
+    if (typeof search === 'function') search();
+  };
+
   function renderWeekView() {
     var container = document.getElementById('weekView');
     if (!container) return;
@@ -389,24 +407,29 @@
       '</div>';
 
       // Find bookings on this day — current bookings first, then history
+      var dayEventCount = 0;
       var shownEventIds = new Set();
       Object.entries(bookings).forEach(function (entry) {
         var evtId = entry[0];
+        var booking = entry[1];
         var evt = cache[evtId];
         if (!evt) return;
         var evtDay = (evt.start_at || '').split('T')[0].split(' ')[0];
         if (evtDay !== dayStr) return;
         shownEventIds.add(evtId);
+        dayEventCount++;
 
         var dt = new Date(evt.start_at.replace(' ', 'T'));
         var h = dt.getHours();
         var m = dt.getMinutes().toString().padStart(2, '0');
         var ampm = h >= 12 ? 'pm' : 'am';
         var timeStr = (h % 12 || 12) + ':' + m + ampm;
+        var slotsCount = booking && booking.slots ? booking.slots.length : 0;
+        var socialBadge = slotsCount > 1 ? '<span class="week-event-social" title="' + slotsCount + ' spots booked">+1</span>' : '';
 
         html += '<div class="week-event" onclick="switchTab(\'bookings\')" title="' +
           escapeHTML(evt._typeName || '') + ' · ' + escapeHTML(evt._instrName || '') + '">' +
-          '<div class="week-event-time">' + timeStr + '</div>' +
+          '<div class="week-event-time">' + timeStr + socialBadge + '</div>' +
           '<div class="week-event-name">' + escapeHTML(evt._typeName || 'Class') + '</div>' +
           '<div class="week-event-loc">' + escapeHTML(evt._locName || '') + '</div>' +
         '</div>';
@@ -417,6 +440,7 @@
         if (h.cancelledAt || !h.date || shownEventIds.has(h.eventId)) return;
         var hDay = (h.date || '').split('T')[0].split(' ')[0];
         if (hDay !== dayStr) return;
+        dayEventCount++;
 
         var dt = new Date(h.date.replace(' ', 'T'));
         var hh = dt.getHours();
@@ -431,6 +455,12 @@
           '<div class="week-event-loc">' + escapeHTML(h.locName || '') + '</div>' +
         '</div>';
       });
+
+      // Interactive empty slot: show "+ Find a class" on days with no events
+      if (dayEventCount === 0) {
+        html += '<div class="week-add-slot" onclick="planDay(\'' + dayStr + '\')">' +
+          '<span class="week-add-icon">+</span> Find a class</div>';
+      }
 
       html += '</div>';
     });

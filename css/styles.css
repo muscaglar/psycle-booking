@@ -66,6 +66,7 @@ header span {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-bottom: 6px;
 }
 
 label {
@@ -75,13 +76,14 @@ label {
   color: #888;
 }
 
-select, input[type="date"] {
+select, input[type="date"], input[type="number"] {
   background: #1a1a1a;
   border: 1px solid #333;
   color: #f0f0f0;
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 14px;
+  font-family: inherit;
   min-width: 180px;
   appearance: none;
   cursor: pointer;
@@ -295,7 +297,8 @@ select:focus, input:focus {
 }
 
 .modal-title { font-size: 16px; font-weight: 700; color: #fff; }
-.modal-subtitle { font-size: 12px; color: #666; margin-top: 3px; }
+.modal-subtitle { font-size: 12px; color: #888; margin-top: 4px; line-height: 1.5; }
+.modal-subtitle-line:first-child { color: #bbb; font-weight: 500; }
 
 .modal-close {
   background: none; border: none; color: #666;
@@ -969,6 +972,134 @@ select:focus, input:focus {
 .rebook-btn:hover { background: #1a2a3a; }
 
 /* ═══════════════════════════════════════════════════════════════════
+   Find Similar Popup
+   ═══════════════════════════════════════════════════════════════════ */
+
+.find-similar-popup {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  background: #1a1a1e;
+  border: 1px solid #333;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  z-index: 100;
+  padding: 6px;
+  animation: findSimilarIn 0.15s ease-out;
+}
+
+@keyframes findSimilarIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.find-similar-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #666;
+  padding: 4px 8px 2px;
+}
+
+.find-similar-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #f0f0f0;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-family: inherit;
+}
+
+.find-similar-option:hover {
+  background: #252530;
+}
+
+.find-similar-icon {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.find-similar-label {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
+.find-similar-desc {
+  font-size: 11px;
+  color: #888;
+  width: 100%;
+  padding-left: 26px;
+  margin-top: -2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Share Class Button
+   ═══════════════════════════════════════════════════════════════════ */
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.card-actions .book-btn {
+  margin-top: 0;
+  flex: 1;
+}
+
+.share-class-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: transparent;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.share-class-btn:hover {
+  color: #e94560;
+  border-color: #e94560;
+  background: rgba(233, 69, 96, 0.08);
+}
+
+/* On desktop, only show share button on card hover */
+@media (hover: hover) {
+  .share-class-btn {
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .class-card:hover .share-class-btn {
+    opacity: 1;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Subscription Info Bar
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -1225,7 +1356,7 @@ select:focus, input:focus {
     max-width: none;
   }
 
-  /* Tab bar: compact, scroll horizontally for 4 tabs */
+  /* Tab bar: compact, scroll horizontally for 3 tabs */
   .tab-bar {
     padding: 0 12px;
     overflow-x: auto;
@@ -1266,6 +1397,13 @@ select:focus, input:focus {
     gap: 0;
     max-width: 1280px;
   }
+  /* Week view on Discover: spans full width above the grid */
+  #tab-discover .week-view {
+    grid-column: 1 / -1;
+    padding: 12px 24px 16px;
+    border-bottom: 1px solid var(--border, #222);
+    margin-bottom: 4px;
+  }
   #tab-discover .controls {
     border-bottom: none;
     border-right: 1px solid var(--border, #222);
@@ -1297,4 +1435,296 @@ select:focus, input:focus {
     transform: translateY(-1px);
     box-shadow: 0 2px 12px rgba(0,0,0,0.2);
   }
+}
+
+/* Feature 9: Post-booking confirmation */
+.booking-confirmation {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%) translateY(120%);
+  width: calc(100% - 32px);
+  max-width: 380px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 16px;
+  z-index: 1100;
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(233,69,96,0.15);
+}
+.booking-confirmation.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.bc-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.bc-check {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(34,197,94,0.15);
+  color: #22c55e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.bc-text { flex: 1; min-width: 0; }
+.bc-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.bc-detail {
+  font-size: 12px;
+  color: #ccc;
+  line-height: 1.4;
+}
+.bc-dim { color: #888; }
+.bc-slot {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e94560;
+  background: rgba(233,69,96,0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+}
+.bc-actions {
+  display: flex;
+  gap: 8px;
+}
+.bc-btn {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bc-btn-secondary {
+  background: #252525;
+  color: #aaa;
+}
+.bc-btn-secondary:hover { background: #303030; color: #ccc; }
+.bc-btn-primary {
+  background: #e94560;
+  color: #fff;
+}
+.bc-btn-primary:hover { background: #d63a54; }
+
+/* ── Class Detail Sheet ─────────────────────────────────────── */
+.class-detail-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 85vh;
+  border-radius: 16px 16px 0 0;
+  background: var(--bg-panel, #111113);
+  border: 1px solid var(--border, #1e1e24);
+  border-bottom: none;
+  padding: 12px 20px 24px;
+  overflow-y: auto;
+  z-index: 210;
+  animation: cds-slide-up 0.25s ease-out;
+}
+
+@keyframes cds-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.cds-handle {
+  width: 36px;
+  height: 4px;
+  background: #444;
+  border-radius: 2px;
+  margin: 0 auto 12px;
+}
+
+.cds-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+}
+
+.cds-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.cds-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.cds-photo-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #222;
+  flex-shrink: 0;
+}
+
+.cds-header-info {
+  min-width: 0;
+}
+
+.cds-instr-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cds-type {
+  font-size: 13px;
+  color: var(--text-muted, #aaa);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cds-duration-badge {
+  display: inline-block;
+  background: #1a1a2e;
+  color: var(--accent, #e94560);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.cds-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #0d0d0d;
+  border-radius: 8px;
+  border: 1px solid var(--border, #1e1e24);
+}
+
+.cds-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #ccc;
+}
+
+.cds-icon {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.cds-avail { color: #4ade80; }
+.cds-avail-full { color: #f87171; }
+.cds-avail-waitlist { color: #facc15; }
+
+.cds-bio {
+  font-size: 13px;
+  color: var(--text-muted, #aaa);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.cds-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.cds-keyword {
+  display: inline-block;
+  background: #1a1a2e;
+  color: #8b8bce;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid #2a2a4a;
+}
+
+.cds-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.cds-book-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--accent, #e94560);
+  color: #fff;
+  transition: background 0.15s;
+}
+.cds-book-btn:hover { background: #d63a54; }
+.cds-book-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+.cds-book-btn.booked { background: #1a2e1a; color: #4ade80; border: 1px solid #2e4a2e; }
+.cds-book-btn.waitlist { background: #2e2a1a; color: #facc15; }
+
+.cds-view-instr {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted, #aaa);
+  transition: border-color 0.15s, color 0.15s;
+}
+.cds-view-instr:hover { border-color: var(--accent, #e94560); color: #fff; }
+
+/* Desktop: centered modal instead of bottom sheet */
+@media (min-width: 1024px) {
+  .class-detail-sheet {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    max-width: 480px;
+    max-height: 85vh;
+    border-radius: 12px;
+    border-bottom: 1px solid var(--border, #1e1e24);
+    margin: auto;
+    animation: none;
+  }
+  .cds-handle { display: none; }
 }

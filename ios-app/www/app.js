@@ -276,6 +276,8 @@ async function checkAuth() {
       pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
       fetchMyBookings();
+      // Feature 13: restore last search results if available
+      restoreLastResults();
       // After first login, offer to sync booking history
       setTimeout(function () { showHistorySyncPrompt(); }, 1500);
     } else {
@@ -498,15 +500,15 @@ function setDateQuick(mode) {
   if (mode === 'today') {
     document.getElementById('startDate').value = todayStr;
     document.getElementById('daysAhead').value = 1;
-    if (daysGroup) daysGroup.style.display = 'none';
   } else if (mode === 'tomorrow') {
     document.getElementById('startDate').value = tomorrowStr;
     document.getElementById('daysAhead').value = 1;
-    if (daysGroup) daysGroup.style.display = 'none';
+  } else if (mode === '2week') {
+    document.getElementById('startDate').value = todayStr;
+    document.getElementById('daysAhead').value = 14;
   } else {
     document.getElementById('startDate').value = todayStr;
     document.getElementById('daysAhead').value = 7;
-    if (daysGroup) daysGroup.style.display = '';
   }
   triggerAutoSearch();
 }
@@ -766,7 +768,26 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   const _sl = slotLabelForEvent(eventId).toLowerCase();
   const _SL = slotLabelForEvent(eventId);
   document.getElementById('modalTitle').textContent = hasMySlots ? 'Your booking' : `Select your ${_sl}(s)`;
-  document.getElementById('modalSubtitle').textContent = studioName;
+
+  // Feature 4: Enhanced class summary header
+  const _evt = _eventCache[String(eventId)];
+  if (_evt) {
+    const _d = new Date(_evt.start_at);
+    const _days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const _h = _d.getHours(), _m = _d.getMinutes();
+    const _ampm = _h >= 12 ? 'pm' : 'am';
+    const _h12 = _h % 12 || 12;
+    const _timeStr = `${_h12}:${String(_m).padStart(2,'0')}${_ampm}`;
+    const _dateStr = `${_days[_d.getDay()]} ${_d.getDate()} ${_months[_d.getMonth()]}`;
+    const line1 = [_evt._typeName, _evt._instrName, `${_dateStr}, ${_timeStr}`].filter(Boolean).join(' \u00b7 ');
+    const line2 = [_evt._locName, _evt._studioName].filter(Boolean).join(' \u00b7 ');
+    const sub = document.getElementById('modalSubtitle');
+    sub.innerHTML = `<span class="modal-subtitle-line">${line1}</span><br><span class="modal-subtitle-line">${line2}</span>`;
+  } else {
+    document.getElementById('modalSubtitle').textContent = studioName;
+  }
+
   document.getElementById('modalHint').textContent = hasMySlots
     ? `Your ${_sl}(s) shown in green — click to cancel. Select another to book.`
     : `Select up to ${MAX_SEATS} ${_sl}s`;
@@ -883,7 +904,7 @@ async function submitBooking(eventId, slots, btn) {
       slotsArr.forEach(s => { slotBookings[s] = bookingId; });
       _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings };
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
-      toast('Booked! See you in class', 'success');
+      showBookingConfirmation(eventId, slotsArr);
       refreshUpcomingPanel();
       PsycleEvents.emit('booking:complete', eventId, slotsArr, btn);
     } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
@@ -904,6 +925,83 @@ async function submitBooking(eventId, slots, btn) {
     btn.textContent = 'Failed — retry';
     btn.disabled = false;
     toast(e.message, 'error');
+  }
+}
+
+// Feature 9: Post-booking confirmation overlay
+let _confirmationTimer = null;
+function showBookingConfirmation(eventId, slotsArr) {
+  // Remove any existing confirmation
+  dismissBookingConfirmation();
+
+  const evt = _eventCache[String(eventId)];
+  const typeName = evt?._typeName || 'Class';
+  const instrName = evt?._instrName || '';
+  const _SL = slotLabelForEvent(eventId);
+
+  // Format date/time
+  let dateTimeStr = '';
+  if (evt?.start_at) {
+    const d = new Date(evt.start_at);
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const h = d.getHours(), m = d.getMinutes();
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 || 12;
+    dateTimeStr = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}, ${h12}:${String(m).padStart(2,'0')}${ampm}`;
+  }
+
+  // Build slot label
+  const slotStr = slotsArr.length
+    ? `${_SL}${slotsArr.length > 1 ? 's' : ''} ${slotsArr.join(' & ')}`
+    : '';
+
+  // Class info line
+  const classLine = [typeName, instrName].filter(Boolean).join(' \u00b7 ');
+
+  const el = document.createElement('div');
+  el.id = 'bookingConfirmation';
+  el.className = 'booking-confirmation';
+  el.innerHTML = `
+    <div class="bc-content">
+      <div class="bc-check">&#10003;</div>
+      <div class="bc-text">
+        <div class="bc-title">Booked!</div>
+        <div class="bc-detail">${classLine}</div>
+        ${dateTimeStr ? `<div class="bc-detail bc-dim">${dateTimeStr}</div>` : ''}
+        ${slotStr ? `<div class="bc-slot">${slotStr}</div>` : ''}
+      </div>
+    </div>
+    <div class="bc-actions">
+      <button class="bc-btn bc-btn-secondary" onclick="dismissBookingConfirmation();scrollToUpcoming()">View my bookings</button>
+      <button class="bc-btn bc-btn-primary" onclick="dismissBookingConfirmation()">Done</button>
+    </div>
+  `;
+  document.body.appendChild(el);
+
+  // Trigger animation on next frame
+  requestAnimationFrame(() => { el.classList.add('show'); });
+
+  // Auto-dismiss after 5 seconds
+  _confirmationTimer = setTimeout(dismissBookingConfirmation, 5000);
+}
+
+function dismissBookingConfirmation() {
+  clearTimeout(_confirmationTimer);
+  _confirmationTimer = null;
+  const el = document.getElementById('bookingConfirmation');
+  if (!el) return;
+  el.classList.remove('show');
+  el.addEventListener('transitionend', () => el.remove(), { once: true });
+  // Fallback removal if transition doesn't fire
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 400);
+}
+
+function scrollToUpcoming() {
+  const panel = document.getElementById('upcomingPanel');
+  if (panel) {
+    panel.style.display = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
@@ -1059,16 +1157,20 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     bookLabel = 'Book'; bookCls = 'book-btn'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
   }
 
-  return `<div class="class-card${myBooking ? ' is-booked' : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}">
+  return `<div class="class-card${myBooking ? ' is-booked' : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
+    onclick="openClassDetail(${evt.id})" style="cursor:pointer">
     <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
     <div class="class-info">
       <div class="class-type">${escapeHTML(type?.name || 'Class')}</div>
       <div class="class-instructor">${instrLink(instr?.full_name, instr?.id)}</div>
       <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
       <div class="class-meta">${badges}</div>
-      <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
-        ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
-        onclick="${bookOnclick}">${bookLabel}</button>
+      <div class="card-actions">
+        <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
+          ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
+          onclick="event.stopPropagation();${bookOnclick}">${bookLabel}</button>
+        <button class="share-class-btn" onclick="event.stopPropagation();shareClass(${evt.id})" title="Share this class">&#8599;</button>
+      </div>
     </div>
   </div>`;
 }
@@ -1226,11 +1328,54 @@ function render(events, relations, filters, done) {
       }
     }
   }
+
+  // Feature 13: Persist search results to sessionStorage for tab-switch restore
+  if (done) {
+    try {
+      sessionStorage.setItem('psycle_last_results', JSON.stringify({ events, relations, filters: {
+        instructorId: filters.instructorId,
+        locationId: filters.locationId,
+        categoryKeys: [...(filters.categoryKeys || [])],
+        startDate: filters.startDate,
+        endDateStr: filters.endDateStr,
+        strengthSubs: [...(filters.strengthSubs || [])],
+        _isTodaySchedule: filters._isTodaySchedule || false,
+      }}));
+    } catch (e) { console.warn('[psycle] sessionStorage save failed:', e); }
+  }
 }
 
 function updateLocationHint() {
   const hint = document.getElementById('locationHint');
   hint.textContent = document.getElementById('locationSelect').value ? '' : '— pick one for best results';
+}
+
+// Feature 7 removed — "Today at Psycle" auto-load was noisy.
+// The app now relies on Feature 13 (restore last search) or the empty state quick actions.
+
+// ── Feature 13: Restore persisted search results ────────────────
+function restoreLastResults() {
+  try {
+    const raw = sessionStorage.getItem('psycle_last_results');
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    if (!saved.events || !saved.relations) return false;
+
+    // Reconstruct Set-based filters from serialised arrays
+    const filters = {
+      instructorId: saved.filters.instructorId || [],
+      locationId: saved.filters.locationId || '',
+      categoryKeys: new Set(saved.filters.categoryKeys || []),
+      startDate: saved.filters.startDate || '',
+      endDateStr: saved.filters.endDateStr || '',
+      strengthSubs: new Set(saved.filters.strengthSubs || ['UPPER', 'LOWER', 'FULL']),
+    };
+    render(saved.events, saved.relations, filters, true);
+    return true;
+  } catch (e) {
+    console.warn('[psycle] restoreLastResults failed:', e);
+    return false;
+  }
 }
 
 // ── Instructor multi-select widget ──────────────────────────────
@@ -1670,7 +1815,7 @@ function renderMyBookings() {
       // Rebook next week button (upcoming only)
       let rebookBtn = '';
       if (!eventPast) {
-        rebookBtn = `<button class="rebook-btn" onclick="event.stopPropagation();rebookNextWeek(${evtId})" title="Find this class next week">↻ Next week</button>`;
+        rebookBtn = `<button class="rebook-btn find-similar-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
       }
 
       html += `<div class="class-card is-booked my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
@@ -1699,11 +1844,14 @@ function renderMyBookings() {
 }
 
 function scrollToClass(eventId, e) {
-  // Don't fire if any cancel/seat-chip/rebook button was clicked
+  // Don't fire if any cancel/seat-chip/rebook/similar/share button was clicked
   if (e.target.classList.contains('up-cancel') ||
       e.target.classList.contains('up-cancel-all') ||
       e.target.classList.contains('rebook-btn') ||
-      e.target.closest('.up-seat-chip')) return;
+      e.target.classList.contains('find-similar-btn') ||
+      e.target.classList.contains('share-class-btn') ||
+      e.target.closest('.up-seat-chip') ||
+      e.target.closest('.find-similar-popup')) return;
   const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
   if (!card) {
     toast('Run a search first to see the class in results', 'info');
@@ -1801,6 +1949,156 @@ async function rebookNextWeek(eventId) {
     toast('No matching class found next week at this location', 'info');
   }
 }
+
+// ── Find Similar popup ──────────────────────────────────────────
+window.findSimilar = function(eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt) { toast('Event data not available', 'error'); return; }
+
+  // Remove any existing popup
+  const existing = document.querySelector('.find-similar-popup');
+  if (existing) existing.remove();
+
+  // Find the triggering button
+  const triggerBtn = document.querySelector(`.my-booking-card[data-id="${eventId}"] .find-similar-btn`);
+  if (!triggerBtn) return;
+
+  const origDate = new Date(evt.start_at);
+  const dayName = origDate.toLocaleDateString('en-GB', { weekday: 'long' });
+  const h = origDate.getHours() % 12 || 12;
+  const m = origDate.getMinutes().toString().padStart(2, '0');
+  const ap = origDate.getHours() >= 12 ? 'pm' : 'am';
+  const timeLabel = `${h}:${m}${ap}`;
+  const instrName = evt._instrName || 'this instructor';
+  const typeName = evt._typeName || 'Class';
+
+  const popup = document.createElement('div');
+  popup.className = 'find-similar-popup';
+  popup.innerHTML =
+    '<div class="find-similar-title">Find similar</div>' +
+    '<button class="find-similar-option" data-action="next-week">' +
+      '<span class="find-similar-icon">&#128197;</span>' +
+      '<span class="find-similar-label">Same class next week</span>' +
+      '<span class="find-similar-desc">' + escapeHTML(typeName) + ' with ' + escapeHTML(instrName) + ', ' + dayName + ' ' + timeLabel + '</span>' +
+    '</button>' +
+    '<button class="find-similar-option" data-action="same-instructor">' +
+      '<span class="find-similar-icon">&#128100;</span>' +
+      '<span class="find-similar-label">Same instructor, any time</span>' +
+      '<span class="find-similar-desc">All classes with ' + escapeHTML(instrName) + ' this week</span>' +
+    '</button>' +
+    '<button class="find-similar-option" data-action="same-time">' +
+      '<span class="find-similar-icon">&#128336;</span>' +
+      '<span class="find-similar-label">Same time, any instructor</span>' +
+      '<span class="find-similar-desc">' + dayName + 's at ' + timeLabel + ', any instructor</span>' +
+    '</button>';
+
+  // Position near the trigger button
+  triggerBtn.style.position = 'relative';
+  triggerBtn.parentElement.style.position = 'relative';
+  triggerBtn.parentElement.appendChild(popup);
+
+  // Handle option clicks
+  popup.addEventListener('click', function(e) {
+    const option = e.target.closest('.find-similar-option');
+    if (!option) return;
+    const action = option.dataset.action;
+    popup.remove();
+
+    if (action === 'next-week') {
+      // Existing rebookNextWeek logic
+      rebookNextWeek(eventId);
+    } else if (action === 'same-instructor') {
+      // Set instructor filter and search this week
+      selectedInstructors.clear();
+      selectedInstructors.add(String(evt.instructor_id));
+      if (typeof renderInstrChips === 'function') renderInstrChips();
+      const today = new Date();
+      const todayStr = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
+      document.getElementById('startDate').value = todayStr;
+      document.getElementById('daysAhead').value = 7;
+      switchTab('discover');
+      search();
+      toast('Showing classes with ' + instrName, 'info');
+    } else if (action === 'same-time') {
+      // Search for classes on the same day of week, next occurrence
+      selectedInstructors.clear();
+      if (typeof renderInstrChips === 'function') renderInstrChips();
+      // Find next occurrence of this weekday (this week or next)
+      const today = new Date();
+      const todayDay = today.getDay();
+      const targetDay = origDate.getDay();
+      let daysUntil = targetDay - todayDay;
+      if (daysUntil < 0) daysUntil += 7;
+      if (daysUntil === 0 && today.getHours() > origDate.getHours()) daysUntil = 7;
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + daysUntil);
+      const targetStr = [targetDate.getFullYear(), String(targetDate.getMonth() + 1).padStart(2, '0'), String(targetDate.getDate()).padStart(2, '0')].join('-');
+      // Also show the week after
+      document.getElementById('startDate').value = targetStr;
+      document.getElementById('daysAhead').value = 8;
+      switchTab('discover');
+      search();
+      toast('Showing ' + dayName + ' classes around ' + timeLabel, 'info');
+    }
+  });
+
+  // Dismiss when clicking outside
+  function dismissPopup(e) {
+    if (!popup.contains(e.target) && e.target !== triggerBtn) {
+      popup.remove();
+      document.removeEventListener('click', dismissPopup, true);
+    }
+  }
+  // Delay listener to avoid immediate dismiss from the triggering click
+  setTimeout(function() {
+    document.addEventListener('click', dismissPopup, true);
+  }, 10);
+};
+
+// ── Share a class ───────────────────────────────────────────────
+window.shareClass = function(eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt) { toast('Event data not available', 'error'); return; }
+
+  const dt = new Date(evt.start_at);
+  const dayName = dt.toLocaleDateString('en-GB', { weekday: 'long' });
+  const dayNum = dt.getDate();
+  const monthName = dt.toLocaleDateString('en-GB', { month: 'short' });
+  const h = dt.getHours() % 12 || 12;
+  const m = dt.getMinutes().toString().padStart(2, '0');
+  const ap = dt.getHours() >= 12 ? 'pm' : 'am';
+  const timeLabel = `${h}:${m}${ap}`;
+
+  const typeName = evt._typeName || 'Class';
+  const instrName = evt._instrName || '';
+  const locName = evt._locName || '';
+
+  const instrPart = instrName ? (' with ' + instrName) : '';
+  const locPart = locName ? (' at ' + locName) : '';
+
+  const message = `I'm going to ${typeName}${instrPart} on ${dayName} ${dayNum} ${monthName} at ${timeLabel}${locPart}. Book a spot! https://psyclelondon.com/pages/timetable`;
+
+  if (navigator.share) {
+    navigator.share({ text: message }).catch(function() {});
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(message).then(function() {
+      toast('Copied to clipboard!', 'success');
+    }).catch(function() {
+      toast('Could not copy to clipboard', 'error');
+    });
+  } else {
+    // Fallback: select from a temporary textarea
+    const ta = document.createElement('textarea');
+    ta.value = message;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    toast('Copied to clipboard!', 'success');
+  }
+};
 
 async function upcomingCancel(eventId, btn) {
   const booking = _myBookings[String(eventId)];
@@ -1906,6 +2204,114 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
 }
 
 // _eventCache managed by state.js
+
+// ── Class Detail Sheet ──────────────────────────────────────────
+window.openClassDetail = function (eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt) return;
+
+  // Remove any existing detail sheet
+  document.getElementById('classDetailOverlay')?.remove();
+
+  // Find instructor from global instructors array
+  const instrs = (typeof instructors !== 'undefined') ? instructors : [];
+  const instr = instrs.find(i => String(i.id) === String(evt.instructor_id));
+  const photo = instr?.photo || instr?.image_1 || '';
+  const instrName = instr?.full_name || evt._instrName || '';
+  const instrId = instr?.id || evt.instructor_id;
+  const meta = instr?.metafields || {};
+  const bio = meta.description || '';
+  const bioExcerpt = bio.length > 200 ? bio.substring(0, 200) + '...' : bio;
+  const keywords = (meta.keywords || '').split(/[,|]/).map(k => k.trim()).filter(Boolean);
+  const tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
+
+  // Format date/time
+  const dt = new Date(evt.start_at);
+  const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const hours = dt.getHours();
+  const mins = dt.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  const h12 = hours % 12 || 12;
+  const timeStr = h12 + ':' + mins + ampm;
+
+  const typeName = evt._typeName || 'Class';
+  const locName = evt._locName || '';
+  const studioName = evt._studioName || '';
+  const duration = evt.duration || '';
+
+  // Availability info
+  let availHtml = '';
+  if (evt.is_fully_booked && !evt.is_waitlistable) {
+    availHtml = '<span class="cds-avail cds-avail-full">Full</span>';
+  } else if (evt.is_fully_booked && evt.is_waitlistable) {
+    availHtml = '<span class="cds-avail cds-avail-waitlist">Waitlist available</span>';
+  } else if (evt.capacity != null && evt.capacity_remaining != null) {
+    availHtml = '<span class="cds-avail">' + escapeHTML(String(evt.capacity_remaining)) + ' spots available</span>';
+  } else if (duration) {
+    availHtml = '<span class="cds-avail">' + escapeHTML(String(duration)) + ' min</span>';
+  }
+
+  // Booking state
+  const myBooking = _myBookings[String(eventId)];
+  let bookBtnHtml;
+  if (myBooking) {
+    const slotLabel = myBooking.slots.length ? 'Bikes ' + myBooking.slots.join(' & ') + ' ✓' : 'Booked ✓';
+    bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">' + escapeHTML(slotLabel) + '</button>';
+  } else if (evt.is_fully_booked && !evt.is_waitlistable) {
+    bookBtnHtml = '<button class="cds-book-btn" disabled>Full</button>';
+  } else if (evt.is_fully_booked && evt.is_waitlistable) {
+    bookBtnHtml = '<button class="cds-book-btn waitlist" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">Join Waitlist</button>';
+  } else {
+    bookBtnHtml = '<button class="cds-book-btn" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">Book</button>';
+  }
+
+  // Keywords tags
+  let keywordsHtml = '';
+  if (keywords.length > 0) {
+    keywordsHtml = '<div class="cds-keywords">' +
+      keywords.map(k => '<span class="cds-keyword">' + escapeHTML(k) + '</span>').join('') +
+      '</div>';
+  }
+
+  // Instructor link
+  const safeInstrName = escapeHTML(instrName).replace(/'/g, "\\'");
+  const viewInstrHtml = instrId
+    ? '<button class="cds-view-instr" onclick="document.getElementById(\'classDetailOverlay\').remove();window._features_openInstructorModal(\'' + safeInstrName + '\',\'' + instrId + '\')">View instructor profile</button>'
+    : '';
+
+  // Build overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'classDetailOverlay';
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML =
+    '<div class="class-detail-sheet">' +
+      '<div class="cds-handle"></div>' +
+      '<button class="modal-close cds-close" onclick="document.getElementById(\'classDetailOverlay\').remove()">&times;</button>' +
+      '<div class="cds-header">' +
+        (photo ? '<img class="cds-photo" src="' + escapeHTML(photo) + '" alt="' + escapeHTML(instrName) + '">' : '<div class="cds-photo-placeholder"></div>') +
+        '<div class="cds-header-info">' +
+          '<div class="cds-instr-name">' + escapeHTML(instrName) + ' ' + tierBadge + '</div>' +
+          '<div class="cds-type">' + escapeHTML(typeName) + '<span class="cds-duration-badge">' + escapeHTML(String(duration)) + ' min</span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="cds-details">' +
+        '<div class="cds-detail-row"><span class="cds-icon">&#128197;</span><span>' + escapeHTML(dayStr) + ' at ' + escapeHTML(timeStr) + '</span></div>' +
+        '<div class="cds-detail-row"><span class="cds-icon">&#128205;</span><span>' + escapeHTML(locName) + (studioName ? ' &middot; ' + escapeHTML(studioName) : '') + '</span></div>' +
+        (availHtml ? '<div class="cds-detail-row"><span class="cds-icon">&#9898;</span>' + availHtml + '</div>' : '') +
+      '</div>' +
+      (bioExcerpt ? '<div class="cds-bio">' + escapeHTML(bioExcerpt) + '</div>' : '') +
+      keywordsHtml +
+      '<div class="cds-actions">' +
+        bookBtnHtml +
+        viewInstrHtml +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+};
 
 // ── PWA Service Worker ───────────────────────────────────────────
 if ('serviceWorker' in navigator) {

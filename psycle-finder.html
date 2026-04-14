@@ -135,23 +135,16 @@
       <button class="date-quick-btn" onclick="setDateQuick('today')">Today</button>
       <button class="date-quick-btn" onclick="setDateQuick('tomorrow')">Tomorrow</button>
       <button class="date-quick-btn" onclick="setDateQuick('week')">7 days</button>
+      <button class="date-quick-btn" onclick="setDateQuick('2week')">14 days</button>
     </div>
-  </div>
-
-  <div class="control-group">
-    <label>From</label>
-    <input type="date" id="startDate" onchange="onDateInputChange()">
-  </div>
-
-  <div class="control-group" id="daysAheadGroup">
-    <label>Days ahead</label>
-    <div class="days-control">
-      <input type="number" id="daysAhead" value="7" min="1" max="60" onchange="onDateInputChange()">
+    <div style="margin-top:8px">
+      <input type="date" id="startDate" onchange="onDateInputChange()" style="min-width:140px">
     </div>
+    <input type="hidden" id="daysAhead" value="7">
   </div>
 
-  <div class="control-group" style="justify-content:flex-end;gap:8px;flex-direction:row;align-items:flex-end">
-    <button class="btn btn-ghost" onclick="clearFilters()" style="padding:9px 16px;width:auto;display:inline-block">Clear</button>
+  <div class="control-group" style="justify-content:space-between;gap:8px;flex-direction:row;align-items:flex-end">
+    <button onclick="clearFilters()" style="padding:6px 12px;width:auto;background:none;border:none;color:var(--text-ghost,#555);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px">Clear filters</button>
     <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
   </div>
   </div>

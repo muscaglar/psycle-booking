@@ -826,9 +826,9 @@
 
   function markDirtyAndMaybeRender() {
     _exploreDirty = true;
-    // Only re-render if explore tab is currently active
+    // Only re-render if profile tab is currently active (explore sections live in profile)
     var activePanel = document.querySelector('.tab-panel.active');
-    if (activePanel && activePanel.id === 'tab-explore') {
+    if (activePanel && (activePanel.id === 'tab-profile' || activePanel.id === 'tab-explore')) {
       window.renderExplore();
     }
   }
