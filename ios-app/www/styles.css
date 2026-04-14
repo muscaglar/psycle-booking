@@ -787,6 +787,50 @@ select:focus, input:focus {
 .mb-past { opacity: 0.5; }
 .mb-past .class-card { border-left-color: #333; background: #0a0a0a; }
 
+/* Discover empty state */
+.discover-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  text-align: center;
+}
+.discover-empty-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-heading, #fff);
+  margin-bottom: 8px;
+}
+.discover-empty-sub {
+  font-size: 13px;
+  color: var(--text-ghost, #555);
+  max-width: 360px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.discover-quick-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.discover-quick-btn {
+  padding: 8px 16px;
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-radius: 8px;
+  color: var(--text-muted, #aaa);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.discover-quick-btn:hover {
+  border-color: var(--accent, #e94560);
+  color: var(--text-heading, #fff);
+}
+
 .mb-period-header {
   font-size: 11px;
   font-weight: 700;

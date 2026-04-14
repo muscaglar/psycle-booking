@@ -1,25 +1,25 @@
-const CACHE = 'psycle-v8';
+const CACHE = 'psycle-v9';
 const SHELL = [
   './psycle-finder.html',
-  './styles.css',
-  './theme.css',
-  './features.css',
-  './state.js',
-  './security.js',
-  './theme.js',
-  './app.js',
-  './reliability.js',
-  './interactions.js',
-  './performance.js',
-  './calendar.js',
-  './features.js',
-  './tabs.css',
-  './tabs.js',
-  './settings.css',
-  './settings.js',
-  './explore.css',
-  './explore.js',
-  './manifest.json'
+  './manifest.json',
+  './css/styles.css',
+  './css/theme.css',
+  './css/features.css',
+  './css/tabs.css',
+  './css/settings.css',
+  './css/explore.css',
+  './js/state.js',
+  './js/security.js',
+  './js/theme.js',
+  './js/app.js',
+  './js/reliability.js',
+  './js/interactions.js',
+  './js/performance.js',
+  './js/calendar.js',
+  './js/features.js',
+  './js/tabs.js',
+  './js/settings.js',
+  './js/explore.js'
 ];
 
 self.addEventListener('install', e => {
