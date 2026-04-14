@@ -1,7 +1,17 @@
-/* ═══════════════════════════════════════════════════════════════
-   Features Module — Class History, Instructor Profiles, Push
-   Self-contained: hooks into app.js via monkey-patching.
-   ═══════════════════════════════════════════════════════════════ */
+/**
+ * features.js — Class History, Instructor Profiles, Push Notifications
+ *
+ * Self-contained IIFE that hooks into app.js via monkey-patching.
+ * Tracks booking history in localStorage, provides instructor profile
+ * modals, and scaffolds push notification watchlists for full classes.
+ *
+ * Depends on: app.js (submitBooking, confirmUnbook, eventCard, _eventCache, etc.),
+ *             security.js (escapeHTML), settings.js (tierBadgeHTML)
+ * Exposes on window:
+ *   openHistoryModal, requestNotificationPermission,
+ *   _features_openInstructorModal, _features_filterByInstructor,
+ *   _features_toggleNotify
+ */
 
 (function () {
   'use strict';

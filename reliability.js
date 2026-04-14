@@ -15,15 +15,31 @@
   // ═══════════════════════════════════════════════════════════════════
 
   const ERROR_LOG_KEY = 'psycle_error_log';
-  const MAX_ERRORS = 20;
+  const ACTION_LOG_KEY = 'psycle_action_log';
+  const MAX_LOG_ENTRIES = 100;
 
   function pushError(msg) {
     let log = [];
     try { log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) || '[]'); } catch {}
     log.push({ timestamp: new Date().toISOString(), message: String(msg) });
-    if (log.length > MAX_ERRORS) log = log.slice(log.length - MAX_ERRORS);
+    if (log.length > MAX_LOG_ENTRIES) log = log.slice(log.length - MAX_LOG_ENTRIES);
     try { localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log)); } catch {}
     console.error('[psycle-error]', msg);
+  }
+
+  /** Log a user action (action name + timestamp only, no sensitive data). */
+  function pushAction(action) {
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem(ACTION_LOG_KEY) || '[]'); } catch {}
+    log.push({ timestamp: new Date().toISOString(), action: String(action) });
+    if (log.length > MAX_LOG_ENTRIES) log = log.slice(log.length - MAX_LOG_ENTRIES);
+    try { localStorage.setItem(ACTION_LOG_KEY, JSON.stringify(log)); } catch {}
+  }
+  window.pushAction = pushAction;
+
+  /** Log a network error (status + path only, no auth tokens). */
+  function logNetworkError(path, status, method) {
+    pushError('Network ' + (method || 'GET') + ' ' + path + ' → ' + status);
   }
 
   window.onerror = function (message, source, lineno, colno, error) {
@@ -45,6 +61,88 @@
   window.getErrorLog = function () {
     try { return JSON.parse(localStorage.getItem(ERROR_LOG_KEY) || '[]'); } catch { return []; }
   };
+
+  /** Retrieve the action log for debugging. */
+  window.getActionLog = function () {
+    try { return JSON.parse(localStorage.getItem(ACTION_LOG_KEY) || '[]'); } catch { return []; }
+  };
+
+  /** Get combined error + action log as a formatted string for bug reports. */
+  window.getFullLog = function () {
+    var errors = window.getErrorLog();
+    var actions = window.getActionLog();
+    // Merge and sort by timestamp
+    var combined = [];
+    errors.forEach(function (e) {
+      combined.push({ ts: e.timestamp, type: 'ERROR', detail: e.message });
+    });
+    actions.forEach(function (a) {
+      combined.push({ ts: a.timestamp, type: 'ACTION', detail: a.action });
+    });
+    combined.sort(function (a, b) { return a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0; });
+    var lines = combined.map(function (entry) {
+      return '[' + entry.ts + '] [' + entry.type + '] ' + entry.detail;
+    });
+    return lines.join('\n');
+  };
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // E2. Action Logging Hooks
+  // ═══════════════════════════════════════════════════════════════════
+  // Hook into PsycleEvents to capture key user actions automatically.
+
+  if (typeof PsycleEvents !== 'undefined') {
+    PsycleEvents.on('booking:complete', function (eventId) {
+      pushAction('booking:complete eventId=' + eventId);
+    });
+    PsycleEvents.on('booking:cancelled', function (eventId) {
+      pushAction('booking:cancelled eventId=' + eventId);
+    });
+    PsycleEvents.on('seat:cancelled', function (eventId, slotId) {
+      pushAction('seat:cancelled eventId=' + eventId + (slotId ? ' slot=' + slotId : ''));
+    });
+    PsycleEvents.on('bookings:loaded', function () {
+      pushAction('bookings:loaded');
+    });
+    PsycleEvents.on('history:synced', function () {
+      pushAction('history:synced');
+    });
+  }
+
+  // Hook into switchTab to log tab switches
+  var _origSwitchTabForLog = window.switchTab;
+  if (_origSwitchTabForLog) {
+    window.switchTab = function () {
+      pushAction('tab:switch to=' + arguments[0]);
+      return _origSwitchTabForLog.apply(this, arguments);
+    };
+  }
+
+  // Hook into settings export/import
+  var _origExportSettings = window.exportSettings;
+  if (_origExportSettings) {
+    window.exportSettings = function () {
+      pushAction('settings:export');
+      return _origExportSettings.apply(this, arguments);
+    };
+  }
+  var _origImportSettings = window.importSettings;
+  if (_origImportSettings) {
+    window.importSettings = function () {
+      pushAction('settings:import');
+      return _origImportSettings.apply(this, arguments);
+    };
+  }
+
+  // Hook into theme toggle
+  var _origToggleTheme = window.toggleTheme;
+  if (_origToggleTheme) {
+    window.toggleTheme = function () {
+      pushAction('settings:theme_toggle');
+      return _origToggleTheme.apply(this, arguments);
+    };
+  }
 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -118,7 +216,15 @@
           if ((res.status === 401 || res.status === 403) && getBearerToken()) {
             showSessionExpired();
           }
+          // Log failed API calls (4xx/5xx) — path and status only, no tokens
+          if (res.status >= 400) {
+            logNetworkError(path, res.status, opts.method || 'GET');
+          }
           return res;
+        })
+        .catch(function (err) {
+          logNetworkError(path, 'NETWORK_ERROR', opts.method || 'GET');
+          throw err;
         });
     };
     // Keep a reference for internal use

@@ -580,7 +580,6 @@ select:focus, input:focus {
 .book-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .book-btn.booked { background: #1a1020; color: #e94560; border: 1px solid #3a1a2a; }
 .book-btn.waitlist { background: #2a2a00; color: #c8a800; }
-.book-btn.login-needed { background: transparent; border: 1px solid #444; color: #888; }
 
 .toast {
   position: fixed;
@@ -654,7 +653,7 @@ select:focus, input:focus {
 #strengthSubPills {
   padding-top: 6px;
   border-top: 1px solid #1e1e1e;
-  margin-top: 6px !important;
+  margin-top: 6px;
 }
 
 .type-section-header {
@@ -709,30 +708,6 @@ select:focus, input:focus {
 }
 .upcoming-body { padding: 0 10px 10px; }
 .upcoming-list { display: flex; flex-direction: column; gap: 4px; }
-.upcoming-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--bg-panel, #111);
-  border: 1px solid var(--border, #222);
-  border-left: 3px solid var(--accent, #e94560);
-  border-radius: 7px;
-}
-.up-day {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #e94560;
-  min-width: 28px;
-  text-align: center;
-  line-height: 1.3;
-}
-.up-time { font-size: 14px; font-weight: 700; color: #fff; min-width: 48px; }
-.up-info { flex: 1; min-width: 0; }
-.up-name { font-weight: 600; color: #f0f0f0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.up-sub { font-size: 10px; color: #777; margin-top: 1px; }
 .up-cancel {
   background: transparent;
   border: 1px solid #333;
@@ -812,6 +787,30 @@ select:focus, input:focus {
 .mb-past { opacity: 0.5; }
 .mb-past .class-card { border-left-color: #333; background: #0a0a0a; }
 
+.mb-period-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim, #888);
+  padding: 8px 4px 4px;
+  margin-top: 4px;
+}
+.mb-period-next {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border, #333);
+  color: var(--accent, #e94560);
+}
+.mb-period-hint {
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--text-ghost, #555);
+  text-transform: none;
+  letter-spacing: normal;
+  margin-left: 8px;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Pull-to-Refresh indicator
    ═══════════════════════════════════════════════════════════════════ */
@@ -860,13 +859,6 @@ select:focus, input:focus {
 /* ═══════════════════════════════════════════════════════════════════
    Swipe-to-Cancel on Upcoming Items
    ═══════════════════════════════════════════════════════════════════ */
-
-.upcoming-item {
-  position: relative;
-  overflow: hidden;
-  /* transform for swipe handled via JS inline style */
-  will-change: transform;
-}
 
 .swipe-cancel-bg {
   position: absolute;

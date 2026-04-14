@@ -75,7 +75,7 @@
     'psycle_instructor_tiers', 'psycle_bike_prefs',
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
     'psycle_notify_watchlist', 'psycle_calendar_data',
-    'psycle_error_log', 'psycle_offline_queue',
+    'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
   ];
 
   // On startup: restore from native storage to localStorage
@@ -546,6 +546,151 @@
   var observer = new MutationObserver(function () { updateStatusBar(); });
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   updateStatusBar();
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Analytics / Diagnostics (developer-only, no third-party services)
+  // ═══════════════════════════════════════════════════════════════════
+
+  var ACTION_LOG_NATIVE_KEY = 'psycle_action_log';
+  var MAX_NATIVE_ACTION_LOG = 200;
+
+  // Persist action log to Capacitor Preferences (survives iOS storage purges).
+  // Hooks into the pushAction function from reliability.js via a wrapper.
+  var _origPushAction = window.pushAction;
+  if (_origPushAction) {
+    window.pushAction = function (action) {
+      _origPushAction(action);
+      // Also persist to Capacitor Preferences with a larger limit
+      _persistActionLogToNative();
+    };
+  }
+
+  function _persistActionLogToNative() {
+    try {
+      var log = JSON.parse(localStorage.getItem(ACTION_LOG_NATIVE_KEY) || '[]');
+      // Trim to native limit (200)
+      if (log.length > MAX_NATIVE_ACTION_LOG) {
+        log = log.slice(log.length - MAX_NATIVE_ACTION_LOG);
+      }
+      Preferences.set({ key: ACTION_LOG_NATIVE_KEY, value: JSON.stringify(log) }).catch(function () {});
+    } catch (e) {}
+  }
+
+  // Initial persist on startup
+  _persistActionLogToNative();
+
+  /**
+   * getDiagnosticReport — comprehensive diagnostics string for developer use.
+   * Includes: device model, iOS version, app version, action log, error log,
+   * localStorage summary.
+   */
+  window.getDiagnosticReport = async function () {
+    var sections = [];
+    sections.push('=== Psycle iOS Diagnostic Report ===');
+    sections.push('Generated: ' + new Date().toISOString());
+    sections.push('');
+
+    // Device info via Capacitor Device plugin (if available)
+    var Device = Capacitor.Plugins.Device;
+    if (Device) {
+      try {
+        var info = await Device.getInfo();
+        sections.push('--- Device ---');
+        sections.push('Model: ' + (info.model || 'unknown'));
+        sections.push('Platform: ' + (info.platform || 'unknown'));
+        sections.push('OS Version: ' + (info.osVersion || 'unknown'));
+        sections.push('Manufacturer: ' + (info.manufacturer || 'unknown'));
+        sections.push('Is Virtual: ' + (info.isVirtual || false));
+        sections.push('');
+      } catch (e) {
+        sections.push('--- Device ---');
+        sections.push('(Device plugin unavailable)');
+        sections.push('');
+      }
+    }
+
+    // App info
+    var AppInfo = Capacitor.Plugins.App;
+    if (AppInfo) {
+      try {
+        var appInfo = await AppInfo.getInfo();
+        sections.push('--- App ---');
+        sections.push('App Name: ' + (appInfo.name || 'unknown'));
+        sections.push('App Version: ' + (appInfo.version || 'unknown'));
+        sections.push('Build: ' + (appInfo.build || 'unknown'));
+        sections.push('Bundle ID: ' + (appInfo.id || 'unknown'));
+        sections.push('');
+      } catch (e) {
+        sections.push('--- App ---');
+        sections.push('(App plugin unavailable)');
+        sections.push('');
+      }
+    }
+
+    // Screen / viewport
+    sections.push('--- Display ---');
+    sections.push('Screen: ' + screen.width + 'x' + screen.height);
+    sections.push('Viewport: ' + window.innerWidth + 'x' + window.innerHeight);
+    sections.push('Pixel Ratio: ' + (window.devicePixelRatio || 1));
+    sections.push('Theme: ' + (document.documentElement.getAttribute('data-theme') || 'unknown'));
+    sections.push('Online: ' + navigator.onLine);
+    sections.push('');
+
+    // Action log
+    sections.push('--- Action Log ---');
+    try {
+      var actionLog = JSON.parse(localStorage.getItem(ACTION_LOG_NATIVE_KEY) || '[]');
+      if (actionLog.length === 0) {
+        sections.push('(empty)');
+      } else {
+        actionLog.forEach(function (entry) {
+          sections.push('[' + entry.timestamp + '] ' + entry.action);
+        });
+      }
+    } catch (e) {
+      sections.push('(could not read action log)');
+    }
+    sections.push('');
+
+    // Error log
+    sections.push('--- Error Log ---');
+    if (typeof window.getErrorLog === 'function') {
+      var errors = window.getErrorLog();
+      if (errors.length === 0) {
+        sections.push('(empty)');
+      } else {
+        errors.forEach(function (entry) {
+          sections.push('[' + entry.timestamp + '] ' + entry.message);
+        });
+      }
+    } else {
+      sections.push('(error log function not available)');
+    }
+    sections.push('');
+
+    // localStorage summary (key names + byte counts only)
+    sections.push('--- localStorage Summary ---');
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        keys.push(localStorage.key(i));
+      }
+      keys.sort();
+      var totalBytes = 0;
+      keys.forEach(function (key) {
+        var val = localStorage.getItem(key) || '';
+        var bytes = new Blob([val]).size;
+        totalBytes += bytes;
+        sections.push('  ' + key + ': ' + bytes + ' bytes');
+      });
+      sections.push('  TOTAL: ' + totalBytes + ' bytes across ' + keys.length + ' keys');
+    } catch (e) {
+      sections.push('  (could not read localStorage)');
+    }
+
+    return sections.join('\n');
+  };
 
 
   console.log('[native] Native bridge initialized');

@@ -1,7 +1,18 @@
-/* ═══════════════════════════════════════════════════════════════════
-   Explore Module — Instructor Discovery Tab
-   Self-contained IIFE: hooks into tabs via window.renderExplore.
-   ═══════════════════════════════════════════════════════════════════ */
+/**
+ * explore.js — Instructor Discovery Tab
+ *
+ * Self-contained IIFE that provides the Explore tab content:
+ *   - "New to you" instructor recommendations
+ *   - "You might like" similarity-based suggestions
+ *   - Instructor map (tier distribution, most booked, unranked)
+ *   - Full booking history sync from the Psycle API
+ *
+ * Depends on: app.js (instructors, _eventCache, _myBookings, getCategory, instrLink),
+ *             settings.js (tierBadgeHTML), state.js (PsycleState, PsycleEvents)
+ * Exposes on window:
+ *   renderExplore, _explore_syncHistory, _explore_resetSync,
+ *   _explore_openSettingsForInstructor
+ */
 (function () {
   'use strict';
 
@@ -12,6 +23,11 @@
   var SYNC_KEY = 'psycle_history_synced';
   var _exploreDirty = true;
   var _syncing = false;
+
+  /** Parse class history from localStorage. Shared across all explore functions. */
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; }
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // DATA LAYER
@@ -72,8 +88,7 @@
     }
 
     // Enrich from class history (most reliable for who the user has booked)
-    var history = [];
-    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) {}
+    var history = getHistory();
     for (var h = 0; h < history.length; h++) {
       var entry = history[h];
       if (entry.cancelledAt) continue;
@@ -108,8 +123,7 @@
     var bookings = (typeof _myBookings !== 'undefined') ? _myBookings : {};
 
     // From class history
-    var history = [];
-    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) {}
+    var history = getHistory();
     for (var h = 0; h < history.length; h++) {
       if (history[h].cancelledAt) continue;
       var hid = history[h].instrId || nameIndex[(history[h].instrName || '').toLowerCase()];
@@ -287,8 +301,7 @@
   function computeInstructorMap(profiles) {
     var nameIndex = buildNameIndex();
     var instrStats = {}; // instrId -> { name, count, classTypes: Set }
-    var history = [];
-    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) {}
+    var history = getHistory();
 
     var soloCount = 0;
     var socialCount = 0;
@@ -539,8 +552,7 @@
       } catch (e) {}
     }
 
-    var history = [];
-    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) {}
+    var history = getHistory();
     var historyCount = history.length;
 
     if (synced) {
@@ -609,39 +621,28 @@
       var foundBookings = false;
       for (var s = 0; s < strategies.length; s++) {
         try {
-          console.log('[sync] trying:', strategies[s]);
           var res = await apiFetch(strategies[s]);
-          console.log('[sync] status:', res.status);
-          if (!res.ok) { console.log('[sync] skipping (not ok)'); continue; }
+          if (!res.ok) { continue; }
           var data = await res.json();
           var list = Array.isArray(data) ? data : (data.data || []);
-          console.log('[sync] got', list.length, 'bookings. Response keys:', Object.keys(data));
-          if (data.meta) console.log('[sync] meta:', JSON.stringify(data.meta));
-          if (list.length > 0 && list[0]) console.log('[sync] first booking sample:', JSON.stringify(list[0]));
           if (list.length > 0) {
             allBookings = list;
             foundBookings = true;
-            console.log('[sync] using strategy:', strategies[s]);
 
             // Check if there's pagination and fetch more pages
             var totalPages = data.meta?.last_page || data.meta?.total_pages || data.last_page || 1;
-            var totalItems = data.meta?.total || data.total || list.length;
-            var perPage = data.meta?.per_page || data.per_page || list.length;
             var currentPage = data.meta?.current_page || data.current_page || 1;
-            console.log('[sync] pagination: page', currentPage, 'of', totalPages, '| total items:', totalItems, '| per_page:', perPage);
             if (totalPages > 1) {
               var baseUrl = strategies[s];
               for (var pg = currentPage + 1; pg <= totalPages && pg <= 100; pg++) {
                 var sep = baseUrl.includes('?') ? '&' : '?';
                 if (btn) btn.textContent = 'Fetching page ' + pg + ' of ' + totalPages + '...';
-                console.log('[sync] fetching page', pg, 'of', totalPages);
                 var pgRes = await apiFetch(baseUrl + sep + 'page=' + pg);
                 if (!pgRes.ok) break;
                 var pgData = await pgRes.json();
                 var pgList = Array.isArray(pgData) ? pgData : (pgData.data || []);
                 if (pgList.length === 0) break;
                 allBookings = allBookings.concat(pgList);
-                console.log('[sync] page', pg, ':', pgList.length, 'bookings (total so far:', allBookings.length, ')');
               }
             }
             break;
@@ -651,7 +652,6 @@
 
       // Strategy 2: If nothing found, try date-range based fetching
       if (!foundBookings) {
-        console.log('[sync] no strategy worked, trying date-range fallback');
         var now = new Date();
         var yearAgo = new Date(now);
         yearAgo.setFullYear(yearAgo.getFullYear() - 2);
@@ -659,21 +659,17 @@
         var endStr = now.toISOString().split('T')[0];
         try {
           var rangeUrl = '/bookings?start=' + startStr + '&end=' + endStr + '&limit=200';
-          console.log('[sync] trying:', rangeUrl);
           var rangeRes = await apiFetch(rangeUrl);
           if (rangeRes.ok) {
             var rangeData = await rangeRes.json();
             var rangeList = Array.isArray(rangeData) ? rangeData : (rangeData.data || []);
-            console.log('[sync] date-range got', rangeList.length, 'bookings');
             if (rangeList.length > 0) {
               allBookings = rangeList;
               foundBookings = true;
             }
           }
-        } catch (e) { console.log('[sync] date-range failed:', e); }
+        } catch (e) { /* date-range fallback failed */ }
       }
-
-      console.log('[sync] total bookings collected:', allBookings.length);
       if (allBookings.length === 0) {
         if (typeof toast === 'function') toast('No past bookings found from the API. Your current history is up to date.', 'info');
         _syncing = false;
@@ -685,8 +681,7 @@
       if (btn) btn.textContent = 'Fetching details (' + allBookings.length + ' bookings)...';
 
       // Fetch event details for each booking to get instructor/type/location
-      var existing = [];
-      try { existing = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) {}
+      var existing = getHistory();
       var existingIds = new Set(existing.map(function (e) { return e.eventId; }));
       var newEntries = [];
       var batchSize = 30;

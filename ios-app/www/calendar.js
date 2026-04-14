@@ -1,6 +1,15 @@
-// ── Calendar Subscription & ICS Export ──────────────────────────
-// Generates iCalendar (RFC 5545) content from booked classes and
-// provides both webcal:// subscription and manual .ics download.
+/**
+ * calendar.js — Calendar sync and ICS export for Psycle Booking PWA
+ *
+ * Generates iCalendar (RFC 5545) content from booked classes.
+ * Provides webcal:// subscription, .ics download, and Google Calendar integration.
+ * Responds to service worker requests for calendar data via MessageChannel.
+ *
+ * Depends on: app.js (_myBookings, _eventCache, toast), state.js (PsycleEvents)
+ * Exposes on window (as bare globals):
+ *   syncCalendarData, generateICS, downloadICS, openICSInCalendar,
+ *   addToGoogleCalendar, getCalendarSubscriptionURL, renderCalendarActions
+ */
 
 const CALENDAR_DATA_KEY = 'psycle_calendar_data';
 

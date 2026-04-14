@@ -1,6 +1,19 @@
-/* ═══════════════════════════════════════════════════════════════════
-   Settings Module — Floating Pill, Instructor Tiers, Bike Prefs
-   ═══════════════════════════════════════════════════════════════════ */
+/**
+ * settings.js — Settings panel, instructor tiers, bike preferences, floating pill
+ *
+ * Self-contained IIFE that provides:
+ *   - Instructor tier ranking system (S/A/B/C/D/F)
+ *   - Per-studio bike/spot preferences (prefer/avoid)
+ *   - Floating "next class" countdown pill
+ *   - Settings export/import (JSON backup)
+ *
+ * Depends on: app.js (escapeHTML, _studioMap, _myBookings, _eventCache, etc.),
+ *             state.js (PsycleEvents, favouriteInstructors)
+ * Exposes on window:
+ *   getInstructorTier, getBikePrefs, tierBadgeHTML, openSettings,
+ *   closeSettings, filterTierList, setInstructorTier, toggleFavFromSettings,
+ *   renderBikePrefGrid, toggleBikePref, exportSettings, importSettings
+ */
 (function () {
   'use strict';
 
@@ -183,6 +196,15 @@
             '<input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(this)">' +
           '</div>' +
           '<div id="importStatus" style="font-size:12px;margin-top:8px;display:none"></div>' +
+        '</div>' +
+        '<div class="settings-section">' +
+          '<div class="settings-section-title">Report a Bug</div>' +
+          '<p style="font-size:12px;color:#666;margin-bottom:12px">Having issues? Send us a bug report with diagnostic info.</p>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button class="cal-btn" onclick="downloadBugReport()">Download bug report</button>' +
+            '<button class="cal-btn" onclick="copyBugReport()">Copy to clipboard</button>' +
+          '</div>' +
+          '<div id="bugReportStatus" style="font-size:12px;margin-top:8px;display:none"></div>' +
         '</div>' +
       '</div>';
 
@@ -492,13 +514,6 @@
       var html = _origEventCard.apply(this, arguments);
       // Inject tier badge after instructor name
       var tier = getInstructorTier(evt.instructor_id);
-      if (!tier && evt.instructor_id) {
-        var allTiers = loadTiers();
-        var keys = Object.keys(allTiers);
-        if (keys.length > 0) {
-          console.log('[tier-debug] ID:', evt.instructor_id, 'type:', typeof evt.instructor_id, '| stored keys sample:', keys.slice(0,5), '| match:', allTiers[String(evt.instructor_id)]);
-        }
-      }
       if (tier) {
         var badge = '<span class="tier-badge tier-' + tier + '">' + tier + '</span>';
         html = html.replace(/(class-instructor">)(.*?)(<\/div>)/, function (match, p1, p2, p3) {
@@ -581,6 +596,124 @@
     };
     reader.readAsText(file);
   };
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Bug Report
+  // ═══════════════════════════════════════════════════════════════════
+
+  function buildBugReport() {
+    var sections = [];
+
+    // Header
+    sections.push('=== Psycle Bug Report ===');
+    sections.push('Generated: ' + new Date().toISOString());
+    sections.push('');
+
+    // Device info
+    sections.push('--- Device Info ---');
+    sections.push('User Agent: ' + navigator.userAgent);
+    sections.push('Screen: ' + screen.width + 'x' + screen.height + ' (devicePixelRatio: ' + (window.devicePixelRatio || 1) + ')');
+    sections.push('Viewport: ' + window.innerWidth + 'x' + window.innerHeight);
+    sections.push('Theme: ' + (document.documentElement.getAttribute('data-theme') || 'unknown'));
+    sections.push('Online: ' + navigator.onLine);
+    sections.push('Language: ' + navigator.language);
+    sections.push('');
+
+    // localStorage summary (keys + byte sizes only, no values)
+    sections.push('--- localStorage Summary ---');
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        keys.push(localStorage.key(i));
+      }
+      keys.sort();
+      var totalBytes = 0;
+      keys.forEach(function (key) {
+        var val = localStorage.getItem(key) || '';
+        var bytes = new Blob([val]).size;
+        totalBytes += bytes;
+        sections.push('  ' + key + ': ' + bytes + ' bytes');
+      });
+      sections.push('  TOTAL: ' + totalBytes + ' bytes across ' + keys.length + ' keys');
+    } catch (e) {
+      sections.push('  (could not read localStorage)');
+    }
+    sections.push('');
+
+    // Full event/error log
+    sections.push('--- Event & Error Log ---');
+    if (typeof window.getFullLog === 'function') {
+      var log = window.getFullLog();
+      sections.push(log || '(empty)');
+    } else {
+      sections.push('(log function not available)');
+    }
+
+    return sections.join('\n');
+  }
+
+  window.downloadBugReport = function () {
+    var report = buildBugReport();
+    var date = new Date().toISOString().split('T')[0];
+    var blob = new Blob([report], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'psycle-bug-report-' + date + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Bug report downloaded', 'success');
+  };
+
+  window.copyBugReport = function () {
+    var report = buildBugReport();
+    var status = document.getElementById('bugReportStatus');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(report).then(function () {
+        if (status) {
+          status.style.display = '';
+          status.style.color = '#5dba5d';
+          status.textContent = 'Copied to clipboard!';
+          setTimeout(function () { status.style.display = 'none'; }, 3000);
+        }
+        toast('Bug report copied to clipboard', 'success');
+      }).catch(function () {
+        _fallbackCopy(report, status);
+      });
+    } else {
+      _fallbackCopy(report, status);
+    }
+  };
+
+  function _fallbackCopy(text, status) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      if (status) {
+        status.style.display = '';
+        status.style.color = '#5dba5d';
+        status.textContent = 'Copied to clipboard!';
+        setTimeout(function () { status.style.display = 'none'; }, 3000);
+      }
+      toast('Bug report copied to clipboard', 'success');
+    } catch (e) {
+      if (status) {
+        status.style.display = '';
+        status.style.color = '#e94560';
+        status.textContent = 'Copy failed — try the download button instead';
+      }
+      toast('Copy failed', 'error');
+    }
+    document.body.removeChild(ta);
+  }
 
 
 })();

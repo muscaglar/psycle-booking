@@ -1,7 +1,16 @@
-/* ═══════════════════════════════════════════════════════════════════
-   Tabs Module — Discover / My Bookings tab navigation
-   + Quick Stats, Weekly Calendar View, Recommendations, Studio Map
-   ═══════════════════════════════════════════════════════════════════ */
+/**
+ * tabs.js — Tab navigation and Insights analytics
+ *
+ * Self-contained IIFE that creates the Discover / My Bookings / Insights / Explore
+ * tab system. Renders analytics: quick stats, cost tracker, activity heatmap,
+ * weekly calendar, class type distribution, lapsed favourites, variety trend,
+ * and a canvas-based share image.
+ *
+ * Depends on: app.js (all globals), features.js (openHistoryModal),
+ *             explore.js (renderExplore), state.js (PsycleEvents)
+ * Exposes on window:
+ *   switchTab, renderInsights, weekNav, shareInsights
+ */
 (function () {
   'use strict';
 
@@ -1020,13 +1029,11 @@
 
     // Export and share
     try {
-      console.log('[share] rendering canvas', W, 'x', H);
       var blob = await new Promise(function (resolve, reject) {
         canvas.toBlob(function (b) {
           if (b) resolve(b); else reject(new Error('toBlob returned null'));
         }, 'image/png');
       });
-      console.log('[share] blob created:', blob.size, 'bytes');
 
       // Try native share (mobile/Capacitor only — desktop share is unreliable)
       var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || !!window.Capacitor;
@@ -1034,7 +1041,6 @@
         try {
           var file = new File([blob], 'psycle-stats.png', { type: 'image/png' });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            console.log('[share] using native share');
             await navigator.share({
               title: 'My Psycle Stats',
               text: totalClasses + ' classes · ' + uniqueInstrs + ' instructors · Top: ' + (topInstr ? topInstr[0] : ''),
@@ -1044,12 +1050,11 @@
           }
         } catch (shareErr) {
           if (shareErr.name === 'AbortError') return; // user cancelled
-          console.log('[share] native share failed, falling back:', shareErr.message);
+          // Fall through to download
         }
       }
 
       // Fallback: download
-      console.log('[share] downloading as file');
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;

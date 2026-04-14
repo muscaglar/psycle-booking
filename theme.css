@@ -290,11 +290,6 @@ select:focus, input:focus { border-color: var(--accent); }
   color: #e94560;
   border-color: #3a1a2a;
 }
-.book-btn.login-needed {
-  background: transparent;
-  border-color: var(--text-off);
-  color: var(--text-dim);
-}
 
 /* Toast */
 .toast {
@@ -308,13 +303,6 @@ select:focus, input:focus { border-color: var(--accent); }
   background: var(--upcoming-bg);
   border-color: var(--upcoming-border);
 }
-.upcoming-item {
-  background: var(--bg-panel);
-  border-color: var(--upcoming-border);
-}
-.up-time { color: var(--text-heading); }
-.up-name { color: var(--text); }
-.up-sub { color: var(--text-dim); }
 
 /* ── My Bookings light mode fixes ──────────────────────────────── */
 .tab-bar {
@@ -605,8 +593,6 @@ select:focus, input:focus { border-color: var(--accent); }
 
 .reco-class { color: var(--text); }
 .reco-detail { color: var(--text-dim); }
-.reco-action { color: var(--accent); }
-
 [data-theme="light"] .reco-card:hover {
   border-color: var(--accent);
 }
@@ -727,10 +713,6 @@ select:focus, input:focus { border-color: var(--accent); }
 [data-theme="light"] .bike-pref-legend {
   color: var(--text-dim);
 }
-[data-theme="light"] .bike-pref-slot:hover {
-  border-color: #999;
-  color: var(--text-heading);
-}
 
 /* ── styles.css: Pull-to-Refresh ─────────────────────────────────── */
 
@@ -759,11 +741,6 @@ select:focus, input:focus { border-color: var(--accent); }
 [data-theme="light"] .book-btn.waitlist {
   background: #fef9e7;
   color: #9a7a0a;
-}
-
-[data-theme="light"] .book-btn.login-needed {
-  border-color: var(--border-light);
-  color: var(--text-dim);
 }
 
 .fav-btn {
@@ -837,7 +814,6 @@ select:focus, input:focus { border-color: var(--accent); }
 
 [data-theme="light"] .upcoming-header h2 { color: var(--text-muted); }
 [data-theme="light"] .upcoming-count { background: var(--accent); color: #fff; }
-[data-theme="light"] .up-day { color: var(--accent); }
 [data-theme="light"] .up-cancel:hover { background: #f5f5f5; }
 [data-theme="light"] .up-seat-chip button { color: rgba(233,69,96,0.7); }
 [data-theme="light"] .up-cancel-all { border-color: #f5b3bf; color: #c73650; }

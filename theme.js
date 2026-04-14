@@ -1,7 +1,16 @@
-/* ================================================================
-   theme.js — UX polish: dark/light toggle, skeleton loading,
-   empty-state illustrations, haptic feedback
-   ================================================================ */
+/**
+ * theme.js — UX polish: dark/light toggle, skeleton loading,
+ * empty-state illustrations, haptic feedback
+ *
+ * Loaded BEFORE app.js. Polls for global functions (search, render,
+ * submitBooking, setStatus) and wraps them to add skeleton states,
+ * empty-state illustrations, and haptic feedback.
+ *
+ * Depends on: DOM only (wraps app.js functions once available)
+ * Exposes on window (as bare globals):
+ *   initTheme, toggleTheme, skeletonCardHTML, showSkeletonLoading,
+ *   hideSkeletonLoading, renderEmptyState, haptic
+ */
 
 // ── A. Dark / Light Mode Toggle ─────────────────────────────────
 

@@ -1,3 +1,29 @@
+/**
+ * app.js — Core application logic for Psycle Booking PWA
+ *
+ * Loaded AFTER state.js and security.js. Provides:
+ *   - API client (apiFetch, apiUrl, getBearerToken)
+ *   - Auth flow (checkAuth, openLoginPopup, showSessionExpired)
+ *   - Class search, filtering, and rendering
+ *   - Booking, cancellation, and bike picker
+ *   - Instructor multi-select, category pills, favourites
+ *   - Upcoming bookings panel (My Bookings)
+ *
+ * Depends on: state.js (PsycleState, PsycleEvents), security.js (_secureTokenStore)
+ *
+ * Exposes on window (all as bare globals via state.js accessors):
+ *   apiFetch, apiUrl, getBearerToken, search, render, eventCard, toast,
+ *   checkAuth, openLoginPopup, showSessionExpired, clearToken,
+ *   submitBooking, bookClass, confirmUnbook, cancelBikeSlot,
+ *   showBikePicker, closeBikePicker, selectBike, confirmBikeBooking,
+ *   fetchMyBookings, renderMyBookings, refreshUpcomingPanel,
+ *   renderInstrDropdown, renderInstrChips, toggleInstructor,
+ *   removeInstructor, toggleFavourite, applyFavouritesAsFilter,
+ *   saveFavourites, renderCategoryPills, toggleCategory,
+ *   renderStrengthSubPills, toggleStrengthSub, setDateQuick,
+ *   onDateInputChange, slotLabel, slotLabelForEvent, instrLink,
+ *   escapeHTML (from security.js), getCategory, CATEGORY_MAP
+ */
 const DIRECT_API = 'https://psycle.codexfit.com/api/v1/customer';
 const PROXY = 'https://corsproxy.io/?';
 const IS_FILE = location.protocol === 'file:';
@@ -50,10 +76,6 @@ function getCategory(typeName) {
   return CATEGORY_MAP.find(c => c.key === 'OTHER');
 }
 
-/**
- * Get the slot label for a class type.
- * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
- */
 /**
  * Get the slot label for a class type.
  * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
@@ -244,9 +266,12 @@ async function checkAuth() {
     if (res.ok) {
       const data = await res.json();
       currentUser = data.data || data;
-      // Extract active subscription info
+      // Extract active subscription info — prefer one with max_bookings (capped plan),
+      // fall back to any active subscription (unlimited plan)
       const subs = currentUser.subscriptions || [];
-      _activeSubscription = subs.find(s => s.status === 'active' && s.max_bookings > 0) || null;
+      _activeSubscription = subs.find(s => s.status === 'active' && s.max_bookings > 0)
+        || subs.find(s => s.status === 'active' && s.period_start)
+        || null;
       const name = currentUser.first_name || currentUser.email || 'You';
       pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
@@ -364,11 +389,6 @@ function showSessionExpired() {
   document.getElementById('sessionBanner').style.display = 'flex';
   const pill = document.getElementById('authPill');
   pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link" style="color:#e94560;font-weight:700"><span class="auth-full">Sign in →</span><span class="auth-icon">👤</span></a>`;
-}
-
-function scheduleAuthRecheck() {
-  setTimeout(checkAuth, 3000);
-  setTimeout(checkAuth, 8000);
 }
 
 // Token from login is now received via postMessage (security.js).
@@ -1388,9 +1408,6 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Upcoming bookings panel ──────────────────────────────────────
-// Bookings are always visible — no collapse toggle needed.
-function toggleUpcoming() { /* no-op */ }
-
 // Keep backward compat — other modules call refreshUpcomingPanel
 function refreshUpcomingPanel() { renderMyBookings(); }
 
@@ -1489,38 +1506,112 @@ function renderMyBookings() {
 
   let html = '';
 
-  // Subscription info bar
+  // Membership / credits info bar + billing period
+  var periodStart = null, periodEnd = null, nextPeriodStart = null;
+  const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const userStats = currentUser?.stats || {};
+  const creditsRemaining = Number(userStats.credits_remaining) || 0;
+  const availableCredits = currentUser?.available_credits || [];
+
   if (_activeSubscription) {
     const made = Number(_activeSubscription.bookings_made) || 0;
     const max = _activeSubscription.max_bookings || 0;
-    const pct = max > 0 ? Math.round((made / max) * 100) : 0;
     const planName = _activeSubscription.name || 'Subscription';
-    const interval = _activeSubscription.billing_interval || 'month';
+    periodStart = _activeSubscription.period_start ? new Date(_activeSubscription.period_start) : null;
+    periodEnd = _activeSubscription.period_end ? new Date(_activeSubscription.period_end) : null;
+    const periods = _activeSubscription.upcoming_billing_periods || [];
+    nextPeriodStart = periods.length > 0 ? new Date(periods[0].start) : null;
+
+    const periodLabel = periodStart && periodEnd ? `${fmtDate(periodStart)} — ${fmtDate(periodEnd)}` : '';
+
+    if (max > 0) {
+      // Capped plan (e.g. Longevity 30 classes/month)
+      const pct = Math.round((made / max) * 100);
+      html += `<div class="sub-bar">
+        <div class="sub-bar-text">
+          <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
+          <span class="sub-bar-count">${made}/${max} classes${periodLabel ? ' · ' + periodLabel : ''}</span>
+        </div>
+        <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
+      </div>`;
+    } else {
+      // Unlimited plan (no max_bookings) — show plan name + period only
+      html += `<div class="sub-bar">
+        <div class="sub-bar-text">
+          <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
+          <span class="sub-bar-count">${made > 0 ? made + ' classes booked' : 'Unlimited'}${periodLabel ? ' · ' + periodLabel : ''}</span>
+        </div>
+      </div>`;
+    }
+  } else if (creditsRemaining > 0 || availableCredits.length > 0) {
+    // Credit pack user — no subscription, but has credits
+    const totalCredits = creditsRemaining || availableCredits.reduce(function (sum, c) { return sum + (Number(c.remaining) || 0); }, 0);
     html += `<div class="sub-bar">
       <div class="sub-bar-text">
-        <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
-        <span class="sub-bar-count">${made}/${max} classes this ${escapeHTML(interval)}</span>
+        <span class="sub-bar-name">Credit Pack</span>
+        <span class="sub-bar-count">${totalCredits} credit${totalCredits !== 1 ? 's' : ''} remaining</span>
       </div>
-      <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
     </div>`;
   }
 
   // Past bookings toggle
   if (past.length > 0) {
     html += `<div style="padding:0 4px 10px;text-align:right">
-      <button class="btn-ghost" onclick="togglePastBookings()" style="font-size:11px;padding:4px 10px;border:1px solid #3a5a3a;border-radius:5px;color:#5dba5d;background:none;cursor:pointer">
+      <button class="btn-ghost" onclick="togglePastBookings()" style="font-size:11px;padding:4px 10px;border:1px solid var(--border,#333);border-radius:5px;color:var(--text-dim,#888);background:none;cursor:pointer">
         ${_showPastBookings ? 'Hide' : 'Show'} ${past.length} past class${past.length !== 1 ? 'es' : ''}
       </button>
     </div>`;
   }
 
-  let _countdownShown = 0; // track how many countdown badges we've shown
+  // Bucket bookings by billing period
+  var currentPeriodItems = [];
+  var nextPeriodItems = [];
+  var otherItems = [];
+
+  let _countdownShown = 0;
   const sortedDays = Object.keys(byDay).sort();
+
+  if (periodEnd) {
+    // Split items into current vs next billing period
+    for (const day of sortedDays) {
+      for (const item of byDay[day]) {
+        const dt = new Date(item.evt.start_at);
+        if (dt < periodEnd) {
+          currentPeriodItems.push(item);
+        } else {
+          nextPeriodItems.push(item);
+        }
+      }
+    }
+  }
+
+  // Render period header if we have billing periods and items span both
+  const hasPeriodSplit = periodEnd && nextPeriodItems.length > 0;
+  if (hasPeriodSplit) {
+    const fmtShort = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    html += `<div class="mb-period-header">Current period</div>`;
+  }
+
+  // Render by day (with period separator injected between)
+  var periodSeparatorShown = false;
   for (const day of sortedDays) {
     const dayItems = byDay[day];
     const date = new Date(day + 'T12:00:00');
     const isPast = date < now && day !== now.toISOString().split('T')[0];
     const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    // Insert next period separator before first day that falls in next period
+    if (hasPeriodSplit && !periodSeparatorShown && periodEnd && date >= periodEnd) {
+      periodSeparatorShown = true;
+      const remaining = _activeSubscription.max_bookings
+        ? (_activeSubscription.max_bookings - Number(_activeSubscription.bookings_made || 0))
+        : null;
+      html += `<div class="mb-period-header mb-period-next">Next period`;
+      if (remaining !== null && remaining > 0) {
+        html += ` <span class="mb-period-hint">${remaining} credits remaining this period</span>`;
+      }
+      html += `</div>`;
+    }
 
     html += `<div class="mb-day-group${isPast ? ' mb-past' : ''}">`;
     html += `<div class="mb-day-header">${dayLabel}</div>`;

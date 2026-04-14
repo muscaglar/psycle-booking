@@ -1,4 +1,14 @@
-// ── interactions.js — Pull-to-Refresh, Swipe-to-Cancel, Filter Persistence ──
+/**
+ * interactions.js — Touch gestures and filter persistence
+ *
+ * Loaded AFTER app.js. Self-contained IIFE that adds:
+ *   A. Pull-to-refresh (calls window.search on threshold)
+ *   B. Swipe-to-cancel on upcoming booking items
+ *   C. Filter persistence (save/restore to localStorage)
+ *
+ * Depends on: app.js (search, selectedInstructors, selectedCategories, etc.)
+ * Exposes on window: saveFilters, restoreFilters
+ */
 
 (function () {
   'use strict';
