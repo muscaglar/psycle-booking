@@ -187,25 +187,7 @@
           '</div>' +
           '<div id="bikePrefGrid" class="bike-pref-grid" style="display:none"></div>' +
         '</div>' +
-        '<div class="settings-section">' +
-          '<div class="settings-section-title">Backup & Restore</div>' +
-          '<p style="font-size:12px;color:#666;margin-bottom:12px">Export all your settings (tiers, bike prefs, favourites, filters, theme, class history) as a file. Import on any device to restore.</p>' +
-          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-            '<button class="cal-btn" onclick="exportSettings()">Export settings</button>' +
-            '<button class="cal-btn" onclick="document.getElementById(\'importFile\').click()">Import settings</button>' +
-            '<input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(this)">' +
-          '</div>' +
-          '<div id="importStatus" style="font-size:12px;margin-top:8px;display:none"></div>' +
-        '</div>' +
-        '<div class="settings-section">' +
-          '<div class="settings-section-title">Report a Bug</div>' +
-          '<p style="font-size:12px;color:#666;margin-bottom:12px">Having issues? Send us a bug report with diagnostic info.</p>' +
-          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-            '<button class="cal-btn" onclick="downloadBugReport()">Download bug report</button>' +
-            '<button class="cal-btn" onclick="copyBugReport()">Copy to clipboard</button>' +
-          '</div>' +
-          '<div id="bugReportStatus" style="font-size:12px;margin-top:8px;display:none"></div>' +
-        '</div>' +
+        // Backup/Restore and Bug Report moved to Membership tab
       '</div>';
 
     document.body.appendChild(overlay);

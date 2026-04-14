@@ -112,22 +112,23 @@ https://github.com/yourusername/psycle-booking/issues
 
 ## Screenshots
 
-Files are in `/tmp/appstore/framed/` at 1290x2796 (6.7" iPhone):
+Files in `ios-app/appstore-assets/` at 1290x2796 (6.7" iPhone):
 
 | Order | File | Caption |
 |-------|------|---------|
-| 1 | `01-ss1-insights-dark.png` | Track Every Class |
-| 2 | `02-ss2-types-dark.png` | Know Your Routine |
-| 3 | `03-ss3-explore-dark.png` | Discover Instructors |
-| 4 | `04-ss4-discover-dark.png` | Smart Search |
-| 5 | `05-ss5-insights-light.png` | Light & Dark Mode |
-| 6 | `06-ss6-explore-light.png` | Your Instructor Map |
+| 1 | `01-ss1-discover-dark.png` | Discover & Book |
+| 2 | `02-ss2-stats-dark.png` | Your Fitness Journey |
+| 3 | `03-ss3-stats-bottom-dark.png` | Deep Analytics |
+| 4 | `04-ss4-membership-dark.png` | Membership |
+| 5 | `05-ss5-discover-light.png` | Light & Dark Mode |
+| 6 | `06-ss6-stats-light.png` | Beautiful in Any Theme |
 
 ## App Icon
 
-File: `/tmp/appstore/AppIcon-1024.png` (1024x1024)
+File: `ios-app/appstore-assets/AppIcon-1024.png` (1024x1024)
+Minimal dark background, white "P" letterform, red accent line.
 
-Additional sizes for Xcode asset catalog in `/tmp/appstore/`:
+Additional sizes for Xcode asset catalog in `ios-app/appstore-assets/`:
 - AppIcon-180.png (60@3x — iPhone)
 - AppIcon-120.png (60@2x — iPhone, 40@3x)
 - AppIcon-167.png (83.5@2x — iPad Pro)
