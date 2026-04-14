@@ -1588,8 +1588,14 @@ function renderMyBookings() {
   // Render period header if we have billing periods and items span both
   const hasPeriodSplit = periodEnd && nextPeriodItems.length > 0;
   if (hasPeriodSplit) {
-    const fmtShort = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    html += `<div class="mb-period-header">Current period</div>`;
+    const max = _activeSubscription?.max_bookings || 0;
+    const made = Number(_activeSubscription?.bookings_made || 0);
+    const remaining = max > 0 ? max - made : 0;
+    html += `<div class="mb-period-header">Current period`;
+    if (remaining > 0) {
+      html += ` <span class="mb-period-hint">${remaining} of ${max} credits remaining</span>`;
+    }
+    html += `</div>`;
   }
 
   // Render by day (with period separator injected between)
@@ -1603,12 +1609,10 @@ function renderMyBookings() {
     // Insert next period separator before first day that falls in next period
     if (hasPeriodSplit && !periodSeparatorShown && periodEnd && date >= periodEnd) {
       periodSeparatorShown = true;
-      const remaining = _activeSubscription.max_bookings
-        ? (_activeSubscription.max_bookings - Number(_activeSubscription.bookings_made || 0))
-        : null;
+      const nextMax = _activeSubscription?.max_bookings || 0;
       html += `<div class="mb-period-header mb-period-next">Next period`;
-      if (remaining !== null && remaining > 0) {
-        html += ` <span class="mb-period-hint">${remaining} credits remaining this period</span>`;
+      if (nextMax > 0) {
+        html += ` <span class="mb-period-hint">${nextMax} credits</span>`;
       }
       html += `</div>`;
     }

@@ -167,7 +167,15 @@
 </div>
 
 <div class="results" id="results">
-  <div class="status">Select an instructor or filter, then click Search.</div>
+  <div class="discover-empty-state">
+    <div class="discover-empty-title">Find your next class</div>
+    <div class="discover-empty-sub">Use the filters to search by instructor, studio, class type, or date — or try a quick search:</div>
+    <div class="discover-quick-actions">
+      <button class="discover-quick-btn" onclick="setDateQuick('today');search()">Today's classes</button>
+      <button class="discover-quick-btn" onclick="setDateQuick('tomorrow');search()">Tomorrow</button>
+      <button class="discover-quick-btn" onclick="applyFavouritesAsFilter();search()">My favourites</button>
+    </div>
+  </div>
 </div>
 
 <script src="state.js"></script>
