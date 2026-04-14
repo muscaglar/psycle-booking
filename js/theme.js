@@ -75,7 +75,7 @@ function toggleTheme() {
 function injectThemeToggle() {
   const header = document.querySelector('header');
   if (!header || document.getElementById('themeToggleBtn')) return;
-  // Insert before the auth-pill so it sits between the title area and account link
+  // Place on the right side, after the auth pill
   const authPill = document.getElementById('authPill');
   const btn = document.createElement('button');
   btn.id = 'themeToggleBtn';
@@ -83,8 +83,8 @@ function injectThemeToggle() {
   btn.setAttribute('aria-label', 'Toggle dark/light mode');
   btn.setAttribute('title', 'Toggle dark/light mode');
   btn.onclick = toggleTheme;
-  if (authPill) {
-    header.insertBefore(btn, authPill);
+  if (authPill && authPill.nextSibling) {
+    header.insertBefore(btn, authPill.nextSibling);
   } else {
     header.appendChild(btn);
   }

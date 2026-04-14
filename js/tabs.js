@@ -17,7 +17,7 @@
 
   // ── Tab Navigation ──────────────────────────────────────────────
 
-  var TABS = ['discover', 'bookings', 'profile'];
+  var TABS = ['discover', 'bookings', 'stats', 'membership'];
   var _currentTab = 'discover';
 
   function initTabs() {
@@ -26,15 +26,16 @@
     var results = document.getElementById('results');
     if (!controls || !results) return;
 
-    // Create tab bar (3 tabs: Discover, Bookings, Profile)
+    // Create tab bar: Discover, My Bookings, Stats, Membership
     var tabBar = document.createElement('div');
     tabBar.className = 'tab-bar';
     tabBar.innerHTML =
-      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">Book a Class</button>' +
+      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">Discover</button>' +
       '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' +
         'My Bookings <span class="tab-badge" id="tabBadge"></span>' +
       '</button>' +
-      '<button class="tab-btn" data-tab="profile" onclick="switchTab(\'profile\')">Profile</button>';
+      '<button class="tab-btn" data-tab="stats" onclick="switchTab(\'stats\')">Stats</button>' +
+      '<button class="tab-btn" data-tab="membership" onclick="switchTab(\'membership\')">Membership</button>';
 
     // Insert tab bar after header
     var header = document.querySelector('header');
@@ -42,63 +43,82 @@
       header.parentNode.insertBefore(tabBar, header.nextSibling);
     }
 
-    // Wrap controls + results in discover panel
+    // ── Discover tab: weekly planner + discovery + filters + search results ──
     var discoverPanel = document.createElement('div');
     discoverPanel.id = 'tab-discover';
     discoverPanel.className = 'tab-panel active';
 
-    // Move session banner, CORS banner inside discover too (they stay visible)
     controls.parentNode.insertBefore(discoverPanel, controls);
 
-    // Add "My week" view at top of Discover (interactive weekly planner)
+    // Weekly planner at top
     var discoverWeekView = document.createElement('div');
     discoverWeekView.id = 'weekView';
     discoverWeekView.className = 'week-view';
     discoverWeekView.style.display = 'none';
     discoverPanel.appendChild(discoverWeekView);
 
+    // Instructor discovery sections (New to you + You might like)
+    var discoverExplore = document.createElement('div');
+    discoverExplore.id = 'discoverExploreWrap';
+    discoverExplore.innerHTML =
+      '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
+      '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>';
+    discoverPanel.appendChild(discoverExplore);
+
     discoverPanel.appendChild(controls);
     discoverPanel.appendChild(results);
 
-    // Create bookings panel with upcoming bookings + history
+    // ── My Bookings tab: upcoming bookings + history ──
     var bookingsPanel = document.createElement('div');
     bookingsPanel.id = 'tab-bookings';
     bookingsPanel.className = 'tab-panel';
 
-    // Move upcoming panel into bookings tab
     if (upcomingPanel) {
       bookingsPanel.appendChild(upcomingPanel);
     }
 
-    discoverPanel.parentNode.insertBefore(bookingsPanel, discoverPanel.nextSibling);
-
-    // Add "View full history" button at the bottom of the bookings panel
     var historyBtnHtml = '<button class="history-in-bookings-btn" onclick="openHistoryModal()">View full history</button>';
     var historyBtnContainer = document.createElement('div');
     historyBtnContainer.innerHTML = historyBtnHtml;
     bookingsPanel.appendChild(historyBtnContainer.firstChild);
 
-    // Create profile panel (merged Insights + Explore)
-    var profilePanel = document.createElement('div');
-    profilePanel.id = 'tab-profile';
-    profilePanel.className = 'tab-panel';
-    profilePanel.innerHTML =
-      // -- Insights sections --
+    // ── Stats tab: fitness journey + instructor discovery ──
+    var statsPanel = document.createElement('div');
+    statsPanel.id = 'tab-stats';
+    statsPanel.className = 'tab-panel';
+    statsPanel.innerHTML =
+      // Sync banner (if needed)
+      '<div id="exploreSyncSection" class="explore-section" style="display:none"></div>' +
+      // Quick stats
       '<div id="statsBar" class="stats-bar" style="display:none"></div>' +
-      '<div id="costSection" class="cost-section" style="display:none"></div>' +
-      '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>' +
+      '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
+      // Patterns
       '<div id="recoSection" class="reco-section" style="display:none"></div>' +
       '<div id="classTypeSection" class="insights-section" style="display:none"></div>' +
-      '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
+      // Deep analytics
+      '<div id="exploreMapSection" class="explore-section" style="display:none"></div>' +
       '<div id="varietySection" class="insights-section" style="display:none"></div>' +
-      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>' +
-      // -- Divider between Insights and Explore --
-      '<div class="profile-divider"></div>' +
-      // -- Explore sections --
-      '<div id="exploreSyncSection" class="explore-section" style="display:none"></div>' +
-      '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
-      '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>' +
-      '<div id="exploreMapSection" class="explore-section" style="display:none"></div>';
+      '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>' +
+      // Share
+      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>';
+
+    // ── Membership tab: account, subscription, cost, settings ──
+    var membershipPanel = document.createElement('div');
+    membershipPanel.id = 'tab-membership';
+    membershipPanel.className = 'tab-panel';
+    membershipPanel.innerHTML =
+      '<div id="membershipInfo" class="insights-section" style="display:none"></div>' +
+      '<div id="costSection" class="cost-section" style="display:none"></div>' +
+      '<div class="insights-section" style="padding:12px 24px">' +
+        '<div class="insights-title">Settings</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+          '<button class="history-in-bookings-btn" onclick="openSettings()">Instructor Rankings & Preferences</button>' +
+          '<button class="history-in-bookings-btn" onclick="exportSettings()">Export settings</button>' +
+          '<button class="history-in-bookings-btn" onclick="document.getElementById(\'importFile\')?.click()">Import settings</button>' +
+          '<input type="file" id="membershipImportFile" accept=".json" style="display:none" onchange="importSettings(this)">' +
+          '<button class="history-in-bookings-btn" onclick="downloadBugReport()">Download bug report</button>' +
+        '</div>' +
+      '</div>';
 
     // Wrap all panels in tab-content
     var tabContent = document.createElement('div');
@@ -106,7 +126,8 @@
     tabBar.parentNode.insertBefore(tabContent, discoverPanel);
     tabContent.appendChild(discoverPanel);
     tabContent.appendChild(bookingsPanel);
-    tabContent.appendChild(profilePanel);
+    tabContent.appendChild(statsPanel);
+    tabContent.appendChild(membershipPanel);
 
     // Move banners before tab content (always visible)
     var sessionBanner = document.getElementById('sessionBanner');
@@ -114,12 +135,9 @@
     if (sessionBanner) tabContent.parentNode.insertBefore(sessionBanner, tabContent);
     if (corsBanner) tabContent.parentNode.insertBefore(corsBanner, tabContent);
 
-    // Also move toast and modals out (they're global overlays)
-    // They're already positioned fixed so they work regardless
-
-    // Read hash (map legacy hashes to new tabs)
+    // Read hash (map legacy hashes)
     var hash = location.hash.replace('#', '');
-    if (hash === 'insights' || hash === 'explore') hash = 'profile';
+    if (hash === 'insights' || hash === 'explore' || hash === 'profile') hash = 'stats';
     if (TABS.indexOf(hash) !== -1) {
       switchTab(hash, true);
     }
@@ -133,7 +151,6 @@
     var btns = document.querySelectorAll('.tab-btn');
     btns.forEach(function (b) {
       b.classList.toggle('active', b.dataset.tab === tab);
-      // Auto-scroll active tab into view on narrow screens
       if (b.dataset.tab === tab) {
         b.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
       }
@@ -146,11 +163,16 @@
       history.replaceState(null, '', '#' + tab);
     }
     if (tab === 'discover') {
-      renderWeekView(); // My week at top of Book a Class
+      renderWeekView();
+      if (typeof renderExplore === 'function') renderExplore();
     }
-    if (tab === 'profile') {
+    if (tab === 'stats') {
       renderInsights();
       if (typeof renderExplore === 'function') renderExplore();
+    }
+    if (tab === 'membership') {
+      renderMembershipInfo();
+      renderCostTracker();
     }
   };
 
@@ -170,7 +192,7 @@
     PsycleEvents.on('bookings:loaded', function () {
       updateTabBadge();
       renderWeekView(); // Always update the week view (it's on Discover)
-      if (_currentTab === 'profile') renderInsights();
+      if (_currentTab === 'stats') renderInsights();
     });
     PsycleEvents.on('booking:complete', function () {
       updateTabBadge();
@@ -178,11 +200,11 @@
     });
     PsycleEvents.on('booking:cancelled', function () {
       updateTabBadge();
-      if (_currentTab === 'profile') renderInsights();
+      if (_currentTab === 'stats') renderInsights();
     });
     PsycleEvents.on('seat:cancelled', function () {
       updateTabBadge();
-      if (_currentTab === 'profile') renderInsights();
+      if (_currentTab === 'stats') renderInsights();
     });
   }
 
@@ -605,6 +627,77 @@
     container.innerHTML = html;
   }
 
+
+  // ── Membership Info ────────────────────────────────────────────
+
+  function renderMembershipInfo() {
+    var container = document.getElementById('membershipInfo');
+    if (!container) return;
+
+    var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
+    var user = (typeof currentUser !== 'undefined') ? currentUser : null;
+    if (!sub && !user) { container.style.display = 'none'; return; }
+    container.style.display = '';
+
+    var html = '<div class="insights-title">Your Membership</div>';
+
+    if (sub) {
+      var planName = sub.name || 'Subscription';
+      var made = Number(sub.bookings_made) || 0;
+      var max = sub.max_bookings || 0;
+      var status = sub.status_detail || sub.status || 'Active';
+      var fmtD = function (d) { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
+      var fmtEnd = function (d) { var prev = new Date(d); prev.setDate(prev.getDate() - 1); return fmtD(prev); };
+      var periodLabel = sub.period_start && sub.period_end
+        ? fmtD(sub.period_start) + ' — ' + fmtEnd(sub.period_end) : '';
+
+      html += '<div class="membership-card">';
+      html += '<div class="membership-plan">' + escapeHTML(planName) + '</div>';
+      html += '<div class="membership-status">' + escapeHTML(status) + '</div>';
+      if (periodLabel) {
+        html += '<div class="membership-period">Current period: ' + periodLabel + '</div>';
+      }
+      if (max > 0) {
+        var pct = Math.round((made / max) * 100);
+        var remaining = max - made;
+        html += '<div class="membership-usage">' + made + ' of ' + max + ' classes used (' + remaining + ' remaining)</div>';
+        html += '<div class="sub-progress" style="margin-top:8px"><div class="sub-progress-fill" style="width:' + Math.min(pct, 100) + '%"></div></div>';
+      }
+
+      // Upcoming billing periods
+      var periods = sub.upcoming_billing_periods || [];
+      if (periods.length > 0) {
+        html += '<div class="membership-upcoming-title">Upcoming periods</div>';
+        html += '<div class="membership-periods">';
+        periods.slice(0, 3).forEach(function (p) {
+          html += '<div class="membership-period-item">' + fmtD(p.start) + ' — ' + fmtD(p.end) +
+            (p.pausable ? ' <span class="membership-pausable">Pausable</span>' : '') + '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Plan price
+      var price = Number(sub.plan?.price || 0);
+      if (price > 0) {
+        html += '<div class="membership-price">£' + (price / 100).toFixed(2) + '/month</div>';
+      }
+
+      html += '</div>';
+    }
+
+    // User info
+    if (user) {
+      html += '<div class="membership-account">';
+      html += '<div class="membership-detail">' + escapeHTML((user.first_name || '') + ' ' + (user.last_name || '')) + '</div>';
+      html += '<div class="membership-detail" style="color:var(--text-ghost)">' + escapeHTML(user.email || '') + '</div>';
+      if (user.booking_cutoff) {
+        html += '<div class="membership-detail" style="margin-top:8px">Can book until: ' + new Date(user.booking_cutoff).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + '</div>';
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  }
 
   // ── Cost Per Class Tracker ─────────────────────────────────────
 

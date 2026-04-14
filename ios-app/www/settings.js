@@ -218,28 +218,7 @@
     if (el) el.remove();
   };
 
-  // Hook the gear icon in the header
-  setTimeout(function () {
-    var themeToggle = document.querySelector('.theme-toggle');
-    if (themeToggle) {
-      var settingsBtn = document.createElement('button');
-      settingsBtn.className = 'theme-toggle';
-      settingsBtn.title = 'Settings';
-      settingsBtn.innerHTML = '⚙';
-      settingsBtn.style.fontSize = '18px';
-      settingsBtn.onclick = function () { openSettings(); };
-      // Check if a settings button already exists
-      if (!document.querySelector('[title="Settings"]')) {
-        // Place settings gear next to the auth pill (right side of header)
-        var authPill = document.getElementById('authPill');
-        if (authPill) {
-          authPill.parentNode.insertBefore(settingsBtn, authPill);
-        } else {
-          themeToggle.parentNode.insertBefore(settingsBtn, themeToggle);
-        }
-      }
-    }
-  }, 500);
+  // Settings gear removed — settings now lives in the Membership tab.
 
 
   // ═══════════════════════════════════════════════════════════════════

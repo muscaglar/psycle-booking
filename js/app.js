@@ -169,7 +169,7 @@ function _parseSlots(raw) {
 async function fetchMyBookings() {
   if (!getBearerToken()) { _myBookings = {}; return; }
   try {
-    const res = await apiFetch('/bookings');
+    const res = await apiFetch('/bookings?limit=200');
     if (!res.ok) return;
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.data || []);
@@ -242,6 +242,11 @@ async function fetchMyBookings() {
   } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); }
 }
 
+// Refresh bookings when the page becomes visible after being hidden
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && getBearerToken()) fetchMyBookings();
+});
+
 // Toast (toastTimer managed by state.js)
 function toast(msg, type = 'info') {
   const el = document.getElementById('toast');
@@ -276,8 +281,6 @@ async function checkAuth() {
       pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
       fetchMyBookings();
-      // Feature 13: restore last search results if available
-      restoreLastResults();
       // After first login, offer to sync booking history
       setTimeout(function () { showHistorySyncPrompt(); }, 1500);
     } else {
@@ -1654,42 +1657,45 @@ function renderMyBookings() {
   // Membership / credits info bar + billing period
   var periodStart = null, periodEnd = null, nextPeriodStart = null;
   const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  // period_end from API is the START of the next period — display as last day of current period
+  const fmtEndDate = d => { var prev = new Date(d); prev.setDate(prev.getDate() - 1); return fmtDate(prev); };
   const userStats = currentUser?.stats || {};
   const creditsRemaining = Number(userStats.credits_remaining) || 0;
   const availableCredits = currentUser?.available_credits || [];
 
   if (_activeSubscription) {
-    const made = Number(_activeSubscription.bookings_made) || 0;
-    const max = _activeSubscription.max_bookings || 0;
-    const planName = _activeSubscription.name || 'Subscription';
     periodStart = _activeSubscription.period_start ? new Date(_activeSubscription.period_start) : null;
     periodEnd = _activeSubscription.period_end ? new Date(_activeSubscription.period_end) : null;
     const periods = _activeSubscription.upcoming_billing_periods || [];
     nextPeriodStart = periods.length > 0 ? new Date(periods[0].start) : null;
 
-    const periodLabel = periodStart && periodEnd ? `${fmtDate(periodStart)} — ${fmtDate(periodEnd)}` : '';
-
-    if (max > 0) {
-      // Capped plan (e.g. Longevity 30 classes/month)
-      const pct = Math.round((made / max) * 100);
-      html += `<div class="sub-bar">
-        <div class="sub-bar-text">
-          <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
-          <span class="sub-bar-count">${made}/${max} classes${periodLabel ? ' · ' + periodLabel : ''}</span>
-        </div>
-        <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
-      </div>`;
-    } else {
-      // Unlimited plan (no max_bookings) — show plan name + period only
-      html += `<div class="sub-bar">
-        <div class="sub-bar-text">
-          <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
-          <span class="sub-bar-count">${made > 0 ? made + ' classes booked' : 'Unlimited'}${periodLabel ? ' · ' + periodLabel : ''}</span>
-        </div>
-      </div>`;
+    // Only show the standalone sub-bar if there's NO period split
+    // (when there IS a split, the period section headers replace it)
+    const willHaveSplit = periodEnd && items.some(item => new Date(item.evt.start_at) >= periodEnd);
+    if (!willHaveSplit) {
+      const made = Number(_activeSubscription.bookings_made) || 0;
+      const max = _activeSubscription.max_bookings || 0;
+      const planName = _activeSubscription.name || 'Subscription';
+      const periodLabel = periodStart && periodEnd ? `${fmtDate(periodStart)} — ${fmtEndDate(periodEnd)}` : '';
+      if (max > 0) {
+        const pct = Math.round((made / max) * 100);
+        html += `<div class="sub-bar">
+          <div class="sub-bar-text">
+            <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
+            <span class="sub-bar-count">${made}/${max} classes${periodLabel ? ' · ' + periodLabel : ''}</span>
+          </div>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
+        </div>`;
+      } else {
+        html += `<div class="sub-bar">
+          <div class="sub-bar-text">
+            <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
+            <span class="sub-bar-count">${made > 0 ? made + ' classes booked' : 'Unlimited'}${periodLabel ? ' · ' + periodLabel : ''}</span>
+          </div>
+        </div>`;
+      }
     }
   } else if (creditsRemaining > 0 || availableCredits.length > 0) {
-    // Credit pack user — no subscription, but has credits
     const totalCredits = creditsRemaining || availableCredits.reduce(function (sum, c) { return sum + (Number(c.remaining) || 0); }, 0);
     html += `<div class="sub-bar">
       <div class="sub-bar-text">
@@ -1730,20 +1736,33 @@ function renderMyBookings() {
     }
   }
 
-  // Render period header if we have billing periods and items span both
+  // Render period sections with full sub-bar headers
   const hasPeriodSplit = periodEnd && nextPeriodItems.length > 0;
-  if (hasPeriodSplit) {
-    const max = _activeSubscription?.max_bookings || 0;
-    const made = Number(_activeSubscription?.bookings_made || 0);
-    const remaining = max > 0 ? max - made : 0;
-    html += `<div class="mb-period-header">Current period`;
-    if (remaining > 0) {
-      html += ` <span class="mb-period-hint">${remaining} of ${max} credits remaining</span>`;
-    }
+  const planName = _activeSubscription?.name || 'Subscription';
+  const periods = _activeSubscription?.upcoming_billing_periods || [];
+
+  if (hasPeriodSplit && _activeSubscription) {
+    const max = _activeSubscription.max_bookings || 0;
+    const made = Number(_activeSubscription.bookings_made || 0);
+    const pct = max > 0 ? Math.round((made / max) * 100) : 0;
+    const periodLabel = periodStart && periodEnd ? `${fmtDate(periodStart)} — ${fmtEndDate(periodEnd)}` : '';
+
+    // Current period sub-bar (open)
+    html += `<div class="mb-period-section">`;
+    html += `<div class="mb-period-bar" onclick="this.parentElement.classList.toggle('collapsed')">`;
+    html += `<div class="mb-period-bar-text">`;
+    html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
+    html += `<span class="sub-bar-count">${max > 0 ? made + '/' + max + ' classes' : (made > 0 ? made + ' classes' : 'Unlimited')}${periodLabel ? ' · ' + periodLabel : ''}</span>`;
     html += `</div>`;
+    if (max > 0) {
+      html += `<div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>`;
+    }
+    html += `<span class="mb-period-chevron">▼</span>`;
+    html += `</div>`;
+    html += `<div class="mb-period-body">`;
   }
 
-  // Render by day (with period separator injected between)
+  // Render by day (with next period section injected between)
   var periodSeparatorShown = false;
   for (const day of sortedDays) {
     const dayItems = byDay[day];
@@ -1751,15 +1770,31 @@ function renderMyBookings() {
     const isPast = date < now && day !== now.toISOString().split('T')[0];
     const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
-    // Insert next period separator before first day that falls in next period
+    // Close current period section and open next period section
     if (hasPeriodSplit && !periodSeparatorShown && periodEnd && date >= periodEnd) {
       periodSeparatorShown = true;
+
+      // Close current period body + section
+      html += `</div></div>`;
+
+      // Next period sub-bar (collapsible, starts open)
+      const nextPeriod = periods.length > 0 ? periods[0] : null;
+      const nextLabel = nextPeriod ? `${fmtDate(new Date(nextPeriod.start))} — ${fmtDate(new Date(nextPeriod.end))}` : '';
       const nextMax = _activeSubscription?.max_bookings || 0;
-      html += `<div class="mb-period-header mb-period-next">Next period`;
-      if (nextMax > 0) {
-        html += ` <span class="mb-period-hint">${nextMax} credits</span>`;
-      }
+
+      html += `<div class="mb-period-section">`;
+      html += `<div class="mb-period-bar mb-period-bar-next" onclick="this.parentElement.classList.toggle('collapsed')">`;
+      html += `<div class="mb-period-bar-text">`;
+      html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
+      html += `<span class="sub-bar-count">${nextPeriodItems.length}/${nextMax > 0 ? nextMax : '∞'} classes · ${nextLabel}</span>`;
       html += `</div>`;
+      if (nextMax > 0) {
+        const nextPct = Math.round((nextPeriodItems.length / nextMax) * 100);
+        html += `<div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(nextPct, 100)}%"></div></div>`;
+      }
+      html += `<span class="mb-period-chevron">▼</span>`;
+      html += `</div>`;
+      html += `<div class="mb-period-body">`;
     }
 
     html += `<div class="mb-day-group${isPast ? ' mb-past' : ''}">`;
@@ -1812,10 +1847,26 @@ function renderMyBookings() {
         cancelBtn = `<button class="book-btn booked" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)" style="margin-top:10px;width:100%">Cancel booking</button>`;
       }
 
-      // Rebook next week button (upcoming only)
+      // Action buttons (upcoming only)
       let rebookBtn = '';
       if (!eventPast) {
-        rebookBtn = `<button class="rebook-btn find-similar-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
+        const hoursUntil = (dt - now) / 3600000;
+        const canChange = hoursUntil > 12;
+
+        rebookBtn = `<div class="booking-actions">`;
+
+        // Add a spot — opens bike picker to book an additional slot
+        if (booking.slots.length < 2) {
+          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();bookClass(${evtId}, this, ${evt.studio_id})" title="Add another spot">+ Add spot</button>`;
+        }
+
+        // Change spot — only if >12h away and class not full
+        if (canChange && booking.slots.length > 0) {
+          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();changeSpot(${evtId})" title="Change to a different spot">Change spot</button>`;
+        }
+
+        rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
+        rebookBtn += `</div>`;
       }
 
       html += `<div class="class-card is-booked my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
@@ -1833,6 +1884,11 @@ function renderMyBookings() {
       </div>`;
     }
     html += `</div></div>`;
+  }
+
+  // Close the last period section if we opened one
+  if (hasPeriodSplit && _activeSubscription) {
+    html += `</div></div>`; // close mb-period-body + mb-period-section
   }
 
   // Calendar sync actions (only when bookings exist)
@@ -1948,6 +2004,127 @@ async function rebookNextWeek(eventId) {
   } else {
     toast('No matching class found next week at this location', 'info');
   }
+}
+
+// ── Change Spot ─────────────────────────────────────────────────
+// Opens bike picker. When user selects a new spot, cancels old + books new.
+window.changeSpot = async function(eventId) {
+  const booking = _myBookings[String(eventId)];
+  const evt = _eventCache[String(eventId)];
+  if (!booking || !evt) return;
+
+  const hoursUntil = (new Date(evt.start_at) - new Date()) / 3600000;
+  if (hoursUntil <= 12) {
+    toast('Cannot change spot within 12 hours of class (incurs a fee)', 'error');
+    return;
+  }
+
+  // Ask which slot to change if multiple
+  let slotToChange = booking.slots[0];
+  if (booking.slots.length > 1) {
+    const label = slotLabelForEvent(eventId);
+    const choice = prompt('Which ' + label.toLowerCase() + ' do you want to change? Enter the number.\nYour current ' + label.toLowerCase() + 's: ' + booking.slots.join(', '));
+    if (!choice) return;
+    slotToChange = Number(choice);
+    if (!booking.slots.includes(slotToChange)) {
+      toast('That ' + label.toLowerCase() + ' is not in your booking', 'error');
+      return;
+    }
+  }
+
+  // Fetch fresh event detail to get availability
+  try {
+    toast('Loading available spots...', 'info');
+    const res = await apiFetch('/events/' + eventId);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const detail = await res.json();
+    const availableSlotIds = new Set((detail.slots || []).map(Number));
+
+    if (availableSlotIds.size === 0) {
+      toast('No other spots available — class is full', 'error');
+      return;
+    }
+
+    const studio = _studioMap[evt.studio_id];
+    const layout = studio?.layout;
+    if (!studio?.has_layout || !layout?.slots?.length) {
+      toast('No layout available for this studio', 'error');
+      return;
+    }
+
+    // Store change context for the confirm handler
+    window._changeSpotContext = {
+      eventId: eventId,
+      slotToChange: slotToChange,
+      bookingId: booking.slotBookings?.[slotToChange] || booking.bookingId,
+    };
+
+    // Open the bike picker — user's existing slots shown as "mine"
+    const mySlots = new Set(booking.slots.map(Number));
+    const studioName = (evt._locName || '') + (evt._studioName ? ' · ' + evt._studioName : '');
+    showBikePicker(eventId, null, layout, availableSlotIds, mySlots, studioName);
+
+    // Override the confirm button to do swap instead of new booking
+    const confirmBtn = document.getElementById('confirmBookBtn');
+    if (confirmBtn) {
+      const label = slotLabelForEvent(eventId);
+      document.getElementById('modalTitle').textContent = 'Change your ' + label.toLowerCase();
+      document.getElementById('modalHint').textContent = 'Select a new ' + label.toLowerCase() + ' to replace ' + label + ' ' + slotToChange;
+      confirmBtn.textContent = 'Swap ' + label.toLowerCase();
+      confirmBtn.onclick = function () { executeSpotSwap(); };
+    }
+  } catch (e) {
+    toast('Failed to load spots: ' + e.message, 'error');
+  }
+};
+
+async function executeSpotSwap() {
+  const ctx = window._changeSpotContext;
+  if (!ctx || _selectedSlots.length === 0) return;
+
+  const newSlot = _selectedSlots[0];
+  const label = slotLabelForEvent(ctx.eventId);
+  const confirmBtn = document.getElementById('confirmBookBtn');
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Swapping...'; }
+
+  try {
+    // Step 1: Cancel the old slot
+    const cancelPath = ctx.bookingId ? '/bookings/' + ctx.bookingId : '/bookings?event_id=' + ctx.eventId;
+    const cancelRes = await apiFetch(cancelPath, { method: 'DELETE' });
+    if (!cancelRes.ok && cancelRes.status !== 204) {
+      throw new Error('Failed to cancel old spot');
+    }
+
+    // Step 2: Book the new slot
+    const bookRes = await apiFetch('/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ event_id: Number(ctx.eventId), slots: [newSlot] }),
+    });
+
+    if (bookRes.ok || bookRes.status === 201) {
+      toast(label + ' changed: ' + ctx.slotToChange + ' → ' + newSlot, 'success');
+      closeBikePicker();
+      fetchMyBookings();
+      PsycleEvents.emit('booking:complete', ctx.eventId, [newSlot]);
+    } else {
+      const err = await bookRes.json().catch(() => ({}));
+      toast('Swap failed: ' + (err.message || 'could not book new spot'), 'error');
+      // Try to re-book the original slot as recovery
+      await apiFetch('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ event_id: Number(ctx.eventId), slots: [ctx.slotToChange] }),
+      });
+      fetchMyBookings();
+    }
+  } catch (e) {
+    toast('Swap failed: ' + e.message, 'error');
+    fetchMyBookings(); // refresh to show actual state
+  }
+
+  window._changeSpotContext = null;
+  if (confirmBtn) { confirmBtn.disabled = false; }
 }
 
 // ── Find Similar popup ──────────────────────────────────────────
