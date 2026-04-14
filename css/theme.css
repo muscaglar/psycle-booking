@@ -6,13 +6,15 @@
 
 /* ── Dark theme (default) ─────────────────────────────────────── */
 :root {
-  --bg: #0a0a0a;
-  --bg-panel: #111;
-  --bg-input: #1a1a1a;
-  --bg-deep: #0d0d0d;
-  --border: #222;
-  --border-light: #333;
-  --border-subtle: #2a2a2a;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --bg: #09090b;
+  --bg-panel: #111113;
+  --bg-input: #19191d;
+  --bg-deep: #0c0c0f;
+  --border: #1e1e24;
+  --border-light: #2a2a32;
+  --border-subtle: #252530;
   --text: #f0f0f0;
   --text-heading: #fff;
   --text-muted: #aaa;
@@ -50,13 +52,13 @@
 
 /* ── Light theme ──────────────────────────────────────────────── */
 [data-theme="light"] {
-  --bg: #f5f5f5;
-  --bg-panel: #fff;
-  --bg-input: #eee;
-  --bg-deep: #e8e8e8;
-  --border: #e0e0e0;
-  --border-light: #d0d0d0;
-  --border-subtle: #ddd;
+  --bg: #f7f7f8;
+  --bg-panel: #ffffff;
+  --bg-input: #ededf0;
+  --bg-deep: #e6e6ea;
+  --border: #dddde2;
+  --border-light: #ccccd4;
+  --border-subtle: #d8d8e0;
   --text: #1a1a1a;
   --text-heading: #111;
   --text-muted: #555;
@@ -97,6 +99,7 @@
 body {
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-body);
 }
 
 header {
@@ -104,8 +107,17 @@ header {
   border-bottom-color: var(--border);
 }
 
-header h1 { color: var(--text-heading); }
+header h1 { color: var(--text-heading); font-family: var(--font-display); }
 header span { color: var(--text-faint); }
+
+/* Display font applied to key typographic elements */
+.tab-btn { font-family: var(--font-display); }
+.stat-value, .cost-value, .explore-map-stat-value { font-family: var(--font-display); }
+.class-time { font-family: var(--font-display); }
+.modal-title, .instructor-name-title { font-family: var(--font-display); }
+.reco-class, .discover-empty-title { font-family: var(--font-display); }
+.mb-period-header { font-family: var(--font-display); }
+.insights-title, .explore-title, .reco-title, .heatmap-title, .cost-title, .week-title { font-family: var(--font-display); }
 
 .controls {
   background: var(--bg-panel);

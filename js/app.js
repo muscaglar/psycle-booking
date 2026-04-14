@@ -276,6 +276,10 @@ async function checkAuth() {
       pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
         <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
       fetchMyBookings();
+      // Feature 13 > Feature 7 > empty state: restore results or load today's schedule
+      if (!restoreLastResults()) {
+        loadTodaySchedule();
+      }
       // After first login, offer to sync booking history
       setTimeout(function () { showHistorySyncPrompt(); }, 1500);
     } else {
@@ -1226,11 +1230,97 @@ function render(events, relations, filters, done) {
       }
     }
   }
+
+  // Feature 13: Persist search results to sessionStorage for tab-switch restore
+  if (done) {
+    try {
+      sessionStorage.setItem('psycle_last_results', JSON.stringify({ events, relations, filters: {
+        instructorId: filters.instructorId,
+        locationId: filters.locationId,
+        categoryKeys: [...(filters.categoryKeys || [])],
+        startDate: filters.startDate,
+        endDateStr: filters.endDateStr,
+        strengthSubs: [...(filters.strengthSubs || [])],
+        _isTodaySchedule: filters._isTodaySchedule || false,
+      }}));
+    } catch (e) { console.warn('[psycle] sessionStorage save failed:', e); }
+  }
 }
 
 function updateLocationHint() {
   const hint = document.getElementById('locationHint');
   hint.textContent = document.getElementById('locationSelect').value ? '' : '— pick one for best results';
+}
+
+// ── Feature 7: "Today at Psycle" default view ──────────────────
+async function loadTodaySchedule() {
+  // Don't override an active search (if results are already showing class cards)
+  const container = document.getElementById('results');
+  if (container && container.querySelector('.class-card')) return;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  try {
+    const res = await apiFetch('/events?start=' + todayStr + '+00:00:00&end=' + todayStr + '+23:59:59&limit=200');
+    if (!res.ok) return;
+    const data = await res.json();
+    const events = data.data || [];
+    const relations = data.relations || null;
+    if (!events.length || !relations) return;
+
+    const filters = {
+      instructorId: [],
+      locationId: '',
+      categoryKeys: new Set(),
+      startDate: todayStr,
+      endDateStr: todayStr,
+      strengthSubs: new Set(['UPPER', 'LOWER', 'FULL']),
+      _isTodaySchedule: true,
+    };
+    render(events, relations, filters, true);
+
+    // Replace the summary text with "Today at Psycle"
+    const summary = container.querySelector('.summary');
+    if (summary) {
+      const count = container.querySelectorAll('.class-card').length;
+      summary.innerHTML = '<strong>Today at Psycle</strong> — ' + count + ' class' + (count !== 1 ? 'es' : '') + ' across all studios';
+    }
+  } catch (e) { console.warn('[psycle] loadTodaySchedule failed:', e); }
+}
+
+// ── Feature 13: Restore persisted search results ────────────────
+function restoreLastResults() {
+  try {
+    const raw = sessionStorage.getItem('psycle_last_results');
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    if (!saved.events || !saved.relations) return false;
+
+    // Reconstruct Set-based filters from serialised arrays
+    const filters = {
+      instructorId: saved.filters.instructorId || [],
+      locationId: saved.filters.locationId || '',
+      categoryKeys: new Set(saved.filters.categoryKeys || []),
+      startDate: saved.filters.startDate || '',
+      endDateStr: saved.filters.endDateStr || '',
+      strengthSubs: new Set(saved.filters.strengthSubs || ['UPPER', 'LOWER', 'FULL']),
+      _isTodaySchedule: saved.filters._isTodaySchedule || false,
+    };
+    render(saved.events, saved.relations, filters, true);
+
+    // If this was a "Today at Psycle" restore, update the summary accordingly
+    if (filters._isTodaySchedule) {
+      const container = document.getElementById('results');
+      const summary = container?.querySelector('.summary');
+      if (summary) {
+        const count = container.querySelectorAll('.class-card').length;
+        summary.innerHTML = '<strong>Today at Psycle</strong> — ' + count + ' class' + (count !== 1 ? 'es' : '') + ' across all studios';
+      }
+    }
+    return true;
+  } catch (e) {
+    console.warn('[psycle] restoreLastResults failed:', e);
+    return false;
+  }
 }
 
 // ── Instructor multi-select widget ──────────────────────────────

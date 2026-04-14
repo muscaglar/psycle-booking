@@ -1,11 +1,31 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #0a0a0a;
+  font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  background: #09090b;
   color: #f0f0f0;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Motion: card entrance animation ────────────────────────────── */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.class-card {
+  animation: cardEnter 0.3s ease-out both;
+}
+.class-grid .class-card:nth-child(1) { animation-delay: 0s; }
+.class-grid .class-card:nth-child(2) { animation-delay: 0.04s; }
+.class-grid .class-card:nth-child(3) { animation-delay: 0.08s; }
+.class-grid .class-card:nth-child(4) { animation-delay: 0.12s; }
+.class-grid .class-card:nth-child(5) { animation-delay: 0.16s; }
+.class-grid .class-card:nth-child(6) { animation-delay: 0.2s; }
+.class-grid .class-card:nth-child(7) { animation-delay: 0.24s; }
+.class-grid .class-card:nth-child(8) { animation-delay: 0.28s; }
+.class-grid .class-card:nth-child(n+9) { animation-delay: 0.32s; }
 
 header {
   background: #111;
@@ -80,13 +100,15 @@ select:focus, input:focus {
   border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
+  font-family: var(--font-display, sans-serif);
   cursor: pointer;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
 }
 
 .btn:hover { background: #c73650; }
+.btn:active { transform: scale(0.97); }
 .btn:disabled { background: #444; cursor: not-allowed; }
 
 .btn-ghost {
@@ -162,19 +184,19 @@ select:focus, input:focus {
 }
 
 .class-card {
-  background: #111;
-  border: 1px solid #222;
-  border-radius: 8px;
+  background: var(--bg-panel, #111113);
+  border: 1px solid var(--border, #1e1e24);
+  border-radius: 10px;
   padding: 14px 16px;
   display: flex;
   gap: 14px;
   align-items: flex-start;
-  transition: border-color 0.15s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.15s;
 }
 
 .class-card.is-booked {
-  border-left: 3px solid #e94560;
-  background: #111;
+  border-left: 3px solid var(--accent, #e94560);
+  background: var(--bg-panel, #111113);
 }
 
 .class-card.is-booked:hover { border-color: #e94560; border-left-color: #e94560; }
@@ -248,7 +270,9 @@ select:focus, input:focus {
 /* Bike picker modal */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 200;
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
@@ -990,7 +1014,7 @@ select:focus, input:focus {
   height: 100%;
   background: #e94560;
   border-radius: 2px;
-  transition: width 0.4s ease;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1259,4 +1283,18 @@ select:focus, input:focus {
 
   /* Explore: wider instructor cards */
   .explore-card { min-width: 240px; }
+
+  /* Desktop: card hover lift */
+  .class-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .explore-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .stat-card:hover, .cost-card:hover, .reco-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  }
 }
