@@ -316,8 +316,8 @@
           '<button class="cal-sync-resync" onclick="onCalendarCleanupDupes(this)">Remove duplicates</button>' : '') +
       '</div>' +
       '<div class="cal-sync-hint">' +
-        'Events are deduplicated by title and start time. Changing the target leaves ' +
-        'already-created events in the old calendar — delete them there or use “Remove duplicates”.' +
+        'Events are deduplicated by title and start time. Switching target moves all your ' +
+        'existing bookings into the new calendar (the old entries are deleted automatically).' +
       '</div>';
 
     // Preselect current mode
@@ -325,20 +325,29 @@
     if (sel && cfg.mode !== 'custom') sel.value = '__auto';
   }
 
-  window.onCalendarSyncToggle = function (checkbox) {
-    window.psycleSetCalendarConfig({ enabled: !!checkbox.checked });
+  window.onCalendarSyncToggle = async function (checkbox) {
+    await window.psycleSetCalendarConfig({ enabled: !!checkbox.checked });
     renderCalendarSync();
   };
 
-  window.onCalendarTargetChange = function (select) {
+  window.onCalendarTargetChange = async function (select) {
     var val = select.value;
-    if (val === '__auto') {
-      window.psycleSetCalendarConfig({ mode: 'auto' });
-    } else {
-      window.psycleSetCalendarConfig({ mode: 'custom', targetId: val });
-    }
-    if (typeof window.psycleResyncCalendar === 'function') {
-      window.psycleResyncCalendar();
+    // Prevent rapid re-entry while delete/sync is in flight
+    select.disabled = true;
+    try {
+      var cfg = val === '__auto'
+        ? { mode: 'auto' }
+        : { mode: 'custom', targetId: val };
+      var result = await window.psycleSetCalendarConfig(cfg);
+      if (typeof window.psycleResyncCalendar === 'function') {
+        await window.psycleResyncCalendar();
+      }
+      if (result && result.movedFromOld > 0 && typeof toast === 'function') {
+        toast('Moved ' + result.movedFromOld + ' event' +
+          (result.movedFromOld !== 1 ? 's' : '') + ' to new calendar', 'info');
+      }
+    } finally {
+      select.disabled = false;
     }
   };
 

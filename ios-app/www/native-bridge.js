@@ -655,11 +655,14 @@
   };
 
   /**
-   * Update the calendar target. When the target changes we wipe the local
-   * mapping so the next sync re-adds bookings into the new calendar
-   * (without touching events already in the old one).
+   * Update the calendar target. When the target changes we delete every
+   * event we previously created (regardless of which calendar they're on —
+   * EventKit's deleteEvent works by id) and wipe the local mapping, so the
+   * next re-sync cleanly re-adds bookings into the new target.
+   *
+   * Returns { movedFromOld: N } so callers (the Settings UI) can show a hint.
    */
-  window.psycleSetCalendarConfig = function (cfg) {
+  window.psycleSetCalendarConfig = async function (cfg) {
     cfg = cfg || {};
     var prevMode = localStorage.getItem(CAL_MODE_KEY) || 'auto';
     var prevTarget = localStorage.getItem(CAL_TARGET_KEY) || '';
@@ -676,12 +679,26 @@
       (cfg.mode && cfg.mode !== prevMode) ||
       (cfg.mode === 'custom' && String(cfg.targetId || '') !== prevTarget);
 
+    var movedFromOld = 0;
     if (targetChanged) {
-      // Forget old mappings — events in the previous calendar are left as-is
-      // (user can delete them manually). Next sync will add to the new target.
+      // Delete every previously-created event from the OLD calendar so
+      // switching targets doesn't orphan duplicates. EventKit's deleteEvent
+      // takes an event id and removes it from whichever calendar holds it,
+      // so we don't need to know the old calendar id explicitly.
+      var oldMap = _loadCalMap();
+      var oldIds = Object.values(oldMap);
+      if (oldIds.length && Calendar) {
+        await _ensureCalendarPermission();
+        await Promise.all(oldIds.map(function (id) {
+          return Calendar.deleteEvent({ id: id })
+            .then(function () { movedFromOld++; })
+            .catch(function () { /* may have been deleted by user */ });
+        }));
+      }
       localStorage.removeItem(CAL_EVENT_MAP_KEY);
       _calSynced = false;
     }
+    return { movedFromOld: movedFromOld };
   };
 
 
