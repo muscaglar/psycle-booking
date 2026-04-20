@@ -377,12 +377,23 @@
     btn.disabled = true;
     btn.textContent = 'Syncing…';
     try {
-      await window.psycleResyncCalendar();
-      btn.textContent = 'Synced ✓';
+      var r = await window.psycleResyncCalendar();
+      if (r && r.error) {
+        btn.textContent = r.error;
+      } else if (r && (r.added || r.removed)) {
+        var parts = [];
+        if (r.added) parts.push('+' + r.added);
+        if (r.removed) parts.push('−' + r.removed);
+        btn.textContent = 'Synced (' + parts.join(' ') + ')';
+      } else {
+        btn.textContent = r && r.verified
+          ? 'All ' + r.verified + ' up to date'
+          : 'Synced ✓';
+      }
     } catch (e) {
       btn.textContent = 'Sync failed';
     }
-    setTimeout(function () { btn.textContent = old; btn.disabled = false; }, 1500);
+    setTimeout(function () { btn.textContent = old; btn.disabled = false; }, 2200);
   };
 
 

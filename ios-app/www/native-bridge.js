@@ -495,30 +495,64 @@
 
   async function syncAllBookingsToCalendar() {
     var ok = await _ensureCalendarPermission();
-    if (!ok) return;
+    if (!ok) return { added: 0, removed: 0, verified: 0, error: 'Permission denied' };
     var map = _loadCalMap();
     var bookings = _myBookings || {};
     var now = Date.now();
+    var summary = { added: 0, removed: 0, verified: 0 };
 
-    // Add upcoming bookings not yet in calendar
-    for (var evtId of Object.keys(bookings)) {
-      var evt = _eventCache[evtId];
-      if (!evt) continue;
-      // Skip past events
-      if (new Date(evt.start_at).getTime() < now) continue;
-      if (!map[evtId]) {
-        await addBookingToCalendar(evtId);
+    // 1. Verify each mapped native event still exists in the calendar.
+    //    If the user deleted an event from the Calendar app, the mapping
+    //    lies — drop it so step 3 re-creates the event.
+    try {
+      var q = await Calendar.listEventsInRange({
+        startDate: now - 7 * 86400000,
+        endDate: now + 120 * 86400000,
+      });
+      var evs = q.result || q || [];
+      if (Array.isArray(evs)) {
+        var known = new Set();
+        evs.forEach(function (ev) { if (ev && ev.id) known.add(String(ev.id)); });
+        var dirty = false;
+        for (var mId in map) {
+          if (!known.has(String(map[mId]))) {
+            delete map[mId];
+            dirty = true;
+          } else {
+            summary.verified++;
+          }
+        }
+        if (dirty) _saveCalMap(map);
       }
+    } catch (e) {
+      // listEventsInRange may not be supported on some plugin versions —
+      // skip verification in that case (add/remove still work).
     }
 
-    // Remove calendar entries for cancelled or past bookings
+    // 2. Remove calendar entries for cancelled bookings.
+    map = _loadCalMap();
     for (var calEvtId of Object.keys(map)) {
       if (!bookings[calEvtId]) {
         await removeBookingFromCalendar(calEvtId);
+        summary.removed++;
       }
     }
 
-    // Clean stale entries (events older than 7 days)
+    // 3. Add upcoming bookings not yet in the calendar.
+    map = _loadCalMap();
+    for (var evtId of Object.keys(bookings)) {
+      var evt = _eventCache[evtId];
+      if (!evt) continue;
+      if (new Date(evt.start_at).getTime() < now) continue;
+      if (!map[evtId]) {
+        var before = Object.keys(_loadCalMap()).length;
+        await addBookingToCalendar(evtId);
+        var after = Object.keys(_loadCalMap()).length;
+        if (after > before) summary.added++;
+      }
+    }
+
+    // 4. Forget stale mappings (events older than 7 days).
     var cleanedMap = _loadCalMap();
     var staleThreshold = now - 7 * 86400000;
     for (var sEvtId of Object.keys(cleanedMap)) {
@@ -528,6 +562,9 @@
       }
     }
     _saveCalMap(cleanedMap);
+
+    console.log('[native-cal] sync result:', summary);
+    return summary;
   }
 
   // Run sync after bookings load
@@ -543,9 +580,16 @@
     };
   }
 
-  /** Force a fresh sync. Used by Settings to re-sync after changing target. */
-  window.psycleResyncCalendar = function () {
+  /**
+   * Force a fresh sync. Refreshes bookings from the server first so the
+   * calendar reflects current state — e.g., classes booked from the web
+   * or swapped on another device. Returns the sync summary.
+   */
+  window.psycleResyncCalendar = async function () {
     _calSynced = false;
+    if (typeof fetchMyBookings === 'function') {
+      try { await fetchMyBookings(); } catch (e) {}
+    }
     return syncAllBookingsToCalendar();
   };
 
