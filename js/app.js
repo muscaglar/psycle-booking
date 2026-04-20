@@ -273,11 +273,14 @@ function toast(msg, type = 'info') {
 // Auth check
 async function checkAuth() {
   const pill = document.getElementById('authPill');
+  const gear = document.getElementById('settingsGear');
   if (!getBearerToken()) {
     currentUser = null;
     pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>`;
+    if (gear) gear.hidden = true;
     return;
   }
+  if (gear) gear.hidden = false;
   try {
     const res = await fetch(apiUrl('/profile'), {
       headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${getBearerToken()}` }
@@ -408,6 +411,8 @@ function showSessionExpired() {
   document.getElementById('sessionBanner').style.display = 'flex';
   const pill = document.getElementById('authPill');
   pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link" style="color:#e94560;font-weight:700"><span class="auth-full">Sign in →</span><span class="auth-icon">👤</span></a>`;
+  const gear = document.getElementById('settingsGear');
+  if (gear) gear.hidden = true;
 }
 
 // Token from login is now received via postMessage (security.js).

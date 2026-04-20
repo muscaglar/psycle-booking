@@ -112,7 +112,7 @@
       '<div class="insights-section" style="padding:12px 24px">' +
         '<div class="insights-title">Settings</div>' +
         '<div style="display:flex;flex-direction:column;gap:8px">' +
-          '<button class="history-in-bookings-btn" onclick="openSettings()">Instructor Rankings & Preferences</button>' +
+          '<button class="history-in-bookings-btn" onclick="openSettings()">Settings</button>' +
           '<button class="history-in-bookings-btn" onclick="exportSettings()">Export settings</button>' +
           '<button class="history-in-bookings-btn" onclick="document.getElementById(\'membershipImportFile\')?.click()">Import settings</button>' +
           '<input type="file" id="membershipImportFile" accept=".json" style="display:none" onchange="importSettings(this)">' +

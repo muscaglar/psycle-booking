@@ -517,6 +517,30 @@ select:focus, input:focus {
 
 .auth-pill a:hover { text-decoration: underline; }
 
+.settings-gear {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #aaa);
+  padding: var(--space-2);
+  margin-left: var(--space-2);
+  border-radius: var(--radius-full, 9999px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast), background var(--transition-fast), transform var(--transition-base);
+}
+
+.settings-gear:hover,
+.settings-gear:focus-visible {
+  color: var(--text-heading, #fff);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
+
+.settings-gear:active { transform: rotate(30deg); }
+.settings-gear[hidden] { display: none; }
+
 .token-dialog {
   position: fixed; inset: 0;
   background: var(--modal-overlay, rgba(0,0,0,0.85));
