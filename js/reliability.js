@@ -158,35 +158,45 @@
    * @param {number}  maxRetries - default 3
    * @returns {Promise<Response>}
    */
+  // Per-attempt timeout — hung requests should fail fast so callers can
+  // retry or show an error, not leave buttons stuck on "…" forever.
+  const FETCH_TIMEOUT_MS = 15000;
+
   window.fetchWithRetry = async function fetchWithRetry(url, opts, maxRetries = 3) {
+    opts = opts || {};
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const res = await fetch(url, opts);
+      // Chain caller-provided signal (if any) with our timeout signal so either
+      // one aborts the request.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+      const callerSignal = opts.signal;
+      if (callerSignal) {
+        if (callerSignal.aborted) ctrl.abort();
+        else callerSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+      }
 
-        // Don't retry client errors (4xx)
+      try {
+        const res = await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+        clearTimeout(timer);
+
         if (res.status >= 400 && res.status < 500) return res;
 
-        // Retry on server errors (5xx)
         if (res.status >= 500) {
           lastError = new Error(`Server error ${res.status}`);
-          if (attempt < maxRetries) {
-            await _backoff(attempt);
-            continue;
-          }
-          // Final attempt — return the response as-is so callers can handle it
+          if (attempt < maxRetries) { await _backoff(attempt); continue; }
           return res;
         }
 
-        // 2xx / 3xx — success
         return res;
       } catch (err) {
-        // Network / CORS / DNS errors
-        lastError = err;
-        if (attempt < maxRetries) {
-          await _backoff(attempt);
-          continue;
-        }
+        clearTimeout(timer);
+        // If the caller aborted (not us), propagate immediately — no retry.
+        if (callerSignal && callerSignal.aborted) throw err;
+        // Our timeout fires as AbortError — treat as network error and retry.
+        const isTimeout = err && err.name === 'AbortError';
+        lastError = isTimeout ? new Error('Request timed out') : err;
+        if (attempt < maxRetries) { await _backoff(attempt); continue; }
       }
     }
     throw lastError;
@@ -313,19 +323,60 @@
   }
 
   /**
-   * Process all queued offline bookings when connectivity is restored.
+   * Enqueue a booking cancel for offline replay. bookingIds is the array
+   * of per-seat booking ids (may be empty → falls back to event_id query).
+   */
+  function queueOfflineCancel(eventId, bookingIds) {
+    var queue = getOfflineQueue();
+    queue.push({
+      type: 'cancel',
+      eventId: eventId,
+      bookingIds: (bookingIds || []).filter(Boolean),
+      timestamp: new Date().toISOString(),
+    });
+    saveOfflineQueue(queue);
+  }
+  window.queueOfflineCancel = queueOfflineCancel;
+
+  /**
+   * Process all queued offline operations (bookings + cancels) when
+   * connectivity is restored.
    */
   async function processOfflineQueue() {
     var queue = getOfflineQueue();
     if (queue.length === 0) return;
 
-    var succeeded = 0;
+    var bookedOk = 0;
+    var cancelOk = 0;
     var failed = 0;
     var remaining = [];
 
     for (var i = 0; i < queue.length; i++) {
       var item = queue[i];
       try {
+        if (item.type === 'cancel') {
+          var ids = (item.bookingIds && item.bookingIds.length)
+            ? item.bookingIds
+            : [null];
+          var results = await Promise.all(ids.map(function (bid) {
+            var path = bid ? '/bookings/' + bid : '/bookings?event_id=' + item.eventId;
+            return apiFetch(path, { method: 'DELETE' });
+          }));
+          var isOk = function (r) { return r.ok || r.status === 204 || r.status === 200 || r.status === 404; };
+          if (results.every(isOk)) {
+            cancelOk++;
+          } else if (results.some(function (r) { return r.status >= 500; })) {
+            // Transient server error — retry later
+            remaining.push(item);
+            failed++;
+          } else {
+            // Client error (already cancelled, etc.) — drop, reconcile on fetch
+            failed++;
+          }
+          continue;
+        }
+
+        // Default: booking (backwards compatible with legacy items)
         var body = { event_id: item.eventId };
         if (item.slots && item.slots.length) body.slots = item.slots.map(Number);
 
@@ -336,8 +387,7 @@
         });
 
         if (res.ok) {
-          succeeded++;
-          // Update local bookings
+          bookedOk++;
           var data = await res.json().catch(function () { return {}; });
           var bookingId = (data.data && data.data.id) || data.id;
           _myBookings[String(item.eventId)] = {
@@ -345,15 +395,12 @@
             slots: item.slots ? item.slots.map(Number) : [],
           };
         } else if (res.status >= 400 && res.status < 500) {
-          // Client error — don't retry (e.g., class is full, already booked)
           failed++;
         } else {
-          // Server error — keep in queue for later retry
           remaining.push(item);
           failed++;
         }
       } catch (err) {
-        // Network error — keep in queue
         remaining.push(item);
         failed++;
       }
@@ -361,15 +408,20 @@
 
     saveOfflineQueue(remaining);
 
-    if (succeeded > 0) {
-      toast(succeeded + ' queued booking' + (succeeded !== 1 ? 's' : '') + ' confirmed!', 'success');
+    if (bookedOk > 0) {
+      toast(bookedOk + ' queued booking' + (bookedOk !== 1 ? 's' : '') + ' confirmed!', 'success');
+    }
+    if (cancelOk > 0) {
+      toast(cancelOk + ' queued cancel' + (cancelOk !== 1 ? 's' : '') + ' sent', 'success');
+    }
+    if (bookedOk > 0 || cancelOk > 0) {
       if (typeof refreshUpcomingPanel === 'function') refreshUpcomingPanel();
       if (typeof fetchMyBookings === 'function') fetchMyBookings();
     }
     if (failed > 0 && remaining.length > 0) {
-      toast(remaining.length + ' queued booking' + (remaining.length !== 1 ? 's' : '') + ' still pending', 'info');
+      toast(remaining.length + ' queued action' + (remaining.length !== 1 ? 's' : '') + ' still pending', 'info');
     } else if (failed > 0) {
-      toast(failed + ' queued booking' + (failed !== 1 ? 's' : '') + ' could not be completed', 'error');
+      toast(failed + ' queued action' + (failed !== 1 ? 's' : '') + ' could not be completed', 'error');
     }
   }
   window.processOfflineQueue = processOfflineQueue;

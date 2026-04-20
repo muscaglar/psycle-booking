@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Defense-in-depth: restrict network + plugin surface, block framing.
+     'unsafe-inline' kept for script/style because the UI uses inline
+     onclick handlers and style attributes throughout. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self' https://psycle.codexfit.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+<!-- Save a DNS+TLS round-trip on the first API call. -->
+<link rel="preconnect" href="https://psycle.codexfit.com" crossorigin>
+<link rel="dns-prefetch" href="https://psycle.codexfit.com">
 <title>Psycle Class Finder</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css">
@@ -171,18 +178,19 @@
   </div>
 </div>
 
-<script src="state.js"></script>
-<script src="security.js"></script>
-<script src="theme.js"></script>
-<script src="app.js"></script>
-<script src="reliability.js"></script>
-<script src="interactions.js"></script>
-<script src="performance.js"></script>
-<script src="calendar.js"></script>
-<script src="features.js"></script>
-<script src="tabs.js"></script>
-<script src="settings.js"></script>
-<script src="explore.js"></script>
-<script src="native-bridge.js"></script>
+<!-- defer preserves load order and lets the parser finish instead of blocking on each file. -->
+<script defer src="state.js"></script>
+<script defer src="security.js"></script>
+<script defer src="theme.js"></script>
+<script defer src="app.js"></script>
+<script defer src="reliability.js"></script>
+<script defer src="interactions.js"></script>
+<script defer src="performance.js"></script>
+<script defer src="calendar.js"></script>
+<script defer src="features.js"></script>
+<script defer src="tabs.js"></script>
+<script defer src="settings.js"></script>
+<script defer src="explore.js"></script>
+<script defer src="native-bridge.js"></script>
 </body>
 </html>

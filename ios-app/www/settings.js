@@ -187,12 +187,18 @@
           '</div>' +
           '<div id="bikePrefGrid" class="bike-pref-grid" style="display:none"></div>' +
         '</div>' +
+        (typeof window.psycleListCalendars === 'function' ?
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Calendar Sync (iOS)</div>' +
+            '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
+          '</div>' : '') +
         // Backup/Restore and Bug Report moved to Membership tab
       '</div>';
 
     document.body.appendChild(overlay);
     renderTierList();
     populateStudioSelect();
+    if (typeof window.psycleListCalendars === 'function') renderCalendarSync();
   };
 
   window.closeSettings = function () {
@@ -267,6 +273,107 @@
     }
     saveTiers(tiers);
     renderTierList();
+  };
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Calendar Sync UI (iOS only)
+  // ═══════════════════════════════════════════════════════════════════
+
+  async function renderCalendarSync() {
+    var panel = document.getElementById('calendarSyncPanel');
+    if (!panel) return;
+    if (typeof window.psycleListCalendars !== 'function') {
+      panel.textContent = 'Calendar sync is only available in the iOS app.';
+      return;
+    }
+    var cfg = window.psycleGetCalendarConfig();
+    var calendars = await window.psycleListCalendars();
+
+    var options = ['<option value="__auto">Psycle (dedicated calendar)</option>'];
+    calendars.forEach(function (c) {
+      if (c.isPsycle) return; // already represented by __auto
+      var sel = cfg.mode === 'custom' && String(cfg.targetId) === String(c.id) ? ' selected' : '';
+      options.push('<option value="' + escapeHTML(String(c.id)) + '"' + sel + '>' +
+        escapeHTML(c.title) + '</option>');
+    });
+
+    var enabled = cfg.enabled;
+    panel.innerHTML =
+      '<label class="cal-sync-row">' +
+        '<span>Auto-add bookings to Calendar</span>' +
+        '<input type="checkbox" id="calSyncEnabled"' + (enabled ? ' checked' : '') + ' onchange="onCalendarSyncToggle(this)">' +
+      '</label>' +
+      '<label class="cal-sync-row cal-sync-target' + (enabled ? '' : ' is-disabled') + '">' +
+        '<span>Write events to</span>' +
+        '<select id="calSyncTarget" onchange="onCalendarTargetChange(this)">' +
+          options.join('') +
+        '</select>' +
+      '</label>' +
+      '<div class="cal-sync-actions">' +
+        '<button class="cal-sync-resync" onclick="onCalendarResync(this)">Re-sync now</button>' +
+        (typeof window.psycleCleanupDuplicates === 'function' ?
+          '<button class="cal-sync-resync" onclick="onCalendarCleanupDupes(this)">Remove duplicates</button>' : '') +
+      '</div>' +
+      '<div class="cal-sync-hint">' +
+        'Events are deduplicated by title and start time. Changing the target leaves ' +
+        'already-created events in the old calendar — delete them there or use “Remove duplicates”.' +
+      '</div>';
+
+    // Preselect current mode
+    var sel = document.getElementById('calSyncTarget');
+    if (sel && cfg.mode !== 'custom') sel.value = '__auto';
+  }
+
+  window.onCalendarSyncToggle = function (checkbox) {
+    window.psycleSetCalendarConfig({ enabled: !!checkbox.checked });
+    renderCalendarSync();
+  };
+
+  window.onCalendarTargetChange = function (select) {
+    var val = select.value;
+    if (val === '__auto') {
+      window.psycleSetCalendarConfig({ mode: 'auto' });
+    } else {
+      window.psycleSetCalendarConfig({ mode: 'custom', targetId: val });
+    }
+    if (typeof window.psycleResyncCalendar === 'function') {
+      window.psycleResyncCalendar();
+    }
+  };
+
+  window.onCalendarCleanupDupes = async function (btn) {
+    if (!window.psycleCleanupDuplicates) return;
+    var old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Scanning…';
+    try {
+      var res = await window.psycleCleanupDuplicates();
+      if (res.error) {
+        btn.textContent = res.error;
+      } else if (res.removed === 0) {
+        btn.textContent = 'No duplicates';
+      } else {
+        btn.textContent = 'Removed ' + res.removed;
+      }
+    } catch (e) {
+      btn.textContent = 'Failed';
+    }
+    setTimeout(function () { btn.textContent = old; btn.disabled = false; }, 2200);
+  };
+
+  window.onCalendarResync = async function (btn) {
+    if (!window.psycleResyncCalendar) return;
+    var old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+    try {
+      await window.psycleResyncCalendar();
+      btn.textContent = 'Synced ✓';
+    } catch (e) {
+      btn.textContent = 'Sync failed';
+    }
+    setTimeout(function () { btn.textContent = old; btn.disabled = false; }, 1500);
   };
 
 

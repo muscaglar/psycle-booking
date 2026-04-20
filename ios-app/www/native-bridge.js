@@ -76,6 +76,11 @@
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
     'psycle_notify_watchlist', 'psycle_calendar_data',
     'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
+    // Calendar integration state — must survive iOS storage purges
+    // or duplicates are created on the next full sync.
+    'psycle_native_cal_events', 'psycle_native_cal_id',
+    'psycle_calendar_target_id', 'psycle_calendar_mode',
+    'psycle_calendar_enabled',
   ];
 
   // On startup: restore from native storage to localStorage
@@ -164,7 +169,10 @@
 
   var Calendar = Capacitor.Plugins.CapacitorCalendar;
   var CAL_EVENT_MAP_KEY = 'psycle_native_cal_events'; // { eventId: nativeCalEventId }
-  var CAL_ID_KEY = 'psycle_native_cal_id';            // dedicated calendar ID
+  var CAL_ID_KEY = 'psycle_native_cal_id';            // dedicated calendar ID (auto-created)
+  var CAL_TARGET_KEY = 'psycle_calendar_target_id';   // user-selected target calendar ID
+  var CAL_MODE_KEY = 'psycle_calendar_mode';          // 'auto' | 'custom' | 'default'
+  var CAL_ENABLED_KEY = 'psycle_calendar_enabled';    // '0' disables sync entirely
   var PSYCLE_CAL_TITLE = 'Psycle';
   var PSYCLE_CAL_COLOR = '#e94560';
 
@@ -214,24 +222,55 @@
 
   // ── Dedicated Psycle Calendar ────────────────────────────────────
 
-  async function _ensurePsycleCalendar() {
-    // Return cached calendar ID if we have one
-    var cachedId = localStorage.getItem(CAL_ID_KEY);
-    if (cachedId) return cachedId;
-
+  async function _listNativeCalendars() {
+    if (!Calendar) return [];
     try {
-      // Check if "Psycle" calendar already exists
       var calendars = await Calendar.listCalendars();
       var list = calendars.result || calendars || [];
-      var existing = list.find(function (c) {
-        return c.title === PSYCLE_CAL_TITLE || c.title === 'Psycle';
-      });
+      // Normalize: some plugin versions nest results differently
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      console.warn('[native-cal] listCalendars failed:', e);
+      return [];
+    }
+  }
+
+  async function _resolveTargetCalendarId() {
+    var mode = localStorage.getItem(CAL_MODE_KEY) || 'auto';
+
+    // User picked a specific calendar — verify it still exists.
+    if (mode === 'custom') {
+      var target = localStorage.getItem(CAL_TARGET_KEY);
+      if (target) {
+        var list = await _listNativeCalendars();
+        if (list.some(function (c) { return String(c.id) === String(target); })) {
+          return target;
+        }
+        // Target disappeared (user deleted it) — fall through to auto.
+      }
+    }
+
+    // 'default' = let iOS pick (no calendarId on createEvent).
+    if (mode === 'default') return null;
+
+    // 'auto' (default): dedicated "Psycle" calendar, create if absent.
+    var cachedId = localStorage.getItem(CAL_ID_KEY);
+    if (cachedId) {
+      var cachedList = await _listNativeCalendars();
+      if (cachedList.some(function (c) { return String(c.id) === String(cachedId); })) {
+        return cachedId;
+      }
+      // Cached calendar was deleted — drop it and recreate below.
+      localStorage.removeItem(CAL_ID_KEY);
+    }
+
+    try {
+      var all = await _listNativeCalendars();
+      var existing = all.find(function (c) { return c.title === PSYCLE_CAL_TITLE; });
       if (existing) {
         localStorage.setItem(CAL_ID_KEY, existing.id);
         return existing.id;
       }
-
-      // Create a new dedicated calendar
       var created = await Calendar.createCalendar({
         title: PSYCLE_CAL_TITLE,
         color: PSYCLE_CAL_COLOR,
@@ -245,8 +284,11 @@
     } catch (e) {
       console.warn('[native-cal] calendar creation failed (using default):', e);
     }
-    return null; // fallback to default calendar
+    return null;
   }
+
+  // Back-compat alias
+  var _ensurePsycleCalendar = _resolveTargetCalendarId;
 
   // ── Add / Update / Remove Events ─────────────────────────────────
 
@@ -288,23 +330,73 @@
     };
   }
 
+  /**
+   * Look for an existing native event with the same start time and title
+   * within the target calendar. Used to dedupe when the local map was lost
+   * (iOS storage purge, reinstall) or when creation succeeded but the
+   * mapping write failed.
+   */
+  async function _findExistingNativeEvent(calId, data) {
+    if (!Calendar || !data) return null;
+    // Search a narrow window around the event start.
+    var windowMs = 60 * 60 * 1000; // ±1h
+    var rangeStart = new Date(data.startDate - windowMs);
+    var rangeEnd = new Date(data.endDate + windowMs);
+    try {
+      var q = await Calendar.listEventsInRange({
+        startDate: rangeStart.getTime(),
+        endDate: rangeEnd.getTime(),
+      });
+      var events = q.result || q || [];
+      if (!Array.isArray(events)) return null;
+      // Match on exact start time + title (title encodes class+instructor+slot).
+      var match = events.find(function (ev) {
+        if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) return false;
+        var evStart = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
+        return Math.abs(evStart - data.startDate) < 60 * 1000 && ev.title === data.title;
+      });
+      return match ? (match.id || match.eventId) : null;
+    } catch (e) {
+      // listEventsInRange may not be available on all plugin versions — ignore.
+      return null;
+    }
+  }
+
+  function calendarSyncEnabled() {
+    return localStorage.getItem(CAL_ENABLED_KEY) !== '0';
+  }
+
   async function addBookingToCalendar(eventId) {
     if (!Calendar) return;
+    if (!calendarSyncEnabled()) return;
     var ok = await _ensureCalendarPermission();
     if (!ok) return;
 
     var data = _buildCalEventData(eventId);
     if (!data) return;
 
-    // Add to dedicated Psycle calendar if available
-    var calId = await _ensurePsycleCalendar();
+    var calId = await _resolveTargetCalendarId();
     if (calId) data.calendarId = calId;
+
+    var map = _loadCalMap();
+
+    // If we already have a mapping, don't create again.
+    if (map[String(eventId)]) return;
+
+    // Dedupe: an event matching this title+time may already exist if the
+    // local mapping was lost (storage purge / reinstall).
+    var existingNativeId = await _findExistingNativeEvent(calId, data);
+    if (existingNativeId) {
+      map[String(eventId)] = existingNativeId;
+      _saveCalMap(map);
+      console.log('[native-cal] adopted existing:', eventId, '→', existingNativeId);
+      return;
+    }
 
     try {
       var result = await Calendar.createEvent(data);
       var nativeId = (result.result || result).id || result.id;
       if (nativeId) {
-        var map = _loadCalMap();
         map[String(eventId)] = nativeId;
         _saveCalMap(map);
         console.log('[native-cal] added:', eventId, '→', nativeId);
@@ -444,14 +536,153 @@
   if (_origRenderNative) {
     window.renderMyBookings = function () {
       _origRenderNative.apply(this, arguments);
-      if (!_calSynced && Object.keys(_myBookings || {}).length > 0) {
+      if (!_calSynced && calendarSyncEnabled() && Object.keys(_myBookings || {}).length > 0) {
         _calSynced = true;
         syncAllBookingsToCalendar();
       }
     };
   }
 
+  /** Force a fresh sync. Used by Settings to re-sync after changing target. */
+  window.psycleResyncCalendar = function () {
+    _calSynced = false;
+    return syncAllBookingsToCalendar();
+  };
+
+  /**
+   * Scan the target calendar for duplicate Psycle events and remove all but
+   * one per (title, start-time) group. Returns { scanned, removed }.
+   *
+   * Used by Settings → "Remove duplicate events" to clean up duplicates
+   * created before the dedupe logic was in place.
+   */
+  window.psycleCleanupDuplicates = async function () {
+    if (!Calendar) return { scanned: 0, removed: 0, error: 'Calendar plugin unavailable' };
+    var ok = await _ensureCalendarPermission();
+    if (!ok) return { scanned: 0, removed: 0, error: 'Permission denied' };
+
+    var calId = await _resolveTargetCalendarId();
+    // Scan a wide window (past 7 days through next 90 days) so we catch
+    // orphan events from previous sync runs.
+    var now = Date.now();
+    var rangeStart = now - 7 * 86400000;
+    var rangeEnd = now + 90 * 86400000;
+
+    var events = [];
+    try {
+      var q = await Calendar.listEventsInRange({ startDate: rangeStart, endDate: rangeEnd });
+      events = q.result || q || [];
+      if (!Array.isArray(events)) events = [];
+    } catch (e) {
+      return { scanned: 0, removed: 0, error: 'Calendar query failed' };
+    }
+
+    // Filter to events in the target calendar (when the plugin reports calendarId).
+    // If the plugin omits calendarId, accept everything matching a Psycle title pattern.
+    var candidates = events.filter(function (ev) {
+      if (!ev || !ev.title) return false;
+      if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) return false;
+      return true;
+    });
+
+    // Group by "title|startMinute" (round to minute to tolerate plugin drift).
+    var groups = {};
+    candidates.forEach(function (ev) {
+      var start = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
+      var key = ev.title + '|' + Math.floor(start / 60000);
+      (groups[key] = groups[key] || []).push({ ev: ev, start: start });
+    });
+
+    // For each group with >1 event, keep the one already in our map (if any),
+    // otherwise keep the first, and delete the rest.
+    var map = _loadCalMap();
+    var mappedIds = new Set(Object.values(map).map(String));
+    var removed = 0;
+    for (var key in groups) {
+      var grp = groups[key];
+      if (grp.length < 2) continue;
+      var keepIdx = grp.findIndex(function (g) { return mappedIds.has(String(g.ev.id)); });
+      if (keepIdx < 0) keepIdx = 0;
+      for (var i = 0; i < grp.length; i++) {
+        if (i === keepIdx) continue;
+        var victimId = grp[i].ev.id;
+        if (!victimId) continue;
+        try {
+          await Calendar.deleteEvent({ id: victimId });
+          removed++;
+          // Remove any stale map entries pointing at the deleted event.
+          for (var evtId in map) {
+            if (String(map[evtId]) === String(victimId)) delete map[evtId];
+          }
+        } catch (e) { /* ignore individual failures */ }
+      }
+    }
+    _saveCalMap(map);
+    console.log('[native-cal] cleanup:', { scanned: candidates.length, removed: removed });
+    return { scanned: candidates.length, removed: removed };
+  };
+
   window.syncAllBookingsToCalendar = syncAllBookingsToCalendar;
+
+  // ── Public API for Settings UI ───────────────────────────────────
+
+  /** List iOS calendars the user can choose from. Returns [{id,title,color,isImmutable}]. */
+  window.psycleListCalendars = async function () {
+    var ok = await _ensureCalendarPermission();
+    if (!ok) return [];
+    var list = await _listNativeCalendars();
+    return list
+      .map(function (c) {
+        return {
+          id: c.id,
+          title: c.title,
+          color: c.color || c.hexColor || null,
+          isImmutable: !!c.isImmutable,
+          isPsycle: c.title === PSYCLE_CAL_TITLE,
+        };
+      })
+      .filter(function (c) { return !c.isImmutable; });
+  };
+
+  /** Get the current calendar sync config for the Settings UI. */
+  window.psycleGetCalendarConfig = function () {
+    return {
+      enabled: calendarSyncEnabled(),
+      mode: localStorage.getItem(CAL_MODE_KEY) || 'auto',
+      targetId: localStorage.getItem(CAL_TARGET_KEY) || null,
+      psycleCalendarId: localStorage.getItem(CAL_ID_KEY) || null,
+    };
+  };
+
+  /**
+   * Update the calendar target. When the target changes we wipe the local
+   * mapping so the next sync re-adds bookings into the new calendar
+   * (without touching events already in the old one).
+   */
+  window.psycleSetCalendarConfig = function (cfg) {
+    cfg = cfg || {};
+    var prevMode = localStorage.getItem(CAL_MODE_KEY) || 'auto';
+    var prevTarget = localStorage.getItem(CAL_TARGET_KEY) || '';
+
+    if (typeof cfg.enabled === 'boolean') {
+      localStorage.setItem(CAL_ENABLED_KEY, cfg.enabled ? '1' : '0');
+    }
+    if (cfg.mode) localStorage.setItem(CAL_MODE_KEY, cfg.mode);
+    if (cfg.mode === 'custom' && cfg.targetId) {
+      localStorage.setItem(CAL_TARGET_KEY, String(cfg.targetId));
+    }
+
+    var targetChanged =
+      (cfg.mode && cfg.mode !== prevMode) ||
+      (cfg.mode === 'custom' && String(cfg.targetId || '') !== prevTarget);
+
+    if (targetChanged) {
+      // Forget old mappings — events in the previous calendar are left as-is
+      // (user can delete them manually). Next sync will add to the new target.
+      localStorage.removeItem(CAL_EVENT_MAP_KEY);
+      _calSynced = false;
+    }
+  };
 
 
   // ── Weekly Booking Reminder ─────────────────────────────────────

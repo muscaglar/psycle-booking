@@ -347,3 +347,71 @@
 /* Selected or mine: white text always wins */
 .bike-slot.selected.pref-prefer text, .bike-slot.selected.pref-avoid text,
 .bike-slot.mine.pref-prefer text, .bike-slot.mine.pref-avoid text { fill: #fff !important; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   Calendar Sync (iOS Settings)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.cal-sync-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  color: var(--text);
+}
+
+.cal-sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-md);
+}
+
+.cal-sync-row select {
+  flex: 1;
+  max-width: 60%;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.cal-sync-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.cal-sync-row.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.cal-sync-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.cal-sync-resync {
+  align-self: flex-start;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cal-sync-resync:hover { border-color: var(--accent); }
+.cal-sync-resync:disabled { opacity: 0.6; cursor: default; }
+
+.cal-sync-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}

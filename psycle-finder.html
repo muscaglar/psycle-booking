@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Defense-in-depth: restrict network + plugin surface, block framing.
+     'unsafe-inline' kept for script/style because the UI uses inline
+     onclick handlers and style attributes throughout. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self' https://psycle.codexfit.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+<!-- Save a DNS+TLS round-trip on the first API call. -->
+<link rel="preconnect" href="https://psycle.codexfit.com" crossorigin>
+<link rel="dns-prefetch" href="https://psycle.codexfit.com">
 <title>Psycle Class Finder</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/styles.css">
@@ -171,17 +178,18 @@
   </div>
 </div>
 
-<script src="js/state.js"></script>
-<script src="js/security.js"></script>
-<script src="js/theme.js"></script>
-<script src="js/app.js"></script>
-<script src="js/reliability.js"></script>
-<script src="js/interactions.js"></script>
-<script src="js/performance.js"></script>
-<script src="js/calendar.js"></script>
-<script src="js/features.js"></script>
-<script src="js/tabs.js"></script>
-<script src="js/settings.js"></script>
-<script src="js/explore.js"></script>
+<!-- defer preserves load order and lets the parser finish instead of blocking on each file. -->
+<script defer src="js/state.js"></script>
+<script defer src="js/security.js"></script>
+<script defer src="js/theme.js"></script>
+<script defer src="js/app.js"></script>
+<script defer src="js/reliability.js"></script>
+<script defer src="js/interactions.js"></script>
+<script defer src="js/performance.js"></script>
+<script defer src="js/calendar.js"></script>
+<script defer src="js/features.js"></script>
+<script defer src="js/tabs.js"></script>
+<script defer src="js/settings.js"></script>
+<script defer src="js/explore.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const CACHE = 'psycle-v9';
+const CACHE = 'psycle-v10';
 const SHELL = [
   './psycle-finder.html',
   './manifest.json',
@@ -165,7 +165,32 @@ self.addEventListener('fetch', e => {
     return; // fall through to network
   }
 
-  // Cache-first for the app shell
+  // Network-first for HTML documents so a new deploy (with a bumped CACHE
+  // version) takes effect on the next load instead of being served stale.
+  // Falls back to cache when offline.
+  const isHtml =
+    e.request.mode === 'navigate' ||
+    (e.request.destination === 'document') ||
+    url.pathname.endsWith('.html') ||
+    url.pathname === '/' || url.pathname.endsWith('/');
+
+  if (isHtml) {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          // Cache a clone of the fresh HTML for offline fallback
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request).then(c => c || caches.match('./psycle-finder.html')))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (JS/CSS/images).
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );

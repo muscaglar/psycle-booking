@@ -44,12 +44,26 @@ function apiFetch(path, opts = {}) {
   const token = getBearerToken();
   const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(apiUrl(path), { ...opts, headers }).then(res => {
-    if ((res.status === 401 || res.status === 403) && getBearerToken()) {
-      showSessionExpired();
-    }
-    return res;
-  });
+
+  // 15s timeout so hung requests fail instead of leaving the UI stuck.
+  // reliability.js replaces this function with one that additionally retries,
+  // but the timeout also lives there.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+
+  return fetch(apiUrl(path), { ...opts, headers, signal: ctrl.signal })
+    .then(res => {
+      clearTimeout(timer);
+      if ((res.status === 401 || res.status === 403) && getBearerToken()) {
+        showSessionExpired();
+      }
+      return res;
+    })
+    .catch(err => {
+      clearTimeout(timer);
+      if (err && err.name === 'AbortError') throw new Error('Request timed out');
+      throw err;
+    });
 }
 
 // Global state is managed by state.js (PsycleState) with backward-compatible
@@ -1008,10 +1022,150 @@ function scrollToUpcoming() {
   }
 }
 
+/**
+ * Promise-based confirmation modal matching the app's visual language.
+ * Replaces the native confirm() so we can render warnings with proper
+ * hierarchy (title, body, optional warn line, distinct buttons).
+ *
+ * confirmModal({ title, body, warn?, confirmText?, cancelText?, danger? })
+ *   → Promise<boolean>
+ */
+function confirmModal(opts) {
+  opts = opts || {};
+  return new Promise(resolve => {
+    document.getElementById('psycleConfirmOverlay')?.remove();
+
+    const previouslyFocused = document.activeElement;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'psycleConfirmOverlay';
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-dialog" role="dialog" aria-modal="true" tabindex="-1">
+        ${opts.title ? `<div class="confirm-title">${escapeHTML(opts.title)}</div>` : ''}
+        ${opts.body ? `<div class="confirm-body">${escapeHTML(opts.body)}</div>` : ''}
+        ${opts.warn ? `<div class="confirm-warn">${escapeHTML(opts.warn)}</div>` : ''}
+        <div class="confirm-actions">
+          <button class="confirm-btn confirm-btn-cancel">${escapeHTML(opts.cancelText || 'Keep booking')}</button>
+          <button class="confirm-btn ${opts.danger ? 'confirm-btn-danger' : 'confirm-btn-primary'}">${escapeHTML(opts.confirmText || 'Confirm')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+
+    // Light haptic when the dialog appears (native bridge on iOS, noop on web)
+    if (typeof haptic === 'function') { try { haptic('tap'); } catch {} }
+
+    const close = result => {
+      overlay.classList.remove('show');
+      setTimeout(() => overlay.remove(), 180);
+      document.removeEventListener('keydown', onKey);
+      // Restore focus to the element that opened the modal
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        try { previouslyFocused.focus(); } catch {}
+      }
+      if (typeof haptic === 'function') {
+        try { haptic(result ? 'success' : 'tap'); } catch {}
+      }
+      resolve(result);
+    };
+
+    // Focus trap: keep Tab inside the dialog
+    const focusables = () => Array.from(
+      overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    ).filter(el => !el.disabled && el.offsetParent !== null);
+
+    const onKey = e => {
+      if (e.key === 'Escape') { e.preventDefault(); close(false); return; }
+      if (e.key === 'Enter') {
+        // Only hijack Enter if focus is inside the dialog (not in a textarea etc.)
+        if (overlay.contains(document.activeElement) && document.activeElement.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          close(true);
+        }
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) { e.preventDefault(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !overlay.contains(active))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (active === last || !overlay.contains(active))) {
+        e.preventDefault(); first.focus();
+      }
+    };
+
+    overlay.querySelector('.confirm-btn-cancel').onclick = () => close(false);
+    overlay.querySelector('.confirm-btn-primary, .confirm-btn-danger').onclick = () => close(true);
+    overlay.onclick = e => { if (e.target === overlay) close(false); };
+    document.addEventListener('keydown', onKey);
+
+    // Focus the primary action so Enter confirms and screen readers land on it
+    setTimeout(() => overlay.querySelector('.confirm-btn-primary, .confirm-btn-danger')?.focus(), 50);
+  });
+}
+window.confirmModal = confirmModal;
+
+/**
+ * Turn a failed cancel into a user-friendly message. Distinguishes session
+ * expiry (401/403), offline, and server errors (prefers server `message`).
+ */
+function describeCancelError(failedResponse, data, err) {
+  if (err) {
+    // Network error bubbled up from fetch()
+    if (!navigator.onLine || /network|failed to fetch/i.test(err.message || '')) {
+      return "You're offline — we'll retry when you're back online.";
+    }
+    return err.message || 'Cancel failed';
+  }
+  if (failedResponse) {
+    if (failedResponse.status === 401 || failedResponse.status === 403) {
+      return 'Session expired — sign in and try again.';
+    }
+    if ((data && data.message)) return data.message;
+    return `Cancel failed (${failedResponse.status})`;
+  }
+  return 'Cancel failed';
+}
+
+/**
+ * Ask the user to confirm cancelling a booking. When the class is inside
+ * Psycle's 12-hour late-cancel window the modal surfaces a warning about
+ * likely charges. Returns Promise<boolean>.
+ */
+function confirmCancelWithPolicy(eventId, base) {
+  const evt = _eventCache[String(eventId)];
+  const msUntil = evt ? (new Date(evt.start_at).getTime() - Date.now()) : Infinity;
+  const hoursUntil = msUntil / 3600000;
+  if (isFinite(hoursUntil) && hoursUntil < 12 && hoursUntil > -0.5) {
+    let remaining;
+    if (hoursUntil < 0) remaining = 'has already started';
+    else if (hoursUntil < 1) remaining = `starts in ${Math.max(1, Math.round(hoursUntil * 60))} min`;
+    else remaining = `starts in ${Math.floor(hoursUntil)}h ${Math.round((hoursUntil % 1) * 60)}m`;
+    return confirmModal({
+      title: base,
+      warn: `This class ${remaining}. Cancellations inside 12 hours are usually charged by Psycle.`,
+      confirmText: 'Cancel anyway',
+      cancelText: 'Keep booking',
+      danger: true,
+    });
+  }
+  return confirmModal({
+    title: base,
+    confirmText: 'Cancel booking',
+    cancelText: 'Keep it',
+    danger: true,
+  });
+}
+
 async function cancelBikeSlot(slotId, eventId) {
   const booking = _myBookings[String(eventId)];
   const _sl3 = slotLabelForEvent(eventId);
-  if (!confirm(`Cancel your ${_sl3} ${slotId} booking?`)) return;
+  if (!(await confirmCancelWithPolicy(eventId, `Cancel your ${_sl3} ${slotId} booking?`))) return;
   // update hint immediately
   document.getElementById('modalHint').textContent = 'Cancelling…';
   try {
@@ -1053,30 +1207,49 @@ async function cancelBikeSlot(slotId, eventId) {
     } else {
       const data = await res.json().catch(() => ({}));
       document.getElementById('modalHint').textContent = 'Cancel failed — try again';
-      toast(data.message || `Cancel failed (${res.status})`, 'error');
+      toast(describeCancelError(res, data), 'error');
     }
   } catch (e) {
     document.getElementById('modalHint').textContent = 'Cancel failed — try again';
-    toast(e.message, 'error');
+    toast(describeCancelError(null, null, e), 'error');
   }
 }
 
 async function confirmUnbook(bookingId, eventId, btn) {
-  if (!confirm('Cancel this booking?')) return;
+  if (!(await confirmCancelWithPolicy(eventId, 'Cancel this booking?'))) return;
   btn.disabled = true;
   btn.textContent = '…';
   const booking = _myBookings[String(eventId)];
+
+  const bookingIds = booking?.slotBookings
+    ? Object.values(booking.slotBookings)
+    : (bookingId ? [bookingId] : (booking?.bookingId ? [booking.bookingId] : []));
+
+  // Offline: queue the cancel and optimistically clear local state.
+  if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
+    queueOfflineCancel(eventId, bookingIds);
+    delete _myBookings[String(eventId)];
+    btn.textContent = 'Book';
+    btn.className = 'book-btn';
+    btn.disabled = false;
+    btn.removeAttribute('data-booking-id');
+    const studioId = btn.dataset.studioId || btn.closest('.class-card')?.dataset?.studioId || 0;
+    btn.onclick = () => bookClass(eventId, btn, studioId);
+    btn.closest('.class-card')?.classList.remove('is-booked');
+    refreshUpcomingPanel();
+    toast("You're offline — cancel queued", 'info');
+    PsycleEvents.emit('booking:cancelled', eventId);
+    return;
+  }
+
   try {
-    // Cancel ALL booking records for this event (one per seat)
-    const bookingIds = booking?.slotBookings
-      ? Object.values(booking.slotBookings)
-      : (bookingId ? [bookingId] : (booking?.bookingId ? [booking.bookingId] : []));
-    if (bookingIds.length === 0) bookingIds.push(null);
-    const results = await Promise.all(bookingIds.map(bid => {
+    const ids = bookingIds.length === 0 ? [null] : bookingIds;
+    const results = await Promise.all(ids.map(bid => {
       const path = bid ? `/bookings/${bid}` : `/bookings?event_id=${eventId}`;
       return apiFetch(path, { method: 'DELETE' });
     }));
-    const allOk = results.every(r => r.ok || r.status === 204 || r.status === 200);
+    const isOk = r => r.ok || r.status === 204 || r.status === 200;
+    const allOk = results.every(isOk);
     if (allOk) {
       delete _myBookings[String(eventId)];
       btn.textContent = 'Book';
@@ -1091,16 +1264,37 @@ async function confirmUnbook(bookingId, eventId, btn) {
       toast('Booking cancelled', 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
     } else {
-      const data = await res.json().catch(() => ({}));
+      const failed = results.find(r => !isOk(r));
+      const data = await failed.json().catch(() => ({}));
       btn.disabled = false;
       btn.textContent = 'Booked ✓';
       PsycleEvents.emit('booking:cancel_failed', eventId, data);
-      toast(data.message || `Cancel failed (${res.status})`, 'error');
+      toast(describeCancelError(failed, data), 'error');
+      // Partial success possible (one seat deleted, another not) — reconcile
+      // with the server so _myBookings matches reality.
+      if (results.some(isOk) && typeof fetchMyBookings === 'function') {
+        fetchMyBookings();
+      }
     }
   } catch (e) {
+    // Network failure after the confirm — queue instead of losing the intent.
+    if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
+      queueOfflineCancel(eventId, bookingIds);
+      delete _myBookings[String(eventId)];
+      btn.textContent = 'Book';
+      btn.className = 'book-btn';
+      btn.disabled = false;
+      const studioId = btn.dataset.studioId || btn.closest('.class-card')?.dataset?.studioId || 0;
+      btn.onclick = () => bookClass(eventId, btn, studioId);
+      btn.closest('.class-card')?.classList.remove('is-booked');
+      refreshUpcomingPanel();
+      toast("You're offline — cancel queued", 'info');
+      PsycleEvents.emit('booking:cancelled', eventId);
+      return;
+    }
     btn.disabled = false;
     btn.textContent = 'Booked ✓';
-    toast(e.message, 'error');
+    toast(describeCancelError(null, null, e), 'error');
   }
 }
 // ─────────────────────────────────────────────────────────────────
@@ -2280,20 +2474,44 @@ window.shareClass = function(eventId) {
 async function upcomingCancel(eventId, btn) {
   const booking = _myBookings[String(eventId)];
   if (!booking) return;
-  if (!confirm('Cancel this booking?')) return;
+  if (!(await confirmCancelWithPolicy(eventId, 'Cancel this booking?'))) return;
   btn.disabled = true;
   btn.textContent = '…';
+
+  const bookingIds = booking.slotBookings
+    ? Object.values(booking.slotBookings)
+    : (booking.bookingId ? [booking.bookingId] : []);
+
+  // Offline: queue + optimistic.
+  if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
+    queueOfflineCancel(eventId, bookingIds);
+    delete _myBookings[String(eventId)];
+    const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
+    if (card) {
+      card.classList.remove('is-booked');
+      const cardBtn = card.querySelector('.book-btn');
+      if (cardBtn) {
+        cardBtn.textContent = 'Book';
+        cardBtn.className = 'book-btn';
+        cardBtn.disabled = false;
+        const studioId = card.dataset.studioId || 0;
+        cardBtn.onclick = () => bookClass(eventId, cardBtn, studioId);
+      }
+    }
+    refreshUpcomingPanel();
+    toast("You're offline — cancel queued", 'info');
+    PsycleEvents.emit('booking:cancelled', eventId);
+    return;
+  }
+
   try {
-    // Cancel ALL booking records for this event (one per seat)
-    const bookingIds = booking.slotBookings
-      ? Object.values(booking.slotBookings)
-      : (booking.bookingId ? [booking.bookingId] : []);
-    if (bookingIds.length === 0) bookingIds.push(null); // fallback
-    const results = await Promise.all(bookingIds.map(bid => {
+    const ids = bookingIds.length === 0 ? [null] : bookingIds;
+    const results = await Promise.all(ids.map(bid => {
       const path = bid ? `/bookings/${bid}` : `/bookings?event_id=${eventId}`;
       return apiFetch(path, { method: 'DELETE' });
     }));
-    const allOk = results.every(r => r.ok || r.status === 204 || r.status === 200);
+    const isOk = r => r.ok || r.status === 204 || r.status === 200;
+    const allOk = results.every(isOk);
     if (allOk) {
       delete _myBookings[String(eventId)];
       // Also update any rendered card
@@ -2315,13 +2533,25 @@ async function upcomingCancel(eventId, btn) {
     } else {
       btn.disabled = false;
       btn.textContent = 'Cancel';
-      const data = await res.json().catch(() => ({}));
-      toast(data.message || `Cancel failed (${res.status})`, 'error');
+      const failed = results.find(r => !isOk(r));
+      const data = await failed.json().catch(() => ({}));
+      toast(describeCancelError(failed, data), 'error');
+      if (results.some(isOk) && typeof fetchMyBookings === 'function') {
+        fetchMyBookings();
+      }
     }
   } catch (e) {
+    if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
+      queueOfflineCancel(eventId, bookingIds);
+      delete _myBookings[String(eventId)];
+      refreshUpcomingPanel();
+      toast("You're offline — cancel queued", 'info');
+      PsycleEvents.emit('booking:cancelled', eventId);
+      return;
+    }
     btn.disabled = false;
     btn.textContent = 'Cancel';
-    toast(e.message, 'error');
+    toast(describeCancelError(null, null, e), 'error');
   }
 }
 
@@ -2329,7 +2559,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
   const booking = _myBookings[String(eventId)];
   if (!booking) return;
   const _sl4 = slotLabelForEvent(eventId);
-  if (!confirm(`Cancel ${_sl4} ${slotId}?`)) return;
+  if (!(await confirmCancelWithPolicy(eventId, `Cancel ${_sl4} ${slotId}?`))) return;
   btn.disabled = true;
   const chip = btn.closest('.up-seat-chip');
   if (chip) chip.style.opacity = '0.5';
@@ -2371,12 +2601,12 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
       btn.disabled = false;
       if (chip) chip.style.opacity = '';
       const data = await res.json().catch(() => ({}));
-      toast(data.message || `Cancel failed (${res.status})`, 'error');
+      toast(describeCancelError(res, data), 'error');
     }
   } catch (e) {
     btn.disabled = false;
     if (chip) chip.style.opacity = '';
-    toast(e.message, 'error');
+    toast(describeCancelError(null, null, e), 'error');
   }
 }
 
