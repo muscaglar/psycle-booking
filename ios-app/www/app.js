@@ -2218,19 +2218,6 @@ window.changeSpot = async function(eventId) {
     return;
   }
 
-  // Ask which slot to change if multiple
-  let slotToChange = booking.slots[0];
-  if (booking.slots.length > 1) {
-    const label = slotLabelForEvent(eventId);
-    const choice = prompt('Which ' + label.toLowerCase() + ' do you want to change? Enter the number.\nYour current ' + label.toLowerCase() + 's: ' + booking.slots.join(', '));
-    if (!choice) return;
-    slotToChange = Number(choice);
-    if (!booking.slots.includes(slotToChange)) {
-      toast('That ' + label.toLowerCase() + ' is not in your booking', 'error');
-      return;
-    }
-  }
-
   // Fetch fresh event detail to get availability
   try {
     toast('Loading available spots...', 'info');
@@ -2251,11 +2238,15 @@ window.changeSpot = async function(eventId) {
       return;
     }
 
-    // Store change context for the confirm handler
+    // Default to the first booked slot. If the user has multiple, the
+    // modalHint renders chips so they can pick which one to swap without
+    // leaving the map view.
+    const slotToChange = booking.slots[0];
     window._changeSpotContext = {
       eventId: eventId,
       slotToChange: slotToChange,
       bookingId: booking.slotBookings?.[slotToChange] || booking.bookingId,
+      booking: booking,
     };
 
     // Open the bike picker — user's existing slots shown as "mine"
@@ -2268,13 +2259,46 @@ window.changeSpot = async function(eventId) {
     if (confirmBtn) {
       const label = slotLabelForEvent(eventId);
       document.getElementById('modalTitle').textContent = 'Change your ' + label.toLowerCase();
-      document.getElementById('modalHint').textContent = 'Select a new ' + label.toLowerCase() + ' to replace ' + label + ' ' + slotToChange;
+      renderChangeSpotHint();
       confirmBtn.textContent = 'Swap ' + label.toLowerCase();
       confirmBtn.onclick = function () { executeSpotSwap(); };
     }
   } catch (e) {
     toast('Failed to load spots: ' + e.message, 'error');
   }
+};
+
+/** Render (or re-render) the modalHint for a Change-spot flow. Shows chips
+ *  when the booking has multiple slots so the user can switch which one
+ *  they're swapping without leaving the bike picker. */
+function renderChangeSpotHint() {
+  const ctx = window._changeSpotContext;
+  if (!ctx) return;
+  const hint = document.getElementById('modalHint');
+  if (!hint) return;
+  const label = slotLabelForEvent(ctx.eventId);
+  const low = label.toLowerCase();
+  if (ctx.booking.slots.length > 1) {
+    const chips = ctx.booking.slots.map(function (s) {
+      const cls = 'change-chip' + (s === ctx.slotToChange ? ' is-active' : '');
+      return '<button type="button" class="' + cls + '" onclick="setChangeSpotTarget(' + s + ')">' +
+        label + ' ' + s + '</button>';
+    }).join('');
+    hint.innerHTML = 'Changing: <span class="change-chip-row">' + chips + '</span>' +
+      ' — now pick a new ' + low + ' on the layout.';
+  } else {
+    hint.textContent = 'Select a new ' + low + ' to replace ' + label + ' ' + ctx.slotToChange;
+  }
+}
+
+window.setChangeSpotTarget = function (slot) {
+  const ctx = window._changeSpotContext;
+  if (!ctx) return;
+  slot = Number(slot);
+  if (!ctx.booking.slots.includes(slot)) return;
+  ctx.slotToChange = slot;
+  ctx.bookingId = ctx.booking.slotBookings?.[slot] || ctx.booking.bookingId;
+  renderChangeSpotHint();
 };
 
 async function executeSpotSwap() {
