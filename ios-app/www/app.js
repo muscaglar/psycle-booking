@@ -495,16 +495,11 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 
 // _dateQuickMode managed by state.js (default: 'week')
 
-// ── Auto-search on filter change (debounced) ───────────────────
-let _autoSearchTimer = null;
-function triggerAutoSearch() {
-  clearTimeout(_autoSearchTimer);
-  _autoSearchTimer = setTimeout(() => {
-    if (!window._searchAborted) search();
-  }, 500);
-}
-// Auto-search when location dropdown changes
-document.getElementById('locationSelect')?.addEventListener('change', triggerAutoSearch);
+// ── Filter changes no longer trigger a search automatically ───────
+// Users wanted explicit control: adjust filters, then press Search (or
+// Enter). Leaving the function in place so existing call-sites compile
+// and we can flip it back on with one line if we change our minds.
+function triggerAutoSearch() { /* no-op — search is manual. */ }
 
 function setDateQuick(mode) {
   const today = new Date();

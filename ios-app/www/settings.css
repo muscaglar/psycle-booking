@@ -222,6 +222,14 @@
   /* No inner scroll — the settings body handles scrolling. */
 }
 
+.tier-empty {
+  padding: var(--space-5) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  line-height: 1.5;
+}
+
 .tier-row {
   display: flex;
   align-items: center;

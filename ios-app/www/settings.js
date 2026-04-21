@@ -220,12 +220,21 @@
     var container = document.getElementById('tierList');
     if (!container) return;
 
-    var query = (document.getElementById('tierSearch')?.value || '').toLowerCase();
+    var query = (document.getElementById('tierSearch')?.value || '').trim().toLowerCase();
     var tiers = loadTiers();
-    // Sort order: S, A, B, C, D, F, then unranked — alphabetical within each tier
+    var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
     var tierOrder = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
-    var list = (typeof instructors !== 'undefined' ? instructors : [])
-      .filter(function (i) { return !query || i.full_name.toLowerCase().includes(query); })
+    var allInstructors = (typeof instructors !== 'undefined') ? instructors : [];
+
+    // When idle (no search query), only show instructors the user has
+    // already engaged with — ranked or favourited. To rank someone new,
+    // they type a name in the search box.
+    var list = allInstructors
+      .filter(function (i) {
+        if (query) return i.full_name.toLowerCase().includes(query);
+        var sid = String(i.id);
+        return !!tiers[sid] || favs.has(sid);
+      })
       .sort(function (a, b) {
         var ta = tiers[String(a.id)];
         var tb = tiers[String(b.id)];
@@ -235,7 +244,13 @@
         return a.full_name.localeCompare(b.full_name);
       });
 
-    var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
+    if (list.length === 0) {
+      var msg = query
+        ? 'No instructor matches "' + escapeHTML(query) + '".'
+        : 'No ranked or favourited instructors yet. Start typing a name to find and rank one.';
+      container.innerHTML = '<div class="tier-empty">' + msg + '</div>';
+      return;
+    }
 
     container.innerHTML = list.map(function (instr) {
       var sid = String(instr.id);
