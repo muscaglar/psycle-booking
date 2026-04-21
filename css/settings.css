@@ -82,11 +82,18 @@
   -webkit-backdrop-filter: blur(8px);
   z-index: 300;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: var(--space-9);
-  padding-top: calc(var(--space-9) + env(safe-area-inset-top));
-  overflow-y: auto;
+  padding: var(--space-7);
+  padding-top: max(var(--space-7), env(safe-area-inset-top));
+  padding-bottom: max(var(--space-7), env(safe-area-inset-bottom));
+  /* No outer scroll — the panel body handles it. */
+  overflow: hidden;
+}
+
+/* Dynamic viewport: avoids iOS address-bar jump on scroll. */
+@supports (height: 100dvh) {
+  .settings-overlay { height: 100dvh; }
 }
 
 .settings-panel {
@@ -95,21 +102,34 @@
   border-radius: var(--radius-3xl);
   width: 100%;
   max-width: 640px;
-  max-height: calc(100vh - var(--space-12));
-  overflow-y: auto;
+  /* Flex column: header fixed, body fills + scrolls. Single scroll context. */
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
 }
 
 .settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px var(--space-8);
+  flex-shrink: 0;
+  padding: var(--space-5) var(--space-8);
   border-bottom: 1px solid var(--border, #222);
-  position: sticky;
-  top: 0;
   background: var(--bg-panel, #111);
-  z-index: 1;
   border-radius: var(--radius-3xl) var(--radius-3xl) 0 0;
+}
+
+.settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* A little breathing room at the bottom so the last section doesn't hug the edge. */
+  padding-bottom: var(--space-4);
 }
 
 .settings-title {
@@ -153,6 +173,29 @@
 [data-theme="light"] .settings-title { color: #1a1a1a; }
 [data-theme="light"] .settings-section { border-bottom-color: #f0f0f0; }
 
+/* Mobile: full-screen sheet, no wasted margin, respects home indicator. */
+@media (max-width: 640px) {
+  .settings-overlay {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .settings-panel {
+    border: none;
+    border-radius: 0;
+    max-width: 100%;
+    max-height: 100%;
+    box-shadow: none;
+  }
+  .settings-header {
+    border-radius: 0;
+    padding-top: calc(var(--space-5) + env(safe-area-inset-top));
+  }
+  .settings-body {
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Instructor Tier System
    ═══════════════════════════════════════════════════════════════════ */
@@ -176,8 +219,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-height: 400px;
-  overflow-y: auto;
+  /* No inner scroll — the settings body handles scrolling. */
 }
 
 .tier-row {

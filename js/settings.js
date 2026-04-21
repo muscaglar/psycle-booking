@@ -168,31 +168,32 @@
       '<div class="settings-panel">' +
         '<div class="settings-header">' +
           '<span class="settings-title">Settings</span>' +
-          '<button class="settings-close" onclick="closeSettings()">×</button>' +
+          '<button class="settings-close" onclick="closeSettings()" aria-label="Close">×</button>' +
         '</div>' +
-        '<div class="settings-section">' +
-          '<div class="settings-section-title">Instructor Rankings & Favourites</div>' +
-          '<input class="tier-search" id="tierSearch" placeholder="Search instructors…" oninput="filterTierList()">' +
-          '<div class="tier-list" id="tierList"></div>' +
-        '</div>' +
-        '<div class="settings-section">' +
-          '<div class="settings-section-title">Bike / Spot Preferences</div>' +
-          '<select class="bike-pref-studio-select" id="bikePrefStudio" onchange="renderBikePrefGrid()">' +
-            '<option value="">Select a studio…</option>' +
-          '</select>' +
-          '<div class="bike-pref-legend">' +
-            '<span><i style="background:#1a1a1a;border:1px solid #333"></i> Neutral</span>' +
-            '<span><i style="background:#0a2a1a;border:1px solid #5dba5d"></i> Prefer</span>' +
-            '<span><i style="background:#2a0a0a;border:1px solid #e94560"></i> Avoid</span>' +
-          '</div>' +
-          '<div id="bikePrefGrid" class="bike-pref-grid" style="display:none"></div>' +
-        '</div>' +
-        (typeof window.psycleListCalendars === 'function' ?
+        '<div class="settings-body">' +
           '<div class="settings-section">' +
-            '<div class="settings-section-title">Calendar Sync (iOS)</div>' +
-            '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
-          '</div>' : '') +
-        // Backup/Restore and Bug Report moved to Membership tab
+            '<div class="settings-section-title">Instructor Rankings & Favourites</div>' +
+            '<input class="tier-search" id="tierSearch" placeholder="Search instructors…" oninput="filterTierList()">' +
+            '<div class="tier-list" id="tierList"></div>' +
+          '</div>' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Bike / Spot Preferences</div>' +
+            '<select class="bike-pref-studio-select" id="bikePrefStudio" onchange="renderBikePrefGrid()">' +
+              '<option value="">Select a studio…</option>' +
+            '</select>' +
+            '<div class="bike-pref-legend">' +
+              '<span><i style="background:#1a1a1a;border:1px solid #333"></i> Neutral</span>' +
+              '<span><i style="background:#0a2a1a;border:1px solid #5dba5d"></i> Prefer</span>' +
+              '<span><i style="background:#2a0a0a;border:1px solid #e94560"></i> Avoid</span>' +
+            '</div>' +
+            '<div id="bikePrefGrid" class="bike-pref-grid" style="display:none"></div>' +
+          '</div>' +
+          (typeof window.psycleListCalendars === 'function' ?
+            '<div class="settings-section">' +
+              '<div class="settings-section-title">Calendar Sync (iOS)</div>' +
+              '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
+            '</div>' : '') +
+        '</div>' +
       '</div>';
 
     document.body.appendChild(overlay);
