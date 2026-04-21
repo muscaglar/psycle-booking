@@ -419,7 +419,46 @@
     if (!Calendar) return;
     var map = _loadCalMap();
     var calEventId = map[String(eventId)];
-    if (!calEventId) return;
+
+    // Fallback: if we have no mapping (map wiped by target switch, reinstall,
+    // iOS storage purge, or booking was created via web/another device), try
+    // to locate the native event by matching the class start time against
+    // events in the target calendar. Without this, cancels silently fail
+    // to clean up the calendar.
+    if (!calEventId) {
+      var evt = (_eventCache || {})[String(eventId)];
+      if (evt && evt.start_at) {
+        try {
+          var start = new Date(evt.start_at).getTime();
+          var end = start + (evt.duration || 45) * 60 * 1000;
+          var windowMs = 2 * 60 * 60 * 1000;
+          var q = await Calendar.listEventsInRange({
+            startDate: start - windowMs,
+            endDate: end + windowMs,
+          });
+          var events = q.result || q || [];
+          if (Array.isArray(events)) {
+            var typeName = evt._typeName || '';
+            // Scan ALL calendars (not just the current target) so orphan
+            // events from a previous target are also cleaned up on cancel.
+            var match = events.find(function (ev) {
+              var evStart = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
+              if (Math.abs(evStart - start) >= 60 * 1000) return false;
+              // Match by class-type prefix in the title so we don't nuke
+              // unrelated events the user may have put at the same time.
+              return !typeName || (ev.title || '').indexOf(typeName) === 0;
+            });
+            calEventId = match ? (match.id || match.eventId) : null;
+            if (calEventId) console.log('[native-cal] located by search:', eventId, '→', calEventId);
+          }
+        } catch (e) { /* listEventsInRange may not be supported */ }
+      }
+    }
+
+    if (!calEventId) {
+      console.log('[native-cal] remove: no mapping/match for', eventId);
+      return;
+    }
 
     try {
       await Calendar.deleteEvent({ id: calEventId });
