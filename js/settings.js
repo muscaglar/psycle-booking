@@ -173,8 +173,13 @@
         '<div class="settings-body">' +
           '<div class="settings-section">' +
             '<div class="settings-section-title">Instructor Rankings & Favourites</div>' +
-            '<input class="tier-search" id="tierSearch" placeholder="Search instructors…" oninput="filterTierList()">' +
-            '<div class="tier-list" id="tierList"></div>' +
+            '<div class="tier-group-label">Ranked</div>' +
+            '<div class="tier-list tier-list-short" id="tierListRanked"></div>' +
+            '<div class="tier-group-label" style="margin-top:16px">Taken a class with — not yet ranked</div>' +
+            '<div class="tier-list tier-list-short" id="tierListUnranked"></div>' +
+            '<div class="tier-group-label" style="margin-top:16px">Search all instructors</div>' +
+            '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
+            '<div class="tier-list" id="tierListSearch" style="display:none"></div>' +
           '</div>' +
           '<div class="settings-section">' +
             '<div class="settings-section-title">Bike / Spot Preferences</div>' +
@@ -216,9 +221,26 @@
 
   window.filterTierList = function () { renderTierList(); };
 
+  function tierRowHTML(instr, tiers, favs) {
+    var sid = String(instr.id);
+    var currentTier = tiers[sid] || '';
+    var isFav = favs.has(sid);
+    var btns = TIERS.map(function (t) {
+      var cls = currentTier === t ? ' active-' + t : '';
+      return '<button class="tier-btn' + cls + '" onclick="setInstructorTier(' + instr.id + ',\'' + t + '\')">' + t + '</button>';
+    }).join('');
+    return '<div class="tier-row">' +
+      '<button class="tier-fav' + (isFav ? ' is-fav' : '') + '" onclick="toggleFavFromSettings(' + instr.id + ')" title="' + (isFav ? 'Remove from favourites' : 'Add to favourites') + '"></button>' +
+      '<span class="tier-name">' + escapeHTML(instr.full_name) + '</span>' +
+      '<div class="tier-btns">' + btns + '</div>' +
+    '</div>';
+  }
+
   function renderTierList() {
-    var container = document.getElementById('tierList');
-    if (!container) return;
+    var rankedContainer = document.getElementById('tierListRanked');
+    var unrankedContainer = document.getElementById('tierListUnranked');
+    var searchContainer = document.getElementById('tierListSearch');
+    if (!rankedContainer) return;
 
     var query = (document.getElementById('tierSearch')?.value || '').trim().toLowerCase();
     var tiers = loadTiers();
@@ -226,46 +248,74 @@
     var tierOrder = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
     var allInstructors = (typeof instructors !== 'undefined') ? instructors : [];
 
-    // When idle (no search query), only show instructors the user has
-    // already engaged with — ranked or favourited. To rank someone new,
-    // they type a name in the search box.
-    var list = allInstructors
-      .filter(function (i) {
-        if (query) return i.full_name.toLowerCase().includes(query);
-        var sid = String(i.id);
-        return !!tiers[sid] || favs.has(sid);
-      })
+    // Build set of instructor IDs from booking history
+    var historyInstrIds = new Set();
+    try {
+      var history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]');
+      history.forEach(function (h) {
+        if (h.cancelledAt) return;
+        if (h.instrId) { historyInstrIds.add(String(h.instrId)); return; }
+        // Fallback: match by name
+        if (h.instrName) {
+          var match = allInstructors.find(function (i) { return i.full_name === h.instrName; });
+          if (match) historyInstrIds.add(String(match.id));
+        }
+      });
+    } catch (e) {}
+
+    // 1. Ranked instructors (have a tier or are favourited)
+    var ranked = allInstructors
+      .filter(function (i) { var sid = String(i.id); return !!tiers[sid] || favs.has(sid); })
       .sort(function (a, b) {
-        var ta = tiers[String(a.id)];
-        var tb = tiers[String(b.id)];
-        var oa = ta ? tierOrder[ta] : 99;
-        var ob = tb ? tierOrder[tb] : 99;
+        var oa = tiers[String(a.id)] ? tierOrder[tiers[String(a.id)]] : 99;
+        var ob = tiers[String(b.id)] ? tierOrder[tiers[String(b.id)]] : 99;
         if (oa !== ob) return oa - ob;
         return a.full_name.localeCompare(b.full_name);
       });
 
-    if (list.length === 0) {
-      var msg = query
-        ? 'No instructor matches "' + escapeHTML(query) + '".'
-        : 'No ranked or favourited instructors yet. Start typing a name to find and rank one.';
-      container.innerHTML = '<div class="tier-empty">' + msg + '</div>';
-      return;
+    if (ranked.length > 0) {
+      rankedContainer.innerHTML = ranked.map(function (i) { return tierRowHTML(i, tiers, favs); }).join('');
+      rankedContainer.style.display = '';
+    } else {
+      rankedContainer.innerHTML = '<div class="tier-empty">No ranked instructors yet.</div>';
+      rankedContainer.style.display = '';
     }
 
-    container.innerHTML = list.map(function (instr) {
-      var sid = String(instr.id);
-      var currentTier = tiers[sid] || '';
-      var isFav = favs.has(sid);
-      var btns = TIERS.map(function (t) {
-        var cls = currentTier === t ? ' active-' + t : '';
-        return '<button class="tier-btn' + cls + '" onclick="setInstructorTier(' + instr.id + ',\'' + t + '\')">' + t + '</button>';
-      }).join('');
-      return '<div class="tier-row">' +
-        '<button class="tier-fav' + (isFav ? ' is-fav' : '') + '" onclick="toggleFavFromSettings(' + instr.id + ')" title="' + (isFav ? 'Remove from favourites' : 'Add to favourites') + '"></button>' +
-        '<span class="tier-name">' + escapeHTML(instr.full_name) + '</span>' +
-        '<div class="tier-btns">' + btns + '</div>' +
-      '</div>';
-    }).join('');
+    // 2. Booked but not ranked
+    var rankedIds = new Set(ranked.map(function (i) { return String(i.id); }));
+    var unranked = allInstructors
+      .filter(function (i) {
+        var sid = String(i.id);
+        return historyInstrIds.has(sid) && !rankedIds.has(sid);
+      })
+      .sort(function (a, b) { return a.full_name.localeCompare(b.full_name); });
+
+    if (unrankedContainer) {
+      if (unranked.length > 0) {
+        unrankedContainer.innerHTML = unranked.map(function (i) { return tierRowHTML(i, tiers, favs); }).join('');
+        unrankedContainer.style.display = '';
+      } else {
+        unrankedContainer.innerHTML = '<div class="tier-empty">All booked instructors have been ranked.</div>';
+        unrankedContainer.style.display = '';
+      }
+    }
+
+    // 3. Search results (only shown when typing)
+    if (searchContainer) {
+      if (query) {
+        var results = allInstructors
+          .filter(function (i) { return i.full_name.toLowerCase().includes(query); })
+          .sort(function (a, b) { return a.full_name.localeCompare(b.full_name); });
+        if (results.length > 0) {
+          searchContainer.innerHTML = results.map(function (i) { return tierRowHTML(i, tiers, favs); }).join('');
+        } else {
+          searchContainer.innerHTML = '<div class="tier-empty">No instructor matches "' + escapeHTML(query) + '".</div>';
+        }
+        searchContainer.style.display = '';
+      } else {
+        searchContainer.style.display = 'none';
+      }
+    }
   }
 
   window.toggleFavFromSettings = function (instrId) {
