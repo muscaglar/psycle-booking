@@ -146,11 +146,17 @@
 
   function computeNewToYou(profiles) {
     var booked = getBookedInstructorIds(profiles);
+    var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
+    var tiers = {};
+    try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
+
     var results = [];
     var ids = Object.keys(profiles);
     for (var i = 0; i < ids.length; i++) {
       var p = profiles[ids[i]];
-      if (!booked.has(p.id)) results.push(p);
+      // Exclude: previously booked, ranked, or favourited
+      if (booked.has(p.id) || favs.has(p.id) || tiers[p.id]) continue;
+      results.push(p);
     }
     // Sort: upcoming first, then alphabetical
     results.sort(function (a, b) {
