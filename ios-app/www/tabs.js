@@ -26,16 +26,26 @@
     var results = document.getElementById('results');
     if (!controls || !results) return;
 
-    // Create tab bar: Discover, My Bookings, Stats, Membership
+    // Create tab bar: Discover, Bookings, Stats, Membership.
+    // Icons only show on mobile, where the bar docks to the bottom.
+    var icon = function (paths) {
+      return '<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+    };
+    var TAB_ICONS = {
+      discover: icon('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
+      bookings: icon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>'),
+      stats: icon('<path d="M5 20v-6M12 20V8M19 20V5"/>'),
+      membership: icon('<circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/>'),
+    };
     var tabBar = document.createElement('div');
     tabBar.className = 'tab-bar';
     tabBar.innerHTML =
-      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">Discover</button>' +
-      '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' +
-        'My Bookings <span class="tab-badge" id="tabBadge"></span>' +
+      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">' + TAB_ICONS.discover + '<span class="tab-label">Discover</span></button>' +
+      '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' + TAB_ICONS.bookings +
+        '<span class="tab-label">Bookings</span> <span class="tab-badge" id="tabBadge"></span>' +
       '</button>' +
-      '<button class="tab-btn" data-tab="stats" onclick="switchTab(\'stats\')">Stats</button>' +
-      '<button class="tab-btn" data-tab="membership" onclick="switchTab(\'membership\')">Membership</button>';
+      '<button class="tab-btn" data-tab="stats" onclick="switchTab(\'stats\')">' + TAB_ICONS.stats + '<span class="tab-label">Stats</span></button>' +
+      '<button class="tab-btn" data-tab="membership" onclick="switchTab(\'membership\')">' + TAB_ICONS.membership + '<span class="tab-label">Membership</span></button>';
 
     // Insert tab bar after header
     var header = document.querySelector('header');
@@ -63,21 +73,31 @@
     discoverExplore.innerHTML =
       '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
       '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>';
-    discoverPanel.appendChild(discoverExplore);
 
     discoverPanel.appendChild(controls);
     discoverPanel.appendChild(results);
+    // Discovery lives UNDER the class finder — at the top it competed with
+    // the planner and filters for attention (user feedback).
+    discoverPanel.appendChild(discoverExplore);
 
     // ── My Bookings tab: upcoming bookings + history ──
     var bookingsPanel = document.createElement('div');
     bookingsPanel.id = 'tab-bookings';
     bookingsPanel.className = 'tab-panel';
 
+    // Empty state (filled by renderMyBookings — sign-in CTA when logged
+    // out, find-a-class CTA when logged in with nothing booked)
+    var bookingsEmpty = document.createElement('div');
+    bookingsEmpty.id = 'bookingsEmpty';
+    bookingsEmpty.className = 'tab-empty';
+    bookingsEmpty.style.display = 'none';
+    bookingsPanel.appendChild(bookingsEmpty);
+
     if (upcomingPanel) {
       bookingsPanel.appendChild(upcomingPanel);
     }
 
-    var historyBtnHtml = '<button class="history-in-bookings-btn" onclick="openHistoryModal()">View full history</button>';
+    var historyBtnHtml = '<button class="history-in-bookings-btn" id="historyInBookingsBtn" onclick="openHistoryModal()">View full history</button>';
     var historyBtnContainer = document.createElement('div');
     historyBtnContainer.innerHTML = historyBtnHtml;
     bookingsPanel.appendChild(historyBtnContainer.firstChild);
@@ -87,6 +107,8 @@
     statsPanel.id = 'tab-stats';
     statsPanel.className = 'tab-panel';
     statsPanel.innerHTML =
+      // Signed-out hero (filled by renderInsights)
+      '<div id="statsEmpty" class="tab-empty" style="display:none"></div>' +
       // Sync banner (if needed)
       '<div id="exploreSyncSection" class="explore-section" style="display:none"></div>' +
       // Quick stats
@@ -106,18 +128,33 @@
     var membershipPanel = document.createElement('div');
     membershipPanel.id = 'tab-membership';
     membershipPanel.className = 'tab-panel';
+    // Membership = the user's relationship with Psycle: plan, usage,
+    // and their instructor rankings/favourites. App-focused settings
+    // (theme, reminders, data) live in the Settings panel.
     membershipPanel.innerHTML =
+      '<div id="membershipSignin" class="tab-empty" style="display:none"></div>' +
       '<div id="membershipInfo" class="insights-section" style="display:none"></div>' +
       '<div id="costSection" class="cost-section" style="display:none"></div>' +
-      '<div class="insights-section" style="padding:12px 24px">' +
-        '<div class="insights-title">Settings</div>' +
-        '<div style="display:flex;flex-direction:column;gap:8px">' +
-          '<button class="history-in-bookings-btn" onclick="openSettings()">Settings</button>' +
-          '<button class="history-in-bookings-btn" onclick="exportSettings()">Export settings</button>' +
-          '<button class="history-in-bookings-btn" onclick="document.getElementById(\'membershipImportFile\')?.click()">Import settings</button>' +
-          '<input type="file" id="membershipImportFile" accept=".json" style="display:none" onchange="importSettings(this)">' +
-          '<button class="history-in-bookings-btn" onclick="downloadBugReport()">Download bug report</button>' +
-        '</div>' +
+      '<div class="insights-section">' +
+        '<div class="insights-title">Instructor Rankings & Favourites</div>' +
+        '<div class="tier-group-label">Ranked</div>' +
+        '<div class="tier-list tier-list-short" id="tierListRanked"></div>' +
+        '<div class="tier-group-label" style="margin-top:16px">Taken a class with — not yet ranked</div>' +
+        '<div class="tier-list tier-list-short" id="tierListUnranked"></div>' +
+        '<div class="tier-group-label" style="margin-top:16px">Search all instructors</div>' +
+        '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
+        '<div class="tier-list" id="tierListSearch" style="display:none"></div>' +
+      '</div>' +
+      '<div class="insights-section app-section">' +
+        '<button class="app-row" onclick="openSettings()">' +
+          '<span class="app-row-text"><span class="app-row-label">Settings</span>' +
+          '<span class="app-row-detail">Theme · bike preferences · reminders · data</span></span>' +
+          '<span class="app-row-chevron">›</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="about-block">' +
+        '<div class="about-mark">Psycle Companion</div>' +
+        '<div class="about-text">An independent companion app for Psycle London members.<br>Not affiliated with, or endorsed by, Psycle.</div>' +
       '</div>';
 
     // Wrap all panels in tab-content
@@ -142,8 +179,10 @@
       switchTab(hash, true);
     }
 
-    // Update badge
+    // Update badge + paint the bookings empty state (checkAuth may have
+    // already run and skipped it because these elements didn't exist yet)
     updateTabBadge();
+    if (typeof renderMyBookings === 'function') renderMyBookings();
   }
 
   window.switchTab = function (tab, noHash) {
@@ -152,13 +191,27 @@
     btns.forEach(function (b) {
       b.classList.toggle('active', b.dataset.tab === tab);
       if (b.dataset.tab === tab) {
-        b.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+        // Centre the active tab by scrolling ONLY the tab bar.
+        // scrollIntoView also scrolls ancestors (the page itself on iOS),
+        // which made tab switches drag the document around.
+        var bar = b.closest('.tab-bar');
+        if (bar) {
+          var rect = b.getBoundingClientRect();
+          var barRect = bar.getBoundingClientRect();
+          bar.scrollTo({
+            left: bar.scrollLeft + (rect.left - barRect.left) - (barRect.width - rect.width) / 2,
+            behavior: 'smooth',
+          });
+        }
       }
     });
     var panels = document.querySelectorAll('.tab-panel');
     panels.forEach(function (p) {
       p.classList.toggle('active', p.id === 'tab-' + tab);
     });
+    // Panels share the document scroller — a scroll position retained from
+    // a taller tab leaves a shorter one stuck past the top (iOS overshoot).
+    window.scrollTo(0, 0);
     if (!noHash) {
       history.replaceState(null, '', '#' + tab);
     }
@@ -173,8 +226,16 @@
     if (tab === 'membership') {
       renderMembershipInfo();
       renderCostTracker();
+      if (typeof filterTierList === 'function') filterTierList();
     }
   };
+
+  // Deep links and back/forward: react to hash changes after load
+  window.addEventListener('hashchange', function () {
+    var hash = location.hash.replace('#', '');
+    if (hash === 'insights' || hash === 'explore' || hash === 'profile') hash = 'stats';
+    if (TABS.indexOf(hash) !== -1 && hash !== _currentTab) switchTab(hash, true);
+  });
 
   function updateTabBadge() {
     var badge = document.getElementById('tabBadge');
@@ -195,8 +256,9 @@
       if (_currentTab === 'stats') renderInsights();
     });
     PsycleEvents.on('booking:complete', function () {
+      // No auto tab-switch — the confirmation overlay offers "View my
+      // bookings" for users who want to jump there.
       updateTabBadge();
-      setTimeout(function () { switchTab('bookings'); }, 800);
     });
     PsycleEvents.on('booking:cancelled', function () {
       updateTabBadge();
@@ -234,6 +296,25 @@
   }
 
   window.renderInsights = function () {
+    // Signed-out with no data: one hero CTA instead of a page of stubs.
+    // Hide actions that can only fail (share with nothing to share).
+    var signedIn = (typeof currentUser !== 'undefined' && !!currentUser);
+    var hasHistory = getFullHistory().some(function (h) { return !h.cancelledAt; });
+    var statsEmpty = document.getElementById('statsEmpty');
+    var shareSection = document.getElementById('shareSection');
+    if (shareSection) shareSection.style.display = hasHistory ? '' : 'none';
+    if (statsEmpty) {
+      if (!signedIn && !hasHistory) {
+        statsEmpty.style.display = '';
+        statsEmpty.innerHTML =
+          '<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-6M12 20V8M19 20V5"/></svg></div>' +
+          '<div class="tab-empty-title">Your training<br>story starts here</div>' +
+          '<div class="tab-empty-sub">Sign in and sync your booking history to unlock stats, heatmaps, and instructor insights.</div>' +
+          '<button class="tab-empty-btn" onclick="openLoginPopup()">Sign in</button>';
+      } else {
+        statsEmpty.style.display = 'none';
+      }
+    }
     renderQuickStats();
     renderCostTracker();
     renderClassTypeDistribution();
@@ -636,7 +717,20 @@
 
     var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
     var user = (typeof currentUser !== 'undefined') ? currentUser : null;
-    if (!sub && !user) { container.style.display = 'none'; return; }
+    var signinEl = document.getElementById('membershipSignin');
+    if (!sub && !user) {
+      container.style.display = 'none';
+      if (signinEl) {
+        signinEl.style.display = '';
+        signinEl.innerHTML =
+          '<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg></div>' +
+          '<div class="tab-empty-title">Membership</div>' +
+          '<div class="tab-empty-sub">Sign in to see your plan, class usage, and cost per class.</div>' +
+          '<button class="tab-empty-btn" onclick="openLoginPopup()">Sign in</button>';
+      }
+      return;
+    }
+    if (signinEl) signinEl.style.display = 'none';
     container.style.display = '';
 
     var html = '<div class="insights-title">Your Membership</div>';
@@ -769,6 +863,60 @@
 
     container.innerHTML = html;
   }
+
+  // ── Theme picker (Membership → App) ───────────────────────────
+
+  function renderThemePicker() {
+    var box = document.getElementById('themePicker');
+    if (!box || !window.APP_THEMES) return;
+    var current = (typeof getAppTheme === 'function') ? getAppTheme() : 'dark';
+    box.innerHTML =
+      '<div class="theme-picker-label">Theme</div>' +
+      '<div class="theme-chips">' +
+      window.APP_THEMES.map(function (t) {
+        return '<button class="theme-chip' + (t.id === current ? ' active' : '') + '" onclick="window._pickTheme(\'' + t.id + '\')">' +
+          '<span class="theme-swatch" style="background:' + t.bg + '"><i style="background:' + t.accent + '"></i></span>' +
+          '<span class="theme-chip-name">' + t.name + '</span>' +
+        '</button>';
+      }).join('') +
+      '</div>';
+  }
+
+  window._pickTheme = function (id) {
+    if (typeof setAppTheme === 'function') setAppTheme(id);
+    renderThemePicker();
+  };
+  // The picker + reminder row render inside the Settings panel, which
+  // settings.js builds — expose so it can trigger them after opening.
+  window.renderThemePicker = renderThemePicker;
+  window.renderReminderRow = renderReminderRow;
+
+  // ── Weekly reminder row (iOS app only — needs the native bridge) ──
+
+  function renderReminderRow() {
+    var row = document.getElementById('reminderRow');
+    if (!row) return;
+    if (!window._nativeReminder) { row.innerHTML = ''; return; }
+    var on = window._nativeReminder.isOn();
+    row.innerHTML =
+      '<button class="app-row" onclick="window._toggleReminder()">' +
+        '<span class="app-row-text"><span class="app-row-label">Monday booking reminder</span>' +
+        '<span class="app-row-detail">11:59 UK — when the new booking week opens</span></span>' +
+        '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
+      '</button>';
+  }
+
+  window._toggleReminder = async function () {
+    if (!window._nativeReminder) return;
+    if (window._nativeReminder.isOn()) {
+      await window._nativeReminder.disable();
+      toast('Weekly reminder off', 'info');
+    } else {
+      var ok = await window._nativeReminder.enable();
+      toast(ok ? 'Reminder set — Mondays at 11:59' : 'Enable notifications for Psycle in iOS Settings first', ok ? 'success' : 'error');
+    }
+    renderReminderRow();
+  };
 
   function _formatGbp(amount) {
     return '£' + amount.toFixed(2);

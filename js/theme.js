@@ -12,28 +12,69 @@
  *   hideSkeletonLoading, renderEmptyState, haptic
  */
 
-// ── A. Dark / Light Mode Toggle ─────────────────────────────────
+// ── A. Themes ───────────────────────────────────────────────────
+// Every theme is a [data-theme="id"] token block in css/theme.css.
+// 'dark' is the :root default (no attribute). The header sun/moon
+// button quick-flips between the light/dark bases; flavour themes are
+// picked in Membership → Theme (or deep-linked with ?theme=id).
 
 const THEME_KEY = 'psycle_theme';
 
-function _applyTheme(mode) {
-  if (mode === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
+const APP_THEMES = [
+  { id: 'dark',      name: 'Noir',      base: 'dark',  bg: '#09090b', accent: '#e94560' },
+  { id: 'light',     name: 'Daylight',  base: 'light', bg: '#f7f7f8', accent: '#e94560' },
+  { id: 'terminal',  name: 'Terminal',  base: 'dark',  bg: '#060906', accent: '#2bd96b' },
+  { id: 'synthwave', name: 'Synthwave', base: 'dark',  bg: '#140a24', accent: '#ff2d95' },
+  { id: 'gameboy',   name: 'Handheld',  base: 'dark',  bg: '#0f380f', accent: '#9bbc0f' },
+  { id: 'blueprint', name: 'Blueprint', base: 'dark',  bg: '#0a1c30', accent: '#38bdf8' },
+];
+window.APP_THEMES = APP_THEMES;
+
+function _themeById(id) {
+  for (var i = 0; i < APP_THEMES.length; i++) {
+    if (APP_THEMES[i].id === id) return APP_THEMES[i];
   }
+  return null;
+}
+
+function _applyTheme(id) {
+  if (id === 'dark') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', id);
+  }
+  // Status area / PWA chrome follows the theme background
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const t = _themeById(id);
+  if (meta && t) meta.setAttribute('content', t.bg);
 }
 
 function _resolveTheme() {
   const saved = localStorage.getItem(THEME_KEY);
-  // 'light' or 'dark' = explicit override. Anything else (null, 'system') = follow system.
-  if (saved === 'light' || saved === 'dark') return saved;
-  // Follow system preference
+  if (_themeById(saved)) return saved;
+  // No (valid) preference — follow the system
   if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
   return 'dark';
 }
 
+window.getAppTheme = _resolveTheme;
+
+window.setAppTheme = function (id) {
+  if (!_themeById(id)) return;
+  localStorage.setItem(THEME_KEY, id);
+  _applyTheme(id);
+  updateThemeIcon();
+  haptic('tap');
+  if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('theme:changed', id);
+};
+
 function initTheme() {
+  // ?theme=synthwave deep link (also handy for testing)
+  try {
+    const param = new URLSearchParams(location.search).get('theme');
+    if (param && _themeById(param)) localStorage.setItem(THEME_KEY, param);
+  } catch (e) {}
+
   _applyTheme(_resolveTheme());
   injectThemeToggle();
   updateThemeIcon();
@@ -42,7 +83,7 @@ function initTheme() {
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
       var saved = localStorage.getItem(THEME_KEY);
-      if (!saved || saved === 'system') {
+      if (!_themeById(saved)) {
         _applyTheme(_resolveTheme());
         updateThemeIcon();
       }
@@ -51,25 +92,11 @@ function initTheme() {
 }
 
 function toggleTheme() {
-  const current = _resolveTheme();
-  const saved = localStorage.getItem(THEME_KEY);
-
-  // Cycle: system → light → dark → system
-  if (!saved || saved === 'system') {
-    // Was following system → switch to explicit light
-    localStorage.setItem(THEME_KEY, 'light');
-    _applyTheme('light');
-  } else if (saved === 'light') {
-    // Was explicit light → switch to explicit dark
-    localStorage.setItem(THEME_KEY, 'dark');
-    _applyTheme('dark');
-  } else {
-    // Was explicit dark → back to system
-    localStorage.setItem(THEME_KEY, 'system');
-    _applyTheme(_resolveTheme());
-  }
-  updateThemeIcon();
-  haptic('tap');
+  // Quick toggle flips between the light/dark bases (and exits any
+  // flavour theme). First tap with no preference flips the system theme.
+  const cur = _themeById(_resolveTheme());
+  const next = cur && cur.base === 'light' ? 'dark' : 'light';
+  window.setAppTheme(next);
 }
 
 function injectThemeToggle() {
@@ -93,25 +120,19 @@ function injectThemeToggle() {
 function updateThemeIcon() {
   const btn = document.getElementById('themeToggleBtn');
   if (!btn) return;
-  const saved = localStorage.getItem(THEME_KEY);
-  const isSystem = !saved || saved === 'system';
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const cur = _themeById(_resolveTheme());
+  const isLight = !!(cur && cur.base === 'light');
 
-  // Sun = currently light, Moon = currently dark, Auto = following system
+  // Sun = currently light, Moon = currently dark
   const sunSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
   const moonSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  // Auto icon: half sun/half moon
-  const autoSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><path d="M12 7a5 5 0 0 1 0 10" fill="currentColor" stroke="none"/></svg>';
 
-  if (isSystem) {
-    btn.innerHTML = autoSvg;
-    btn.title = 'Theme: auto (following system) — click for light';
-  } else if (saved === 'light') {
+  if (isLight) {
     btn.innerHTML = sunSvg;
     btn.title = 'Theme: light — click for dark';
   } else {
     btn.innerHTML = moonSvg;
-    btn.title = 'Theme: dark — click for auto';
+    btn.title = 'Theme: dark — click for light';
   }
 }
 

@@ -17,11 +17,13 @@
   // A. Pull-to-Refresh
   // ═══════════════════════════════════════════════════════════════════
 
-  const PULL_THRESHOLD = 60;
-  const PULL_MAX = 120;
+  const PULL_THRESHOLD = 110;
+  const PULL_MAX = 180;
+  const PULL_INTENT = 24; // downward movement required before we react at all
   let pullStartY = 0;
   let pullCurrentY = 0;
-  let isPulling = false;
+  let pullArmed = false;  // touch began at the top, outside excluded targets
+  let isPulling = false;  // deliberate downward intent confirmed
   let pullIndicator = null;
 
   function createPullIndicator() {
@@ -69,56 +71,79 @@
     if (spinner) spinner.style.transform = '';
   }
 
+  // Refresh whatever is actually on screen: bookings on the My Bookings
+  // tab, the last search on Discover (only if results are showing).
+  // Returns a promise/truthy when a refresh ran, null when there is
+  // nothing sensible to refresh (then the gesture is a no-op).
+  function pullRefreshAction() {
+    var active = document.querySelector('.tab-panel.active');
+    var tabId = active ? active.id : 'tab-discover';
+    if (tabId === 'tab-bookings') {
+      return (typeof fetchMyBookings === 'function') ? (fetchMyBookings() || true) : null;
+    }
+    if (tabId === 'tab-discover') {
+      var hasResults = document.querySelector('#results .day-group');
+      if (hasResults && typeof search === 'function') return search() || true;
+    }
+    return null;
+  }
+
   document.addEventListener('touchstart', function (e) {
+    pullArmed = false;
+    isPulling = false;
     if (window.scrollY !== 0) return;
-    // Don't capture if the touch started inside any overlay or scrollable modal.
+    // Don't capture inside overlays, scrollable widgets, or interactive elements.
     if (e.target.closest(
-      '.modal-overlay, .modal, .tab-bar, ' +
-      '.settings-overlay, .confirm-overlay, ' +
+      '.modal-overlay, .modal, .tab-bar, button, input, select, textarea, ' +
+      '.week-grid, .instr-dropdown, .settings-overlay, .confirm-overlay, ' +
       '.bike-modal-overlay, .class-detail-overlay, .instr-modal-overlay, .history-modal-overlay'
     )) return;
     pullStartY = e.touches[0].clientY;
-    isPulling = true;
-    createPullIndicator();
+    pullCurrentY = pullStartY;
+    pullArmed = true;
   }, { passive: true });
 
   document.addEventListener('touchmove', function (e) {
-    if (!isPulling) return;
+    if (!pullArmed) return;
     if (window.scrollY > 0) {
+      pullArmed = false;
       isPulling = false;
       resetPullIndicator();
       return;
     }
     pullCurrentY = e.touches[0].clientY;
     const distance = pullCurrentY - pullStartY;
+    // Require deliberate downward movement before showing anything
+    if (!isPulling) {
+      if (distance < PULL_INTENT) return;
+      isPulling = true;
+      createPullIndicator();
+    }
     if (distance > 0) {
       updatePullIndicator(distance);
     }
   }, { passive: true });
 
   document.addEventListener('touchend', function () {
+    if (!pullArmed) return;
+    pullArmed = false;
     if (!isPulling) return;
     isPulling = false;
     const distance = pullCurrentY - pullStartY;
     if (distance >= PULL_THRESHOLD) {
-      showRefreshing();
-      // Call global search() to re-run last search
-      if (typeof search === 'function') {
-        try {
-          const result = search();
-          // If search returns a promise, wait for it to finish
-          if (result && typeof result.then === 'function') {
-            result.finally(function () {
-              setTimeout(resetPullIndicator, 400);
-            });
-          } else {
-            setTimeout(resetPullIndicator, 1500);
-          }
-        } catch (err) {
-          setTimeout(resetPullIndicator, 400);
-        }
+      var result = null;
+      try { result = pullRefreshAction(); } catch (err) { result = null; }
+      if (!result) {
+        resetPullIndicator();
       } else {
-        setTimeout(resetPullIndicator, 400);
+        showRefreshing();
+        if (typeof result.then === 'function') {
+          result.finally(function () {
+            setTimeout(resetPullIndicator, 400);
+          });
+        } else {
+          setTimeout(resetPullIndicator, 1500);
+        }
       }
     } else {
       resetPullIndicator();
@@ -252,7 +277,7 @@
     try {
       const filters = {
         instructorIds: typeof selectedInstructors !== 'undefined' ? [...selectedInstructors] : [],
-        locationId: document.getElementById('locationSelect')?.value || '',
+        locationIds: typeof selectedLocations !== 'undefined' ? [...selectedLocations] : [],
         categories: typeof selectedCategories !== 'undefined' ? [...selectedCategories] : [],
         strengthSubs: typeof selectedStrengthSubs !== 'undefined' ? [...selectedStrengthSubs] : [],
         startDate: document.getElementById('startDate')?.value || '',
@@ -286,13 +311,16 @@
         }
       }
 
-      // Restore location
-      if (filters.locationId) {
-        const lSel = document.getElementById('locationSelect');
-        if (lSel) {
-          lSel.value = filters.locationId;
-          if (typeof updateLocationHint === 'function') updateLocationHint();
-        }
+      // Restore studios (multi-select; legacy saves had a single locationId)
+      var savedLocs = filters.locationIds || (filters.locationId ? [filters.locationId] : []);
+      if (savedLocs.length > 0 && typeof selectedLocations !== 'undefined') {
+        selectedLocations.clear();
+        savedLocs.forEach(function (id) {
+          if (typeof locations !== 'undefined' && locations.some(function (l) { return String(l.id) === String(id); })) {
+            selectedLocations.add(String(id));
+          }
+        });
+        if (typeof renderLocationChips === 'function') renderLocationChips();
       }
 
       // Restore categories
@@ -326,9 +354,14 @@
             b.classList.add('active');
           }
         });
-        // For today/tomorrow, recalculate the actual date (it shifts daily)
+        // For today/tomorrow, recalculate the actual date (it shifts daily).
+        // Local-time formatting — toISOString() shifts the day in the evening
+        // for timezones west of UTC.
+        var fmtLocal = function (d) {
+          return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+        };
         var todayDate = new Date();
-        var todayStr = todayDate.toISOString().split('T')[0];
+        var todayStr = fmtLocal(todayDate);
         if (filters.dateQuickMode === 'today') {
           document.getElementById('startDate').value = todayStr;
           document.getElementById('daysAhead').value = 1;
@@ -337,7 +370,7 @@
         } else if (filters.dateQuickMode === 'tomorrow') {
           var tmrw = new Date(todayDate);
           tmrw.setDate(tmrw.getDate() + 1);
-          document.getElementById('startDate').value = tmrw.toISOString().split('T')[0];
+          document.getElementById('startDate').value = fmtLocal(tmrw);
           document.getElementById('daysAhead').value = 1;
           var daysGroup2 = document.getElementById('daysAheadGroup');
           if (daysGroup2) daysGroup2.style.display = 'none';
@@ -358,6 +391,8 @@
           b.classList.remove('active');
         });
       }
+
+      if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
     } catch (e) {
       // Silently fail if stored data is corrupt
     }
@@ -393,11 +428,8 @@
   wrapGlobal('setDateQuick', saveFilters);
   wrapGlobal('onDateInputChange', saveFilters);
 
-  // Hook location select change
-  var locationSelect = document.getElementById('locationSelect');
-  if (locationSelect) {
-    locationSelect.addEventListener('change', saveFilters);
-  }
+  // Hook studio chip toggles
+  wrapGlobal('toggleLocation', saveFilters);
 
   // ── Wait for init IIFE to complete, then restore filters ────────
   // The init IIFE in app.js is an async function that fetches instructors,

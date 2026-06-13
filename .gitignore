@@ -6,3 +6,7 @@ node_modules/
 
 # CocoaPods (reproducible from Podfile.lock via pod install)
 ios-app/ios/App/Pods/
+
+# Local Claude Code settings (machine-specific)
+.claude/settings.json
+.claude/settings.local.json

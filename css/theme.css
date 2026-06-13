@@ -984,3 +984,183 @@ select:focus, input:focus { border-color: var(--accent); }
 .explore-top-count { color: var(--text-dim); }
 [data-theme="light"] .explore-tier-bar { background: #ebedf0; }
 [data-theme="light"] .explore-tier-seg.tier-unranked { background: #d0d0d0; color: #888; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Flavour themes — picked in Membership → Theme (?theme=id deep link).
+   Each block only overrides tokens; component styles cascade for free.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Terminal: green phosphor CRT ─────────────────────────────── */
+[data-theme="terminal"] {
+  --bg: #060906; --bg-panel: #0a120a; --bg-input: #0e1a0e; --bg-deep: #040604;
+  --border: #16341a; --border-light: #1f4a25; --border-subtle: #1a3f1f;
+  --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c;
+  --text-dim: #6da86d; --text-faint: #538a53; --text-ghost: #3f6b3f; --text-off: #2c4c2c;
+  --accent: #16a34a; --accent-hover: #15803d;
+  --badge-bg: #0e1a0e; --badge-border: #1f4a25; --badge-text: #8cc78c;
+  --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d;
+  --badge-waitlist-bg: #2a2208; --badge-waitlist-text: #facc15; --badge-waitlist-border: #574a12;
+  --badge-highlight-bg: #082026; --badge-highlight-text: #22d3ee; --badge-highlight-border: #155e6b;
+  --booked-bg: #0c1f10; --booked-border: #16a34a;
+  --spinner-track: #1f4a25;
+  --modal-overlay: rgba(2, 8, 2, 0.75);
+  --toast-bg: #0a120a; --toast-border: #1f4a25;
+  --skeleton-base: #0e1a0e; --skeleton-shine: #16341a;
+  --section-border: #122a16;
+  --upcoming-bg: #0a120a; --upcoming-border: #16341a;
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(22,163,74,0.12);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 32px rgba(22,163,74,0.12);
+  --shadow-overlay: rgba(0,0,0,0.6);
+  --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+}
+
+/* CRT scanlines + phosphor glow on headlines */
+[data-theme="terminal"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.16) 0px, rgba(0, 0, 0, 0.16) 1px,
+    transparent 1px, transparent 3px
+  );
+}
+[data-theme="terminal"] header h1,
+[data-theme="terminal"] .tab-empty-title,
+[data-theme="terminal"] .discover-empty-title { text-shadow: 0 0 18px rgba(43, 217, 107, 0.4); }
+[data-theme="terminal"] .hm-level-0 { background: var(--bg-input); }
+[data-theme="terminal"] .hm-level-1 { background: rgba(43, 217, 107, 0.25); }
+[data-theme="terminal"] .hm-level-2 { background: rgba(43, 217, 107, 0.45); }
+[data-theme="terminal"] .hm-level-3 { background: rgba(43, 217, 107, 0.7); }
+[data-theme="terminal"] .hm-level-4 { background: rgba(43, 217, 107, 1); }
+
+/* ── Synthwave: neon horizon ──────────────────────────────────── */
+[data-theme="synthwave"] {
+  --bg: #140a24; --bg-panel: #1c1133; --bg-input: #251746; --bg-deep: #0e0719;
+  --border: #322055; --border-light: #44307a; --border-subtle: #3a2866;
+  --text: #efe6ff; --text-heading: #ffffff; --text-muted: #c2a9e8;
+  --text-dim: #a489cf; --text-faint: #8169ad; --text-ghost: #64508a; --text-off: #483a64;
+  --accent: #ff2d95; --accent-hover: #e0187d;
+  --badge-bg: #251746; --badge-border: #44307a; --badge-text: #c2a9e8;
+  --badge-full-bg: #3c1030; --badge-full-text: #ff7eb9; --badge-full-border: #6e2257;
+  --badge-waitlist-bg: #3a2b0e; --badge-waitlist-text: #fbbf24; --badge-waitlist-border: #6b521c;
+  --badge-highlight-bg: #0c2a3a; --badge-highlight-text: #22d3ee; --badge-highlight-border: #1c5a73;
+  --booked-bg: #2a0f3d; --booked-border: #ff2d95;
+  --spinner-track: #44307a;
+  --modal-overlay: rgba(8, 3, 18, 0.75);
+  --toast-bg: #1c1133; --toast-border: #44307a;
+  --skeleton-base: #251746; --skeleton-shine: #322055;
+  --section-border: #2a1c4a;
+  --upcoming-bg: #1c1133; --upcoming-border: #322055;
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 16px rgba(255, 45, 149, 0.18);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 40px rgba(255, 45, 149, 0.18);
+  --shadow-overlay: rgba(0,0,0,0.6);
+}
+
+/* Cyan→pink gradient headlines + neon CTAs */
+[data-theme="synthwave"] header h1,
+[data-theme="synthwave"] .tab-empty-title,
+[data-theme="synthwave"] .discover-empty-title {
+  background: linear-gradient(180deg, #22d3ee 0%, #ff2d95 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+[data-theme="synthwave"] .auth-pill a.signin-pill,
+[data-theme="synthwave"] .tab-empty-btn { box-shadow: 0 0 24px rgba(255, 45, 149, 0.45); }
+[data-theme="synthwave"] .hm-level-0 { background: var(--bg-input); }
+[data-theme="synthwave"] .hm-level-1 { background: rgba(255, 45, 149, 0.25); }
+[data-theme="synthwave"] .hm-level-2 { background: rgba(255, 45, 149, 0.45); }
+[data-theme="synthwave"] .hm-level-3 { background: rgba(255, 45, 149, 0.7); }
+[data-theme="synthwave"] .hm-level-4 { background: rgba(255, 45, 149, 1); }
+
+/* ── Handheld: DMG four-shade green, hard pixel corners ───────── */
+[data-theme="gameboy"] {
+  --bg: #0f380f; --bg-panel: #133f13; --bg-input: #1b4d1b; --bg-deep: #0a2a0a;
+  --border: #306230; --border-light: #3f7a3f; --border-subtle: #2a572a;
+  --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f;
+  --text-dim: #79991c; --text-faint: #648224; --text-ghost: #527029; --text-off: #3f5c28;
+  --accent: #9bbc0f; --accent-hover: #8bac0f;
+  --badge-bg: #1b4d1b; --badge-border: #306230; --badge-text: #8bac0f;
+  --badge-full-bg: #2a572a; --badge-full-text: #c6e034; --badge-full-border: #3f7a3f;
+  --badge-waitlist-bg: #2a572a; --badge-waitlist-text: #9bbc0f; --badge-waitlist-border: #3f7a3f;
+  --badge-highlight-bg: #1b4d1b; --badge-highlight-text: #c6e034; --badge-highlight-border: #3f7a3f;
+  --booked-bg: #1b4d1b; --booked-border: #9bbc0f;
+  --spinner-track: #306230;
+  --modal-overlay: rgba(6, 22, 6, 0.8);
+  --toast-bg: #133f13; --toast-border: #306230;
+  --skeleton-base: #1b4d1b; --skeleton-shine: #306230;
+  --section-border: #2a572a;
+  --upcoming-bg: #133f13; --upcoming-border: #306230;
+  --shadow-sm: none; --shadow-md: none;
+  --shadow-lg: 0 4px 0 rgba(0, 0, 0, 0.25);
+  --shadow-overlay: rgba(0,0,0,0.5);
+  /* Pixel hardware: no rounded corners anywhere */
+  --radius-xs: 0; --radius-sm: 0; --radius-md: 0; --radius-lg: 0;
+  --radius-xl: 0; --radius-2xl: 0; --radius-3xl: 0; --radius-full: 0;
+  --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+}
+
+/* Lime CTAs need dark text */
+[data-theme="gameboy"] .auth-pill a.signin-pill,
+[data-theme="gameboy"] .tab-empty-btn,
+[data-theme="gameboy"] .btn,
+[data-theme="gameboy"] .bc-btn-primary,
+[data-theme="gameboy"] .tab-badge,
+[data-theme="gameboy"] .week-event-social { color: #0f380f; }
+[data-theme="gameboy"] .hm-level-0 { background: var(--bg-input); }
+[data-theme="gameboy"] .hm-level-1 { background: #306230; }
+[data-theme="gameboy"] .hm-level-2 { background: #79991c; }
+[data-theme="gameboy"] .hm-level-3 { background: #8bac0f; }
+[data-theme="gameboy"] .hm-level-4 { background: #9bbc0f; }
+
+/* ── Blueprint: engineering drawing ───────────────────────────── */
+[data-theme="blueprint"] {
+  --bg: #0a1c30; --bg-panel: #0e2440; --bg-input: #132d4e; --bg-deep: #071525;
+  --border: #1c3d61; --border-light: #295380; --border-subtle: #224870;
+  --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0;
+  --text-dim: #84a8c8; --text-faint: #6589a8; --text-ghost: #4d6d89; --text-off: #364f66;
+  --accent: #38bdf8; --accent-hover: #1ba2dd;
+  --badge-bg: #132d4e; --badge-border: #295380; --badge-text: #a4c4e0;
+  --badge-full-bg: #3a1525; --badge-full-text: #ff8097; --badge-full-border: #66293f;
+  --badge-waitlist-bg: #36300e; --badge-waitlist-text: #fbbf24; --badge-waitlist-border: #645a1e;
+  --badge-highlight-bg: #0e3344; --badge-highlight-text: #67e8f9; --badge-highlight-border: #1c5a73;
+  --booked-bg: #0d3050; --booked-border: #38bdf8;
+  --spinner-track: #295380;
+  --modal-overlay: rgba(3, 10, 18, 0.75);
+  --toast-bg: #0e2440; --toast-border: #295380;
+  --skeleton-base: #132d4e; --skeleton-shine: #1c3d61;
+  --section-border: #163454;
+  --upcoming-bg: #0e2440; --upcoming-border: #1c3d61;
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.35);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.35), 0 12px 40px rgba(0,0,0,0.5);
+  --shadow-overlay: rgba(0,0,0,0.6);
+}
+
+/* Graph-paper grid over everything, faint */
+[data-theme="blueprint"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+[data-theme="blueprint"] .auth-pill a.signin-pill,
+[data-theme="blueprint"] .tab-empty-btn,
+[data-theme="blueprint"] .btn,
+[data-theme="blueprint"] .bc-btn-primary,
+[data-theme="blueprint"] .tab-badge { color: #06283f; }
+[data-theme="blueprint"] .hm-level-0 { background: var(--bg-input); }
+[data-theme="blueprint"] .hm-level-1 { background: rgba(56, 189, 248, 0.25); }
+[data-theme="blueprint"] .hm-level-2 { background: rgba(56, 189, 248, 0.45); }
+[data-theme="blueprint"] .hm-level-3 { background: rgba(56, 189, 248, 0.7); }
+[data-theme="blueprint"] .hm-level-4 { background: rgba(56, 189, 248, 1); }

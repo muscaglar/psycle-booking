@@ -10,7 +10,7 @@
 <!-- Save a DNS+TLS round-trip on the first API call. -->
 <link rel="preconnect" href="https://psycle.codexfit.com" crossorigin>
 <link rel="dns-prefetch" href="https://psycle.codexfit.com">
-<title>Psycle Class Finder</title>
+<title>Psycle Companion</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="theme.css">
@@ -27,9 +27,9 @@
 
 <header>
   <h1>Psycle</h1>
-  <span class="header-subtitle">Class Finder</span>
+  <span class="header-subtitle">Companion</span>
   <div class="auth-pill" id="authPill">
-    <a href="#" onclick="event.preventDefault();if(typeof openLoginPopup==='function')openLoginPopup();else location.href='./login.html'" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>
+    <a href="#" onclick="event.preventDefault();if(typeof openLoginPopup==='function')openLoginPopup();else location.href='./login.html'" class="signin-pill">Sign in</a>
   </div>
   <button id="settingsGear" class="settings-gear" aria-label="Settings" title="Settings" hidden onclick="if(typeof openSettings==='function')openSettings()">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -116,6 +116,7 @@
 <div class="controls" id="controlsPanel">
   <div class="controls-toggle" id="controlsToggle" onclick="toggleFilters()">
     <span>Filters</span>
+    <span class="controls-summary" id="controlsSummary"></span>
     <span class="controls-chevron" id="controlsChevron">▼</span>
   </div>
   <div class="controls-body" id="controlsBody">
@@ -130,10 +131,8 @@
   </div>
 
   <div class="control-group">
-    <label>Location <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
-    <select id="locationSelect" onchange="updateLocationHint()">
-      <option value="">All Studios (slower)</option>
-    </select>
+    <label>Studios <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
+    <div id="locationChips" class="location-chips"></div>
   </div>
 
   <div class="control-group" style="position:relative">
@@ -174,12 +173,18 @@
 
 <div class="results" id="results">
   <div class="discover-empty-state">
-    <div class="discover-empty-title">Find your next class</div>
-    <div class="discover-empty-sub">Use the filters to search by instructor, studio, class type, or date — or try a quick search:</div>
-    <div class="discover-quick-actions">
-      <button class="discover-quick-btn" onclick="setDateQuick('today');search()">Today's classes</button>
-      <button class="discover-quick-btn" onclick="setDateQuick('tomorrow');search()">Tomorrow</button>
-      <button class="discover-quick-btn" onclick="applyFavouritesAsFilter();search()">My favourites</button>
+    <div class="discover-empty-title">Find your<br>next class</div>
+    <div id="discoverQuickWrap">
+      <div class="discover-empty-sub">Search by instructor, studio, class type, or date — or jump straight in:</div>
+      <div class="discover-quick-actions">
+        <button class="discover-quick-btn" onclick="setDateQuick('today');search()">Today's classes</button>
+        <button class="discover-quick-btn" onclick="setDateQuick('tomorrow');search()">Tomorrow</button>
+        <button class="discover-quick-btn" id="qaFavs" onclick="applyFavouritesAsFilter();search()">My favourites</button>
+      </div>
+    </div>
+    <div id="discoverSignin" style="display:none">
+      <div class="discover-empty-sub">Sign in with your Psycle account to search the timetable and book classes.</div>
+      <button class="tab-empty-btn" onclick="openLoginPopup()">Sign in</button>
     </div>
   </div>
 </div>

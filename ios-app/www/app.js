@@ -27,7 +27,13 @@
 const DIRECT_API = 'https://psycle.codexfit.com/api/v1/customer';
 const PROXY = 'https://corsproxy.io/?';
 const IS_FILE = location.protocol === 'file:';
-const today = new Date().toISOString().split('T')[0];
+
+// Format a Date as YYYY-MM-DD in LOCAL time. toISOString() converts to UTC,
+// which makes "today" wrong in the evening for timezones west of UTC.
+function localDateStr(d = new Date()) {
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+}
+const today = localDateStr();
 
 function apiUrl(path) {
   return IS_FILE
@@ -181,7 +187,11 @@ function _parseSlots(raw) {
 }
 
 async function fetchMyBookings() {
-  if (!getBearerToken()) { _myBookings = {}; return; }
+  if (!getBearerToken()) {
+    _myBookings = {};
+    renderMyBookings(); // still render — the signed-out empty state lives there
+    return;
+  }
   try {
     const res = await apiFetch('/bookings?limit=200');
     if (!res.ok) return;
@@ -207,6 +217,12 @@ async function fetchMyBookings() {
         _myBookings[evtId].slots.push(slotNum);
         _myBookings[evtId].slotBookings[slotNum] = b.id;
       }
+    });
+
+    // Re-apply locally-tracked waitlist status (cleared once the class passes)
+    const waitlisted = _cleanWaitlisted();
+    Object.keys(waitlisted).forEach(id => {
+      if (_myBookings[id]) _myBookings[id].waitlisted = true;
     });
 
     // Fetch event details for any bookings not yet in _eventCache.
@@ -270,14 +286,27 @@ function toast(msg, type = 'info') {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
+// ── Discover empty state: signed-out users get one clear action ───
+function updateDiscoverEmptyState() {
+  const signedIn = !!currentUser;
+  const qa = document.getElementById('discoverQuickWrap');
+  const si = document.getElementById('discoverSignin');
+  if (qa) qa.style.display = signedIn ? '' : 'none';
+  if (si) si.style.display = signedIn ? 'none' : '';
+  // "My favourites" is dead weight until favourites exist
+  const fav = document.getElementById('qaFavs');
+  if (fav) fav.style.display = favouriteInstructors && favouriteInstructors.size > 0 ? '' : 'none';
+}
+
 // Auth check
 async function checkAuth() {
   const pill = document.getElementById('authPill');
   const gear = document.getElementById('settingsGear');
   if (!getBearerToken()) {
     currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>`;
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
     if (gear) gear.hidden = true;
+    updateDiscoverEmptyState();
     return;
   }
   if (gear) gear.hidden = false;
@@ -295,8 +324,10 @@ async function checkAuth() {
         || subs.find(s => s.status === 'active' && s.period_start)
         || null;
       const name = currentUser.first_name || currentUser.email || 'You';
-      pill.innerHTML = `<span class="user-name"><span class="auth-full">Logged in as </span><strong>${escapeHTML(name)}</strong></span>
-        <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
+      const initial = (name.trim()[0] || '?').toUpperCase();
+      pill.innerHTML = `<span class="user-chip" title="${escapeHTML(name)}"><span class="user-avatar">${escapeHTML(initial)}</span><span class="auth-full user-name"><strong>${escapeHTML(name)}</strong></span></span>
+        <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link" title="Log out"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
+      updateDiscoverEmptyState();
       fetchMyBookings();
       // After first login, offer to sync booking history
       setTimeout(function () { showHistorySyncPrompt(); }, 1500);
@@ -305,7 +336,8 @@ async function checkAuth() {
     }
   } catch {
     currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link"><span class="auth-full">Sign in</span><span class="auth-icon">👤</span></a>`;
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
+    updateDiscoverEmptyState();
   }
 }
 
@@ -410,9 +442,10 @@ function showSessionExpired() {
   else localStorage.removeItem('psycle_bearer_token');
   document.getElementById('sessionBanner').style.display = 'flex';
   const pill = document.getElementById('authPill');
-  pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="auth-link" style="color:#e94560;font-weight:700"><span class="auth-full">Sign in →</span><span class="auth-icon">👤</span></a>`;
+  pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
   const gear = document.getElementById('settingsGear');
   if (gear) gear.hidden = true;
+  updateDiscoverEmptyState();
 }
 
 // Token from login is now received via postMessage (security.js).
@@ -479,9 +512,7 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   renderInstrChips();
   renderInstrDropdown();
 
-  const lSel = document.getElementById('locationSelect');
-  lSel.innerHTML = '<option value="">All Studios</option>' +
-    locations.map(l => `<option value="${l.id}">${escapeHTML(l.name.replace('Psycle ', ''))}</option>`).join('');
+  renderLocationChips();
 
   renderCategoryPills();
   renderStrengthSubPills();
@@ -491,22 +522,74 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   document.querySelectorAll('.date-quick-btn').forEach(b => {
     if (b.textContent.trim() === '7 days') b.classList.add('active');
   });
+
+  updateDiscoverEmptyState();
+  updateFiltersSummary();
+
+  // Feature 13: restore the last search instantly (kills the empty-state →
+  // results layout jump), then re-run it silently so availability is fresh.
+  if (restoreLastResults() && getBearerToken()) {
+    setTimeout(() => { try { search(); } catch {} }, 800);
+  }
 })();
 
 // _dateQuickMode managed by state.js (default: 'week')
 
-// ── Filter changes no longer trigger a search automatically ───────
-// Users wanted explicit control: adjust filters, then press Search (or
-// Enter). Leaving the function in place so existing call-sites compile
-// and we can flip it back on with one line if we change our minds.
-function triggerAutoSearch() { /* no-op — search is manual. */ }
+// ── Live filters: changes auto-run the search (debounced) ─────────
+// Stays inert until signed in (avoids error spam pre-auth). The Search
+// button still works for explicit refreshes; overlapping searches are
+// superseded via _searchSeq.
+let _autoSearchTimer = null;
+function triggerAutoSearch() {
+  updateFiltersSummary();
+  if (!getBearerToken()) return;
+  clearTimeout(_autoSearchTimer);
+  _autoSearchTimer = setTimeout(() => search(), 600);
+}
+
+// One-line digest of the active filters, shown in the collapsed
+// Filters bar so its state is readable without expanding.
+function updateFiltersSummary() {
+  const el = document.getElementById('controlsSummary');
+  if (!el) return;
+  const parts = [];
+  const modeLabels = { today: 'Today', tomorrow: 'Tomorrow', week: '7 days', '2week': '14 days' };
+  if (_dateQuickMode && modeLabels[_dateQuickMode]) {
+    parts.push(modeLabels[_dateQuickMode]);
+  } else {
+    const d = document.getElementById('startDate')?.value;
+    if (d) {
+      const [y, m, dd] = d.split('-').map(Number);
+      parts.push(new Date(y, m - 1, dd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+    }
+  }
+  if (selectedLocations.size === 1) {
+    const l = locations.find(x => selectedLocations.has(String(x.id)));
+    if (l) parts.push(l.name.replace('Psycle ', ''));
+  } else if (selectedLocations.size > 1) {
+    parts.push(selectedLocations.size + ' studios');
+  }
+  if (selectedInstructors.size === 1) {
+    const i = instructors.find(x => String(x.id) === [...selectedInstructors][0]);
+    if (i) parts.push(i.full_name.split(' ')[0]);
+  } else if (selectedInstructors.size > 1) {
+    parts.push(selectedInstructors.size + ' instructors');
+  }
+  if (selectedCategories.size > 0) {
+    parts.push([...selectedCategories].map(k => {
+      const c = CATEGORY_MAP.find(c => c.key === k);
+      return c ? c.label : k;
+    }).join(' · '));
+  }
+  el.textContent = parts.join(' · ');
+}
 
 function setDateQuick(mode) {
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  const tomorrow = new Date(today);
+  const now = new Date();
+  const todayStr = localDateStr(now);
+  const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const tomorrowStr = localDateStr(tomorrow);
 
   _dateQuickMode = mode;
   document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
@@ -540,15 +623,22 @@ function onDateInputChange() {
 }
 
 // ── Collapsible filters (mobile) ─────────────────────────────────
-let _filtersCollapsed = false;
+// Collapsed by default on phones (≤640px, where the toggle is visible);
+// the desktop sidebar stays expanded via CSS !important.
+let _filtersCollapsed = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches;
 
-function toggleFilters() {
-  _filtersCollapsed = !_filtersCollapsed;
+function applyFiltersCollapsedState() {
   const body = document.getElementById('controlsBody');
   const chevron = document.getElementById('controlsChevron');
   if (body) body.style.display = _filtersCollapsed ? 'none' : '';
   if (chevron) chevron.classList.toggle('collapsed', _filtersCollapsed);
 }
+
+function toggleFilters() {
+  _filtersCollapsed = !_filtersCollapsed;
+  applyFiltersCollapsedState();
+}
+applyFiltersCollapsedState();
 
 function clearFilters() {
   selectedInstructors.clear();
@@ -561,30 +651,30 @@ function clearFilters() {
   document.getElementById('instrSearch').value = '';
   renderInstrChips();
   renderInstrDropdown();
-  document.getElementById('locationSelect').value = '';
+  selectedLocations.clear();
+  renderLocationChips();
   selectedCategories.clear();
   selectedStrengthSubs.clear();
   selectedStrengthSubs.add('UPPER'); selectedStrengthSubs.add('LOWER'); selectedStrengthSubs.add('FULL');
   renderCategoryPills();
   renderStrengthSubPills();
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('startDate').value = today;
+  document.getElementById('startDate').value = localDateStr();
   document.getElementById('daysAhead').value = 7;
-  document.getElementById('results').innerHTML = '<div class="status">Select an instructor or filter, then click Search.</div>';
+  document.getElementById('results').innerHTML = '<div class="status">Pick an instructor, studio, or date to search.</div>';
 }
 
 function setStatus(html) {
   document.getElementById('results').innerHTML = `<div class="status">${html}</div>`;
 }
 
-async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds) {
+async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds, isStale) {
   const limit = 200;
   let windowStart = startDate + ' 00:00:00';
   const windowEnd  = endDateStr + ' 23:59:59';
   let locEvents = [], locRelations = null;
 
   while (true) {
-    if (window._searchAborted) break;
+    if (isStale ? isStale() : window._searchAborted) break;
     const params = new URLSearchParams({ start: windowStart, end: windowEnd, location: locId, limit });
     const res = await apiFetch(`/events?${params}`).then(r => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -607,12 +697,19 @@ async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds) {
   return { events: locEvents, relations: locRelations };
 }
 
+let _searchSeq = 0;
+
 async function search() {
   const instructorId = [...selectedInstructors];
-  const locationId   = document.getElementById('locationSelect').value;
+  const locationIds  = [...selectedLocations];
   const categoryKeys = new Set(selectedCategories);
   const startDate    = document.getElementById('startDate').value;
   const days         = parseInt(document.getElementById('daysAhead').value) || 14;
+
+  // Newer searches supersede older in-flight ones (live filters overlap);
+  // stale fetch loops stop fetching/rendering as soon as the seq moves on.
+  const mySeq = ++_searchSeq;
+  const stale = () => window._searchAborted || mySeq !== _searchSeq;
 
   // For today/tomorrow quick picks, end = same day (don't bleed into next day)
   let endDateStr;
@@ -637,25 +734,26 @@ async function search() {
 
   setStatus('<span class="spinner"></span>Connecting…');
 
-  const filters = { instructorId, locationId, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs) };
+  const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs) };
   let allEvents = [], relations = null;
   const seenIds = new Set();
 
-  // Which locations to query
-  const locationsToFetch = locationId
-    ? [{ id: locationId }]
+  // Which locations to query (empty selection = all studios)
+  const locationsToFetch = locationIds.length
+    ? locations.filter(l => locationIds.includes(String(l.id)))
     : locations.filter(l => l.handle !== 'psycle-at-home');
 
   try {
-    if (locationId) {
+    if (locationsToFetch.length === 1) {
       // Single location: stream page by page so results appear progressively
+      const singleLocId = locationsToFetch[0].id;
       await (async () => {
         const limit = 200;
         let windowStart = startDate + ' 00:00:00';
         const windowEnd  = endDateStr + ' 23:59:59';
         while (true) {
-          if (window._searchAborted) break;
-          const params = new URLSearchParams({ start: windowStart, end: windowEnd, location: locationId, limit });
+          if (stale()) break;
+          const params = new URLSearchParams({ start: windowStart, end: windowEnd, location: singleLocId, limit });
           const res = await apiFetch(`/events?${params}`).then(r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
@@ -668,6 +766,7 @@ async function search() {
           if (!relations) relations = res.relations;
           else mergeRelations(relations, res.relations);
           const done = batch.length < limit;
+          if (stale()) break;
           render(allEvents, relations, filters, done);
           if (done) break;
           const sorted = batch.map(e => e.start_at).sort(); const lastTs = sorted[sorted.length - 1];
@@ -682,8 +781,8 @@ async function search() {
       let done = 0;
 
       const promises = locationsToFetch.map(async loc => {
-        const { events, relations: rel } = await fetchEventsForLocation(loc.id, startDate, endDateStr, seenIds);
-        if (window._searchAborted) return;
+        const { events, relations: rel } = await fetchEventsForLocation(loc.id, startDate, endDateStr, seenIds, stale);
+        if (stale()) return;
         allEvents = allEvents.concat(events);
         if (!relations) relations = rel;
         else if (rel) mergeRelations(relations, rel);
@@ -694,15 +793,20 @@ async function search() {
       await Promise.all(promises);
     }
 
-    if (!relations) setStatus('No classes found.');
-    else render(allEvents, relations, filters, true);
+    if (!stale()) {
+      if (!relations) setStatus('No classes found.');
+      else render(allEvents, relations, filters, true);
+    }
 
   } catch (e) {
-    setStatus(`<span style="color:#e94560">Error: ${escapeHTML(e.message)}</span>`);
+    if (!stale()) setStatus(`<span style="color:#e94560">Error: ${escapeHTML(e.message)}</span>`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Search';
-    btn.onclick = search;
+    // Only the most recent search owns the button state
+    if (mySeq === _searchSeq) {
+      btn.disabled = false;
+      btn.textContent = 'Search';
+      btn.onclick = search;
+    }
   }
 }
 
@@ -730,6 +834,10 @@ async function bookClass(eventId, btn, studioId) {
     return;
   }
 
+  // Double-tap guard: a second tap while the event fetch is in flight
+  // would run the whole flow (and potentially the booking) twice.
+  if (btn.dataset.busy === '1') return;
+  btn.dataset.busy = '1';
   btn.disabled = true;
   btn.textContent = '…';
 
@@ -740,9 +848,37 @@ async function bookClass(eventId, btn, studioId) {
     // detail.slots = AVAILABLE (bookable) slot IDs
     const availableSlotIds = new Set((detail.slots || []).map(Number));
 
+    const evtData = detail.data || {};
+    const cached = _eventCache[String(eventId)] || {};
+    const isFullyBooked = evtData.is_fully_booked ?? cached.is_fully_booked;
+    const isWaitlistable = evtData.is_waitlistable ?? cached.is_waitlistable;
+    const myBooking = _myBookings[String(eventId)];
+
     const studio = _studioMap[studioId];
     const layout = studio?.layout;
     const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
+
+    // Full class and we're not in it → waitlist path. There's no seat to
+    // pick, so never open the bike picker here.
+    const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
+    if (noSeatsLeft && !myBooking) {
+      btn.disabled = false;
+      if (!isWaitlistable) {
+        btn.textContent = 'Full';
+        toast('This class is full', 'info');
+        return;
+      }
+      btn.textContent = 'Join Waitlist';
+      const ok = await confirmModal({
+        title: 'Join the waitlist?',
+        body: `${cached._typeName || 'This class'} is full. You'll be added to the waitlist and notified if a spot opens up.`,
+        confirmText: 'Join waitlist',
+        cancelText: 'Not now',
+      });
+      if (!ok) return;
+      await submitBooking(eventId, null, btn, { waitlist: true });
+      return;
+    }
 
     if (hasLayout) {
       btn.disabled = false;
@@ -774,6 +910,8 @@ async function bookClass(eventId, btn, studioId) {
     btn.disabled = false;
     btn.textContent = 'Book';
     toast(e.message, 'error');
+  } finally {
+    delete btn.dataset.busy;
   }
 }
 
@@ -893,7 +1031,34 @@ async function confirmBikeBooking() {
   await submitBooking(eventId, slotsToBook, btn);
 }
 
-async function submitBooking(eventId, slots, btn) {
+// ── Waitlist tracking ────────────────────────────────────────────
+// The bookings list API has no reliable waitlist status field, so we
+// remember which events we joined as waitlist locally and clear entries
+// once the class date passes.
+const WAITLIST_KEY = 'psycle_waitlisted_events';
+function _getWaitlisted() {
+  try { return JSON.parse(localStorage.getItem(WAITLIST_KEY) || '{}'); } catch { return {}; }
+}
+function _markWaitlisted(eventId, startAt) {
+  const map = _getWaitlisted();
+  map[String(eventId)] = startAt || '';
+  localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
+}
+function _cleanWaitlisted() {
+  const map = _getWaitlisted();
+  const now = Date.now();
+  let changed = false;
+  Object.entries(map).forEach(([id, startAt]) => {
+    if (startAt && new Date(String(startAt).replace(' ', 'T')).getTime() < now) {
+      delete map[id];
+      changed = true;
+    }
+  });
+  if (changed) localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
+  return map;
+}
+
+async function submitBooking(eventId, slots, btn, opts = {}) {
   // slots: array of slot IDs, or null for no-layout booking
   btn.disabled = true;
   btn.textContent = '…';
@@ -907,7 +1072,10 @@ async function submitBooking(eventId, slots, btn) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      const label = slots?.length ? `Bikes ${slots.join(' & ')} ✓` : 'Booked ✓';
+      const isWaitlist = !!opts.waitlist;
+      const label = isWaitlist
+        ? 'Waitlisted ✓'
+        : (slots?.length ? `Bikes ${slots.join(' & ')} ✓` : 'Booked ✓');
       btn.textContent = label;
       btn.className = 'book-btn booked';
       const bookingId = data?.data?.id || data?.id;
@@ -919,9 +1087,10 @@ async function submitBooking(eventId, slots, btn) {
       // The API creates one booking per slot; after a fresh book we only know the
       // returned bookingId — map all slots to it (fetchMyBookings will correct later)
       slotsArr.forEach(s => { slotBookings[s] = bookingId; });
-      _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings };
+      _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings, waitlisted: isWaitlist };
+      if (isWaitlist) _markWaitlisted(eventId, _eventCache[String(eventId)]?.start_at);
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
-      showBookingConfirmation(eventId, slotsArr);
+      showBookingConfirmation(eventId, slotsArr, { waitlist: isWaitlist });
       refreshUpcomingPanel();
       PsycleEvents.emit('booking:complete', eventId, slotsArr, btn);
     } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
@@ -947,7 +1116,7 @@ async function submitBooking(eventId, slots, btn) {
 
 // Feature 9: Post-booking confirmation overlay
 let _confirmationTimer = null;
-function showBookingConfirmation(eventId, slotsArr) {
+function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   // Remove any existing confirmation
   dismissBookingConfirmation();
 
@@ -983,14 +1152,15 @@ function showBookingConfirmation(eventId, slotsArr) {
     <div class="bc-content">
       <div class="bc-check">&#10003;</div>
       <div class="bc-text">
-        <div class="bc-title">Booked!</div>
+        <div class="bc-title">${opts.waitlist ? 'On the waitlist!' : 'Booked!'}</div>
         <div class="bc-detail">${classLine}</div>
         ${dateTimeStr ? `<div class="bc-detail bc-dim">${dateTimeStr}</div>` : ''}
+        ${opts.waitlist ? `<div class="bc-detail bc-dim">You'll be notified if a spot opens up</div>` : ''}
         ${slotStr ? `<div class="bc-slot">${slotStr}</div>` : ''}
       </div>
     </div>
     <div class="bc-actions">
-      <button class="bc-btn bc-btn-secondary" onclick="dismissBookingConfirmation();scrollToUpcoming()">View my bookings</button>
+      <button class="bc-btn bc-btn-secondary" onclick="dismissBookingConfirmation();(typeof switchTab==='function'?switchTab('bookings'):scrollToUpcoming())">View my bookings</button>
       <button class="bc-btn bc-btn-primary" onclick="dismissBookingConfirmation()">Done</button>
     </div>
   `;
@@ -1138,6 +1308,15 @@ function describeCancelError(failedResponse, data, err) {
  * likely charges. Returns Promise<boolean>.
  */
 function confirmCancelWithPolicy(eventId, base) {
+  // Leaving a waitlist isn't a late cancel — no fee warning needed.
+  if (_myBookings[String(eventId)]?.waitlisted) {
+    return confirmModal({
+      title: 'Leave the waitlist?',
+      confirmText: 'Leave waitlist',
+      cancelText: 'Stay on it',
+      danger: true,
+    });
+  }
   const evt = _eventCache[String(eventId)];
   const msUntil = evt ? (new Date(evt.start_at).getTime() - Date.now()) : Infinity;
   const hoursUntil = msUntil / 3600000;
@@ -1300,7 +1479,9 @@ async function confirmUnbook(bookingId, eventId, btn) {
 // ─────────────────────────────────────────────────────────────────
 
 function applyBookedState(btn, eventId, booking) {
-  const slotLabel = booking.slots.length ? `Bikes ${booking.slots.join(' & ')} ✓` : 'Booked ✓';
+  const slotLabel = booking.waitlisted
+    ? 'Waitlisted ✓'
+    : (booking.slots.length ? `Bikes ${booking.slots.join(' & ')} ✓` : 'Booked ✓');
   btn.textContent = slotLabel;
   btn.className = 'book-btn booked';
   btn.disabled = false;
@@ -1337,7 +1518,9 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   const myBooking = _myBookings[String(evt.id)];
   let bookLabel, bookCls, bookDisabled, bookOnclick;
   if (myBooking) {
-    const slotLabel = myBooking.slots.length ? `Bikes ${myBooking.slots.join(' & ')} ✓` : 'Booked ✓';
+    const slotLabel = myBooking.waitlisted
+      ? 'Waitlisted ✓'
+      : (myBooking.slots.length ? `Bikes ${myBooking.slots.join(' & ')} ✓` : 'Booked ✓');
     bookLabel = slotLabel;
     bookCls = 'book-btn booked';
     bookDisabled = '';
@@ -1366,7 +1549,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
         <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
           ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
           onclick="event.stopPropagation();${bookOnclick}">${bookLabel}</button>
-        <button class="share-class-btn" onclick="event.stopPropagation();shareClass(${evt.id})" title="Share this class">&#8599;</button>
+        <button class="share-class-btn" onclick="event.stopPropagation();shareClass(${evt.id})" title="Share this class"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg></button>
       </div>
     </div>
   </div>`;
@@ -1419,9 +1602,12 @@ function render(events, relations, filters, done) {
         if (matchedSub && !filters.strengthSubs.has(matchedSub.key)) return false;
       }
     }
-    if (filters.locationId) {
+    const locIds = (filters.locationIds && filters.locationIds.length)
+      ? filters.locationIds
+      : (filters.locationId ? [filters.locationId] : []); // legacy restored sessions
+    if (locIds.length) {
       const studio = studioMap[e.studio_id];
-      if (!studio || String(studio.location_id) !== filters.locationId) return false;
+      if (!studio || !locIds.includes(String(studio.location_id))) return false;
     }
     return true;
   });
@@ -1531,7 +1717,7 @@ function render(events, relations, filters, done) {
     try {
       sessionStorage.setItem('psycle_last_results', JSON.stringify({ events, relations, filters: {
         instructorId: filters.instructorId,
-        locationId: filters.locationId,
+        locationIds: filters.locationIds || [],
         categoryKeys: [...(filters.categoryKeys || [])],
         startDate: filters.startDate,
         endDateStr: filters.endDateStr,
@@ -1542,9 +1728,39 @@ function render(events, relations, filters, done) {
   }
 }
 
+// ── Studio multi-select chips ────────────────────────────────────
+// selectedLocations: Set of location IDs (strings). Empty = all studios.
+const selectedLocations = new Set();
+
+function renderLocationChips() {
+  const box = document.getElementById('locationChips');
+  if (!box) return;
+  const allActive = selectedLocations.size === 0;
+  let html = `<button class="loc-chip${allActive ? ' active' : ''}" onclick="toggleLocation('')">All</button>`;
+  html += locations.map(l => {
+    const active = selectedLocations.has(String(l.id));
+    return `<button class="loc-chip${active ? ' active' : ''}" onclick="toggleLocation('${l.id}')">${escapeHTML(l.name.replace('Psycle ', ''))}</button>`;
+  }).join('');
+  box.innerHTML = html;
+  updateLocationHint();
+}
+
+function toggleLocation(id) {
+  if (!id) {
+    selectedLocations.clear();
+  } else {
+    const sid = String(id);
+    if (selectedLocations.has(sid)) selectedLocations.delete(sid);
+    else selectedLocations.add(sid);
+  }
+  renderLocationChips();
+  triggerAutoSearch();
+}
+
 function updateLocationHint() {
   const hint = document.getElementById('locationHint');
-  hint.textContent = document.getElementById('locationSelect').value ? '' : '— pick one for best results';
+  if (!hint) return;
+  hint.textContent = selectedLocations.size === 0 ? '— all studios (slower)' : '';
 }
 
 // Feature 7 removed — "Today at Psycle" auto-load was noisy.
@@ -1561,7 +1777,7 @@ function restoreLastResults() {
     // Reconstruct Set-based filters from serialised arrays
     const filters = {
       instructorId: saved.filters.instructorId || [],
-      locationId: saved.filters.locationId || '',
+      locationIds: saved.filters.locationIds || (saved.filters.locationId ? [saved.filters.locationId] : []),
       categoryKeys: new Set(saved.filters.categoryKeys || []),
       startDate: saved.filters.startDate || '',
       endDateStr: saved.filters.endDateStr || '',
@@ -1744,9 +1960,13 @@ function toggleCategory(key) {
 }
 // ────────────────────────────────────────────────────────────────
 
-// Allow pressing Enter to search
+// Allow pressing Enter to search — scoped to the filters panel so Enter
+// inside dialogs/modals elsewhere doesn't fire a surprise search.
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') search();
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('psycleConfirmOverlay')) return;
+  if (!e.target || !e.target.closest || !e.target.closest('#controlsPanel')) return;
+  search();
 });
 
 // ── Upcoming bookings panel ──────────────────────────────────────
@@ -1787,13 +2007,13 @@ function getCountdownText(eventDate, now) {
   if (diff <= 0) return null; // past
 
   const diffHours = diff / (1000 * 60 * 60);
-  const todayStr = now.toISOString().split('T')[0];
-  const eventDayStr = eventDate.toISOString().split('T')[0];
+  const todayStr = localDateStr(now);
+  const eventDayStr = localDateStr(eventDate);
 
   // Check if tomorrow
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const tomorrowStr = localDateStr(tomorrow);
 
   if (eventDayStr === todayStr) {
     const hrs = Math.floor(diffHours);
@@ -1830,11 +2050,33 @@ function renderMyBookings() {
 
   countEl.textContent = upcoming.length;
 
+  // Empty tab: a real destination, not a blank page. Signed out → the
+  // one action that matters (sign in); signed in → go find a class.
+  const emptyEl = document.getElementById('bookingsEmpty');
+  const histBtn = document.getElementById('historyInBookingsBtn');
+  let histCount = 0;
+  try { histCount = JSON.parse(localStorage.getItem('psycle_class_history') || '[]').length; } catch {}
+
   if (all.length === 0) {
     panel.style.display = 'none';
+    if (histBtn) histBtn.style.display = (currentUser && histCount > 0) ? '' : 'none';
+    if (emptyEl) {
+      emptyEl.style.display = '';
+      emptyEl.innerHTML = currentUser
+        ? `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
+           <div class="tab-empty-title">Nothing booked<br>— yet</div>
+           <div class="tab-empty-sub">Find your next ride, lift, or flow and it'll show up here.</div>
+           <button class="tab-empty-btn" onclick="switchTab('discover')">Find a class</button>`
+        : `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
+           <div class="tab-empty-title">Your bookings<br>live here</div>
+           <div class="tab-empty-sub">Sign in with your Psycle account to see and manage your upcoming classes.</div>
+           <button class="tab-empty-btn" onclick="openLoginPopup()">Sign in</button>`;
+    }
     return;
   }
 
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (histBtn) histBtn.style.display = '';
   panel.style.display = '';
   const items = _showPastBookings ? [...upcoming, ...past] : upcoming;
 
@@ -1961,7 +2203,7 @@ function renderMyBookings() {
   for (const day of sortedDays) {
     const dayItems = byDay[day];
     const date = new Date(day + 'T12:00:00');
-    const isPast = date < now && day !== now.toISOString().split('T')[0];
+    const isPast = date < now && day !== localDateStr(now);
     const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
     // Close current period section and open next period section
@@ -2008,6 +2250,7 @@ function renderMyBookings() {
       const eventPast = dt <= now;
 
       let badges = `<span class="badge">${evt.duration}min</span>`;
+      if (booking.waitlisted) badges += `<span class="badge waitlist">Waitlisted</span>`;
       if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
       if (eventPast) badges += `<span class="badge" style="background:#1a1a1a;color:#555">Attended</span>`;
 
@@ -2038,7 +2281,7 @@ function renderMyBookings() {
       // Cancel button for no-slot bookings
       let cancelBtn = '';
       if (!eventPast && booking.slots.length === 0) {
-        cancelBtn = `<button class="book-btn booked" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)" style="margin-top:10px;width:100%">Cancel booking</button>`;
+        cancelBtn = `<button class="book-btn booked" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)" style="margin-top:10px;width:100%">${booking.waitlisted ? 'Leave waitlist' : 'Cancel booking'}</button>`;
       }
 
       // Action buttons (upcoming only)
@@ -2060,6 +2303,9 @@ function renderMyBookings() {
         }
 
         rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
+        if (evt._locAddress || evt._locFullName || evt._locName) {
+          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();openMapForBooking(${evtId})" title="Open the studio in Maps">📍 Map</button>`;
+        }
         rebookBtn += `</div>`;
       }
 
@@ -2115,6 +2361,21 @@ function scrollToClass(eventId, e) {
   setTimeout(() => { card.style.boxShadow = ''; }, 1800);
 }
 
+// ── Open a booking's studio in the maps app ──────────────────────
+window.openMapForBooking = function (eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt) { toast('Location not available', 'error'); return; }
+  const query = [evt._locFullName || evt._locName, evt._locAddress].filter(Boolean).join(', ');
+  if (!query) { toast('No address on file for this studio', 'error'); return; }
+  const q = encodeURIComponent(query);
+  // maps.apple.com opens the native Maps app on iOS/macOS; Google Maps elsewhere
+  const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+  const url = isApple
+    ? 'https://maps.apple.com/?q=' + q
+    : 'https://www.google.com/maps/search/?api=1&query=' + q;
+  window.open(url, '_blank', 'noopener');
+};
+
 async function rebookNextWeek(eventId) {
   const evt = _eventCache[String(eventId)];
   if (!evt) { toast('Event data not available', 'error'); return; }
@@ -2123,7 +2384,7 @@ async function rebookNextWeek(eventId) {
   const origDate = new Date(evt.start_at);
   const nextWeek = new Date(origDate);
   nextWeek.setDate(nextWeek.getDate() + 7);
-  const dayStr = nextWeek.toISOString().split('T')[0];
+  const dayStr = localDateStr(nextWeek);
 
   // Check if user already has a booking for the same class next week
   const origMinutesCheck = origDate.getHours() * 60 + origDate.getMinutes();
@@ -2135,7 +2396,7 @@ async function rebookNextWeek(eventId) {
     if (bookedEvt.instructor_id !== evt.instructor_id) return false;
     if (bookedEvt.event_type_id !== evt.event_type_id) return false;
     // Must be on the target next-week date
-    if (bookedDate.toISOString().split('T')[0] !== dayStr) return false;
+    if (localDateStr(bookedDate) !== dayStr) return false;
     // Similar time (within 30 minutes)
     const bookedMinutes = bookedDate.getHours() * 60 + bookedDate.getMinutes();
     if (Math.abs(bookedMinutes - origMinutesCheck) >= 30) return false;

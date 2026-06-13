@@ -26,6 +26,9 @@
     try { localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log)); } catch {}
     console.error('[psycle-error]', msg);
   }
+  // Exposed so earlier-loading modules (e.g. security.js) can record errors
+  // once this module is up — they must guard with a typeof check.
+  window.pushError = pushError;
 
   /** Log a user action (action name + timestamp only, no sensitive data). */
   function pushAction(action) {
@@ -246,6 +249,18 @@
   // B. Optimistic UI for Bookings
   // ═══════════════════════════════════════════════════════════════════
 
+  // Track when showSessionExpired fires. apiFetch RESOLVES on 401/403 (it
+  // does not throw) and calls showSessionExpired globally, so the optimistic
+  // wrapper below cannot rely on its catch block to detect an expired session.
+  var _sessionExpiredAt = 0;
+  if (typeof showSessionExpired === 'function') {
+    const _originalShowSessionExpired = showSessionExpired;
+    window.showSessionExpired = function trackedShowSessionExpired() {
+      _sessionExpiredAt = Date.now();
+      return _originalShowSessionExpired.apply(this, arguments);
+    };
+  }
+
   if (typeof submitBooking === 'function') {
     const _originalSubmitBooking = submitBooking;
 
@@ -259,6 +274,20 @@
       const prevBooking = _myBookings[String(eventId)]
         ? JSON.parse(JSON.stringify(_myBookings[String(eventId)]))
         : undefined;
+
+      function revertOptimistic() {
+        btn.textContent = origText;
+        btn.className = origClass;
+        btn.disabled = origDisabled;
+        if (origOnclick) btn.onclick = origOnclick;
+
+        // Revert _myBookings
+        if (hadBooking && prevBooking) {
+          _myBookings[String(eventId)] = prevBooking;
+        } else {
+          delete _myBookings[String(eventId)];
+        }
+      }
 
       // 2. Optimistically update UI immediately
       const optimisticLabel = (slots && slots.length)
@@ -275,24 +304,20 @@
       };
 
       // 3. Call the real submitBooking
+      const startedAt = Date.now();
       try {
         await _originalSubmitBooking(eventId, slots, btn);
-        // On success the original function already sets the correct state,
-        // so nothing more to do.
+        // On success the original function already sets the correct state.
+        // But on 401/403 it returns normally (apiFetch resolves and fires
+        // showSessionExpired) \u2014 the booking never happened, so revert the
+        // optimistic "Booked \u2713" state. The \u2713 check keeps a genuinely
+        // confirmed booking intact if the session timer expired mid-flight.
+        if (_sessionExpiredAt >= startedAt && btn.textContent.indexOf('\u2713') === -1) {
+          revertOptimistic();
+        }
       } catch (err) {
         // 4. Revert on failure
-        btn.textContent = origText;
-        btn.className = origClass;
-        btn.disabled = origDisabled;
-        if (origOnclick) btn.onclick = origOnclick;
-
-        // Revert _myBookings
-        if (hadBooking && prevBooking) {
-          _myBookings[String(eventId)] = prevBooking;
-        } else {
-          delete _myBookings[String(eventId)];
-        }
-
+        revertOptimistic();
         toast('Booking failed \u2014 please try again', 'error');
       }
     };
@@ -348,6 +373,7 @@
 
     var bookedOk = 0;
     var cancelOk = 0;
+    var skipped = 0;
     var failed = 0;
     var remaining = [];
 
@@ -377,6 +403,23 @@
         }
 
         // Default: booking (backwards compatible with legacy items)
+        // Validate before replaying: drop queued bookings whose class no
+        // longer exists or has already started. A thrown fetch here falls
+        // into the outer catch, which keeps the item queued for later.
+        var evRes = await apiFetch('/events/' + item.eventId);
+        if (evRes.status === 404) {
+          skipped++;
+          continue;
+        }
+        if (evRes.ok) {
+          var evData = await evRes.json().catch(function () { return {}; });
+          var evt = evData.data || evData;
+          if (evt && evt.start_at && new Date(evt.start_at).getTime() <= Date.now()) {
+            skipped++;
+            continue;
+          }
+        }
+
         var body = { event_id: item.eventId };
         if (item.slots && item.slots.length) body.slots = item.slots.map(Number);
 
@@ -386,14 +429,19 @@
           body: JSON.stringify(body),
         });
 
+        var data = await res.json().catch(function () { return {}; });
         if (res.ok) {
           bookedOk++;
-          var data = await res.json().catch(function () { return {}; });
           var bookingId = (data.data && data.data.id) || data.id;
           _myBookings[String(item.eventId)] = {
             bookingId: bookingId,
             slots: item.slots ? item.slots.map(Number) : [],
           };
+        } else if (res.status === 409 || (data.message || '').toLowerCase().indexOf('already') !== -1) {
+          // Already booked server-side — the booking exists, so this replay
+          // achieved its goal. Count it as success and clear it from the
+          // queue; fetchMyBookings below reconciles the exact slot state.
+          bookedOk++;
         } else if (res.status >= 400 && res.status < 500) {
           failed++;
         } else {
@@ -414,10 +462,15 @@
     if (cancelOk > 0) {
       toast(cancelOk + ' queued cancel' + (cancelOk !== 1 ? 's' : '') + ' sent', 'success');
     }
-    if (bookedOk > 0 || cancelOk > 0) {
-      if (typeof refreshUpcomingPanel === 'function') refreshUpcomingPanel();
-      if (typeof fetchMyBookings === 'function') fetchMyBookings();
+    if (skipped > 0) {
+      toast(skipped === 1
+        ? 'Skipped a queued booking — the class already started or was cancelled.'
+        : 'Skipped ' + skipped + ' queued bookings — they already started or were cancelled.', 'info');
     }
+    // Always reconcile with the server — failed or skipped replays would
+    // otherwise leave the optimistic local state out of sync.
+    if (typeof refreshUpcomingPanel === 'function') refreshUpcomingPanel();
+    if (typeof fetchMyBookings === 'function') fetchMyBookings();
     if (failed > 0 && remaining.length > 0) {
       toast(remaining.length + ' queued action' + (remaining.length !== 1 ? 's' : '') + ' still pending', 'info');
     } else if (failed > 0) {

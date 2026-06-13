@@ -146,11 +146,17 @@
 
   function computeNewToYou(profiles) {
     var booked = getBookedInstructorIds(profiles);
+    var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
+    var tiers = {};
+    try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
+
     var results = [];
     var ids = Object.keys(profiles);
     for (var i = 0; i < ids.length; i++) {
       var p = profiles[ids[i]];
-      if (!booked.has(p.id)) results.push(p);
+      // Exclude: previously booked, ranked, or favourited
+      if (booked.has(p.id) || favs.has(p.id) || tiers[p.id]) continue;
+      results.push(p);
     }
     // Sort: upcoming first, then alphabetical
     results.sort(function (a, b) {
@@ -377,6 +383,12 @@
     var data = computeInstructorMap(profiles);
 
     if (data.uniqueCount === 0) {
+      // Signed out: the Stats tab's hero empty-state already carries the
+      // message — an extra stub section just adds noise.
+      if (typeof currentUser === 'undefined' || !currentUser) {
+        container.style.display = 'none';
+        return;
+      }
       container.innerHTML = '<div class="explore-title">Your instructor map</div>' +
         '<div class="explore-empty">Book your first class to start building your instructor map.</div>';
       container.style.display = '';

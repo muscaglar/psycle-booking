@@ -123,6 +123,28 @@
     } catch (e) { return ''; }
   }
 
+  // ── Error-log bridge ───────────────────────────────────────────
+  // reliability.js owns the error log (psycle_error_log) and exposes
+  // window.pushError — but it loads AFTER security.js, so guard with a
+  // typeof check and fall back to writing the same log format directly.
+
+  var ERROR_LOG_KEY = 'psycle_error_log';
+  var MAX_ERROR_LOG_ENTRIES = 100;
+
+  function _logSecurityError(msg) {
+    try {
+      if (typeof window.pushError === 'function') {
+        window.pushError('[security] ' + msg);
+        return;
+      }
+      var log = [];
+      try { log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) || '[]'); } catch (e) {}
+      log.push({ timestamp: new Date().toISOString(), message: '[security] ' + msg });
+      if (log.length > MAX_ERROR_LOG_ENTRIES) log = log.slice(log.length - MAX_ERROR_LOG_ENTRIES);
+      localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log));
+    } catch (e) { /* logging must never break token storage */ }
+  }
+
   // ── Secure Token Store ─────────────────────────────────────────
 
   window._secureTokenStore = {
@@ -141,7 +163,13 @@
           localStorage.removeItem(LEGACY_TOKEN_KEY);
         }
       } catch (e) {
-        // Last resort fallback
+        // Last resort fallback — keeps login working (login.html writes the
+        // legacy key and the main app migrates it), but the token is now
+        // stored in PLAINTEXT, so make the failure loud.
+        var reason = (e && e.message) ? e.message : String(e);
+        console.warn('[security] Token encryption FAILED (' + reason + ') — '
+          + 'falling back to PLAINTEXT localStorage. The bearer token is NOT encrypted at rest.');
+        _logSecurityError('Token encryption failed (' + reason + ') — plaintext localStorage fallback used');
         localStorage.setItem(LEGACY_TOKEN_KEY, token);
       }
     },
