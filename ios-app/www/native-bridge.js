@@ -813,14 +813,23 @@
     }
   }
 
-  async function scheduleWeeklyReminder() {
-    if (!LocalNotifications) return;
+  var REMINDER_PREF = 'psycle_weekly_reminder'; // 'on' | 'off' | unset (off)
+
+  /**
+   * @param interactive true = user just asked for this, OK to show the
+   *   iOS permission prompt. false = silent launch-time reschedule that
+   *   must NEVER prompt (checkPermissions only).
+   */
+  async function scheduleWeeklyReminder(interactive) {
+    if (!LocalNotifications) return false;
 
     try {
-      var perm = await LocalNotifications.requestPermissions();
+      var perm = interactive
+        ? await LocalNotifications.requestPermissions()
+        : await LocalNotifications.checkPermissions();
       if (perm.display !== 'granted') {
-        console.log('[native] notification permission denied');
-        return;
+        console.log('[native] notification permission not granted');
+        return false;
       }
 
       // Cancel existing to reschedule (handles timezone/DST changes)
@@ -849,13 +858,36 @@
       });
 
       console.log('[native] weekly reminder scheduled: Mondays at ' + localHour + ':59 local (11:59 UK)');
+      return true;
     } catch (e) {
       console.warn('[native] failed to schedule weekly reminder:', e);
+      return false;
     }
   }
 
-  // Schedule on every app launch (re-calculates timezone offset for DST)
-  setTimeout(scheduleWeeklyReminder, 3000);
+  // Exposed to the web layer (Membership tab toggle). The permission
+  // prompt only ever appears from enable() — a deliberate user action —
+  // never at app launch.
+  window._nativeReminder = {
+    isOn: function () { return localStorage.getItem(REMINDER_PREF) === 'on'; },
+    enable: async function () {
+      var ok = await scheduleWeeklyReminder(true);
+      if (ok) localStorage.setItem(REMINDER_PREF, 'on');
+      return ok;
+    },
+    disable: async function () {
+      localStorage.setItem(REMINDER_PREF, 'off');
+      try {
+        await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
+      } catch (e) { /* may not exist */ }
+    },
+  };
+
+  // Launch-time reschedule (recalculates timezone offset for DST) — only
+  // for users who already opted in, and never prompting.
+  setTimeout(function () {
+    if (localStorage.getItem(REMINDER_PREF) === 'on') scheduleWeeklyReminder(false);
+  }, 3000);
 
 
   // ── Status Bar ─────────────────────────────────────────────────

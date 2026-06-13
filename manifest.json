@@ -1,7 +1,7 @@
 {
-  "name": "Psycle Class Finder",
+  "name": "Psycle Companion",
   "short_name": "Psycle",
-  "description": "Find and book Psycle classes",
+  "description": "Independent companion app for finding and booking Psycle classes. Not affiliated with Psycle.",
   "start_url": "./psycle-finder.html",
   "display": "standalone",
   "background_color": "#0a0a0a",

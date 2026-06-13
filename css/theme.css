@@ -1,3 +1,17 @@
+/* ── Display face: Archivo Black (SIL OFL), self-hosted in fonts/.
+   Wide ultra-bold grotesque — poster impact that stays legible at
+   small sizes (Anton was too condensed to read).
+   Must stay a file URL — iOS WebKit silently rejects large data-URI
+   fonts (the face never registers in document.fonts). The iOS sync
+   script rewrites ../fonts/ for the flattened www/ copy. ── */
+@font-face {
+  font-family: 'AppDisplay';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/display.woff2') format('woff2');
+}
+
 /* ================================================================
    theme.css — CSS custom-property layer for Psycle dark/light mode
    + skeleton loading cards + empty-state styles
@@ -63,7 +77,9 @@
   --transition-spring: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ── Fonts ─────────────────────────────────────────────────── */
-  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Display face — wordmark, numerals, headlines, titles.
+     Body stays on the system stack for small-size legibility. */
+  --font-display: 'AppDisplay', -apple-system, sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --bg: #09090b;
   --bg-panel: #111113;
@@ -118,11 +134,13 @@
   --border-subtle: #d8d8e0;
   --text: #1a1a1a;
   --text-heading: #111;
-  --text-muted: #555;
-  --text-dim: #666;
-  --text-faint: #888;
-  --text-ghost: #999;
-  --text-off: #bbb;
+  /* One step darker than the naive inversion — #888/#999 fell below
+     comfortable contrast at the app's small label sizes on white. */
+  --text-muted: #4d4d55;
+  --text-dim: #5b5b63;
+  --text-faint: #71717a;
+  --text-ghost: #84848e;
+  --text-off: #a6a6b0;
   --accent: #e94560;
   --accent-hover: #c73650;
   --badge-bg: #f0f0f0;
@@ -156,6 +174,14 @@
 
 /* ── Override styles.css with var() ───────────────────────────── */
 
+/* Solid html background + no vertical rubber-band: over-scroll was
+   exposing a mismatched page edge above/below the fixed bars and made
+   scrolling feel loose in the WKWebView. */
+html {
+  background: var(--bg, #09090b);
+  overscroll-behavior-y: none;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -170,14 +196,24 @@ header {
 header h1 { color: var(--text-heading); font-family: var(--font-display); }
 header span { color: var(--text-faint); }
 
-/* Display font applied to key typographic elements */
-.tab-btn { font-family: var(--font-display); }
+/* Display font applied to key typographic elements.
+   Deliberately NOT on small UI labels (tab buttons, etc.) — display
+   faces belong at headline sizes, body face everywhere else. */
 .stat-value, .cost-value, .explore-map-stat-value { font-family: var(--font-display); }
 .class-time { font-family: var(--font-display); }
 .modal-title, .instructor-name-title { font-family: var(--font-display); }
 .reco-class, .discover-empty-title { font-family: var(--font-display); }
 .mb-period-header { font-family: var(--font-display); }
 .insights-title, .explore-title, .reco-title, .heatmap-title, .cost-title, .week-title { font-family: var(--font-display); }
+
+/* The display face ships a single 400 weight — synthetic bolding
+   distorts it, so normalize everything on it back to the real weight. */
+header h1, .stat-value, .cost-value, .explore-map-stat-value,
+.class-time, .modal-title, .instructor-name-title, .reco-class,
+.discover-empty-title, .mb-period-header, .insights-title, .explore-title,
+.reco-title, .heatmap-title, .cost-title, .week-title {
+  font-weight: 400;
+}
 
 .controls {
   background: var(--bg-panel);
@@ -199,9 +235,14 @@ select:focus, input:focus { border-color: var(--accent); }
 .btn:disabled { background: var(--text-off); }
 
 .btn-ghost {
+  /* background must be restated: the .btn rule above is in this same
+     file and would otherwise win the cascade over styles.css's
+     .btn-ghost, turning ghost buttons solid accent. */
+  background: transparent;
   border-color: var(--border-light);
   color: var(--text-muted);
 }
+.btn-ghost:hover { background: var(--bg-input); }
 .btn-ghost:hover {
   background: var(--bg-input);
   color: var(--text-heading);

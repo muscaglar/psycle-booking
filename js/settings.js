@@ -171,15 +171,12 @@
           '<button class="settings-close" onclick="closeSettings()" aria-label="Close">×</button>' +
         '</div>' +
         '<div class="settings-body">' +
+          // App-focused settings only — instructor rankings/favourites
+          // live on the Membership tab with the rest of the personal data.
           '<div class="settings-section">' +
-            '<div class="settings-section-title">Instructor Rankings & Favourites</div>' +
-            '<div class="tier-group-label">Ranked</div>' +
-            '<div class="tier-list tier-list-short" id="tierListRanked"></div>' +
-            '<div class="tier-group-label" style="margin-top:16px">Taken a class with — not yet ranked</div>' +
-            '<div class="tier-list tier-list-short" id="tierListUnranked"></div>' +
-            '<div class="tier-group-label" style="margin-top:16px">Search all instructors</div>' +
-            '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
-            '<div class="tier-list" id="tierListSearch" style="display:none"></div>' +
+            '<div class="settings-section-title">Appearance</div>' +
+            '<div class="theme-picker" id="themePicker"></div>' +
+            '<div id="reminderRow"></div>' +
           '</div>' +
           '<div class="settings-section">' +
             '<div class="settings-section-title">Bike / Spot Preferences</div>' +
@@ -198,11 +195,21 @@
               '<div class="settings-section-title">Calendar Sync (iOS)</div>' +
               '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
             '</div>' : '') +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Data</div>' +
+            '<div class="app-advanced">' +
+              '<button class="app-advanced-btn" onclick="exportSettings()">Export settings</button>' +
+              '<button class="app-advanced-btn" onclick="document.getElementById(\'settingsImportFile\')?.click()">Import settings</button>' +
+              '<input type="file" id="settingsImportFile" accept=".json" style="display:none" onchange="importSettings(this)">' +
+              '<button class="app-advanced-btn" onclick="downloadBugReport()">Bug report</button>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
     document.body.appendChild(overlay);
-    renderTierList();
+    if (typeof window.renderThemePicker === 'function') window.renderThemePicker();
+    if (typeof window.renderReminderRow === 'function') window.renderReminderRow();
     populateStudioSelect();
     if (typeof window.psycleListCalendars === 'function') renderCalendarSync();
   };

@@ -13,19 +13,22 @@ psycle-booking/
 ├── login.html              # Login page (extracts auth token)
 ├── index.html              # Redirect to psycle-finder.html
 ├── manifest.json           # PWA manifest
-├── sw.js                   # Service Worker (cache shell v9)
+├── sw.js                   # Service Worker (cache shell — bump CACHE version on asset changes)
 │
+├── fonts/                  # Self-hosted display face (display.woff2 = Archivo Black,
+│                           #   family 'AppDisplay'; file URL only — iOS WebKit
+│                           #   rejects large data-URI fonts)
 ├── js/                     # All JavaScript modules (load order matters!)
 │   ├── state.js            # PsycleState (reactive), PsycleEvents (emitter)
 │   ├── security.js         # Auth, AES-GCM encryption, XSS protection
 │   ├── app.js              # Core: API, search, booking, rendering, class detail sheet
-│   ├── theme.js            # Dark/light/auto toggle, skeleton loading, haptics
+│   ├── theme.js            # Dark/light toggle (follows system until first tap), skeleton loading, haptics
 │   ├── reliability.js      # Retry logic, offline queue, error/action logging
 │   ├── interactions.js     # Pull-to-refresh, swipe-to-cancel, filter persistence
 │   ├── performance.js      # Debounce, virtual scrolling, stale-while-revalidate
 │   ├── calendar.js         # ICS generation, Google Calendar links
 │   ├── features.js         # Class history, instructor profiles, notifications
-│   ├── tabs.js             # 3-tab navigation, Profile rendering, share card, weekly planner
+│   ├── tabs.js             # 4-tab navigation, insights rendering, share card, weekly planner
 │   ├── settings.js         # Settings panel, tiers, bike prefs, bug report
 │   └── explore.js          # Instructor discovery, history sync, recommendations
 │
@@ -55,12 +58,13 @@ tabs.js → settings.js → explore.js
 ```
 Later modules monkey-patch earlier ones. Don't reorder.
 
-## Tab Structure (3 tabs)
+## Tab Structure (4 tabs)
 | Tab | Name | Contents |
 |-----|------|----------|
-| 1 | **Book a Class** | Weekly planner, search filters (sidebar on desktop), search results, class detail sheets |
-| 2 | **My Bookings** | Upcoming bookings (billing period bucketed), subscription bar, history button |
-| 3 | **Profile** | All insights (stats, heatmap, cost tracker, class types, variety, lapsed) + instructor discovery (new to you, you might like, instructor map) + share card |
+| 1 | **Discover** | Weekly planner → filters (live/debounced; collapsed by default on mobile; studio multi-select chips) → search results → instructor discovery (New to you / You might like) |
+| 2 | **My Bookings** | Upcoming bookings (billing period bucketed, waitlist badges, Map buttons), subscription bar, history button |
+| 3 | **Stats** | Insights (stats, heatmap, class types, variety, lapsed) + instructor map + share card |
+| 4 | **Membership** | Plan info, cost tracker, instructor rankings & favourites, Settings entry, about/affiliation. (Settings panel = app-focused: theme picker, reminder, bike prefs, calendar sync, export/import/bug report) |
 
 ## Design System (css/theme.css :root)
 
@@ -77,6 +81,7 @@ Later modules monkey-patch earlier ones. Don't reorder.
 | **Shadows** | `--shadow-sm`, `--shadow-md`, `--shadow-lg` | `box-shadow: var(--shadow-md)` |
 | **Transitions** | `--transition-fast` (0.12s) through `--transition-spring` (0.3s cubic-bezier) | `transition: color var(--transition-base)` |
 | **Colors** | `--bg`, `--bg-panel`, `--border`, `--text`, `--accent`, etc. (~30 tokens) | `color: var(--text-muted)` |
+| **Fonts** | `--font-display` (Archivo Black — wordmark, numerals, headlines; NEVER small UI labels or buttons), `--font-body` (system) | `font-family: var(--font-display)` |
 
 ### Color Hierarchy
 ```
@@ -90,10 +95,11 @@ Later modules monkey-patch earlier ones. Don't reorder.
 ```
 
 ### Theming
-- Dark values defined in `:root`
-- Light overrides in `[data-theme="light"]` (same file)
-- Theme follows system by default, user can override to light/dark
-- Shadows have separate light-mode values (less intense)
+- Dark ("Noir") values defined in `:root`; every other theme is a `[data-theme="id"]` token block in the same file
+- Themes: dark, light, terminal (CRT green + scanlines + mono body), synthwave (neon gradient headlines), gameboy (DMG palette, radius tokens zeroed, mono body), blueprint (grid overlay)
+- Registry lives in `js/theme.js` (`APP_THEMES`) — picker renders from it in Membership → App; `?theme=id` deep-links/persists a theme
+- Header sun/moon button quick-flips light/dark bases (exits flavour themes); system preference is followed until any explicit choice
+- To add a theme: new `[data-theme="id"]` block in css/theme.css + one entry in APP_THEMES (id, name, base, bg, accent)
 
 ## Key Patterns
 
@@ -104,7 +110,11 @@ Window accessors mean you can read/write `instructors`, `_myBookings`, `_eventCa
 
 **Monkey-patching**: reliability.js wraps `apiFetch` for retries and logging, features.js wraps `eventCard` for notify buttons, settings.js wraps it again for tier badges. Chain: settings → features → app.js original.
 
-**Session persistence**: Last search results saved to `sessionStorage` and restored on next visit (Feature 13).
+**Session persistence**: Last search results saved to `sessionStorage`, restored instantly on next visit, then silently re-searched to refresh availability (Feature 13).
+
+**Live filters**: every filter change calls `triggerAutoSearch()` (600ms debounce). Overlapping searches are superseded via `_searchSeq` — stale loops stop fetching/rendering.
+
+**Waitlist**: full+waitlistable classes skip the bike picker — `bookClass` shows a confirm dialog and POSTs `{event_id}` with no slots. Joined waitlists are tracked in `psycle_waitlisted_events` and badged in My Bookings.
 
 **Slot labels**: `slotLabel(typeName)` returns Bike/Bed/Bench/Spot based on class type. `slotLabelForEvent(eventId)` resolves via event cache.
 
@@ -140,10 +150,13 @@ Window accessors mean you can read/write `instructors`, `_myBookings`, `_eventCa
 
 ### Booking Flow
 ```
-Book a Class tab → tap class card → class detail sheet (photo, bio, availability)
+Discover tab → tap class card → class detail sheet (photo, bio, availability)
   → tap Book → bike picker (with class summary header + preference indicators)
   → select slot(s) → confirm → post-booking confirmation (slide-up)
-  → "View bookings" or "Done"
+  → "View my bookings" (switches tab) or "Done" (stays put — no auto tab switch)
+
+Full class → "Join Waitlist" → confirm dialog (no bike picker, no slots)
+  → "On the waitlist!" confirmation → Waitlisted badge in My Bookings
 ```
 
 ### History Sync Flow
@@ -187,8 +200,9 @@ Auth: Bearer token via `Authorization` header.
 | psycle_instructor_tiers | {instrId: "S"..."F"} |
 | psycle_bike_prefs | {studioId: {avoid: [], prefer: []}} |
 | psycle_fav_instructors | [instrId, ...] |
-| psycle_saved_filters | Last search filter state |
-| psycle_theme | "light", "dark", or "system" |
+| psycle_saved_filters | Last search filter state (locationIds array since multi-select) |
+| psycle_theme | Theme id: "dark", "light", "terminal", "synthwave", "gameboy", "blueprint" (absent/invalid = follow OS) |
+| psycle_waitlisted_events | {eventId: start_at} for waitlist joins (auto-cleared after class) |
 | psycle_notify_watchlist | [eventId, ...] for availability alerts |
 | psycle_error_log | Error entries (max 100) |
 | psycle_action_log | User action entries (max 100) |
