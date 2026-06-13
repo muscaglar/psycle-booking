@@ -383,6 +383,12 @@
     var data = computeInstructorMap(profiles);
 
     if (data.uniqueCount === 0) {
+      // Signed out: the Stats tab's hero empty-state already carries the
+      // message — an extra stub section just adds noise.
+      if (typeof currentUser === 'undefined' || !currentUser) {
+        container.style.display = 'none';
+        return;
+      }
       container.innerHTML = '<div class="explore-title">Your instructor map</div>' +
         '<div class="explore-empty">Book your first class to start building your instructor map.</div>';
       container.style.display = '';

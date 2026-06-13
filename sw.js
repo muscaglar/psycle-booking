@@ -1,7 +1,8 @@
-const CACHE = 'psycle-v10';
+const CACHE = 'psycle-v17';
 const SHELL = [
   './psycle-finder.html',
   './manifest.json',
+  './fonts/display.woff2',
   './css/styles.css',
   './css/theme.css',
   './css/features.css',
@@ -24,7 +25,13 @@ const SHELL = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    // cache: 'reload' bypasses the browser HTTP cache. Without it a
+    // conditional revalidation can return 304, which makes addAll reject
+    // (silently failing the whole install), and stale cached bytes can
+    // defeat the version bump.
+    caches.open(CACHE)
+      .then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 

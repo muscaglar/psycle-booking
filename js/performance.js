@@ -344,12 +344,8 @@ function _revalidateInBackground(path, cacheKey) {
   if (cachedLocations && typeof locations !== 'undefined' && locations.length === 0) {
     const visible = (cachedLocations.data || cachedLocations).filter(l => l.is_visible && l.handle !== 'psycle-at-home');
     locations.push(...visible);
-    // Re-render the location dropdown
-    const lSel = document.getElementById('locationSelect');
-    if (lSel && lSel.options.length <= 1) {
-      lSel.innerHTML = '<option value="">All Studios</option>' +
-        visible.map(l => `<option value="${l.id}">${escapeHTML(l.name.replace('Psycle ', ''))}</option>`).join('');
-    }
+    // Re-render the studio chips
+    if (typeof renderLocationChips === 'function') renderLocationChips();
   }
 
   if (cachedEventTypes && typeof eventTypes !== 'undefined' && eventTypes.length === 0) {
