@@ -29,8 +29,10 @@ psycle-booking/
 │   ├── calendar.js         # ICS generation, Google Calendar links
 │   ├── features.js         # Class history, instructor profiles, notifications
 │   ├── tabs.js             # 4-tab navigation, insights rendering, share card, weekly planner
-│   ├── settings.js         # Settings panel, tiers, bike prefs, bug report
-│   └── explore.js          # Instructor discovery, history sync, recommendations
+│   ├── settings.js         # Settings panel, tiers, bike prefs, bug report, diagnostics
+│   ├── explore.js          # Instructor discovery, history sync, recommendations
+│   ├── api-client.js       # window.PsycleAPI — typed getters, schema validation, error categorization
+│   └── diagnostic.js       # window.PsycleDiag — API drift detection, safe-mode banner, diagnostics
 │
 ├── css/                    # All stylesheets — fully tokenized design system
 │   ├── styles.css          # Core layout, class cards, booking UI, desktop layout
@@ -54,9 +56,24 @@ psycle-booking/
 ```
 state.js → security.js → theme.js → app.js → reliability.js →
 interactions.js → performance.js → calendar.js → features.js →
-tabs.js → settings.js → explore.js
+tabs.js → settings.js → explore.js → api-client.js → diagnostic.js
 ```
-Later modules monkey-patch earlier ones. Don't reorder.
+Later modules monkey-patch earlier ones. Don't reorder. api-client/diagnostic
+load last (everything they wrap exists); diagnostic reads PsycleAPI.SCHEMAS.
+
+## Build & CI
+- `cd ios-app && npm run build` — deterministic www/ flatten (auto-discovers js/css modules)
+  + content-hashed SW cache version (no manual bumps). `npm run sync` also runs `cap sync ios`.
+- `npm run sync:check` (or root `npm run drift`) — fails if www/ drifted from source (CI + pre-commit; see ios-app/PRECOMMIT.md).
+- Root: `npm run check` (node --check all JS), `npm test` (tests/unit.js, 42 assertions on the resilience layer),
+  `npm run typecheck` (advisory tsc --checkJs), `npm run ci` (check+test+drift). CI in .github/workflows/ci.yml.
+- tests/smoke.html — load in a browser/sim to assert all critical globals exist (title → "SMOKE: PASS").
+
+## Native iOS (scaffolded — needs Xcode wiring)
+Home Screen widget, Lock Screen Live Activity, App Intents/Siri, notification actions.
+Swift sources under ios-app/ios/App/Psycle*/ + data bridge in native-bridge.js (writes
+widget_next_class / widget_week to Capacitor Preferences). See ios-app/NATIVE_FEATURES.md
+for the required Xcode target + App Group setup. Not in any target yet — main build unaffected.
 
 ## Tab Structure (4 tabs)
 | Tab | Name | Contents |
@@ -206,6 +223,13 @@ Auth: Bearer token via `Authorization` header.
 | psycle_notify_watchlist | [eventId, ...] for availability alerts |
 | psycle_error_log | Error entries (max 100) |
 | psycle_action_log | User action entries (max 100) |
+| psycle_weekly_template | [{dayOfWeek,hour,minute,locationId,eventTypeId,instructorId,label}] for one-tap "book my week" |
+| psycle_bike_history | {studioId:{instructorId:{slot:count}}} — your usual spot, pre-selected in the picker |
+| psycle_recent_searches | Last 5 search filter states (deduped) for the Discover pills |
+| psycle_onboarded_v1 | First-run onboarding-tour completion flag |
+| psycle_api_contract | Snapshot of expected API response shapes (field names only) for drift detection |
+| psycle_api_schema_log | Observed response shapes + missing-field counters (field names only, no PII) |
+| psycle_api_last_drift | ISO timestamp of the last detected API drift |
 
 ## sessionStorage Keys
 | Key | Contents |

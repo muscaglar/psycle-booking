@@ -1,6 +1,6 @@
 {
   "appId": "com.psyclefinder.app",
-  "appName": "Psycle Finder",
+  "appName": "Psync",
   "webDir": "www",
   "server": {
     "androidScheme": "https"

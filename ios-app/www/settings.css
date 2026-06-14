@@ -482,3 +482,158 @@
   color: var(--text-muted);
   line-height: 1.4;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Diagnostics Panel
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Reuses .settings-overlay / .settings-panel for the modal frame; sits above
+   the settings overlay so it can be opened from within it. */
+.diag-overlay { z-index: 320; }
+
+.diag-section-hint {
+  font-size: var(--text-sm);
+  color: var(--text-muted, #aaa);
+  line-height: 1.45;
+  margin-bottom: var(--space-4);
+}
+
+/* Generous touch target for the close button (>= 44px). */
+.settings-close.diag-close {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diag-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.diag-kv {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-md);
+}
+
+.diag-kv-block {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.diag-k {
+  color: var(--text-dim, #888);
+  flex-shrink: 0;
+}
+
+.diag-v {
+  color: var(--text, #f0f0f0);
+  text-align: right;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.diag-ok { color: #5dba5d; }
+.diag-bad { color: var(--accent, #e94560); }
+
+.diag-findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.diag-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-deep, #0d0d0d);
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.diag-finding-kind {
+  font-weight: var(--weight-bold);
+  color: var(--text, #f0f0f0);
+  font-size: var(--text-sm);
+}
+
+.diag-finding-missing {
+  color: var(--accent, #e94560);
+  font-size: var(--text-xs);
+  word-break: break-word;
+}
+
+.diag-finding-note {
+  color: var(--text-muted, #aaa);
+  font-size: var(--text-xs);
+  word-break: break-word;
+}
+
+/* Scrollable, capped log lists so a long history doesn't blow out the panel. */
+.diag-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  background: var(--bg-deep, #0d0d0d);
+}
+
+.diag-log-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--section-border, #1a1a1a);
+}
+
+.diag-log-row:last-child { border-bottom: none; }
+
+.diag-log-ts {
+  font-size: var(--text-2xs, 9px);
+  color: var(--text-faint, #666);
+  font-variant-numeric: tabular-nums;
+}
+
+.diag-log-msg {
+  font-size: var(--text-xs);
+  color: var(--text, #f0f0f0);
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.diag-empty {
+  font-size: var(--text-sm);
+  color: var(--text-muted, #aaa);
+  text-align: center;
+  padding: var(--space-4) var(--space-2);
+}
+
+.diag-status {
+  font-size: var(--text-sm);
+  margin-top: var(--space-3);
+}
+
+/* Light mode */
+[data-theme="light"] .diag-finding,
+[data-theme="light"] .diag-log {
+  background: #f7f7f7;
+  border-color: #e2e2e2;
+}
+[data-theme="light"] .diag-finding-kind,
+[data-theme="light"] .diag-log-msg,
+[data-theme="light"] .diag-v { color: #1a1a1a; }
+[data-theme="light"] .diag-log-row { border-bottom-color: #ececec; }

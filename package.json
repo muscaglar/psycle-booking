@@ -5,8 +5,16 @@
   "private": true,
   "scripts": {
     "start": "npx serve -l 8080",
-    "dev": "npx serve -l 8080 --cors"
+    "dev": "npx serve -l 8080 --cors",
+    "check": "node -e \"const{execFileSync}=require('child_process'),fs=require('fs'),p=require('path');const files=[...fs.readdirSync('js').filter(f=>f.endsWith('.js')).map(f=>p.join('js',f)),'sw.js','ios-app/build.js','ios-app/www/native-bridge.js'].filter(f=>fs.existsSync(f));let bad=0;for(const f of files){try{execFileSync(process.execPath,['--check',f],{stdio:['ignore','ignore','pipe']});}catch(e){bad++;process.stderr.write('[check] syntax error in '+f+'\\n'+String(e.stderr||e.message)+'\\n');}}if(bad){console.error('[check] '+bad+' file(s) failed --check');process.exit(1);}console.log('[check] OK — '+files.length+' file(s) parsed');\"",
+    "test": "node tests/unit.js",
+    "drift": "node ios-app/build.js --check",
+    "typecheck": "tsc -p jsconfig.json --noEmit || true",
+    "ci": "npm run check && npm run test && npm run drift"
   },
   "keywords": ["psycle", "fitness", "booking", "pwa"],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
 }

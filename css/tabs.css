@@ -488,6 +488,58 @@
   border-radius: var(--radius-lg);
 }
 
+/* ── Spend-vs-usage forecast (Feature 2) ─────────────────────────── */
+
+.forecast-block {
+  margin-top: var(--space-5);
+  padding: var(--space-6);
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius-lg);
+}
+
+.forecast-head {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.forecast-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.forecast-num {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-4xl);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--text-heading, #fff);
+  line-height: 1;
+}
+
+.forecast-cap {
+  font-size: var(--text-sm);
+  color: var(--text-faint, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: var(--space-2);
+}
+
+.forecast-meta {
+  font-size: var(--text-sm);
+  color: var(--text-ghost, #555);
+  margin-top: var(--space-4);
+}
+
+.forecast-verdict {
+  margin-top: var(--space-3);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--accent, #e94560);
+  line-height: 1.4;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Shared Insights Sections
    ═══════════════════════════════════════════════════════════════════ */
@@ -627,6 +679,336 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   Habit-slot alerts (Feature 1)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.habit-section { padding: 0 var(--space-9) var(--space-7); }
+
+.habit-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim, #888);
+  margin-bottom: var(--space-1);
+}
+
+.habit-subtitle {
+  font-size: var(--text-base);
+  color: var(--text-ghost, #555);
+  margin-bottom: var(--space-5);
+}
+
+.habit-cards {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: var(--space-1);
+}
+
+.habit-cards::-webkit-scrollbar { display: none; }
+
+.habit-card {
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-left: 3px solid var(--accent, #e94560);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-7);
+  min-width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.habit-line {
+  font-size: var(--text-md);
+  color: var(--text-muted, #aaa);
+  line-height: 1.4;
+}
+
+.habit-line strong {
+  color: var(--text-heading, #fff);
+  font-weight: var(--weight-bold);
+}
+
+.habit-class {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text, #f0f0f0);
+  margin-top: var(--space-2);
+}
+
+.habit-meta {
+  font-size: var(--text-sm);
+  color: var(--text-ghost, #555);
+  margin-top: 2px;
+}
+
+.habit-find-btn {
+  margin-top: var(--space-4);
+  align-self: flex-start;
+  background: var(--accent, #e94560);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--space-3) var(--space-7);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-base), transform var(--transition-fast);
+}
+
+.habit-find-btn:hover { background: var(--accent-hover, #c73650); }
+.habit-find-btn:active { transform: scale(0.96); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Streaks & milestones (Feature 3)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.streak-section { padding: 0 var(--space-9) var(--space-7); }
+
+.streak-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim, #888);
+  margin-bottom: var(--space-5);
+}
+
+.streak-cards {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: var(--space-1);
+}
+
+.streak-cards::-webkit-scrollbar { display: none; }
+
+.streak-card {
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) 18px;
+  min-width: 130px;
+  flex-shrink: 0;
+}
+
+.streak-card.streak-live {
+  border-color: var(--accent, #e94560);
+  box-shadow: 0 0 0 1px var(--accent, #e94560), 0 0 24px -8px var(--accent, #e94560);
+}
+
+.streak-value {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-5xl);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--text-heading, #fff);
+  line-height: 1;
+}
+
+.streak-card.streak-live .streak-value { color: var(--accent, #e94560); }
+
+.streak-label {
+  font-size: var(--text-sm);
+  color: var(--text-faint, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: var(--space-1);
+}
+
+.streak-hint {
+  font-size: var(--text-sm);
+  color: var(--text-off, #444);
+  margin-top: var(--space-2);
+  line-height: 1.3;
+}
+
+.milestone-row {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.milestone-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: var(--space-4) var(--space-3);
+  background: var(--bg-deep, #0d0d0d);
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius-lg);
+  opacity: 0.45;
+  transition: opacity var(--transition-base), border-color var(--transition-base);
+}
+
+.milestone-badge.earned {
+  opacity: 1;
+  border-color: var(--accent, #e94560);
+  background: var(--bg-panel, #111);
+}
+
+.milestone-badge.next {
+  opacity: 0.85;
+  border-style: dashed;
+  border-color: var(--border-light, #333);
+}
+
+.milestone-num {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-2xl);
+  font-weight: 400;
+  color: var(--text-heading, #fff);
+  line-height: 1;
+}
+
+.milestone-badge:not(.earned) .milestone-num { color: var(--text-faint, #666); }
+
+.milestone-cap {
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-ghost, #555);
+  margin-top: var(--space-1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Year in review (Feature 4) — entry button + modal
+   ═══════════════════════════════════════════════════════════════════ */
+
+.year-review-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-panel, #111);
+  border: 1px solid var(--border, #222);
+  border-left: 3px solid var(--accent, #e94560);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-7);
+  cursor: pointer;
+  color: inherit;
+  transition: border-color var(--transition-base), transform var(--transition-fast);
+}
+
+.year-review-btn:hover { border-color: var(--accent, #e94560); }
+.year-review-btn:active { transform: scale(0.99); }
+
+.year-review-btn-main {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--text-heading, #fff);
+}
+
+.year-review-btn-sub {
+  font-size: var(--text-base);
+  color: var(--text-dim, #888);
+}
+
+.year-review-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-9);
+}
+
+.year-review-modal .modal {
+  max-width: 460px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.yr-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-5);
+}
+
+.yr-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border, #222);
+}
+
+.yr-row:last-child { border-bottom: none; }
+
+.yr-row-label {
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint, #666);
+}
+
+.yr-row-value {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--text-heading, #fff);
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Weekly template buttons (Feature 5)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.week-template-bar {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+
+.week-template-btn {
+  background: none;
+  border: 1px solid var(--border-light, #333);
+  color: var(--text-muted, #aaa);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+}
+
+.week-template-btn:hover {
+  background: var(--bg-input, #1a1a1a);
+  border-color: var(--accent, #e94560);
+  color: var(--text-heading, #fff);
+}
+
+.week-template-btn.week-template-book {
+  border-color: var(--accent, #e94560);
+  color: var(--accent, #e94560);
+}
+
+.week-template-btn.week-template-book:hover {
+  background: var(--accent, #e94560);
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Profile Tab Divider (between Insights and Explore sections)
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -672,8 +1054,11 @@
 
 @media (max-width: 640px) {
   .insights-section { padding: 0 var(--space-7) var(--space-7); }
+  .habit-section,
+  .streak-section { padding: 0 var(--space-7) var(--space-7); }
   .ct-label { min-width: 56px; font-size: var(--text-sm); }
   .week-add-slot { font-size: var(--text-2xs); padding: var(--space-2) 2px; }
+  .week-template-btn { flex: 1 1 100%; text-align: center; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1133,4 +1518,35 @@
   .tab-btn.active .tab-icon,
   .tab-panel,
   .stats-bar .stat-card { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   iOS app-shell (mobile): lock the viewport so the document can't
+   rubber-band. Stops the overscroll smear in the notch / under the tab
+   bar (overscroll-behavior alone doesn't stop the main WKWebView bounce).
+   The body fills the screen and doesn't scroll; only .tab-content
+   scrolls (overscroll contained). The bottom tab bar stays position:
+   fixed (rule above) so it keeps covering the home-indicator safe area —
+   making it a static flex item left the native bg showing there.
+   Desktop keeps normal document scroll.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  html { height: 100%; }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  header { flex: 0 0 auto; }
+  #sessionBanner, #corsBanner, #safeModeBanner { flex: 0 0 auto; }
+  .tab-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
 }

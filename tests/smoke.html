@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMOKE: running…</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 0; background: #111; color: #eee;
+  }
+  #banner {
+    padding: 24px; font-size: 28px; font-weight: 800; text-align: center;
+    color: #fff;
+  }
+  #banner.pass { background: #0f5132; }
+  #banner.fail { background: #842029; }
+  #banner.run  { background: #533f03; }
+  #summary { padding: 8px 24px; font-size: 15px; color: #bbb; text-align: center; }
+  #results { padding: 16px 24px; max-width: 720px; margin: 0 auto; }
+  .line { padding: 4px 0; border-bottom: 1px solid #222; font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pass-line { color: #4ade80; }
+  .fail-line { color: #f87171; font-weight: 700; }
+  .pass-line::before { content: "✓ "; }
+  .fail-line::before { content: "✗ "; }
+</style>
+</head>
+<body>
+<div id="banner" class="run">SMOKE: running…</div>
+<div id="summary"></div>
+<div id="results"></div>
+
+<!--
+  Smoke test — load ALL the real app scripts in the SAME order as
+  psycle-finder.html, then assert the critical globals exist and a few pure
+  functions behave. A missing global produces a FAIL *line*, never a thrown
+  page: every check is wrapped so the harness always reaches the final banner.
+
+  Run by opening this file in a browser / iOS simulator (served, ideally:
+  `python3 -m http.server 8080` then open /tests/smoke.html). The big banner
+  and document.title ("SMOKE: PASS" / "SMOKE: FAIL") report the result.
+
+  NOTE: these scripts are NOT deferred here (unlike psycle-finder.html, which
+  uses `defer`). Loaded synchronously in order, each finishes before the next
+  starts, so by the time the final smoke-runner script runs every module is
+  fully evaluated. We do not call checkAuth()/init paths — we only assert that
+  the symbols are present and the right type, plus two pure-logic checks.
+-->
+<script src="../js/state.js"></script>
+<script src="../js/security.js"></script>
+<script src="../js/theme.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/reliability.js"></script>
+<script src="../js/interactions.js"></script>
+<script src="../js/performance.js"></script>
+<script src="../js/calendar.js"></script>
+<script src="../js/features.js"></script>
+<script src="../js/tabs.js"></script>
+<script src="../js/settings.js"></script>
+<script src="../js/explore.js"></script>
+<script src="../js/api-client.js"></script>
+<script src="../js/diagnostic.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var passed = 0, failed = 0;
+  var resultsEl = document.getElementById('results');
+
+  function line(isPass, msg) {
+    if (isPass) passed++; else failed++;
+    var div = document.createElement('div');
+    div.className = 'line ' + (isPass ? 'pass-line' : 'fail-line');
+    div.textContent = msg;
+    resultsEl.appendChild(div);
+  }
+
+  // Assert a global exists and is the expected type. Never throws.
+  function checkType(name, expectedType) {
+    try {
+      var val = window[name];
+      var actual = typeof val;
+      if (actual === expectedType) {
+        line(true, name + ' is a ' + expectedType);
+      } else {
+        line(false, name + ' expected ' + expectedType + ', got ' + actual);
+      }
+    } catch (e) {
+      line(false, name + ' threw: ' + (e && e.message));
+    }
+  }
+
+  // Assert a nested property (e.g. PsycleAPI.categorizeError) exists + type.
+  function checkMember(objName, member, expectedType) {
+    try {
+      var obj = window[objName];
+      if (!obj) { line(false, objName + ' missing (cannot check .' + member + ')'); return; }
+      var actual = typeof obj[member];
+      if (actual === expectedType) {
+        line(true, objName + '.' + member + ' is a ' + expectedType);
+      } else {
+        line(false, objName + '.' + member + ' expected ' + expectedType + ', got ' + actual);
+      }
+    } catch (e) {
+      line(false, objName + '.' + member + ' threw: ' + (e && e.message));
+    }
+  }
+
+  function checkEqual(label, actual, expected) {
+    try {
+      if (actual === expected) {
+        line(true, label);
+      } else {
+        line(false, label + '  (expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual) + ')');
+      }
+    } catch (e) {
+      line(false, label + ' threw: ' + (e && e.message));
+    }
+  }
+
+  // ── Critical globals: search / booking / render pipeline (app.js etc.) ──
+  checkType('search', 'function');
+  checkType('bookClass', 'function');
+  checkType('submitBooking', 'function');
+  checkType('render', 'function');
+  checkType('escapeHTML', 'function');
+  checkType('eventCard', 'function');
+  checkType('checkAuth', 'function');
+  checkType('fetchMyBookings', 'function');
+
+  // ── Weekly template + recent searches + insights (tabs/app/explore) ──
+  checkType('bookWeeklyTemplate', 'function');
+  checkType('getRecentSearches', 'function');
+  checkType('renderInsights', 'function');
+
+  // ── Diagnostics UI + resilience layer (settings/diagnostic/api-client) ──
+  checkType('openDiagnostics', 'function');
+  checkType('PsycleAPI', 'object');
+  checkType('PsycleDiag', 'object');
+  checkType('PsycleState', 'object');
+  checkType('PsycleEvents', 'object');
+
+  // ── PsycleAPI surface ──
+  checkMember('PsycleAPI', 'categorizeError', 'function');
+  checkMember('PsycleAPI', 'validate', 'function');
+  checkMember('PsycleAPI', 'field', 'function');
+  checkMember('PsycleAPI', 'parseJson', 'function');
+  checkMember('PsycleAPI', 'SCHEMAS', 'object');
+
+  // ── PsycleDiag surface ──
+  checkMember('PsycleDiag', 'record', 'function');
+  checkMember('PsycleDiag', 'checkContract', 'function');
+
+  // ── A few pure checks (no network, no DOM mutation) ──
+  try {
+    checkEqual('escapeHTML("<b>") === "&lt;b&gt;"', window.escapeHTML('<b>'), '&lt;b&gt;');
+  } catch (e) { line(false, 'escapeHTML pure check threw: ' + (e && e.message)); }
+
+  try {
+    var cat401 = window.PsycleAPI && window.PsycleAPI.categorizeError({ status: 401, ok: false });
+    checkEqual('categorizeError({status:401}).type === "auth"', cat401 && cat401.type, 'auth');
+    var catNet = window.PsycleAPI && window.PsycleAPI.categorizeError(new TypeError('Failed to fetch'));
+    checkEqual('categorizeError(TypeError "Failed to fetch").type === "network"', catNet && catNet.type, 'network');
+  } catch (e) { line(false, 'categorizeError pure check threw: ' + (e && e.message)); }
+
+  try {
+    var vBad = window.PsycleAPI && window.PsycleAPI.validate('event', { id: 1 });
+    checkEqual('validate("event",{id:1}).ok === false', vBad && vBad.ok, false);
+  } catch (e) { line(false, 'validate pure check threw: ' + (e && e.message)); }
+
+  // ── Banner + title ──
+  var banner = document.getElementById('banner');
+  var summary = document.getElementById('summary');
+  var total = passed + failed;
+  if (failed === 0) {
+    banner.className = 'pass';
+    banner.textContent = 'SMOKE: PASS';
+    document.title = 'SMOKE: PASS';
+  } else {
+    banner.className = 'fail';
+    banner.textContent = 'SMOKE: FAIL';
+    document.title = 'SMOKE: FAIL';
+  }
+  summary.textContent = passed + ' passed, ' + failed + ' failed (' + total + ' checks)';
+})();
+</script>
+</body>
+</html>
