@@ -3661,10 +3661,10 @@ const _OB_ICON = {
 };
 
 const ONBOARDING_STEPS = [
-  { icon: _OB_ICON.logo, title: 'Welcome to Psync', body: 'Your fast, no-faff companion for finding and booking Psycle classes.' },
-  { icon: _OB_ICON.search, title: 'Book in seconds', body: 'Filter the timetable by instructor, studio, type or time — then book in a tap. Psync remembers your usual bike.' },
-  { icon: _OB_ICON.calendar, title: 'Plan your week', body: 'See your week at a glance, save it as a template, and rebook your regulars in one tap.' },
-  { icon: _OB_ICON.bars, title: 'Know your numbers', body: 'Streaks, cost-per-class, top studios and instructor picks — all from your booking history.' },
+  { icon: _OB_ICON.logo, title: 'Psync', body: 'An independent companion for booking Psycle classes.' },
+  { icon: _OB_ICON.search, title: 'Search and book', body: 'Filter the timetable by instructor, studio, type or time, then book in a tap. Your usual bike is remembered.' },
+  { icon: _OB_ICON.calendar, title: 'Plan the week', body: 'View the week ahead, save it as a template, and rebook your regulars in one tap.' },
+  { icon: _OB_ICON.bars, title: 'Track your training', body: 'Streaks, cost per class and instructor suggestions, from your booking history.' },
 ];
 
 let _onboardIdx = 0;
