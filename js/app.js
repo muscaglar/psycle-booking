@@ -3153,6 +3153,957 @@ window.openClassDetail = function (eventId) {
   document.body.appendChild(overlay);
 };
 
+// ════════════════════════════════════════════════════════════════
+// Feature: Weekly Template Booking Engine
+// localStorage 'psycle_weekly_template' = array of
+//   { dayOfWeek:0-6 (0=Sun), hour, minute, locationId, eventTypeId,
+//     instructorId, label }
+// The planner UI in tabs.js calls saveWeeklyTemplate/loadWeeklyTemplate/
+// bookWeeklyTemplate; this is the implementation behind those hooks.
+// ════════════════════════════════════════════════════════════════
+const WEEKLY_TEMPLATE_KEY = 'psycle_weekly_template';
+
+function loadWeeklyTemplate() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(WEEKLY_TEMPLATE_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function saveWeeklyTemplate(arr) {
+  try {
+    localStorage.setItem(WEEKLY_TEMPLATE_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
+  } catch (e) { console.warn('[psycle] saveWeeklyTemplate failed:', e); }
+}
+
+function clearWeeklyTemplate() {
+  try { localStorage.removeItem(WEEKLY_TEMPLATE_KEY); }
+  catch (e) { console.warn('[psycle] clearWeeklyTemplate failed:', e); }
+}
+
+// Resolve a template's stored id (which may be a real location id OR a
+// studio_id, since _eventCache only stores studio_id) into a location id
+// suitable for the `/events?location=` query.
+function _resolveTemplateLocationId(id) {
+  if (id == null) return '';
+  const sid = String(id);
+  // Already a real location id?
+  if (typeof locations !== 'undefined' && locations.some(l => String(l.id) === sid)) return sid;
+  // Treat as a studio id and look up its location.
+  const studio = (typeof _studioMap !== 'undefined') ? _studioMap[id] : null;
+  if (studio && studio.location_id != null) return String(studio.location_id);
+  return sid; // best effort
+}
+
+// Date of the given weekday (0=Sun..6=Sat) within the upcoming 7 days
+// (today counts as day 0). Returns a YYYY-MM-DD string.
+function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date()) {
+  const today0 = new Date(fromDate);
+  today0.setHours(0, 0, 0, 0);
+  let diff = (Number(dayOfWeek) - today0.getDay() + 7) % 7;
+  const target = new Date(today0);
+  target.setDate(target.getDate() + diff);
+  return localDateStr(target);
+}
+
+// Headlessly book a single resolved event the way rebookNextWeek does —
+// a detached button drives bookClass(), but we never pop the bike picker:
+// no-layout → submitBooking; layout → auto-pick usual/first available slot.
+// Returns 'booked' | 'waitlisted' | 'skipped' | 'failed'.
+async function _bookEventHeadless(eventId, studioId) {
+  const btn = document.createElement('button');
+  btn.className = 'book-btn';
+  btn.textContent = 'Book';
+
+  try {
+    const res = await apiFetch(`/events/${eventId}`);
+    if (!res.ok) return 'failed';
+    const detail = await res.json();
+    const availableSlotIds = new Set((detail.slots || []).map(Number));
+    const evtData = detail.data || {};
+    const cached = _eventCache[String(eventId)] || {};
+    const isFullyBooked = evtData.is_fully_booked ?? cached.is_fully_booked;
+    const isWaitlistable = evtData.is_waitlistable ?? cached.is_waitlistable;
+
+    const studio = _studioMap[studioId];
+    const layout = studio?.layout;
+    const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
+
+    const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
+    if (noSeatsLeft) {
+      if (!isWaitlistable) return 'failed';
+      await submitBooking(eventId, null, btn, { waitlist: true });
+      return btn.classList.contains('booked') ? 'waitlisted' : 'failed';
+    }
+
+    if (hasLayout) {
+      // Auto-pick: the user's usual slot if it's free, else the first available.
+      const usual = _usualSlotForEvent(eventId);
+      let pick = (usual != null && availableSlotIds.has(Number(usual))) ? Number(usual) : null;
+      if (pick == null) pick = [...availableSlotIds][0];
+      if (pick == null) return 'failed';
+      await submitBooking(eventId, [pick], btn);
+    } else {
+      await submitBooking(eventId, null, btn);
+    }
+    return btn.classList.contains('booked') ? 'booked' : 'failed';
+  } catch (e) {
+    console.warn('[psycle] headless book failed:', eventId, e);
+    return 'failed';
+  }
+}
+
+// For each template entry: find its date in the upcoming 7 days, fetch that
+// day's events at the entry's location, pick the best match (same type, and
+// same instructor if specified, within ±20 min), skip if already booked,
+// otherwise book it headlessly. One failure never aborts the rest.
+// Resolves to { booked, waitlisted, failed, skipped }.
+async function bookWeeklyTemplate() {
+  const counts = { booked: 0, waitlisted: 0, failed: 0, skipped: 0 };
+  const template = loadWeeklyTemplate();
+  if (!template.length) return counts;
+  if (!currentUser) { counts.failed = template.length; return counts; }
+
+  const TOLERANCE_MIN = 20;
+
+  // Cache per-day event fetches so multiple entries on the same day+location
+  // share one network call.
+  const dayCache = {};
+  const fetchDay = async (dayStr, locId) => {
+    const key = dayStr + '|' + locId;
+    if (dayCache[key]) return dayCache[key];
+    const p = (async () => {
+      const params = new URLSearchParams({
+        start: dayStr + ' 00:00:00',
+        end: dayStr + ' 23:59:59',
+        location: locId,
+        limit: 200,
+      });
+      const res = await apiFetch('/events?' + params);
+      if (!res.ok) return [];
+      const data = await res.json().catch(() => ({}));
+      // Cache event metadata so headless booking + state stay consistent.
+      const rel = data.relations || {};
+      const studioMap = Object.fromEntries((rel.studios || []).map(s => [s.id, s]));
+      const instrMap = Object.fromEntries((rel.instructors || []).map(i => [i.id, i]));
+      const locationMap = Object.fromEntries((rel.locations || []).map(l => [l.id, l]));
+      const typeMap = Object.fromEntries((rel.event_types || []).map(t => [t.id, t]));
+      Object.assign(_studioMap, studioMap);
+      (data.data || []).forEach(e => {
+        if (!_eventCache[String(e.id)]) {
+          const studio = studioMap[e.studio_id];
+          const loc = studio ? locationMap[studio.location_id] : null;
+          _eventCache[String(e.id)] = {
+            ...e,
+            _typeName: typeMap[e.event_type_id]?.name || 'Class',
+            _instrName: instrMap[e.instructor_id]?.full_name || '',
+            _locName: loc ? loc.name.replace('Psycle ', '') : '',
+            _locFullName: loc ? loc.name : '',
+            _locAddress: loc ? (loc.address || '') : '',
+            _studioName: studio ? studio.name : '',
+          };
+        }
+      });
+      return data.data || [];
+    })().catch(() => []);
+    dayCache[key] = p;
+    return p;
+  };
+
+  const tasks = template.map(async entry => {
+    try {
+      const dayStr = _upcomingWeekdayDate(entry.dayOfWeek);
+      const targetMin = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
+      const locId = _resolveTemplateLocationId(entry.locationId);
+
+      // Already booked something matching this slot? (same type, instructor if
+      // set, on the target day, within tolerance) → skip.
+      const already = Object.keys(_myBookings).some(bookedId => {
+        const be = _eventCache[bookedId];
+        if (!be || !be.start_at) return false;
+        if (localDateStr(new Date(be.start_at)) !== dayStr) return false;
+        if (entry.eventTypeId != null && be.event_type_id !== entry.eventTypeId) return false;
+        if (entry.instructorId != null && be.instructor_id !== entry.instructorId) return false;
+        const bMin = new Date(be.start_at).getHours() * 60 + new Date(be.start_at).getMinutes();
+        return Math.abs(bMin - targetMin) <= TOLERANCE_MIN;
+      });
+      if (already) { counts.skipped++; return; }
+
+      const events = await fetchDay(dayStr, locId);
+      if (!events.length) { counts.failed++; return; }
+
+      // Best match: same type, same instructor (if set), closest time within ±20m.
+      let best = null, bestDelta = Infinity;
+      for (const e of events) {
+        if (entry.eventTypeId != null && e.event_type_id !== entry.eventTypeId) continue;
+        if (entry.instructorId != null && e.instructor_id !== entry.instructorId) continue;
+        const eMin = new Date(e.start_at).getHours() * 60 + new Date(e.start_at).getMinutes();
+        const delta = Math.abs(eMin - targetMin);
+        if (delta <= TOLERANCE_MIN && delta < bestDelta) { best = e; bestDelta = delta; }
+      }
+      if (!best) { counts.failed++; return; }
+
+      // Don't double-book the exact event we found.
+      if (_myBookings[String(best.id)]) { counts.skipped++; return; }
+
+      const result = await _bookEventHeadless(best.id, best.studio_id);
+      if (result === 'booked') counts.booked++;
+      else if (result === 'waitlisted') counts.waitlisted++;
+      else if (result === 'skipped') counts.skipped++;
+      else counts.failed++;
+    } catch (e) {
+      console.warn('[psycle] template entry failed:', entry, e);
+      counts.failed++;
+    }
+  });
+
+  await Promise.allSettled(tasks);
+  if (typeof fetchMyBookings === 'function') { try { await fetchMyBookings(); } catch {} }
+  return counts;
+}
+
+// Analyse psycle_class_history for day-of-week + time + type slots booked
+// 2+ times; return candidate template entries (same shape). Names in history
+// are resolved back to numeric IDs via the loaded instructors/eventTypes.
+function detectRecurringSlots() {
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch { return []; }
+  if (!Array.isArray(history) || !history.length) return [];
+
+  const typeByName = {};
+  if (typeof eventTypes !== 'undefined') {
+    eventTypes.forEach(t => { if (t.name) typeByName[t.name.toLowerCase()] = t.id; });
+  }
+  const instrByName = {};
+  if (typeof instructors !== 'undefined') {
+    instructors.forEach(i => { if (i.full_name) instrByName[i.full_name.toLowerCase()] = i.id; });
+  }
+
+  // Bucket by day-of-week + rounded half-hour + type name.
+  const buckets = {};
+  history.forEach(h => {
+    if (!h || h.cancelledAt || !h.date) return;
+    const dt = new Date(String(h.date).replace(' ', 'T'));
+    if (isNaN(dt.getTime())) return;
+    const dow = dt.getDay();
+    const mins = dt.getHours() * 60 + dt.getMinutes();
+    const halfHour = Math.round(mins / 30) * 30; // cluster nearby times
+    const typeName = h.typeName || 'Class';
+    const key = dow + '|' + halfHour + '|' + typeName.toLowerCase();
+    if (!buckets[key]) {
+      buckets[key] = { dow, mins: [], typeName, instrName: h.instrName || '', count: 0 };
+    }
+    buckets[key].count++;
+    buckets[key].mins.push(mins);
+  });
+
+  const candidates = [];
+  Object.values(buckets).forEach(b => {
+    if (b.count < 2) return; // recurring = booked 2+ times
+    const avg = Math.round(b.mins.reduce((a, c) => a + c, 0) / b.mins.length);
+    const hour = Math.floor(avg / 60), minute = avg % 60;
+    candidates.push({
+      dayOfWeek: b.dow,
+      hour,
+      minute,
+      locationId: null, // history doesn't carry a numeric location id
+      eventTypeId: typeByName[b.typeName.toLowerCase()] ?? null,
+      instructorId: instrByName[(b.instrName || '').toLowerCase()] ?? null,
+      label: b.typeName + (b.instrName ? ' · ' + b.instrName : ''),
+      _count: b.count,
+    });
+  });
+
+  // Most-booked slots first.
+  return candidates.sort((a, b) => (b._count || 0) - (a._count || 0));
+}
+
+window.loadWeeklyTemplate = loadWeeklyTemplate;
+window.saveWeeklyTemplate = saveWeeklyTemplate;
+window.clearWeeklyTemplate = clearWeeklyTemplate;
+window.bookWeeklyTemplate = bookWeeklyTemplate;
+window.detectRecurringSlots = detectRecurringSlots;
+
+// ════════════════════════════════════════════════════════════════
+// Feature: Saved / Recent searches + presets
+// 'psycle_recent_searches' = array (cap 5), deduped by a signature of
+// instructors + locations + categories + date-mode.
+// ════════════════════════════════════════════════════════════════
+const RECENT_SEARCHES_KEY = 'psycle_recent_searches';
+const RECENT_SEARCHES_CAP = 5;
+
+// Snapshot the live filter globals into a serialisable object.
+function _currentSearchState() {
+  return {
+    instructors: [...selectedInstructors],
+    locations: [...selectedLocations],
+    categories: [...selectedCategories],
+    strengthSubs: [...selectedStrengthSubs],
+    dateMode: _dateQuickMode || null,
+    startDate: document.getElementById('startDate')?.value || '',
+    daysAhead: document.getElementById('daysAhead')?.value || '7',
+  };
+}
+
+// Order-independent signature for dedup: sorted ids + sorted categories +
+// date mode (or explicit start date when no quick mode is active).
+function _searchSignature(s) {
+  const instr = [...(s.instructors || [])].map(String).sort().join(',');
+  const locs = [...(s.locations || [])].map(String).sort().join(',');
+  const cats = [...(s.categories || [])].map(String).sort().join(',');
+  const date = s.dateMode || ('date:' + (s.startDate || '') + '+' + (s.daysAhead || ''));
+  return ['i:' + instr, 'l:' + locs, 'c:' + cats, 'd:' + date].join('|');
+}
+
+// Human label for a saved/recent search pill.
+function _searchLabel(s) {
+  const parts = [];
+  const modeLabels = { today: 'Today', tomorrow: 'Tomorrow', week: '7 days', '2week': '14 days' };
+  if (s.dateMode && modeLabels[s.dateMode]) parts.push(modeLabels[s.dateMode]);
+  else if (s.startDate) {
+    const [y, m, d] = s.startDate.split('-').map(Number);
+    if (y && m && d) parts.push(new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+  }
+  if ((s.locations || []).length === 1 && typeof locations !== 'undefined') {
+    const l = locations.find(x => String(x.id) === String(s.locations[0]));
+    if (l) parts.push(l.name.replace('Psycle ', ''));
+  } else if ((s.locations || []).length > 1) parts.push(s.locations.length + ' studios');
+  if ((s.instructors || []).length === 1 && typeof instructors !== 'undefined') {
+    const i = instructors.find(x => String(x.id) === String(s.instructors[0]));
+    if (i) parts.push(i.full_name.split(' ')[0]);
+  } else if ((s.instructors || []).length > 1) parts.push(s.instructors.length + ' instructors');
+  if ((s.categories || []).length) {
+    parts.push(s.categories.map(k => {
+      const c = CATEGORY_MAP.find(c => c.key === k);
+      return c ? c.label : k;
+    }).join(' · '));
+  }
+  return parts.length ? parts.join(' · ') : 'All classes';
+}
+
+function getRecentSearches() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function _recordRecentSearch() {
+  // Skip empty searches (no filters, default date) — they aren't worth saving.
+  const state = _currentSearchState();
+  const sig = _searchSignature(state);
+  let list = getRecentSearches().filter(s => _searchSignature(s) !== sig);
+  list.unshift({ ...state, signature: sig, ts: Date.now() });
+  if (list.length > RECENT_SEARCHES_CAP) list = list.slice(0, RECENT_SEARCHES_CAP);
+  try { localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(list)); } catch {}
+  renderDiscoverPresets();
+}
+
+// Built-in presets. Each has an apply() that sets the filter globals.
+function getSearchPresets() {
+  return [
+    {
+      key: 'tonight', label: 'Tonight', apply() {
+        selectedInstructors.clear();
+        selectedCategories.clear();
+        selectedStrengthSubs.clear();
+        ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+        _dateQuickMode = 'today';
+        document.getElementById('startDate').value = localDateStr();
+        document.getElementById('daysAhead').value = 1;
+        document.querySelectorAll('.date-quick-btn').forEach(b => {
+          b.classList.toggle('active', b.textContent.trim() === 'Today');
+        });
+      },
+    },
+    {
+      key: 'strength', label: 'Strength', apply() {
+        selectedCategories.clear();
+        selectedCategories.add('STRENGTH');
+        selectedStrengthSubs.clear();
+        ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+        _dateQuickMode = 'week';
+        document.getElementById('startDate').value = localDateStr();
+        document.getElementById('daysAhead').value = 7;
+        document.querySelectorAll('.date-quick-btn').forEach(b => {
+          b.classList.toggle('active', b.textContent.trim() === '7 days');
+        });
+      },
+    },
+    {
+      key: 'favourites', label: 'Favourites',
+      // Only meaningful when the user has favourites.
+      available: () => typeof favouriteInstructors !== 'undefined' && favouriteInstructors.size > 0,
+      apply() {
+        if (typeof applyFavouritesAsFilter === 'function') applyFavouritesAsFilter();
+      },
+    },
+  ];
+}
+
+// Re-sync the filter UI to the current globals after a programmatic change.
+function _syncFilterUI() {
+  if (typeof renderInstrChips === 'function') renderInstrChips();
+  if (typeof renderInstrDropdown === 'function') renderInstrDropdown();
+  if (typeof renderLocationChips === 'function') renderLocationChips();
+  if (typeof renderCategoryPills === 'function') renderCategoryPills();
+  if (typeof renderStrengthSubPills === 'function') renderStrengthSubPills();
+  if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
+}
+
+// Apply a saved search object: set the filter globals + inputs, re-render
+// chips, and run the search.
+function applySavedSearch(obj) {
+  if (!obj) return;
+  selectedInstructors.clear();
+  (obj.instructors || []).forEach(id => selectedInstructors.add(String(id)));
+  selectedLocations.clear();
+  (obj.locations || []).forEach(id => selectedLocations.add(String(id)));
+  selectedCategories.clear();
+  (obj.categories || []).forEach(k => selectedCategories.add(k));
+  selectedStrengthSubs.clear();
+  ((obj.strengthSubs && obj.strengthSubs.length) ? obj.strengthSubs : ['UPPER', 'LOWER', 'FULL'])
+    .forEach(k => selectedStrengthSubs.add(k));
+
+  _dateQuickMode = obj.dateMode || null;
+  if (obj.startDate) document.getElementById('startDate').value = obj.startDate;
+  if (obj.daysAhead) document.getElementById('daysAhead').value = obj.daysAhead;
+  const modeLabels = { today: 'Today', tomorrow: 'Tomorrow', week: '7 days', '2week': '14 days' };
+  document.querySelectorAll('.date-quick-btn').forEach(b => {
+    b.classList.toggle('active', !!_dateQuickMode && b.textContent.trim() === modeLabels[_dateQuickMode]);
+  });
+
+  _syncFilterUI();
+  if (typeof switchTab === 'function') switchTab('discover');
+  search();
+}
+
+// Apply a preset by key, then search.
+function applySearchPreset(key) {
+  const preset = getSearchPresets().find(p => p.key === key);
+  if (!preset) return;
+  preset.apply();
+  _syncFilterUI();
+  if (typeof switchTab === 'function') switchTab('discover');
+  search();
+}
+
+// Render preset + recent-search pills inside the Discover empty state.
+function renderDiscoverPresets() {
+  let host = document.getElementById('discoverSearchPresets');
+  const wrap = document.getElementById('discoverQuickWrap');
+  if (!wrap) return;
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'discoverSearchPresets';
+    wrap.appendChild(host);
+  }
+  if (!currentUser) { host.innerHTML = ''; return; }
+
+  const presets = getSearchPresets().filter(p => !p.available || p.available());
+  const recents = getRecentSearches();
+
+  let html = '';
+  if (presets.length) {
+    html += '<div class="discover-pill-group"><span class="discover-pill-label">Quick picks</span>' +
+      '<div class="discover-pill-row">' +
+      presets.map(p =>
+        `<button class="discover-pill" data-preset="${escapeHTML(p.key)}">${escapeHTML(p.label)}</button>`
+      ).join('') +
+      '</div></div>';
+  }
+  if (recents.length) {
+    html += '<div class="discover-pill-group"><span class="discover-pill-label">Recent searches</span>' +
+      '<div class="discover-pill-row">' +
+      recents.map((r, idx) =>
+        `<button class="discover-pill discover-pill-recent" data-recent="${idx}">${escapeHTML(_searchLabel(r))}</button>`
+      ).join('') +
+      '</div></div>';
+  }
+  host.innerHTML = html;
+}
+
+// Single delegated listener — no inline string onclick (XSS-safe via data-*).
+document.addEventListener('click', e => {
+  const presetBtn = e.target.closest('[data-preset]');
+  if (presetBtn) {
+    e.preventDefault();
+    applySearchPreset(presetBtn.dataset.preset);
+    return;
+  }
+  const recentBtn = e.target.closest('[data-recent]');
+  if (recentBtn) {
+    e.preventDefault();
+    const idx = Number(recentBtn.dataset.recent);
+    const list = getRecentSearches();
+    if (list[idx]) applySavedSearch(list[idx]);
+  }
+});
+
+window.getRecentSearches = getRecentSearches;
+window.applySavedSearch = applySavedSearch;
+window.getSearchPresets = getSearchPresets;
+window.applySearchPreset = applySearchPreset;
+window.renderDiscoverPresets = renderDiscoverPresets;
+
+// ════════════════════════════════════════════════════════════════
+// Feature: Onboarding tour (first run only)
+// ════════════════════════════════════════════════════════════════
+const ONBOARDING_KEY = 'psycle_onboarded_v1';
+
+const ONBOARDING_STEPS = [
+  {
+    selector: '#controlsPanel',
+    title: 'Find your class',
+    body: 'Filter by instructor, studio, class type, or date. Changes search automatically once you\'re signed in.',
+  },
+  {
+    selector: '.week-view, #tab-discover .week-view, #weekView',
+    title: 'Your week at a glance',
+    body: 'The weekly planner shows what you\'ve booked. Save a week as a template and rebook it in one tap.',
+  },
+  {
+    selector: '.tab-bar',
+    title: 'Move around',
+    body: 'Discover classes, manage your bookings, and see your stats — all from the bottom bar.',
+  },
+  {
+    selector: '.class-card .book-btn, .discover-quick-btn',
+    title: 'Booking is one tap',
+    body: 'Tap a class to see details, then Book. We\'ll remember your usual bike for next time.',
+  },
+];
+
+let _onboardIdx = 0;
+
+function _onboardCleanup() {
+  document.getElementById('onboardOverlay')?.remove();
+  window.removeEventListener('resize', _onboardReposition);
+  window.removeEventListener('scroll', _onboardReposition, true);
+}
+
+function _onboardFinish() {
+  try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch {}
+  _onboardCleanup();
+}
+
+function _onboardReposition() {
+  const overlay = document.getElementById('onboardOverlay');
+  if (!overlay) return;
+  const step = ONBOARDING_STEPS[_onboardIdx];
+  const target = step ? document.querySelector(step.selector) : null;
+  const spot = overlay.querySelector('.onboard-spotlight');
+  const tip = overlay.querySelector('.onboard-tip');
+  if (!spot || !tip) return;
+
+  if (target) {
+    const r = target.getBoundingClientRect();
+    const pad = 8;
+    spot.style.display = 'block';
+    spot.style.left = Math.max(4, r.left - pad) + 'px';
+    spot.style.top = Math.max(4, r.top - pad) + 'px';
+    spot.style.width = (r.width + pad * 2) + 'px';
+    spot.style.height = (r.height + pad * 2) + 'px';
+
+    // Place the tip below the target if there's room, else above.
+    const tipH = tip.offsetHeight || 150;
+    const below = r.bottom + 12;
+    if (below + tipH < window.innerHeight) {
+      tip.style.top = below + 'px';
+    } else {
+      tip.style.top = Math.max(12, r.top - tipH - 12) + 'px';
+    }
+  } else {
+    // No target on this view — centre the tip, hide the spotlight.
+    spot.style.display = 'none';
+    tip.style.top = Math.max(40, (window.innerHeight - (tip.offsetHeight || 150)) / 2) + 'px';
+  }
+}
+
+function _onboardRenderStep() {
+  const overlay = document.getElementById('onboardOverlay');
+  if (!overlay) return;
+  const step = ONBOARDING_STEPS[_onboardIdx];
+  const tip = overlay.querySelector('.onboard-tip');
+  const isLast = _onboardIdx === ONBOARDING_STEPS.length - 1;
+  tip.innerHTML =
+    `<div class="onboard-tip-title">${escapeHTML(step.title)}</div>` +
+    `<div class="onboard-tip-body">${escapeHTML(step.body)}</div>` +
+    '<div class="onboard-tip-foot">' +
+      `<div class="onboard-dots">${ONBOARDING_STEPS.map((_, i) =>
+        `<span class="onboard-dot${i === _onboardIdx ? ' active' : ''}"></span>`).join('')}</div>` +
+      '<div class="onboard-tip-actions">' +
+        '<button class="onboard-btn onboard-btn-skip" data-onboard="skip">Skip</button>' +
+        `<button class="onboard-btn onboard-btn-next" data-onboard="next">${isLast ? 'Done' : 'Next'}</button>` +
+      '</div>' +
+    '</div>';
+  // Reposition after layout settles.
+  requestAnimationFrame(_onboardReposition);
+}
+
+function startOnboarding() {
+  _onboardCleanup();
+  _onboardIdx = 0;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'onboardOverlay';
+  overlay.className = 'onboard-overlay';
+  overlay.innerHTML = '<div class="onboard-spotlight"></div><div class="onboard-tip"></div>';
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', e => {
+    const act = e.target.closest('[data-onboard]')?.dataset.onboard;
+    if (act === 'skip') { _onboardFinish(); return; }
+    if (act === 'next') {
+      if (_onboardIdx >= ONBOARDING_STEPS.length - 1) { _onboardFinish(); return; }
+      _onboardIdx++;
+      _onboardRenderStep();
+      return;
+    }
+    // Clicking the dim backdrop (not the tip) advances too.
+    if (e.target === overlay) {
+      if (_onboardIdx >= ONBOARDING_STEPS.length - 1) { _onboardFinish(); return; }
+      _onboardIdx++;
+      _onboardRenderStep();
+    }
+  });
+
+  window.addEventListener('resize', _onboardReposition);
+  window.addEventListener('scroll', _onboardReposition, true);
+  requestAnimationFrame(() => { overlay.classList.add('show'); _onboardRenderStep(); });
+}
+
+function replayOnboarding() {
+  try { localStorage.removeItem(ONBOARDING_KEY); } catch {}
+  startOnboarding();
+}
+window.replayOnboarding = replayOnboarding;
+
+// First-run trigger: only for genuinely new users. A returning/signed-in user
+// who already has booking history shouldn't be interrupted.
+function _maybeStartOnboarding() {
+  try {
+    if (localStorage.getItem(ONBOARDING_KEY)) return;
+    let hist = [];
+    try { hist = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch {}
+    if (Array.isArray(hist) && hist.length > 3) {
+      // Existing user — mark onboarded silently rather than nag.
+      localStorage.setItem(ONBOARDING_KEY, '1');
+      return;
+    }
+    // Let the first paint + tab bar render before highlighting targets.
+    setTimeout(() => {
+      if (!document.getElementById('onboardOverlay')) startOnboarding();
+    }, 2200);
+  } catch {}
+}
+
+// ════════════════════════════════════════════════════════════════
+// Feature: Timezone-aware travel notice
+// Classes are London time. If the device isn't in Europe/London AND the
+// current UTC offset differs, show a subtle, session-dismissible notice.
+// ════════════════════════════════════════════════════════════════
+const TRAVEL_NOTICE_DISMISS_KEY = 'psycle_travel_notice_dismissed';
+
+// Minutes that local time is ahead of London right now (London ahead → negative).
+function londonOffsetDeltaMinutes(at = new Date()) {
+  try {
+    const fmt = tz => {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz, hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }).formatToParts(at).reduce((o, p) => { o[p.type] = p.value; return o; }, {});
+      // Interpret the wall-clock reading in that zone as if it were UTC, so the
+      // difference between two zones' readings equals their offset difference.
+      return Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+    };
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const localMs = fmt(localTz);
+    const londonMs = fmt('Europe/London');
+    return Math.round((localMs - londonMs) / 60000);
+  } catch { return 0; }
+}
+
+function _isAwayFromLondon() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz === 'Europe/London') return false;
+    return londonOffsetDeltaMinutes() !== 0;
+  } catch { return false; }
+}
+
+function renderTravelNotice() {
+  if (sessionStorage.getItem(TRAVEL_NOTICE_DISMISS_KEY)) {
+    document.getElementById('travelNotice')?.remove();
+    return;
+  }
+  if (!_isAwayFromLondon()) {
+    document.getElementById('travelNotice')?.remove();
+    return;
+  }
+  if (document.getElementById('travelNotice')) return;
+
+  const results = document.getElementById('results');
+  if (!results) return;
+  const el = document.createElement('div');
+  el.id = 'travelNotice';
+  el.className = 'travel-notice';
+  el.innerHTML =
+    '<span class="travel-notice-icon">✈︎</span>' +
+    '<span>You appear to be away — class times are shown in London time.</span>' +
+    '<button class="travel-notice-close" data-travel-dismiss aria-label="Dismiss">&times;</button>';
+  results.parentNode.insertBefore(el, results);
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-travel-dismiss]')) {
+    try { sessionStorage.setItem(TRAVEL_NOTICE_DISMISS_KEY, '1'); } catch {}
+    document.getElementById('travelNotice')?.remove();
+  }
+});
+
+window.renderTravelNotice = renderTravelNotice;
+window.londonOffsetDeltaMinutes = londonOffsetDeltaMinutes;
+
+// ════════════════════════════════════════════════════════════════
+// Feature: Rebook prediction
+// Scores past/recurring classes by frequency + recency + day-of-week timing
+// and surfaces ONE gentle suggestion (in the findSimilar popup + a hint on
+// the My Bookings tab).
+// ════════════════════════════════════════════════════════════════
+
+// Returns the single best-predicted recurring class, or null. Shape:
+// { dayOfWeek, hour, minute, eventTypeId, instructorId, label, score, daysUntil }.
+function predictNextClass() {
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch { return null; }
+  if (!Array.isArray(history) || history.length < 2) return null;
+
+  const typeByName = {};
+  if (typeof eventTypes !== 'undefined') {
+    eventTypes.forEach(t => { if (t.name) typeByName[t.name.toLowerCase()] = t.id; });
+  }
+  const instrByName = {};
+  if (typeof instructors !== 'undefined') {
+    instructors.forEach(i => { if (i.full_name) instrByName[i.full_name.toLowerCase()] = i.id; });
+  }
+
+  const now = Date.now();
+  const buckets = {};
+  history.forEach(h => {
+    if (!h || h.cancelledAt || !h.date) return;
+    const dt = new Date(String(h.date).replace(' ', 'T'));
+    if (isNaN(dt.getTime())) return;
+    const dow = dt.getDay();
+    const mins = dt.getHours() * 60 + dt.getMinutes();
+    const halfHour = Math.round(mins / 30) * 30;
+    const typeName = h.typeName || 'Class';
+    const key = dow + '|' + halfHour + '|' + typeName.toLowerCase() + '|' + (h.instrName || '').toLowerCase();
+    if (!buckets[key]) {
+      buckets[key] = { dow, mins: [], typeName, instrName: h.instrName || '', count: 0, lastTs: 0 };
+    }
+    buckets[key].count++;
+    buckets[key].mins.push(mins);
+    const ts = dt.getTime();
+    if (ts > buckets[key].lastTs) buckets[key].lastTs = ts;
+  });
+
+  let best = null;
+  Object.values(buckets).forEach(b => {
+    if (b.count < 2) return;
+    const avg = Math.round(b.mins.reduce((a, c) => a + c, 0) / b.mins.length);
+    const hour = Math.floor(avg / 60), minute = avg % 60;
+
+    // Days until the next occurrence of this weekday (1..7).
+    const todayDow = new Date().getDay();
+    let daysUntil = (b.dow - todayDow + 7) % 7;
+    if (daysUntil === 0) daysUntil = 7; // it's today but likely already passed → next week
+
+    // Recency: more recent attendance scores higher (decay over ~60 days).
+    const daysSince = b.lastTs ? (now - b.lastTs) / 86400000 : 999;
+    const recency = Math.max(0, 1 - daysSince / 60);
+    // Timing: the sooner the next occurrence, the higher.
+    const timing = (8 - daysUntil) / 7;
+    const score = b.count * 2 + recency * 3 + timing;
+
+    if (!best || score > best.score) {
+      best = {
+        dayOfWeek: b.dow,
+        hour, minute,
+        eventTypeId: typeByName[b.typeName.toLowerCase()] ?? null,
+        instructorId: instrByName[(b.instrName || '').toLowerCase()] ?? null,
+        label: b.typeName + (b.instrName ? ' · ' + b.instrName : ''),
+        typeName: b.typeName,
+        instrName: b.instrName,
+        count: b.count,
+        daysUntil,
+        score,
+      };
+    }
+  });
+  return best;
+}
+
+// One-tap path into search for a predicted class: set type/instructor + the
+// next occurrence date, then search.
+function bookPrediction(pred) {
+  if (!pred) return;
+  selectedInstructors.clear();
+  selectedCategories.clear();
+  selectedStrengthSubs.clear();
+  ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+
+  if (pred.instructorId != null) selectedInstructors.add(String(pred.instructorId));
+
+  const target = new Date();
+  target.setHours(0, 0, 0, 0);
+  target.setDate(target.getDate() + (pred.daysUntil || 0));
+  _dateQuickMode = null;
+  document.getElementById('startDate').value = localDateStr(target);
+  document.getElementById('daysAhead').value = 1;
+  document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
+
+  _syncFilterUI();
+  if (typeof switchTab === 'function') switchTab('discover');
+  search();
+  const when = new Date(target).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+  toast('Showing ' + pred.label + ' for ' + when, 'info');
+}
+
+// Render the gentle "Book again?" hint on the My Bookings tab.
+function renderRebookHint() {
+  const panel = document.getElementById('upcomingPanel');
+  document.getElementById('rebookHint')?.remove();
+  if (!currentUser) return;
+  const pred = predictNextClass();
+  if (!pred) return;
+
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][pred.dayOfWeek];
+  const ampm = pred.hour >= 12 ? 'pm' : 'am';
+  const h12 = pred.hour % 12 || 12;
+  const timeStr = h12 + ':' + String(pred.minute).padStart(2, '0') + ampm;
+
+  const el = document.createElement('div');
+  el.id = 'rebookHint';
+  el.className = 'rebook-hint';
+  el.innerHTML =
+    '<div class="rebook-hint-text">' +
+      '<span class="rebook-hint-eyebrow">Book again?</span>' +
+      '<span class="rebook-hint-main">' + escapeHTML(pred.label) + '</span>' +
+      '<span class="rebook-hint-sub">You usually go ' + escapeHTML(dayName) + 's at ' + escapeHTML(timeStr) + '</span>' +
+    '</div>' +
+    '<button class="rebook-hint-btn" data-rebook-predict>Find it</button>';
+
+  // Place it just above the upcoming panel (or where it would be).
+  if (panel && panel.parentNode) panel.parentNode.insertBefore(el, panel);
+  else {
+    const bookingsTab = document.getElementById('tab-bookings');
+    if (bookingsTab) bookingsTab.insertBefore(el, bookingsTab.firstChild);
+  }
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-rebook-predict]')) {
+    e.preventDefault();
+    bookPrediction(predictNextClass());
+  }
+});
+
+window.predictNextClass = predictNextClass;
+window.bookPrediction = bookPrediction;
+window.renderRebookHint = renderRebookHint;
+
+// Keep the rebook hint fresh as bookings change.
+if (typeof PsycleEvents !== 'undefined') {
+  ['bookings:loaded', 'booking:complete', 'booking:cancelled'].forEach(evt => {
+    try { PsycleEvents.on(evt, () => { try { renderRebookHint(); } catch {} }); } catch {}
+  });
+}
+
+// ── Extend findSimilar with the predicted "book again" suggestion ─
+// Monkey-patch (the original is defined above) so the popup gains one extra
+// option when a strong prediction exists.
+(function () {
+  const _origFindSimilar = window.findSimilar;
+  if (typeof _origFindSimilar !== 'function') return;
+  window.findSimilar = function (eventId) {
+    _origFindSimilar(eventId);
+    try {
+      const pred = predictNextClass();
+      if (!pred) return;
+      const popup = document.querySelector('.find-similar-popup');
+      if (!popup) return;
+      // Don't suggest the same class the popup is already centred on.
+      const evt = _eventCache[String(eventId)];
+      if (evt && pred.eventTypeId != null && evt.event_type_id === pred.eventTypeId &&
+          (pred.instructorId == null || evt.instructor_id === pred.instructorId)) return;
+
+      const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][pred.dayOfWeek];
+      const ampm = pred.hour >= 12 ? 'pm' : 'am';
+      const h12 = pred.hour % 12 || 12;
+      const timeStr = h12 + ':' + String(pred.minute).padStart(2, '0') + ampm;
+
+      const btn = document.createElement('button');
+      btn.className = 'find-similar-option find-similar-predicted';
+      btn.dataset.action = 'predicted';
+      btn.innerHTML =
+        '<span class="find-similar-icon">&#10024;</span>' +
+        '<span class="find-similar-label">Book again: ' + escapeHTML(pred.label) + '</span>' +
+        '<span class="find-similar-desc">You usually go ' + escapeHTML(dayName) + 's at ' + escapeHTML(timeStr) + '</span>';
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        popup.remove();
+        bookPrediction(pred);
+      });
+      popup.appendChild(btn);
+    } catch (e) { /* non-intrusive — ignore */ }
+  };
+})();
+
+// ── Wire the new Discover-tab surfaces into auth + first run ──────
+// Re-render presets/notice when the discover empty state updates (sign in/out).
+(function () {
+  const _origUpdateDiscover = window.updateDiscoverEmptyState || updateDiscoverEmptyState;
+  if (typeof _origUpdateDiscover === 'function') {
+    window.updateDiscoverEmptyState = function () {
+      _origUpdateDiscover.apply(this, arguments);
+      try { renderDiscoverPresets(); } catch {}
+      try { renderTravelNotice(); } catch {}
+    };
+    updateDiscoverEmptyState = window.updateDiscoverEmptyState;
+  }
+})();
+
+// Record the search into recents once it completes (signed-in only). Wrap
+// search() so we don't touch its internals.
+(function () {
+  const _origSearch = window.search || search;
+  if (typeof _origSearch !== 'function') return;
+  const wrapped = async function () {
+    const r = await _origSearch.apply(this, arguments);
+    try {
+      if (currentUser && (selectedInstructors.size || selectedLocations.size ||
+          selectedCategories.size || _dateQuickMode !== 'week')) {
+        _recordRecentSearch();
+      }
+    } catch {}
+    return r;
+  };
+  window.search = wrapped;
+  search = wrapped;
+})();
+
+// First paint: presets, travel notice, rebook hint, and the onboarding tour.
+(window.securityReady || Promise.resolve()).then(function () {
+  setTimeout(function () {
+    try { renderDiscoverPresets(); } catch {}
+    try { renderTravelNotice(); } catch {}
+    try { renderRebookHint(); } catch {}
+    _maybeStartOnboarding();
+  }, 1200);
+});
+
 // ── PWA Service Worker ───────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
