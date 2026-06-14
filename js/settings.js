@@ -204,6 +204,13 @@
               '<button class="app-advanced-btn" onclick="downloadBugReport()">Bug report</button>' +
             '</div>' +
           '</div>' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Diagnostics</div>' +
+            '<div class="diag-section-hint">See what the app and the Psycle API are doing — useful when something looks broken.</div>' +
+            '<div class="app-advanced">' +
+              '<button class="app-advanced-btn" onclick="openDiagnostics()">Open diagnostics</button>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
@@ -900,6 +907,309 @@
       toast('Copy failed', 'error');
     }
     document.body.removeChild(ta);
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Diagnostics Panel
+  // ═══════════════════════════════════════════════════════════════════
+  // Self-service troubleshooting view. The app talks to an UNOFFICIAL API,
+  // so users need to see API health / drift, recent errors, recent actions
+  // and a small environment summary without opening a console.
+  //
+  // HARD safety rules upheld here:
+  //   - Every value rendered into HTML goes through escapeHTML().
+  //   - The bearer token (or any localStorage value) is NEVER rendered —
+  //     we surface a boolean "present" flag and counts/field-names only.
+  //   - Cross-module access (PsycleDiag, getErrorLog, getActionLog,
+  //     getFullLog, getDiagnosticReport) is guarded with typeof.
+
+  var DIAG_MAX_LOG_ROWS = 15;
+
+  function esc(v) {
+    return (typeof window.escapeHTML === 'function')
+      ? window.escapeHTML(String(v == null ? '' : v))
+      : String(v == null ? '' : v);
+  }
+
+  /** Boolean-only check for whether an auth token is present. Never reads the value into the DOM. */
+  function diagHasToken() {
+    try {
+      if (typeof getBearerToken === 'function') return !!getBearerToken();
+    } catch (e) {}
+    try { return !!localStorage.getItem('psycle_bearer_token_enc'); } catch (e) {}
+    try { return !!localStorage.getItem('psycle_bearer_token'); } catch (e) {}
+    return false;
+  }
+
+  /** Pull the diagnostics object from PsycleDiag, fully guarded. Returns null if unavailable. */
+  function diagGetDiagnostics() {
+    try {
+      if (typeof window.PsycleDiag !== 'undefined' && window.PsycleDiag &&
+          typeof window.PsycleDiag.getDiagnostics === 'function') {
+        return window.PsycleDiag.getDiagnostics();
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /** Last N entries (newest first) from a log getter that returns [{timestamp, <key>}]. */
+  function diagRecentLog(getterName, key) {
+    var rows = [];
+    try {
+      if (typeof window[getterName] === 'function') {
+        var log = window[getterName]();
+        if (Array.isArray(log)) {
+          rows = log.slice(Math.max(0, log.length - DIAG_MAX_LOG_ROWS)).reverse();
+        }
+      }
+    } catch (e) {}
+    if (!rows.length) {
+      return '<div class="diag-empty">No entries.</div>';
+    }
+    return rows.map(function (entry) {
+      var ts = entry && entry.timestamp ? entry.timestamp : '';
+      var detail = entry ? entry[key] : '';
+      return '<div class="diag-log-row">' +
+        '<span class="diag-log-ts">' + esc(ts) + '</span>' +
+        '<span class="diag-log-msg">' + esc(detail) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  /** Build the API-health section HTML from a diagnostics object (may be null). */
+  function diagApiHealthHTML(diag) {
+    if (!diag) {
+      return '<div class="diag-empty">Diagnostics module not available.</div>';
+    }
+    var rows = [];
+
+    var safe = !!diag.safeMode;
+    rows.push('<div class="diag-kv">' +
+      '<span class="diag-k">Safe mode</span>' +
+      '<span class="diag-v ' + (safe ? 'diag-bad' : 'diag-ok') + '">' +
+        (safe ? 'Active' : 'Off') + '</span>' +
+    '</div>');
+
+    var contract = diag.contract;
+    var capturedAt = (contract && contract.capturedAt) ? contract.capturedAt : null;
+    rows.push('<div class="diag-kv">' +
+      '<span class="diag-k">Contract captured</span>' +
+      '<span class="diag-v">' + (capturedAt ? esc(capturedAt) : 'Not captured yet') + '</span>' +
+    '</div>');
+
+    rows.push('<div class="diag-kv">' +
+      '<span class="diag-k">Last drift</span>' +
+      '<span class="diag-v">' + (diag.lastDriftAt ? esc(diag.lastDriftAt) : 'None') + '</span>' +
+    '</div>');
+
+    var findings = Array.isArray(diag.drift) ? diag.drift : [];
+    if (!findings.length) {
+      rows.push('<div class="diag-kv">' +
+        '<span class="diag-k">Drift findings</span>' +
+        '<span class="diag-v diag-ok">None — shapes look healthy</span>' +
+      '</div>');
+    } else {
+      var findHTML = findings.map(function (f) {
+        var kind = f && f.kind ? f.kind : 'unknown';
+        var missing = (f && Array.isArray(f.missingRequired)) ? f.missingRequired : [];
+        var note = (f && f.note) ? f.note : '';
+        return '<div class="diag-finding">' +
+          '<span class="diag-finding-kind">' + esc(kind) + '</span>' +
+          (missing.length
+            ? '<span class="diag-finding-missing">missing required: ' + esc(missing.join(', ')) + '</span>'
+            : '') +
+          (note ? '<span class="diag-finding-note">' + esc(note) + '</span>' : '') +
+        '</div>';
+      }).join('');
+      rows.push('<div class="diag-kv diag-kv-block">' +
+        '<span class="diag-k diag-bad">Drift findings (' + findings.length + ')</span>' +
+        '<div class="diag-findings">' + findHTML + '</div>' +
+      '</div>');
+    }
+
+    return rows.join('');
+  }
+
+  /** Build the environment section HTML. Booleans/counts only — no token, no values. */
+  function diagEnvironmentHTML(diag) {
+    var appVersion = (diag && diag.appVersion) ? diag.appVersion : null;
+    if (!appVersion) {
+      try { if (window.APP_VERSION) appVersion = String(window.APP_VERSION); } catch (e) {}
+    }
+    var online = false;
+    try { online = !!navigator.onLine; } catch (e) {}
+    var inIosApp = false;
+    try { inIosApp = !!window.Capacitor; } catch (e) {}
+    var tokenPresent = diagHasToken();
+    var errorCount = (diag && typeof diag.errorLogCount === 'number') ? diag.errorLogCount : 0;
+    var actionCount = (diag && typeof diag.actionLogCount === 'number') ? diag.actionLogCount : 0;
+
+    function kv(k, v, cls) {
+      return '<div class="diag-kv">' +
+        '<span class="diag-k">' + esc(k) + '</span>' +
+        '<span class="diag-v' + (cls ? ' ' + cls : '') + '">' + esc(v) + '</span>' +
+      '</div>';
+    }
+
+    return kv('App version', appVersion || 'unknown') +
+      kv('Online', online ? 'Yes' : 'No', online ? 'diag-ok' : 'diag-bad') +
+      kv('iOS app', inIosApp ? 'Yes' : 'No') +
+      kv('Auth token present', tokenPresent ? 'Yes' : 'No', tokenPresent ? 'diag-ok' : 'diag-bad') +
+      kv('Stored errors', String(errorCount)) +
+      kv('Stored actions', String(actionCount));
+  }
+
+  /**
+   * Assemble the JSON blob copied by "Copy diagnostics". Prefers a native /
+   * existing report (getDiagnosticReport / getFullLog) when present, else
+   * assembles from the diagnostics object + counts. NEVER includes the token
+   * value or full localStorage values.
+   */
+  function diagBuildCopyBlob(diag) {
+    var blob = {
+      generatedAt: new Date().toISOString(),
+      environment: {
+        appVersion: (diag && diag.appVersion) ? diag.appVersion : (window.APP_VERSION || null),
+        online: (function () { try { return !!navigator.onLine; } catch (e) { return null; } })(),
+        iosApp: (function () { try { return !!window.Capacitor; } catch (e) { return false; } })(),
+        tokenPresent: diagHasToken(),
+        userAgent: (function () { try { return navigator.userAgent; } catch (e) { return null; } })(),
+      },
+      apiHealth: diag ? {
+        safeMode: !!diag.safeMode,
+        contractCapturedAt: (diag.contract && diag.contract.capturedAt) || null,
+        lastDriftAt: diag.lastDriftAt || null,
+        drift: Array.isArray(diag.drift) ? diag.drift : [],
+        errorLogCount: typeof diag.errorLogCount === 'number' ? diag.errorLogCount : 0,
+        actionLogCount: typeof diag.actionLogCount === 'number' ? diag.actionLogCount : 0,
+      } : null,
+    };
+
+    // A combined error+action log, if reliability.js exposed it.
+    try {
+      if (typeof window.getFullLog === 'function') {
+        blob.fullLog = window.getFullLog();
+      }
+    } catch (e) {}
+
+    // A richer native diagnostic report, if the iOS bridge exposed one.
+    try {
+      if (typeof window.getDiagnosticReport === 'function') {
+        blob.diagnosticReport = window.getDiagnosticReport();
+      }
+    } catch (e) {}
+
+    try {
+      return JSON.stringify(blob, null, 2);
+    } catch (e) {
+      // Last-resort: a minimal, definitely-serialisable summary.
+      return JSON.stringify({
+        generatedAt: blob.generatedAt,
+        tokenPresent: blob.environment.tokenPresent,
+        note: 'Full diagnostics could not be serialised.',
+      }, null, 2);
+    }
+  }
+
+  window.openDiagnostics = function () {
+    if (document.getElementById('diagOverlay')) return;
+
+    var diag = diagGetDiagnostics();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'diagOverlay';
+    overlay.className = 'settings-overlay diag-overlay';
+    overlay.onclick = function (e) { if (e.target === overlay) closeDiagnostics(); };
+
+    overlay.innerHTML =
+      '<div class="settings-panel diag-panel">' +
+        '<div class="settings-header">' +
+          '<span class="settings-title">Diagnostics</span>' +
+          '<button class="settings-close diag-close" onclick="closeDiagnostics()" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="settings-body">' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">API health</div>' +
+            '<div class="diag-block">' + diagApiHealthHTML(diag) + '</div>' +
+          '</div>' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Recent errors</div>' +
+            '<div class="diag-log">' + diagRecentLog('getErrorLog', 'message') + '</div>' +
+          '</div>' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Recent actions</div>' +
+            '<div class="diag-log">' + diagRecentLog('getActionLog', 'action') + '</div>' +
+          '</div>' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Environment</div>' +
+            '<div class="diag-block">' + diagEnvironmentHTML(diag) + '</div>' +
+          '</div>' +
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Tools</div>' +
+            '<div class="app-advanced">' +
+              '<button class="app-advanced-btn" id="diagCopyBtn">Copy diagnostics</button>' +
+              '<button class="app-advanced-btn" id="diagClearBtn">Clear logs</button>' +
+            '</div>' +
+            '<div class="diag-status" id="diagStatus" style="display:none"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    // Wire buttons via addEventListener (no inline string-arg onclick).
+    var copyBtn = document.getElementById('diagCopyBtn');
+    if (copyBtn) copyBtn.addEventListener('click', copyDiagnostics);
+    var clearBtn = document.getElementById('diagClearBtn');
+    if (clearBtn) clearBtn.addEventListener('click', clearDiagnosticLogs);
+  };
+
+  window.closeDiagnostics = function () {
+    var el = document.getElementById('diagOverlay');
+    if (el) el.remove();
+  };
+
+  function diagStatus(msg, ok) {
+    var el = document.getElementById('diagStatus');
+    if (!el) return;
+    el.style.display = '';
+    el.style.color = ok ? '#5dba5d' : '#e94560';
+    el.textContent = msg;
+    setTimeout(function () { if (el) el.style.display = 'none'; }, 3000);
+  }
+
+  function copyDiagnostics() {
+    var blob = diagBuildCopyBlob(diagGetDiagnostics());
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(blob).then(function () {
+        diagStatus('Diagnostics copied to clipboard', true);
+        if (typeof toast === 'function') toast('Diagnostics copied', 'success');
+      }).catch(function () {
+        _fallbackCopy(blob, null);
+        diagStatus('Diagnostics copied to clipboard', true);
+      });
+    } else {
+      _fallbackCopy(blob, null);
+      diagStatus('Diagnostics copied to clipboard', true);
+    }
+  }
+
+  function clearDiagnosticLogs() {
+    try { localStorage.removeItem('psycle_error_log'); } catch (e) {}
+    try { localStorage.removeItem('psycle_action_log'); } catch (e) {}
+    // Refresh the open panel in place so the cleared state is visible.
+    var diag = diagGetDiagnostics();
+    var errEl = document.querySelector('#diagOverlay .diag-log');
+    if (errEl) {
+      var logs = document.querySelectorAll('#diagOverlay .diag-log');
+      if (logs[0]) logs[0].innerHTML = diagRecentLog('getErrorLog', 'message');
+      if (logs[1]) logs[1].innerHTML = diagRecentLog('getActionLog', 'action');
+    }
+    var envBlocks = document.querySelectorAll('#diagOverlay .diag-block');
+    if (envBlocks && envBlocks[1]) envBlocks[1].innerHTML = diagEnvironmentHTML(diag);
+    diagStatus('Logs cleared', true);
+    if (typeof toast === 'function') toast('Logs cleared', 'success');
   }
 
 

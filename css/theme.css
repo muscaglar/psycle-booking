@@ -557,15 +557,26 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 
 /* ── Skeleton loading cards ───────────────────────────────────── */
-@keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
+/* A travelling sheen rides across each bar. Driven by a CSS custom
+   property so a single keyframe animates a moving highlight without
+   stretching the gradient by hand. Geometry mirrors the real
+   .class-card (time block left, type/instructor/location lines, a
+   badge row, and a button-shaped block). */
+@property --sk-shine {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { --sk-shine: -40%; }
+  100% { --sk-shine: 140%; }
 }
 
 .skeleton-card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: var(--space-6) var(--space-7);
   display: flex;
   gap: var(--space-6);
@@ -573,33 +584,41 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 
 .skeleton-bar {
-  background: linear-gradient(
+  --sk-shine: 0%;
+  position: relative;
+  overflow: hidden;
+  background: var(--skeleton-base);
+  background-image: linear-gradient(
     90deg,
-    var(--skeleton-base) 0%,
-    var(--skeleton-shine) 40%,
-    var(--skeleton-base) 80%
+    transparent 0%,
+    var(--skeleton-shine) 50%,
+    transparent 100%
   );
-  background-size: 800px 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  background-repeat: no-repeat;
+  background-size: 60% 100%;
+  background-position: var(--sk-shine) 0;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
   border-radius: var(--radius-sm);
 }
 
+/* Left time column */
 .skeleton-time {
   width: 54px;
   flex-shrink: 0;
 }
 
-.skeleton-time .skeleton-bar:first-child {
-  width: 42px;
-  height: 22px;
+.sk-time-hour {
+  width: 46px;
+  height: 26px;
   margin-bottom: var(--space-1);
 }
 
-.skeleton-time .skeleton-bar:last-child {
-  width: 24px;
-  height: 12px;
+.sk-time-ampm {
+  width: 26px;
+  height: 11px;
 }
 
+/* Right info column */
 .skeleton-info {
   flex: 1;
   display: flex;
@@ -607,33 +626,27 @@ select:focus, input:focus { border-color: var(--accent); }
   gap: var(--space-2);
 }
 
-.skeleton-info .skeleton-bar:nth-child(1) {
-  width: 60%;
-  height: 14px;
-}
+.sk-type  { width: 62%; height: 16px; }
+.sk-instr { width: 44%; height: 13px; }
+.sk-loc   { width: 52%; height: 12px; }
 
-.skeleton-info .skeleton-bar:nth-child(2) {
-  width: 45%;
-  height: 13px;
-}
-
-.skeleton-info .skeleton-bar:nth-child(3) {
-  width: 35%;
-  height: 12px;
-}
-
-.skeleton-info .skeleton-bar:nth-child(4) {
-  width: 50px;
-  height: 18px;
+.skeleton-meta {
+  display: flex;
+  gap: var(--space-3);
   margin-top: var(--space-1);
+}
+
+.sk-badge {
+  width: 48px;
+  height: 16px;
   border-radius: var(--radius-sm);
 }
 
-.skeleton-info .skeleton-bar:nth-child(5) {
+.sk-button {
   width: 100%;
-  height: 30px;
-  margin-top: var(--space-2);
-  border-radius: 5px;
+  height: 34px;
+  margin-top: var(--space-3);
+  border-radius: var(--radius-md);
 }
 
 .skeleton-grid {
@@ -642,12 +655,69 @@ select:focus, input:focus { border-color: var(--accent); }
   gap: var(--space-4);
 }
 
-/* Stagger the animation for each card */
-.skeleton-card:nth-child(2) .skeleton-bar { animation-delay: 0.1s; }
-.skeleton-card:nth-child(3) .skeleton-bar { animation-delay: 0.2s; }
-.skeleton-card:nth-child(4) .skeleton-bar { animation-delay: 0.3s; }
-.skeleton-card:nth-child(5) .skeleton-bar { animation-delay: 0.4s; }
-.skeleton-card:nth-child(6) .skeleton-bar { animation-delay: 0.5s; }
+/* Stagger the shimmer per card so the sheen ripples down the list */
+.skeleton-card:nth-child(2) .skeleton-bar  { animation-delay: 0.08s; }
+.skeleton-card:nth-child(3) .skeleton-bar  { animation-delay: 0.16s; }
+.skeleton-card:nth-child(4) .skeleton-bar  { animation-delay: 0.24s; }
+.skeleton-card:nth-child(5) .skeleton-bar  { animation-delay: 0.32s; }
+.skeleton-card:nth-child(6) .skeleton-bar  { animation-delay: 0.40s; }
+.skeleton-card:nth-child(7) .skeleton-bar  { animation-delay: 0.48s; }
+
+/* ── Studio-aware bike-grid placeholder ───────────────────────── */
+/* Shown above the card skeletons when exactly one studio is selected
+   and its layout is known. The dot count is sized from the layout's
+   slot count, so the shape hints at the studio being searched. */
+.skeleton-studio {
+  grid-column: 1 / -1;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-1);
+}
+
+.sk-studio-label {
+  width: 38%;
+  height: 13px;
+  margin-bottom: var(--space-4);
+}
+
+.skeleton-bike-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.skeleton-bike {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  background: var(--skeleton-base);
+  opacity: 0.55;
+  animation: skeleton-bike-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-bike-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.7; }
+}
+
+/* Ripple the bike pulse across the grid */
+.skeleton-bike:nth-child(3n)   { animation-delay: 0.15s; }
+.skeleton-bike:nth-child(3n+1) { animation-delay: 0.30s; }
+.skeleton-bike:nth-child(5n)   { animation-delay: 0.45s; }
+
+/* ── Reduced motion: hold a steady sheen, no movement ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+    background-position: 50% 0;
+  }
+  .skeleton-bike {
+    animation: none;
+    opacity: 0.5;
+  }
+}
 
 /* ── Empty state ──────────────────────────────────────────────── */
 .empty-state {

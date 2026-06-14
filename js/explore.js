@@ -29,6 +29,32 @@
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; }
   }
 
+  /**
+   * Bucket an hour-of-day into a coarse time window. Returns '' for invalid input.
+   * Windows: morning (<12), midday (12–16), evening (>=17). 16:00 counts as midday.
+   */
+  function timeWindow(hour) {
+    if (typeof hour !== 'number' || isNaN(hour)) return '';
+    if (hour < 12) return 'morning';
+    if (hour < 17) return 'midday';
+    return 'evening';
+  }
+
+  var DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var WINDOW_LABELS = { morning: 'mornings', midday: 'middays', evening: 'evenings' };
+
+  /**
+   * Safely derive { day, hour, window } from an ISO datetime string.
+   * Returns null on any parse failure so callers never throw.
+   */
+  function slotOf(iso) {
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    var hour = d.getHours();
+    return { day: d.getDay(), hour: hour, window: timeWindow(hour) };
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // DATA LAYER
   // ═══════════════════════════════════════════════════════════════════
@@ -48,7 +74,13 @@
 
   /**
    * Gather a comprehensive profile for every known instructor.
-   * Returns: { instrId: { id, name, classTypes: Set, locations: Set, bookCount, hasUpcoming } }
+   * Returns: { instrId: {
+   *   id, name, classTypes: Set, locations: Set, bookCount, hasUpcoming,
+   *   upcomingCount,        // # of bookable upcoming events in the cache
+   *   dayCounts: {0..6},    // upcoming events keyed by weekday
+   *   windowCounts: {},     // upcoming events keyed by time window
+   *   lastBookedTs          // ms timestamp the user last booked this instructor (0 if never)
+   * } }
    */
   function gatherInstructorProfiles() {
     var profiles = {};
@@ -69,6 +101,10 @@
         locations: new Set(),
         bookCount: 0,
         hasUpcoming: false,
+        upcomingCount: 0,
+        dayCounts: {},
+        windowCounts: {},
+        lastBookedTs: 0,
       };
     }
 
@@ -82,8 +118,16 @@
       if (!p) continue;
       if (evt._typeName) p.classTypes.add(evt._typeName);
       if (evt._locName) p.locations.add(evt._locName);
-      if (!evt.is_fully_booked && new Date(evt.start_at) > now) {
+      var startD = new Date(evt.start_at);
+      var isUpcoming = !isNaN(startD.getTime()) && startD > now;
+      if (!evt.is_fully_booked && isUpcoming) {
         p.hasUpcoming = true;
+        p.upcomingCount++;
+        var slot = slotOf(evt.start_at);
+        if (slot) {
+          p.dayCounts[slot.day] = (p.dayCounts[slot.day] || 0) + 1;
+          if (slot.window) p.windowCounts[slot.window] = (p.windowCounts[slot.window] || 0) + 1;
+        }
       }
     }
 
@@ -97,6 +141,8 @@
       profiles[hid].bookCount++;
       if (entry.typeName) profiles[hid].classTypes.add(entry.typeName);
       if (entry.locName) profiles[hid].locations.add(entry.locName);
+      var ts = Date.parse(entry.date || entry.bookedAt || '');
+      if (!isNaN(ts) && ts > profiles[hid].lastBookedTs) profiles[hid].lastBookedTs = ts;
     }
 
     // Also count current bookings
@@ -107,10 +153,47 @@
       var bid = String(bevt.instructor_id);
       if (profiles[bid]) {
         profiles[bid].bookCount++;
+        var bts = Date.parse(bevt.start_at || '');
+        if (!isNaN(bts) && bts > profiles[bid].lastBookedTs) profiles[bid].lastBookedTs = bts;
       }
     }
 
     return profiles;
+  }
+
+  /**
+   * Derive the user's habitual booking schedule from their class history.
+   * Returns weighted preference maps (day → weight, window → weight) plus the
+   * single most-booked window for the empty-history fallback path.
+   * Defensive: any malformed entry is skipped, never thrown on.
+   */
+  function getUserScheduleProfile() {
+    var history = getHistory();
+    var dayWeights = {};
+    var windowWeights = {};
+    var dayTotal = 0;
+    var windowTotal = 0;
+
+    for (var h = 0; h < history.length; h++) {
+      var entry = history[h];
+      if (!entry || entry.cancelledAt) continue;
+      var slot = slotOf(entry.date || entry.bookedAt);
+      if (!slot) continue;
+      dayWeights[slot.day] = (dayWeights[slot.day] || 0) + 1;
+      dayTotal++;
+      if (slot.window) {
+        windowWeights[slot.window] = (windowWeights[slot.window] || 0) + 1;
+        windowTotal++;
+      }
+    }
+
+    return {
+      dayWeights: dayWeights,
+      windowWeights: windowWeights,
+      dayTotal: dayTotal,
+      windowTotal: windowTotal,
+      hasData: dayTotal > 0,
+    };
   }
 
   /**
@@ -158,9 +241,10 @@
       if (booked.has(p.id) || favs.has(p.id) || tiers[p.id]) continue;
       results.push(p);
     }
-    // Sort: upcoming first, then alphabetical
+    // Sort: most bookable-this-week first (more actionable), then alphabetical
     results.sort(function (a, b) {
       if (a.hasUpcoming !== b.hasUpcoming) return b.hasUpcoming ? 1 : -1;
+      if (b.upcomingCount !== a.upcomingCount) return b.upcomingCount - a.upcomingCount;
       return a.name.localeCompare(b.name);
     });
     return results.slice(0, 20);
@@ -197,12 +281,103 @@
   // SECTION 2: "You might like"
   // ═══════════════════════════════════════════════════════════════════
 
+  // Blend weights for the three recommendation dimensions. Each component
+  // produces a 0..1 sub-score, so weights are directly comparable.
+  var YML_WEIGHTS = {
+    affinity: 0.55,     // (a) similarity to instructors the user rates/books highly
+    timing: 0.30,       // (b) schedule overlap with the user's habitual times
+    availability: 0.15, // (c) how actionable: # upcoming + freshness boost
+  };
+
+  // 30 days un-booked before the lightweight "haven't tried recently" boost kicks in.
+  var FRESHNESS_DAYS = 30;
+
+  /**
+   * (a) TALENT/AFFINITY — how similar a candidate is to the reference set
+   * (favourites + highly-tiered + frequently-booked instructors) by the class
+   * types and locations they share. Returns { score (0..1), typeMatches, locMatches }.
+   */
+  function scoreAffinity(p, refClassTypes, refLocations, maxTypeMatch, maxLocMatch) {
+    var typeMatches = [];
+    p.classTypes.forEach(function (ct) { if (refClassTypes.has(ct)) typeMatches.push(ct); });
+    var locMatches = [];
+    p.locations.forEach(function (loc) { if (refLocations.has(loc)) locMatches.push(loc); });
+    var typeScore = maxTypeMatch > 0 ? (typeMatches.length / maxTypeMatch) : 0;
+    var locScore = maxLocMatch > 0 ? (locMatches.length / maxLocMatch) : 0;
+    // Class-type overlap matters more than location overlap.
+    var score = (typeScore * 0.7) + (locScore * 0.3);
+    return { score: score, typeMatches: typeMatches, locMatches: locMatches };
+  }
+
+  /**
+   * (b) TIMING FIT — fraction of the candidate's upcoming events that land in
+   * the user's habitual day/time windows, weighted by how strongly the user
+   * favours each. Returns { score (0..1), topDays: [dayIdx], topWindow }.
+   */
+  function scoreTiming(p, sched) {
+    var topDays = [];
+    var topWindow = '';
+    if (!sched.hasData || p.upcomingCount === 0) {
+      return { score: 0, topDays: topDays, topWindow: topWindow };
+    }
+    var dayHit = 0;
+    var dKeys = Object.keys(p.dayCounts);
+    for (var i = 0; i < dKeys.length; i++) {
+      var d = dKeys[i];
+      var share = sched.dayTotal > 0 ? ((sched.dayWeights[d] || 0) / sched.dayTotal) : 0;
+      dayHit += p.dayCounts[d] * share;
+    }
+    var winHit = 0;
+    var wKeys = Object.keys(p.windowCounts);
+    for (var j = 0; j < wKeys.length; j++) {
+      var w = wKeys[j];
+      var wShare = sched.windowTotal > 0 ? ((sched.windowWeights[w] || 0) / sched.windowTotal) : 0;
+      winHit += p.windowCounts[w] * wShare;
+    }
+    // Normalise each hit by upcomingCount → 0..1, then average the two axes.
+    var dayScore = dayHit / p.upcomingCount;
+    var winScore = winHit / p.upcomingCount;
+    var score = (dayScore + winScore) / 2;
+
+    // Surface the candidate's most-common upcoming days/window for the "why" line.
+    var maxDay = 0;
+    for (var dk = 0; dk < dKeys.length; dk++) { if (p.dayCounts[dKeys[dk]] > maxDay) maxDay = p.dayCounts[dKeys[dk]]; }
+    for (var dk2 = 0; dk2 < dKeys.length; dk2++) {
+      if (p.dayCounts[dKeys[dk2]] === maxDay) topDays.push(Number(dKeys[dk2]));
+    }
+    topDays.sort(function (a, b) { return a - b; });
+    if (topDays.length > 2) topDays = topDays.slice(0, 2);
+    var maxWin = 0;
+    for (var wk = 0; wk < wKeys.length; wk++) {
+      if (p.windowCounts[wKeys[wk]] > maxWin) { maxWin = p.windowCounts[wKeys[wk]]; topWindow = wKeys[wk]; }
+    }
+    return { score: score, topDays: topDays, topWindow: topWindow };
+  }
+
+  /**
+   * (c) AVAILABILITY/FRESHNESS — more upcoming classes = more actionable, with
+   * a light boost for instructors the user hasn't booked in a while (or never).
+   * Returns a 0..1 score. maxUpcoming normalises across the candidate pool.
+   */
+  function scoreAvailability(p, maxUpcoming, now) {
+    var avail = maxUpcoming > 0 ? (p.upcomingCount / maxUpcoming) : 0;
+    var freshness;
+    if (!p.lastBookedTs) {
+      freshness = 1; // never booked → maximally fresh
+    } else {
+      var days = (now - p.lastBookedTs) / 86400000;
+      freshness = Math.max(0, Math.min(1, days / FRESHNESS_DAYS));
+    }
+    // Availability dominates; freshness is the lighter nudge.
+    return (avail * 0.75) + (freshness * 0.25);
+  }
+
   function computeYouMightLike(profiles) {
     var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
     var tiers = {};
     try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
 
-    // Build reference set: favourites + S/A tier instructors
+    // Build reference set: favourites + S/A tier instructors + frequently booked
     var refIds = new Set();
     favs.forEach(function (id) { refIds.add(String(id)); });
     var tierKeys = Object.keys(tiers);
@@ -210,6 +385,11 @@
       if (tiers[tierKeys[t]] === 'S' || tiers[tierKeys[t]] === 'A') {
         refIds.add(String(tierKeys[t]));
       }
+    }
+    // Treat anyone booked 3+ times as a de-facto favourite for affinity.
+    var pIds = Object.keys(profiles);
+    for (var pi = 0; pi < pIds.length; pi++) {
+      if (profiles[pIds[pi]].bookCount >= 3) refIds.add(pIds[pi]);
     }
 
     if (refIds.size === 0) return { results: [], noRefs: true };
@@ -223,32 +403,52 @@
       p.classTypes.forEach(function (ct) { refClassTypes.add(ct); });
       p.locations.forEach(function (loc) { refLocations.add(loc); });
     });
+    var maxTypeMatch = refClassTypes.size;
+    var maxLocMatch = refLocations.size;
 
-    // Score every non-reference instructor
+    var sched = getUserScheduleProfile();
+    var now = Date.now();
+
+    // First pass: find the busiest candidate to normalise availability.
+    var maxUpcoming = 0;
+    for (var mi = 0; mi < pIds.length; mi++) {
+      var mp = profiles[pIds[mi]];
+      if (refIds.has(mp.id) || favs.has(mp.id) || tiers[mp.id]) continue;
+      if (mp.upcomingCount > maxUpcoming) maxUpcoming = mp.upcomingCount;
+    }
+
+    // Score every non-reference, non-ranked, non-favourite instructor.
     var booked = getBookedInstructorIds(profiles);
     var candidates = [];
-    var ids = Object.keys(profiles);
-    for (var i = 0; i < ids.length; i++) {
-      var p = profiles[ids[i]];
-      // Skip favourites, reference instructors, and anyone already ranked
-      var hasTier = !!tiers[p.id];
-      if (refIds.has(p.id) || favs.has(p.id) || hasTier) continue;
+    for (var i = 0; i < pIds.length; i++) {
+      var p = profiles[pIds[i]];
+      if (refIds.has(p.id) || favs.has(p.id) || tiers[p.id]) continue;
 
-      var typeMatches = [];
-      p.classTypes.forEach(function (ct) { if (refClassTypes.has(ct)) typeMatches.push(ct); });
-      var locMatches = [];
-      p.locations.forEach(function (loc) { if (refLocations.has(loc)) locMatches.push(loc); });
+      var aff = scoreAffinity(p, refClassTypes, refLocations, maxTypeMatch, maxLocMatch);
+      // Affinity is the entry gate: no shared class type or location → not a "like".
+      if (aff.typeMatches.length === 0 && aff.locMatches.length === 0) continue;
 
-      var score = (typeMatches.length * 2) + locMatches.length + (p.hasUpcoming ? 1 : 0);
-      if (score > 0) {
-        candidates.push({
-          profile: p,
-          score: score,
-          typeMatches: typeMatches,
-          locMatches: locMatches,
-          isNew: !booked.has(p.id),
-        });
-      }
+      var tim = scoreTiming(p, sched);
+      var avl = scoreAvailability(p, maxUpcoming, now);
+
+      var score = (aff.score * YML_WEIGHTS.affinity) +
+                  (tim.score * YML_WEIGHTS.timing) +
+                  (avl * YML_WEIGHTS.availability);
+      if (score <= 0) continue;
+
+      candidates.push({
+        profile: p,
+        score: score,
+        affScore: aff.score,
+        timScore: tim.score,
+        availScore: avl,
+        typeMatches: aff.typeMatches,
+        locMatches: aff.locMatches,
+        topDays: tim.topDays,
+        topWindow: tim.topWindow,
+        upcomingCount: p.upcomingCount,
+        isNew: !booked.has(p.id),
+      });
     }
 
     candidates.sort(function (a, b) { return b.score - a.score; });
@@ -273,23 +473,51 @@
     }
 
     var html = '<div class="explore-title">You might like</div>';
-    html += '<div class="explore-subtitle">Based on your favourites and top-rated instructors</div>';
+    html += '<div class="explore-subtitle">Matched on your taste, your usual times & what\'s bookable</div>';
     html += '<div class="explore-grid">';
     for (var i = 0; i < data.results.length; i++) {
       var c = data.results[i];
-      // Build a "why" label
-      var why = '';
-      if (c.typeMatches.length > 0) {
-        var catName = getShortCategoryName(c.typeMatches[0]);
-        why = 'Also teaches ' + catName;
-      } else if (c.locMatches.length > 0) {
-        why = 'Also at ' + c.locMatches[0];
-      }
-      html += instrCard(c.profile, why);
+      html += instrCard(c.profile, buildWhyLine(c));
     }
     html += '</div>';
     container.innerHTML = html;
     container.style.display = '';
+  }
+
+  /**
+   * Build the short "why" line for a recommendation, e.g.
+   *   "Teaches Tue & Thu mornings · 4 classes this week"
+   * Falls back gracefully when timing data is unavailable, leading instead with
+   * the affinity reason (shared class type or location).
+   * Returns a plain string; instrCard escapes it before insertion.
+   */
+  function buildWhyLine(c) {
+    var parts = [];
+
+    // Timing fragment — only when the candidate actually has upcoming slots
+    // and they land in the user's habitual windows.
+    if (c.timScore > 0 && c.topDays && c.topDays.length > 0) {
+      var dayStr = c.topDays.map(function (d) { return DAY_NAMES[d] || ''; })
+        .filter(Boolean).join(' & ');
+      var winStr = c.topWindow ? (WINDOW_LABELS[c.topWindow] || '') : '';
+      if (dayStr) parts.push('Teaches ' + dayStr + (winStr ? ' ' + winStr : ''));
+    }
+
+    // Affinity fragment — what makes them similar to your favourites.
+    if (parts.length === 0) {
+      if (c.typeMatches.length > 0) {
+        parts.push('Also teaches ' + getShortCategoryName(c.typeMatches[0]));
+      } else if (c.locMatches.length > 0) {
+        parts.push('Also at ' + c.locMatches[0]);
+      }
+    }
+
+    // Availability fragment — how actionable this week.
+    if (c.upcomingCount > 0) {
+      parts.push(c.upcomingCount + (c.upcomingCount === 1 ? ' class this week' : ' classes this week'));
+    }
+
+    return parts.join(' · ');
   }
 
   function getShortCategoryName(typeName) {
