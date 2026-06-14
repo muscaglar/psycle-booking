@@ -160,8 +160,8 @@
         '</button>' +
       '</div>' +
       '<div class="about-block">' +
-        '<div class="about-mark">Psycle Companion</div>' +
-        '<div class="about-text">An independent companion app for Psycle London members.<br>Not affiliated with, or endorsed by, Psycle.</div>' +
+        '<div class="about-mark">DRAFT</div>' +
+        '<div class="about-text">An independent companion for Psycle London riders.<br>Not affiliated with, or endorsed by, Psycle.</div>' +
       '</div>';
 
     // Wrap all panels in tab-content
