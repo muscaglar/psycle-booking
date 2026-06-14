@@ -202,6 +202,9 @@
 <script defer src="tabs.js"></script>
 <script defer src="settings.js"></script>
 <script defer src="explore.js"></script>
+<!-- API resilience layer: loads last so window.apiFetch + all globals exist; api-client before diagnostic (diagnostic reads PsycleAPI.SCHEMAS). -->
+<script defer src="api-client.js"></script>
+<script defer src="diagnostic.js"></script>
 <script defer src="native-bridge.js"></script>
 </body>
 </html>

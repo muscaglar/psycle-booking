@@ -110,12 +110,19 @@
 }
 
 /* ── "Why" label for recommendations ─────────────────────────────── */
+/* Now carries a multi-part reason (timing · availability), so it may wrap to
+   two lines. Keep it compact and readable rather than forcing a single line. */
 
 .explore-why {
   font-size: var(--text-xs);
   color: var(--accent, #e94560);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ── Card action link ────────────────────────────────────────────── */

@@ -1,4 +1,4 @@
-const CACHE = 'psycle-v17';
+const CACHE = 'psycle-88e5baa1';
 const SHELL = [
   './psycle-finder.html',
   './manifest.json',
@@ -20,7 +20,9 @@ const SHELL = [
   './features.js',
   './tabs.js',
   './settings.js',
-  './explore.js'
+  './explore.js',
+  './api-client.js',
+  './diagnostic.js'
 ];
 
 self.addEventListener('install', e => {

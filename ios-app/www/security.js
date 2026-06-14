@@ -250,8 +250,26 @@
 
   var _expiryTimer = null;
 
+  // True when the token is within the warning window of expiry. Read by
+  // bookClass() to warn BEFORE a booking attempt fails at checkout.
+  window.isTokenExpiringSoon = function (withinMs) {
+    var expiry = getTokenExpiry();
+    if (!expiry) return false; // opaque/non-JWT token — can't tell, assume fine
+    var msLeft = expiry.getTime() - Date.now();
+    return msLeft <= (withinMs || 5 * 60 * 1000);
+  };
+
+  function _emitExpiring() {
+    try {
+      if (typeof PsycleState !== 'undefined') PsycleState._tokenExpiringSoon = true;
+      if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('token:expiring-soon');
+    } catch (e) {}
+    if (typeof toast === 'function') toast('Session expiring soon — sign in again to keep booking', 'info');
+  }
+
   window.scheduleTokenExpiryCheck = function () {
     if (_expiryTimer) clearTimeout(_expiryTimer);
+    try { if (typeof PsycleState !== 'undefined') PsycleState._tokenExpiringSoon = false; } catch (e) {}
     var expiry = getTokenExpiry();
     if (!expiry) return;
 
@@ -261,7 +279,7 @@
     var warnMs = msLeft - 5 * 60 * 1000;
     if (warnMs > 0) {
       _expiryTimer = setTimeout(function () {
-        if (typeof toast === 'function') toast('Session expiring soon — sign in again to continue', 'info');
+        _emitExpiring();
         // Set another timer for actual expiry
         setTimeout(function () {
           if (typeof showSessionExpired === 'function') showSessionExpired();
@@ -269,6 +287,7 @@
       }, warnMs);
     } else if (msLeft > 0) {
       // Less than 5 min left
+      _emitExpiring();
       _expiryTimer = setTimeout(function () {
         if (typeof showSessionExpired === 'function') showSessionExpired();
       }, msLeft);

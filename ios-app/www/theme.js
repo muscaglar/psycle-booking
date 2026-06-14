@@ -138,28 +138,78 @@ function updateThemeIcon() {
 
 
 // ── B. Skeleton Loading Cards ───────────────────────────────────
+// Geometry mirrors the real .class-card (js/app.js eventCard):
+//   time block on the left, then type / instructor / location lines,
+//   a meta (badge) row, and a button-shaped block. CSS in theme.css.
 
 function skeletonCardHTML() {
-  return `<div class="skeleton-card">
+  return `<div class="skeleton-card" aria-hidden="true">
     <div class="skeleton-time">
-      <div class="skeleton-bar"></div>
-      <div class="skeleton-bar"></div>
+      <div class="skeleton-bar sk-time-hour"></div>
+      <div class="skeleton-bar sk-time-ampm"></div>
     </div>
     <div class="skeleton-info">
-      <div class="skeleton-bar"></div>
-      <div class="skeleton-bar"></div>
-      <div class="skeleton-bar"></div>
-      <div class="skeleton-bar"></div>
-      <div class="skeleton-bar"></div>
+      <div class="skeleton-bar sk-type"></div>
+      <div class="skeleton-bar sk-instr"></div>
+      <div class="skeleton-bar sk-loc"></div>
+      <div class="skeleton-meta">
+        <div class="skeleton-bar sk-badge"></div>
+        <div class="skeleton-bar sk-badge"></div>
+      </div>
+      <div class="skeleton-bar sk-button"></div>
     </div>
   </div>`;
 }
 
+// A faint bike-grid placeholder, sized from a studio layout's slot
+// count, hinting at the shape of the studio currently being searched.
+function skeletonStudioHTML(name, slotCount) {
+  const count = Math.max(1, Math.min(60, Number(slotCount) || 0));
+  if (!count) return '';
+  let dots = '';
+  for (let i = 0; i < count; i++) {
+    dots += '<span class="skeleton-bike"></span>';
+  }
+  const label = name ? escapeHTML(name) : '';
+  return `<div class="skeleton-studio" aria-hidden="true">
+    <div class="skeleton-bar sk-studio-label">${label}</div>
+    <div class="skeleton-bike-grid">${dots}</div>
+  </div>`;
+}
+
+// Context-aware: when exactly one studio is selected and its layout is
+// known, prepend a bike-grid placeholder shaped from that studio's slot
+// count. Otherwise fall back to the plain card skeletons. Reads the
+// selection itself so call sites stay a zero-arg showSkeletonLoading().
 function showSkeletonLoading() {
   const container = document.getElementById('results');
   if (!container) return;
+
+  let studioHTML = '';
+  if (typeof selectedLocations !== 'undefined' && selectedLocations.size === 1
+      && typeof _studioMap !== 'undefined' && _studioMap) {
+    const selId = [...selectedLocations][0];
+    // selectedLocations holds *location* ids; find studios in _studioMap
+    // that belong to it and carry a usable layout. Fall back to a direct
+    // id match for cases where the selection is keyed by studio id.
+    let studio = null;
+    for (const key in _studioMap) {
+      const s = _studioMap[key];
+      if (!s) continue;
+      const matchesLoc = String(s.location_id) === String(selId);
+      const matchesStudio = String(s.id) === String(selId);
+      if ((matchesLoc || matchesStudio) && s.layout && s.layout.slots && s.layout.slots.length) {
+        studio = s;
+        break;
+      }
+    }
+    if (studio) {
+      studioHTML = skeletonStudioHTML(studio.name, studio.layout.slots.length);
+    }
+  }
+
   container.innerHTML = `<div class="skeleton-grid" id="skeletonGrid">
-    ${skeletonCardHTML().repeat(6)}
+    ${studioHTML}${skeletonCardHTML().repeat(6)}
   </div>`;
 }
 
