@@ -1,44 +1,27 @@
+# Renders the Psync app icon (1024 PNG) — a ring (bike wheel / pilates
+# magic-circle) crossed by a dumbbell. Dependency-free PNG rasterizer.
 import zlib, struct, math
 W=H=1024; SS=3
 TOP=(19,19,24); BOT=(8,8,10)
-CX=CY=512; R_OUT=300; R_IN=212; MIDR=256; HALF=44
-RED=(233,69,96); WHITE=(250,250,250)
-# arcs (degrees, atan2 with y-down): A red top, B white bottom
-A0,A1=-155,-20   # red
-B0,B1=25,160     # white
-def cap(deg): return (CX+MIDR*math.cos(math.radians(deg)), CY+MIDR*math.sin(math.radians(deg)))
-capA=cap(A0); capB=cap(B0)  # rounded tails
-# arrowheads (apex, base1, base2)
-def head(te):
-    t=math.radians(te); c=math.cos(t); s=math.sin(t)
-    pm=(CX+MIDR*c, CY+MIDR*s)
-    tan=(-s,c); n=(c,s); L=92; Wd=66
-    apex=(pm[0]+tan[0]*L, pm[1]+tan[1]*L)
-    b1=(pm[0]+n[0]*Wd, pm[1]+n[1]*Wd); b2=(pm[0]-n[0]*Wd, pm[1]-n[1]*Wd)
-    return (apex,b1,b2)
-headA=head(A1); headB=head(B1)
-def tri(p,a,b,c):
-    d1=(p[0]-b[0])*(a[1]-b[1])-(a[0]-b[0])*(p[1]-b[1])
-    d2=(p[0]-c[0])*(b[1]-c[1])-(b[0]-c[0])*(p[1]-c[1])
-    d3=(p[0]-a[0])*(c[1]-a[1])-(c[0]-a[0])*(p[1]-a[1])
-    neg=(d1<0)or(d2<0)or(d3<0); pos=(d1>0)or(d2>0)or(d3>0)
-    return not(neg and pos)
+WHITE=(250,250,250); RED=(233,69,96)
+CX=CY=512; R_IN=197; R_OUT=235
+def ring(x,y): d=math.hypot(x-CX,y-CY); return R_IN<=d<=R_OUT
+def seg(x,y,x0,y0,x1,y1,half):
+    dx=x1-x0; dy=y1-y0; L2=dx*dx+dy*dy
+    t=0 if L2==0 else max(0,min(1,((x-x0)*dx+(y-y0)*dy)/L2))
+    return math.hypot(x-(x0+t*dx),y-(y0+t*dy))<=half
+def dumbbell(x,y):
+    return (seg(x,y,300,512,724,512,16)      # handle
+         or seg(x,y,266,446,266,578,28)      # left weight
+         or seg(x,y,758,446,758,578,28))     # right weight
 def bg(y):
     t=y/(H-1); return (int(TOP[0]+(BOT[0]-TOP[0])*t),int(TOP[1]+(BOT[1]-TOP[1])*t),int(TOP[2]+(BOT[2]-TOP[2])*t))
 def sample(x,y,bgc):
-    dx=x-CX; dy=y-CY; d=math.hypot(dx,dy); c=bgc
-    if R_IN<=d<=R_OUT:
-        ang=math.degrees(math.atan2(dy,dx))
-        if B0<=ang<=B1: c=WHITE
-        if A0<=ang<=A1: c=RED
-    # rounded tails
-    if math.hypot(x-capA[0],y-capA[1])<=HALF: c=RED
-    if math.hypot(x-capB[0],y-capB[1])<=HALF: c=WHITE
-    # arrowheads on top
-    if tri((x,y),*headA): c=RED
-    if tri((x,y),*headB): c=WHITE
+    c=bgc
+    if ring(x,y): c=WHITE
+    if dumbbell(x,y): c=RED
     return c
-BX0,BX1,BY0,BY1=170,854,170,854; inv=1.0/(SS*SS); buf=bytearray()
+BX0,BX1,BY0,BY1=210,814,250,774; inv=1.0/(SS*SS); buf=bytearray()
 for py in range(H):
     bgrow=bg(py); bgr=bytes(bgrow); row=bytearray()
     for px in range(W):
@@ -54,4 +37,4 @@ for py in range(H):
 def chunk(t,d): c=t+d; return struct.pack('>I',len(d))+c+struct.pack('>I',zlib.crc32(c)&0xffffffff)
 png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',W,H,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(bytes(buf),9))+chunk(b'IEND',b'')
 out='ios-app/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png'
-open(out,'wb').write(png); print('wrote',out,len(png),'bytes')
+open(out,'wb').write(png); print('wrote',out)

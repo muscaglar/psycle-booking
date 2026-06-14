@@ -2285,13 +2285,17 @@ select:focus, input:focus {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(0, 0, 0, 0.62);
+  /* Dim comes from the spotlight's huge box-shadow so the highlighted
+     target stays bright. Only when there's no target do we dim the
+     whole screen (.no-target). */
+  background: transparent;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.25s ease, background 0.3s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .onboard-overlay.show { opacity: 1; }
+.onboard-overlay.no-target { background: rgba(0, 0, 0, 0.62); }
 
 .onboard-spotlight {
   position: fixed;
@@ -2303,8 +2307,11 @@ select:focus, input:focus {
 }
 
 .onboard-tip {
+  /* Anchored in ONE stable spot (lower-centre, above the tab bar). The
+     caption never jumps — only the spotlight moves to each target. */
   position: fixed;
   left: 50%;
+  bottom: calc(88px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(360px, calc(100vw - 32px));
   background: var(--bg-panel, #161616);
@@ -2312,7 +2319,6 @@ select:focus, input:focus {
   border-radius: var(--radius-lg, 12px);
   box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,0.5));
   padding: var(--space-5, 18px);
-  transition: top 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .onboard-tip-title {

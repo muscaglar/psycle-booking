@@ -3691,32 +3691,30 @@ function _onboardReposition() {
   const overlay = document.getElementById('onboardOverlay');
   if (!overlay) return;
   const step = ONBOARDING_STEPS[_onboardIdx];
-  const target = step ? document.querySelector(step.selector) : null;
+  let target = step ? document.querySelector(step.selector) : null;
   const spot = overlay.querySelector('.onboard-spotlight');
-  const tip = overlay.querySelector('.onboard-tip');
-  if (!spot || !tip) return;
+  if (!spot) return;
 
+  // The caption card is fixed in place (CSS); we only move the spotlight.
   if (target) {
-    const r = target.getBoundingClientRect();
+    // Bring an off-screen target into view so its highlight is visible.
+    const vh = window.innerHeight;
+    let r = target.getBoundingClientRect();
+    if (r.top < 56 || r.bottom > vh - 220) {
+      try { target.scrollIntoView({ block: 'center' }); } catch {}
+      r = target.getBoundingClientRect();
+    }
     const pad = 8;
+    overlay.classList.remove('no-target');
     spot.style.display = 'block';
     spot.style.left = Math.max(4, r.left - pad) + 'px';
     spot.style.top = Math.max(4, r.top - pad) + 'px';
     spot.style.width = (r.width + pad * 2) + 'px';
     spot.style.height = (r.height + pad * 2) + 'px';
-
-    // Place the tip below the target if there's room, else above.
-    const tipH = tip.offsetHeight || 150;
-    const below = r.bottom + 12;
-    if (below + tipH < window.innerHeight) {
-      tip.style.top = below + 'px';
-    } else {
-      tip.style.top = Math.max(12, r.top - tipH - 12) + 'px';
-    }
   } else {
-    // No target on this view — centre the tip, hide the spotlight.
+    // Nothing to point at on this view — dim the whole screen, no spotlight.
+    overlay.classList.add('no-target');
     spot.style.display = 'none';
-    tip.style.top = Math.max(40, (window.innerHeight - (tip.offsetHeight || 150)) / 2) + 'px';
   }
 }
 
