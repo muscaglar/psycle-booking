@@ -276,10 +276,26 @@ select:focus, input:focus {
 .badge.waitlist { background: var(--badge-waitlist-bg, #1a1a0a); color: var(--badge-waitlist-text, #b8860b); border-color: var(--badge-waitlist-border, #3a3a10); }
 .badge.highlight { background: var(--badge-highlight-bg, #0f1e2a); color: var(--badge-highlight-text, #4a9eff); border-color: var(--badge-highlight-border, #1a3a5a); }
 
+/* Capacity urgency chips — subtle amber (soft) / red (urgent) */
+.badge.avail-soft { background: #2a200a; color: #e0a93c; border-color: #4a3a14; }
+.badge.avail-urgent { background: #2a0f0f; color: #ef5a72; border-color: #4a1a1a; }
+
 .no-results {
   text-align: center;
   padding: var(--space-12);
   color: var(--text-ghost, #555);
+}
+
+/* Offline / unreachable fallback: cached results shown with this notice on top */
+.stale-results-banner {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md, 8px);
+  background: var(--badge-waitlist-bg, #1a1a0a);
+  color: var(--badge-waitlist-text, #b8860b);
+  border: 1px solid var(--badge-waitlist-border, #3a3a10);
+  font-size: var(--text-sm, 12px);
+  text-align: center;
 }
 
 /* Bike picker modal */
@@ -348,6 +364,9 @@ select:focus, input:focus {
 .bike-slot.selected text { fill: #fff; }
 .bike-slot.available:hover text { fill: #fff; }
 .bike-slot.mine text { fill: #e94560; }
+
+/* "Your usual" spot — thin gold ring overlay, layered over any selected/available fill */
+.bike-slot.usual rect { stroke: #d4af37; stroke-width: 2; }
 
 .bike-legend {
   display: flex; gap: var(--space-7); font-size: var(--text-sm); color: var(--text-faint, #666);

@@ -799,7 +799,7 @@ async function search() {
     }
 
   } catch (e) {
-    if (!stale()) setStatus(`<span style="color:#e94560">Error: ${escapeHTML(e.message)}</span>`);
+    if (!stale()) showSearchError(e);
   } finally {
     // Only the most recent search owns the button state
     if (mySeq === _searchSeq) {
@@ -808,6 +808,39 @@ async function search() {
       btn.onclick = search;
     }
   }
+}
+
+// Friendly search-failure handling. For offline / server / network errors we
+// fall back to the last cached results (if any) with a small banner, rather
+// than wiping the screen with a bare error. Defensive — never throws.
+function showSearchError(e) {
+  let cat = { type: 'unknown', userMessage: 'Something went wrong — please try again.' };
+  try {
+    if (window.PsycleAPI && typeof window.PsycleAPI.categorizeError === 'function') {
+      cat = window.PsycleAPI.categorizeError(e) || cat;
+    }
+  } catch (_) {}
+
+  const canFallBack = cat.type === 'network' || cat.type === 'server' || cat.type === 'timeout';
+  let cached = false;
+  if (canFallBack) {
+    try { cached = sessionStorage.getItem('psycle_last_results') != null && restoreLastResults(); }
+    catch (_) { cached = false; }
+  }
+
+  if (cached) {
+    // Prepend a non-destructive banner above the restored results.
+    const container = document.getElementById('results');
+    if (container && !container.querySelector('.stale-results-banner')) {
+      const banner = document.createElement('div');
+      banner.className = 'stale-results-banner';
+      banner.textContent = "Showing your last results — couldn't reach Psycle";
+      container.insertBefore(banner, container.firstChild);
+    }
+    return;
+  }
+
+  setStatus(`<span style="color:#e94560">${escapeHTML(cat.userMessage || ('Error: ' + (e && e.message || 'Unknown error')))}</span>`);
 }
 
 function mergeRelations(base, incoming) {
@@ -832,6 +865,21 @@ async function bookClass(eventId, btn, studioId) {
     toast('Connect your Psycle account first', 'error');
     showTokenDialog();
     return;
+  }
+
+  // Feature: token-expiry guard. Warn BEFORE the event fetch / booking so the
+  // user can refresh their session rather than have checkout fail mid-flow.
+  if (typeof isTokenExpiringSoon === 'function' && isTokenExpiringSoon()) {
+    const reauth = await confirmModal({
+      title: 'Session expiring',
+      body: 'Your Psycle session is about to expire and booking may fail. Sign in again first?',
+      confirmText: 'Sign in',
+      cancelText: 'Book anyway',
+    });
+    if (reauth) {
+      openLoginPopup();
+      return;
+    }
   }
 
   // Double-tap guard: a second tap while the event fetch is in flight
@@ -877,6 +925,30 @@ async function bookClass(eventId, btn, studioId) {
       });
       if (!ok) return;
       await submitBooking(eventId, null, btn, { waitlist: true });
+      return;
+    }
+
+    // Feature: skip the bike picker when only one seat is left and the user
+    // isn't already booked — there's nothing to choose, so confirm directly.
+    if (hasLayout && availableSlotIds.size === 1 && !myBooking) {
+      btn.disabled = false;
+      btn.textContent = 'Book';
+      const onlySlotId = [...availableSlotIds][0];
+      const SL = slotLabelForEvent(eventId);
+      // Prefer the slot's display label from the layout (may differ from its id)
+      const onlySlot = (layout.slots || []).find(s => Number(s.id) === onlySlotId);
+      const slotN = onlySlot ? (onlySlot.label ?? onlySlot.id) : onlySlotId;
+      const ok = await confirmModal({
+        title: 'Book this spot?',
+        body: `Only ${SL} ${slotN} is left — book it?`,
+        confirmText: 'Book it',
+      });
+      if (ok) {
+        await submitBooking(eventId, [onlySlotId], btn);
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Book';
+      }
       return;
     }
 
@@ -974,12 +1046,19 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
       fill="#555" font-size="9" font-family="sans-serif">★</text>`
   ).join('');
 
+  // Feature: pre-select the user's "usual" slot for this studio+instructor.
+  // Only for a fresh booking (no existing slots) and not during a spot swap.
+  const isChangeSpot = !!window._changeSpotContext;
+  const usualSlot = (!hasMySlots && !isChangeSpot) ? _usualSlotForEvent(eventId) : null;
+  const usualAvailable = usualSlot != null && availableSlotIds.has(Number(usualSlot));
+
   inner += slots.map(slot => {
     const id = Number(slot.id);
     const isMine = mySlotIds.has(id);
     const isAvailable = availableSlotIds.has(id);
+    const isUsual = usualAvailable && id === Number(usualSlot);
     const label = slot.label ?? slot.id;
-    const cls = isMine ? 'mine' : isAvailable ? 'available' : 'taken';
+    const cls = isMine ? 'mine' : isUsual ? 'selected usual' : isAvailable ? 'available' : 'taken';
     const click = isMine ? `onclick="cancelBikeSlot(${slot.id}, ${eventId})"` : isAvailable ? `onclick="selectBike(${slot.id})"` : '';
     return `<g class="bike-slot ${cls}" data-slot="${slot.id}" ${click}>
       <rect x="${sx(slot.x)}" y="${sy(slot.y)}" width="${SLOT}" height="${SLOT}" rx="6" stroke-width="1.5"/>
@@ -990,6 +1069,15 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
 
   svg.innerHTML = inner;
   document.getElementById('bikeModal').style.display = 'flex';
+
+  // Pre-select the usual slot so Confirm is enabled (without auto-confirming).
+  if (usualAvailable) {
+    _selectedSlots = [Number(usualSlot)];
+    const _slU = slotLabelForEvent(eventId);
+    document.getElementById('modalHint').textContent =
+      `${_slU} ${usualSlot} is your usual — selected. Confirm or pick another.`;
+    document.getElementById('confirmBookBtn').disabled = false;
+  }
 }
 
 function selectBike(slotId) {
@@ -1058,6 +1146,52 @@ function _cleanWaitlisted() {
   return map;
 }
 
+// ── Bike-preference memory ───────────────────────────────────────
+// Remembers which slots the user books, keyed by studio + instructor, so the
+// bike picker can surface and pre-select their "usual" spot next time.
+// Shape: { [studioId]: { [instructorId]: { [slotNumber]: count } } }
+const BIKE_HISTORY_KEY = 'psycle_bike_history';
+
+function _getBikeHistory() {
+  try { return JSON.parse(localStorage.getItem(BIKE_HISTORY_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function _recordBikeHistory(eventId, slots) {
+  if (!slots || !slots.length) return;
+  const evt = _eventCache[String(eventId)];
+  if (!evt) return;
+  const studioId = evt.studio_id;
+  const instructorId = evt.instructor_id;
+  if (studioId == null || instructorId == null) return;
+  const hist = _getBikeHistory();
+  const sKey = String(studioId);
+  const iKey = String(instructorId);
+  if (!hist[sKey]) hist[sKey] = {};
+  if (!hist[sKey][iKey]) hist[sKey][iKey] = {};
+  slots.map(Number).filter(Boolean).forEach(slot => {
+    const slotKey = String(slot);
+    hist[sKey][iKey][slotKey] = (hist[sKey][iKey][slotKey] || 0) + 1;
+  });
+  try { localStorage.setItem(BIKE_HISTORY_KEY, JSON.stringify(hist)); }
+  catch (e) { console.warn('[psycle] bike history save failed:', e); }
+}
+
+// Most-booked slot number for an event's studio+instructor, or null.
+function _usualSlotForEvent(eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt || evt.studio_id == null || evt.instructor_id == null) return null;
+  const byInstr = _getBikeHistory()[String(evt.studio_id)];
+  const counts = byInstr && byInstr[String(evt.instructor_id)];
+  if (!counts) return null;
+  let bestSlot = null, bestCount = 0;
+  Object.keys(counts).forEach(slotKey => {
+    const c = Number(counts[slotKey]) || 0;
+    if (c > bestCount) { bestCount = c; bestSlot = Number(slotKey); }
+  });
+  return bestCount > 0 ? bestSlot : null;
+}
+
 async function submitBooking(eventId, slots, btn, opts = {}) {
   // slots: array of slot IDs, or null for no-layout booking
   btn.disabled = true;
@@ -1088,6 +1222,8 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       // returned bookingId — map all slots to it (fetchMyBookings will correct later)
       slotsArr.forEach(s => { slotBookings[s] = bookingId; });
       _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings, waitlisted: isWaitlist };
+      // Remember the booked slot(s) per studio+instructor for next time.
+      if (!isWaitlist && slotsArr.length) _recordBikeHistory(eventId, slotsArr);
       if (isWaitlist) _markWaitlisted(eventId, _eventCache[String(eventId)]?.start_at);
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
       showBookingConfirmation(eventId, slotsArr, { waitlist: isWaitlist });
@@ -1516,6 +1652,18 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
 
   const myBooking = _myBookings[String(evt.id)];
+
+  // Feature: capacity urgency chip — only with a real remaining count, and
+  // only when the class is bookable (not booked, full, or waitlist).
+  if (!myBooking && !isFull && !isWaitlist && typeof evt.capacity_remaining === 'number') {
+    const rem = evt.capacity_remaining;
+    if (rem >= 1 && rem <= 3) {
+      badges += `<span class="badge avail-urgent">Only ${rem} left</span>`;
+    } else if (rem >= 4 && rem <= 7) {
+      badges += `<span class="badge avail-soft">${rem} spots left</span>`;
+    }
+  }
+
   let bookLabel, bookCls, bookDisabled, bookOnclick;
   if (myBooking) {
     const slotLabel = myBooking.waitlisted
