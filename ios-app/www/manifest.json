@@ -1,7 +1,7 @@
 {
-  "name": "Draft",
-  "short_name": "Draft",
-  "description": "Draft your week of spin, strength and yoga classes \u2014 a fast, independent companion for Psycle London riders.",
+  "name": "Psync",
+  "short_name": "Psync",
+  "description": "Find, book and sync your Psycle classes \u2014 a fast, independent companion for Psycle London riders.",
   "start_url": "./psycle-finder.html",
   "display": "standalone",
   "background_color": "#08080a",
@@ -9,7 +9,7 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201024%201024%22%20role%3D%22img%22%20aria-label%3D%22Draft%22%3E%20%3Cdefs%3E%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23131318%22%2F%3E%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2308080a%22%2F%3E%20%3C%2FlinearGradient%3E%20%3C%2Fdefs%3E%20%3Crect%20width%3D%221024%22%20height%3D%221024%22%20fill%3D%22url%28%23bg%29%22%2F%3E%20%3C%21--%20slipstream%20%2F%20draft%20lines%20--%3E%20%3Cg%20fill%3D%22%23e94560%22%3E%20%3Crect%20x%3D%22150%22%20y%3D%22339%22%20width%3D%22210%22%20height%3D%2246%22%20rx%3D%2223%22%20opacity%3D%220.7%22%2F%3E%20%3Crect%20x%3D%22104%22%20y%3D%22489%22%20width%3D%22286%22%20height%3D%2246%22%20rx%3D%2223%22%2F%3E%20%3Crect%20x%3D%22150%22%20y%3D%22639%22%20width%3D%22210%22%20height%3D%2246%22%20rx%3D%2223%22%20opacity%3D%220.7%22%2F%3E%20%3C%2Fg%3E%20%3C%21--%20bold%20D%20with%20D-shaped%20counter%20--%3E%20%3Cpath%20fill%3D%22%23ffffff%22%20fill-rule%3D%22evenodd%22%20d%3D%22M455%20290%20L590%20290%20A222%20222%200%200%201%20590%20734%20L455%20734%20Z%20M550%20385%20L590%20385%20A127%20127%200%200%201%20590%20639%20L550%20639%20Z%22%2F%3E%20%3C%2Fsvg%3E",
+      "src": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201024%201024%22%20role%3D%22img%22%20aria-label%3D%22Psync%22%3E%20%3Cdefs%3E%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23131318%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2308080a%22%2F%3E%20%3C%2FlinearGradient%3E%20%3C%2Fdefs%3E%20%3Crect%20width%3D%221024%22%20height%3D%221024%22%20fill%3D%22url%28%23bg%29%22%2F%3E%20%3C%21--%20spin%2Fsync%3A%20two%20chasing%20arcs%20%28top%20red%2C%20bottom%20white%29%20with%20arrowheads%20--%3E%20%3Cg%20fill%3D%22none%22%20stroke-width%3D%2288%22%20stroke-linecap%3D%22round%22%3E%20%3Cpath%20stroke%3D%22%23e94560%22%20d%3D%22M280%20270%20A256%20256%200%200%201%20753%20424%22%2F%3E%20%3Cpath%20stroke%3D%22%23ffffff%22%20d%3D%22M744%20754%20A256%20256%200%200%201%20271%20600%22%2F%3E%20%3C%2Fg%3E%20%3Cpath%20fill%3D%22%23e94560%22%20d%3D%22M753%20424%20l64%20-10%20l-26%2078%20z%22%2F%3E%20%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M271%20600%20l-64%2010%20l26%20-78%20z%22%2F%3E%20%3C%2Fsvg%3E",
       "sizes": "1024x1024",
       "type": "image/svg+xml",
       "purpose": "any maskable"

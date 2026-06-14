@@ -1,6 +1,6 @@
 {
   "appId": "com.psyclefinder.app",
-  "appName": "Draft",
+  "appName": "Psync",
   "webDir": "www",
   "server": {
     "androidScheme": "https"

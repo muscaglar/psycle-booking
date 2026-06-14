@@ -1519,3 +1519,34 @@
   .tab-panel,
   .stats-bar .stat-card { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   iOS app-shell (mobile): lock the viewport so the document can't
+   rubber-band. Stops the overscroll smear in the notch / under the tab
+   bar (overscroll-behavior alone doesn't stop the main WKWebView bounce).
+   The body fills the screen and doesn't scroll; only .tab-content
+   scrolls (overscroll contained). The bottom tab bar stays position:
+   fixed (rule above) so it keeps covering the home-indicator safe area —
+   making it a static flex item left the native bg showing there.
+   Desktop keeps normal document scroll.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  html { height: 100%; }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  header { flex: 0 0 auto; }
+  #sessionBanner, #corsBanner, #safeModeBanner { flex: 0 0 auto; }
+  .tab-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}

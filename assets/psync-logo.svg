@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Psync">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131318"/><stop offset="1" stop-color="#08080a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <!-- spin/sync: two chasing arcs (top red, bottom white) with arrowheads -->
+  <g fill="none" stroke-width="88" stroke-linecap="round">
+    <path stroke="#e94560" d="M280 270 A256 256 0 0 1 753 424"/>
+    <path stroke="#ffffff" d="M744 754 A256 256 0 0 1 271 600"/>
+  </g>
+  <path fill="#e94560" d="M753 424 l64 -10 l-26 78 z"/>
+  <path fill="#ffffff" d="M271 600 l-64 10 l26 -78 z"/>
+</svg>
