@@ -1,0 +1,24 @@
+{
+  "// Note": "Advisory type-checking config for a vanilla-JS PWA (no build step).",
+  "// Note2": "Intentionally LOOSE — no strict / no noImplicitAny — so this is a typo and",
+  "// Note3": "arg-count catcher, NOT a nag. Browser globals live in types/globals.d.ts.",
+  "// Note4": "Run via `npm run typecheck` (advisory, never blocks the build).",
+  "compilerOptions": {
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "strict": false,
+    "noImplicitAny": false,
+    "noImplicitThis": false,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "allowUmdGlobalAccess": true,
+    "resolveJsonModule": true
+  },
+  "include": ["js/**/*.js", "types/**/*.d.ts"],
+  "exclude": ["node_modules", "ios-app"]
+}

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    name: Lint, test, drift & types
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # No lockfile is required; fall back to a plain install so the job is
+      # robust whether or not package-lock.json is committed.
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      # Syntax-check every shipped JS file (js/*.js + sw.js + the iOS build
+      # script + the hand-maintained native bridge).
+      - name: Syntax check (node --check)
+        run: npm run check
+
+      # Unit tests (tests/unit.js — a plain `node` runner, no test framework).
+      - name: Unit tests
+        run: npm run test
+
+      # Verify the flattened ios-app/www/ mirror + SW cache stamp are in sync
+      # with root (ios-app/build.js --check).
+      - name: iOS www drift check
+        run: npm run drift
+
+      # Advisory only: surfaces type/typo issues without failing the build.
+      # The vanilla-JS global pattern means strict tsc would be noisy, so this
+      # is informational. `continue-on-error` keeps a red typecheck from
+      # blocking merges.
+      - name: Type check (advisory)
+        run: npm run typecheck
+        continue-on-error: true
