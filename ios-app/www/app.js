@@ -3651,92 +3651,70 @@ window.renderDiscoverPresets = renderDiscoverPresets;
 // ════════════════════════════════════════════════════════════════
 const ONBOARDING_KEY = 'psycle_onboarded_v1';
 
+// Centred modal carousel — just shows the key things. No element targeting,
+// so nothing can misalign. Icons are trusted static SVGs (inherit accent).
+const _OB_ICON = {
+  logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="13" r="3"/><circle cx="18" cy="13" r="3"/><path d="M9 13c1-1.7 2-1.7 3 0s2 1.7 3 0"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>',
+  bars: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-6M12 20V8M19 20V5"/></svg>',
+};
+
 const ONBOARDING_STEPS = [
-  {
-    selector: '#controlsPanel',
-    title: 'Find your class',
-    body: 'Filter by instructor, studio, class type, or date. Changes search automatically once you\'re signed in.',
-  },
-  {
-    selector: '.week-view, #tab-discover .week-view, #weekView',
-    title: 'Your week at a glance',
-    body: 'The weekly planner shows what you\'ve booked. Save a week as a template and rebook it in one tap.',
-  },
-  {
-    selector: '.tab-bar',
-    title: 'Move around',
-    body: 'Discover classes, manage your bookings, and see your stats — all from the bottom bar.',
-  },
-  {
-    selector: '.class-card .book-btn, .discover-quick-btn',
-    title: 'Booking is one tap',
-    body: 'Tap a class to see details, then Book. We\'ll remember your usual bike for next time.',
-  },
+  { icon: _OB_ICON.logo, title: 'Welcome to Psync', body: 'Your fast, no-faff companion for finding and booking Psycle classes.' },
+  { icon: _OB_ICON.search, title: 'Book in seconds', body: 'Filter the timetable by instructor, studio, type or time — then book in a tap. Psync remembers your usual bike.' },
+  { icon: _OB_ICON.calendar, title: 'Plan your week', body: 'See your week at a glance, save it as a template, and rebook your regulars in one tap.' },
+  { icon: _OB_ICON.bars, title: 'Know your numbers', body: 'Streaks, cost-per-class, top studios and instructor picks — all from your booking history.' },
 ];
 
 let _onboardIdx = 0;
 
 function _onboardCleanup() {
   document.getElementById('onboardOverlay')?.remove();
-  window.removeEventListener('resize', _onboardReposition);
-  window.removeEventListener('scroll', _onboardReposition, true);
+  document.removeEventListener('keydown', _onboardKey);
 }
 
-function _onboardFinish() {
+function _onboardFinish(thenSignIn) {
   try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch {}
-  _onboardCleanup();
+  const ov = document.getElementById('onboardOverlay');
+  if (ov) { ov.classList.remove('show'); setTimeout(_onboardCleanup, 220); }
+  else _onboardCleanup();
+  if (thenSignIn && typeof openLoginPopup === 'function') openLoginPopup();
 }
 
-function _onboardReposition() {
-  const overlay = document.getElementById('onboardOverlay');
-  if (!overlay) return;
-  const step = ONBOARDING_STEPS[_onboardIdx];
-  let target = step ? document.querySelector(step.selector) : null;
-  const spot = overlay.querySelector('.onboard-spotlight');
-  if (!spot) return;
+function _onboardKey(e) {
+  if (e.key === 'Escape') _onboardFinish();
+  else if (e.key === 'ArrowRight' || e.key === 'Enter') _onboardAdvance();
+  else if (e.key === 'ArrowLeft' && _onboardIdx > 0) { _onboardIdx--; _onboardRender(); }
+}
 
-  // The caption card is fixed in place (CSS); we only move the spotlight.
-  if (target) {
-    // Bring an off-screen target into view so its highlight is visible.
-    const vh = window.innerHeight;
-    let r = target.getBoundingClientRect();
-    if (r.top < 56 || r.bottom > vh - 220) {
-      try { target.scrollIntoView({ block: 'center' }); } catch {}
-      r = target.getBoundingClientRect();
-    }
-    const pad = 8;
-    overlay.classList.remove('no-target');
-    spot.style.display = 'block';
-    spot.style.left = Math.max(4, r.left - pad) + 'px';
-    spot.style.top = Math.max(4, r.top - pad) + 'px';
-    spot.style.width = (r.width + pad * 2) + 'px';
-    spot.style.height = (r.height + pad * 2) + 'px';
-  } else {
-    // Nothing to point at on this view — dim the whole screen, no spotlight.
-    overlay.classList.add('no-target');
-    spot.style.display = 'none';
+function _onboardAdvance() {
+  if (_onboardIdx >= ONBOARDING_STEPS.length - 1) {
+    _onboardFinish(!currentUser); // last step → finish, opening sign-in if signed out
+    return;
   }
+  _onboardIdx++;
+  _onboardRender();
 }
 
-function _onboardRenderStep() {
-  const overlay = document.getElementById('onboardOverlay');
-  if (!overlay) return;
+function _onboardRender() {
+  const card = document.querySelector('#onboardOverlay .onboard-card');
+  if (!card) return;
   const step = ONBOARDING_STEPS[_onboardIdx];
-  const tip = overlay.querySelector('.onboard-tip');
   const isLast = _onboardIdx === ONBOARDING_STEPS.length - 1;
-  tip.innerHTML =
-    `<div class="onboard-tip-title">${escapeHTML(step.title)}</div>` +
-    `<div class="onboard-tip-body">${escapeHTML(step.body)}</div>` +
-    '<div class="onboard-tip-foot">' +
-      `<div class="onboard-dots">${ONBOARDING_STEPS.map((_, i) =>
-        `<span class="onboard-dot${i === _onboardIdx ? ' active' : ''}"></span>`).join('')}</div>` +
-      '<div class="onboard-tip-actions">' +
-        '<button class="onboard-btn onboard-btn-skip" data-onboard="skip">Skip</button>' +
-        `<button class="onboard-btn onboard-btn-next" data-onboard="next">${isLast ? 'Done' : 'Next'}</button>` +
-      '</div>' +
-    '</div>';
-  // Reposition after layout settles.
-  requestAnimationFrame(_onboardReposition);
+  const cta = isLast ? (currentUser ? 'Get started' : 'Sign in') : 'Next';
+  card.innerHTML =
+    '<button class="onboard-skip" data-onboard="skip">Skip</button>' +
+    `<div class="onboard-icon">${step.icon}</div>` +
+    `<div class="onboard-title">${escapeHTML(step.title)}</div>` +
+    `<div class="onboard-body">${escapeHTML(step.body)}</div>` +
+    `<div class="onboard-dots">${ONBOARDING_STEPS.map((_, i) =>
+      `<span class="onboard-dot${i === _onboardIdx ? ' active' : ''}"></span>`).join('')}</div>` +
+    `<button class="onboard-cta" data-onboard="next">${cta}</button>`;
+  // replay the per-step content animation
+  card.classList.remove('step-in');
+  void card.offsetWidth;
+  card.classList.add('step-in');
 }
 
 function startOnboarding() {
@@ -3746,29 +3724,17 @@ function startOnboarding() {
   const overlay = document.createElement('div');
   overlay.id = 'onboardOverlay';
   overlay.className = 'onboard-overlay';
-  overlay.innerHTML = '<div class="onboard-spotlight"></div><div class="onboard-tip"></div>';
-  document.body.appendChild(overlay);
-
+  overlay.innerHTML = '<div class="onboard-card" role="dialog" aria-modal="true" aria-label="Welcome to Psync"></div>';
   overlay.addEventListener('click', e => {
     const act = e.target.closest('[data-onboard]')?.dataset.onboard;
     if (act === 'skip') { _onboardFinish(); return; }
-    if (act === 'next') {
-      if (_onboardIdx >= ONBOARDING_STEPS.length - 1) { _onboardFinish(); return; }
-      _onboardIdx++;
-      _onboardRenderStep();
-      return;
-    }
-    // Clicking the dim backdrop (not the tip) advances too.
-    if (e.target === overlay) {
-      if (_onboardIdx >= ONBOARDING_STEPS.length - 1) { _onboardFinish(); return; }
-      _onboardIdx++;
-      _onboardRenderStep();
-    }
+    if (act === 'next') { _onboardAdvance(); return; }
+    // Tapping the backdrop does nothing — avoids accidental dismissal.
   });
+  document.body.appendChild(overlay);
+  document.addEventListener('keydown', _onboardKey);
 
-  window.addEventListener('resize', _onboardReposition);
-  window.addEventListener('scroll', _onboardReposition, true);
-  requestAnimationFrame(() => { overlay.classList.add('show'); _onboardRenderStep(); });
+  requestAnimationFrame(() => { overlay.classList.add('show'); _onboardRender(); });
 }
 
 function replayOnboarding() {
@@ -3789,10 +3755,10 @@ function _maybeStartOnboarding() {
       localStorage.setItem(ONBOARDING_KEY, '1');
       return;
     }
-    // Let the first paint + tab bar render before highlighting targets.
+    // Brief delay so the app paints behind the welcome modal first.
     setTimeout(() => {
       if (!document.getElementById('onboardOverlay')) startOnboarding();
-    }, 2200);
+    }, 700);
   } catch {}
 }
 

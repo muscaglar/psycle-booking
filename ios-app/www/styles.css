@@ -2279,107 +2279,139 @@ select:focus, input:focus {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   Onboarding tour (Feature: onboarding)
+   Onboarding — a centred modal carousel (reliable; no element targeting)
    ════════════════════════════════════════════════════════════════ */
 .onboard-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  /* Dim comes from the spotlight's huge box-shadow so the highlighted
-     target stays bright. Only when there's no target do we dim the
-     whole screen (.no-target). */
-  background: transparent;
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-7);
+  padding-bottom: calc(var(--space-7) + env(safe-area-inset-bottom));
   opacity: 0;
-  transition: opacity 0.25s ease, background 0.3s ease;
+  transition: opacity 0.25s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .onboard-overlay.show { opacity: 1; }
-.onboard-overlay.no-target { background: rgba(0, 0, 0, 0.62); }
 
-.onboard-spotlight {
-  position: fixed;
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.62), 0 0 0 2px var(--accent, #e94560);
-  pointer-events: none;
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  display: none;
-}
-
-.onboard-tip {
-  /* Anchored in ONE stable spot (lower-centre, above the tab bar). The
-     caption never jumps — only the spotlight moves to each target. */
-  position: fixed;
-  left: 50%;
-  bottom: calc(88px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  width: min(360px, calc(100vw - 32px));
+.onboard-card {
+  position: relative;
+  width: min(380px, 100%);
   background: var(--bg-panel, #161616);
-  border: 1px solid var(--border-light, #444);
-  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius-2xl, 16px);
   box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,0.5));
-  padding: var(--space-5, 18px);
+  padding: var(--space-11, 40px) var(--space-8, 20px) var(--space-8, 20px);
+  text-align: center;
+  transform: translateY(10px) scale(0.97);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.onboard-tip-title {
-  font-size: var(--text-lg, 16px);
-  font-weight: var(--weight-bold, 700);
-  color: var(--text-heading, #fff);
-  margin-bottom: var(--space-2, 8px);
-}
+.onboard-overlay.show .onboard-card { transform: none; }
 
-.onboard-tip-body {
-  font-size: var(--text-sm, 13px);
-  color: var(--text-muted, #aaa);
-  line-height: 1.5;
-  margin-bottom: var(--space-4, 16px);
+.onboard-skip {
+  position: absolute;
+  top: var(--space-5, 12px);
+  right: var(--space-6, 14px);
+  background: none;
+  border: none;
+  color: var(--text-faint, #666);
+  font-size: var(--text-sm, 11px);
+  cursor: pointer;
+  padding: 4px 6px;
 }
+.onboard-skip:hover { color: var(--text-muted, #aaa); }
 
-.onboard-tip-foot {
+.onboard-icon {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto var(--space-6, 14px);
+  border-radius: var(--radius-full, 9999px);
+  background: rgba(233, 69, 96, 0.12);
+  color: var(--accent, #e94560);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3, 12px);
+  justify-content: center;
+}
+.onboard-icon svg { width: 36px; height: 36px; }
+
+.onboard-title {
+  font-family: var(--font-display, sans-serif);
+  font-weight: 400;
+  font-size: var(--text-3xl, 20px);
+  letter-spacing: 0.02em;
+  color: var(--text-heading, #fff);
+  margin-bottom: var(--space-4, 10px);
+}
+
+.onboard-body {
+  font-size: var(--text-md, 13px);
+  line-height: 1.6;
+  color: var(--text-muted, #aaa);
+  margin: 0 auto var(--space-8, 20px);
+  max-width: 300px;
+  min-height: 4.2em;
 }
 
 .onboard-dots {
   display: flex;
-  gap: var(--space-2, 6px);
+  gap: var(--space-3, 8px);
+  justify-content: center;
+  margin-bottom: var(--space-7, 16px);
 }
-
 .onboard-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-full, 9999px);
-  background: var(--text-off, #444);
-  transition: background var(--transition-fast, 0.12s);
+  background: var(--border-light, #333);
+  transition: width 0.25s ease, background 0.25s ease;
 }
-
-.onboard-dot.active { background: var(--accent, #e94560); }
-
-.onboard-tip-actions {
-  display: flex;
-  gap: var(--space-2, 8px);
-}
-
-.onboard-btn {
-  padding: var(--space-2, 8px) var(--space-4, 14px);
-  border-radius: var(--radius-md, 8px);
-  font-size: var(--text-sm, 12px);
-  font-weight: var(--weight-semibold, 600);
-  cursor: pointer;
-  border: 1px solid var(--border, #333);
-  background: transparent;
-  color: var(--text-muted, #aaa);
-  transition: background var(--transition-fast, 0.12s), filter var(--transition-fast, 0.12s);
-}
-
-.onboard-btn-skip:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
-
-.onboard-btn-next {
+.onboard-dot.active {
   background: var(--accent, #e94560);
-  border-color: var(--accent, #e94560);
+  width: 22px;
+  border-radius: 4px;
+}
+
+.onboard-cta {
+  width: 100%;
+  padding: var(--space-5, 12px);
+  border: none;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--accent, #e94560);
   color: #fff;
+  font-size: var(--text-md, 13px);
+  font-weight: var(--weight-bold, 700);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-base, 0.15s), transform var(--transition-fast, 0.12s);
+}
+.onboard-cta:hover { background: var(--accent-hover, #c73650); }
+.onboard-cta:active { transform: scale(0.98); }
+
+@keyframes onboardStepIn {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+.onboard-card.step-in .onboard-icon,
+.onboard-card.step-in .onboard-title,
+.onboard-card.step-in .onboard-body {
+  animation: onboardStepIn 0.32s ease both;
+}
+.onboard-card.step-in .onboard-title { animation-delay: 0.05s; }
+.onboard-card.step-in .onboard-body { animation-delay: 0.09s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .onboard-card { transition: none; }
+  .onboard-card.step-in .onboard-icon,
+  .onboard-card.step-in .onboard-title,
+  .onboard-card.step-in .onboard-body { animation: none; }
 }
 
 .onboard-btn-next:hover { filter: brightness(1.08); }
