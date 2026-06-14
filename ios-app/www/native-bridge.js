@@ -890,6 +890,242 @@
   }, 3000);
 
 
+  // ── Notification Action Buttons (Book / Cancel / Snooze) ────────
+  // Register an actionable notification CATEGORY with the Capacitor
+  // LocalNotifications plugin. On iOS the plugin turns each action type
+  // into a UNNotificationCategory whose UNNotificationActions render as
+  // the swipe-down / long-press buttons on the banner.
+  //
+  // To use it, schedule a notification with `actionTypeId: 'PSYCLE_CLASS'`
+  // and an `extra: { eventId }` payload; the listener below routes taps.
+  // (The native-only equivalent — registering the category in Swift via
+  // UNUserNotificationCenter — is documented in
+  // PsycleIntents/NotificationCategories.swift for non-Capacitor paths.)
+
+  function registerNotificationActions() {
+    if (!LocalNotifications || typeof LocalNotifications.registerActionTypes !== 'function') return;
+    LocalNotifications.registerActionTypes({
+      types: [{
+        id: 'PSYCLE_CLASS',
+        actions: [
+          { id: 'BOOK',   title: 'Book' },
+          { id: 'CANCEL', title: 'Cancel',  destructive: true },
+          // foreground:false keeps the app backgrounded for a quick snooze.
+          { id: 'SNOOZE', title: 'Snooze',  foreground: false },
+        ],
+      }],
+    }).catch(function () {});
+  }
+
+  // Route a tapped action button to the right web-app flow. The web layer
+  // owns booking/cancel (auth + slot picker), so we surface the eventId and
+  // let app.js handle it; SNOOZE re-schedules a one-off reminder natively.
+  function handleNotificationAction(notification) {
+    try {
+      var actionId = notification.actionId;
+      var data = (notification.notification && notification.notification.extra) || {};
+      var eventId = data.eventId;
+      if (actionId === 'SNOOZE') {
+        // Re-fire in 1 hour without involving the web layer.
+        try {
+          LocalNotifications.schedule({
+            notifications: [{
+              id: Math.floor(Math.random() * 100000) + 1,
+              title: notification.notification.title || 'Psycle reminder',
+              body: notification.notification.body || '',
+              schedule: { at: new Date(Date.now() + 60 * 60 * 1000) },
+              actionTypeId: 'PSYCLE_CLASS',
+              extra: data,
+            }],
+          }).catch(function () {});
+        } catch (e) {}
+        return;
+      }
+      // BOOK / CANCEL / default tap → hand off to the web app if it exposes
+      // a handler; otherwise just deep-link by stashing the intent.
+      if (typeof window.handleNotificationIntent === 'function') {
+        window.handleNotificationIntent(actionId || 'TAP', eventId, data);
+      } else {
+        try {
+          sessionStorage.setItem('psycle_pending_notification_action',
+            JSON.stringify({ actionId: actionId || 'TAP', eventId: eventId, data: data }));
+        } catch (e) {}
+      }
+    } catch (e) {
+      try { console.warn('[native-notif] action handling failed:', e); } catch (_) {}
+    }
+  }
+
+  if (LocalNotifications) {
+    registerNotificationActions();
+    try {
+      LocalNotifications.addListener('localNotificationActionPerformed', handleNotificationAction);
+    } catch (e) {}
+  }
+
+
+  // ── Widget / Live Activity / Siri Snapshot ─────────────────────
+  // Compute a compact "next class" + "this week" snapshot from the app
+  // state (_myBookings + _eventCache, already populated/synced) and write
+  // it to Capacitor Preferences. The WidgetKit timeline provider, the
+  // ActivityKit Live Activity, and the "What's my next class?" App Intent
+  // all read these keys from the SHARED UserDefaults(suiteName: appGroup).
+  //
+  // IMPORTANT (Capacitor ↔ native mapping):
+  //   capacitor.config.json sets Preferences.group = "PsycleFinderSettings".
+  //   Capacitor's iOS Preferences plugin stores values in
+  //   UserDefaults(suiteName: "<group>"), namespacing each key as
+  //   "<group>.<key>" -> so widget_next_class is persisted under the
+  //   defaults key "PsycleFinderSettings.widget_next_class".
+  //   A plain UserDefaults(suiteName: "PsycleFinderSettings") is NOT an
+  //   App Group container and is NOT shareable with an extension. To let
+  //   the widget/Live Activity/intent read the snapshot we ALSO mirror it
+  //   into a real App Group suite (WIDGET_APP_GROUP below) under the bare
+  //   keys "widget_next_class" / "widget_week". See NATIVE_FEATURES.md.
+
+  // App Group container id. MUST match the App Group capability you add in
+  // Xcode to BOTH the main app target and every extension target. This is a
+  // placeholder — change it (here and in every Swift file) if you use a
+  // different id, then re-run `npm run sync`.
+  var WIDGET_APP_GROUP = 'group.com.psyclefinder.app';
+
+  var WIDGET_NEXT_KEY = 'widget_next_class';
+  var WIDGET_WEEK_KEY = 'widget_week';
+
+  // Capacitor Preferences plugin: writes to UserDefaults(suiteName: group)
+  // under "<group>.<key>". Always available (web build excluded earlier).
+  function _prefSet(key, value) {
+    try { Preferences.set({ key: key, value: value }).catch(function () {}); } catch (e) {}
+  }
+
+  // App Group mirror: writes the SAME logical value under the BARE key into
+  // the shared App Group suite, so a native extension can read it directly
+  // with UserDefaults(suiteName: WIDGET_APP_GROUP).string(forKey: key).
+  //
+  // We can only reach the App Group suite natively. If a Capacitor plugin
+  // that exposes the App Group is present (custom or community), use it;
+  // otherwise this is a no-op and the snapshot still lands in the standard
+  // Preferences suite. NATIVE_FEATURES.md documents pointing Capacitor
+  // Preferences directly at the App Group suite as the simplest wiring.
+  function _appGroupSet(key, value) {
+    try {
+      var AppGroup = Capacitor.Plugins.AppGroupPreferences || Capacitor.Plugins.SharedPreferences;
+      if (AppGroup && typeof AppGroup.set === 'function') {
+        AppGroup.set({ group: WIDGET_APP_GROUP, key: key, value: value }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+
+  function _writeSnapshotKey(key, value) {
+    _prefSet(key, value);
+    _appGroupSet(key, value);
+  }
+
+  // Resolve a display-ready event object from the cache, or null.
+  function _snapshotEventFor(eventId) {
+    try {
+      var evt = (_eventCache || {})[String(eventId)];
+      if (!evt || !evt.start_at) return null;
+      var booking = (_myBookings || {})[String(eventId)];
+      var slots = (booking && Array.isArray(booking.slots)) ? booking.slots.slice() : [];
+      return {
+        eventId: String(eventId),
+        startAt: evt.start_at,                          // ISO string
+        instrName: evt._instrName || '',
+        typeName: evt._typeName || 'Class',
+        studioName: evt._studioName || '',
+        locName: evt._locName || evt._locFullName || '',
+        slots: slots,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Recompute the widget snapshot from current app state and persist it.
+   * Defensive: never throws. Safe to call before state exists (writes null).
+   */
+  function updateWidgetSnapshot() {
+    try {
+      var bookings = (typeof _myBookings !== 'undefined' && _myBookings) ? _myBookings : {};
+      var cache = (typeof _eventCache !== 'undefined' && _eventCache) ? _eventCache : {};
+      var now = Date.now();
+
+      // Collect upcoming booked events (have a cache entry + future start).
+      var upcoming = [];
+      for (var id in bookings) {
+        if (!Object.prototype.hasOwnProperty.call(bookings, id)) continue;
+        var evt = cache[String(id)];
+        if (!evt || !evt.start_at) continue;
+        var ts = new Date(evt.start_at).getTime();
+        if (isNaN(ts) || ts < now) continue;
+        upcoming.push({ id: id, ts: ts });
+      }
+      upcoming.sort(function (a, b) { return a.ts - b.ts; });
+
+      // 1) Next class snapshot (or null when nothing upcoming).
+      var next = upcoming.length ? _snapshotEventFor(upcoming[0].id) : null;
+      _writeSnapshotKey(WIDGET_NEXT_KEY, JSON.stringify(next));
+
+      // 2) This-week buckets: next 7 days from now, one entry per day that
+      //    has >=1 booking, with the day's first start time.
+      var byDay = {};
+      for (var i = 0; i < upcoming.length; i++) {
+        var u = upcoming[i];
+        if (u.ts > now + 7 * 86400000) break; // sorted — rest are further out
+        var d = new Date(u.ts);
+        // Local YYYY-MM-DD key (avoid UTC shifting the day).
+        var dayKey = d.getFullYear() + '-' +
+          String(d.getMonth() + 1).padStart(2, '0') + '-' +
+          String(d.getDate()).padStart(2, '0');
+        if (!byDay[dayKey]) {
+          byDay[dayKey] = { day: dayKey, count: 0, firstStart: cache[String(u.id)].start_at };
+        }
+        byDay[dayKey].count++;
+      }
+      var week = Object.keys(byDay).sort().map(function (k) { return byDay[k]; });
+      _writeSnapshotKey(WIDGET_WEEK_KEY, JSON.stringify(week));
+
+      // Hint the native side to reload widget timelines, if a reload plugin
+      // is wired up. No-op otherwise. (See NATIVE_FEATURES.md.)
+      try {
+        var WC = Capacitor.Plugins.WidgetCenter || Capacitor.Plugins.WidgetReloader;
+        if (WC && typeof WC.reloadAllTimelines === 'function') {
+          WC.reloadAllTimelines().catch(function () {});
+        }
+      } catch (e) {}
+    } catch (e) {
+      // Last-resort guard: never let snapshot computation break the app.
+      try { console.warn('[native-widget] snapshot failed:', e); } catch (_) {}
+    }
+  }
+  window.updateWidgetSnapshot = updateWidgetSnapshot;
+
+  // Recompute on the booking lifecycle events the app emits.
+  if (typeof PsycleEvents !== 'undefined' && PsycleEvents && typeof PsycleEvents.on === 'function') {
+    try {
+      PsycleEvents.on('bookings:loaded', updateWidgetSnapshot);
+      PsycleEvents.on('booking:complete', updateWidgetSnapshot);
+      PsycleEvents.on('booking:cancelled', updateWidgetSnapshot);
+      // Seat-level changes alter slot lists shown on the widget too.
+      PsycleEvents.on('seat:cancelled', updateWidgetSnapshot);
+    } catch (e) {}
+  }
+
+  // Refresh whenever the app returns to the foreground (a class may have
+  // started/passed since the last write, flipping "next class").
+  try {
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') updateWidgetSnapshot();
+    });
+  } catch (e) {}
+
+  // Initial compute shortly after launch, once state has had a chance to
+  // hydrate from the bookings fetch / restore.
+  setTimeout(function () { updateWidgetSnapshot(); }, 4000);
+
+
   // ── Status Bar ─────────────────────────────────────────────────
   // Set status bar style based on theme
 

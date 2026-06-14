@@ -1,0 +1,138 @@
+//
+//  PsycleSnapshot.swift
+//  Shared model + App Group reader for widgets, Live Activity, and intents.
+//
+//  ── HOW TO ADD THIS FILE IN XCODE ────────────────────────────────────────
+//  Add this file to the **target membership** of EVERY target that needs the
+//  snapshot: the Widget Extension, the (optional) Live Activity code in the
+//  main app, AND the App Intents extension (or the app target if intents live
+//  there). Select the file in the Project navigator → File Inspector →
+//  "Target Membership" → tick all of them.
+//
+//  ── WHERE THE DATA COMES FROM ────────────────────────────────────────────
+//  native-bridge.js writes two JSON strings into the shared App Group
+//  defaults: `widget_next_class` and `widget_week`. See NATIVE_FEATURES.md
+//  for how Capacitor Preferences maps onto UserDefaults(suiteName:).
+//
+//  NOTE: This is drop-in source. It compiles only once it is a member of a
+//  real Swift target created in Xcode (you cannot create that target from
+//  the CLI — see NATIVE_FEATURES.md).
+//
+
+import Foundation
+
+/// The App Group container id. MUST match:
+///   - the App Group capability on the main app + every extension (Xcode), and
+///   - `WIDGET_APP_GROUP` in native-bridge.js.
+public enum PsycleAppGroup {
+    public static let id = "group.com.psyclefinder.app"
+}
+
+/// The bare keys native-bridge.js writes into the App Group suite.
+public enum PsycleSnapshotKey {
+    public static let nextClass = "widget_next_class"
+    public static let week = "widget_week"
+}
+
+/// One upcoming class. Mirrors the JS `widget_next_class` shape.
+public struct PsycleNextClass: Codable, Equatable {
+    public let eventId: String
+    public let startAt: String   // ISO-8601 string, e.g. "2026-06-15T18:30:00Z"
+    public let instrName: String
+    public let typeName: String
+    public let studioName: String
+    public let locName: String
+    public let slots: [Int]
+
+    /// Parsed start date, or nil if the ISO string can't be parsed.
+    public var startDate: Date? {
+        PsycleDateParser.parse(startAt)
+    }
+
+    /// "Bike 12 & 14" / "Bed 3" — label depends on class type, matching the
+    /// web app's slotLabel() logic.
+    public var slotSummary: String? {
+        guard !slots.isEmpty else { return nil }
+        let label = PsycleSlotLabel.label(for: typeName)
+        let nums = slots.map(String.init).joined(separator: " & ")
+        return slots.count == 1 ? "\(label) \(nums)" : "\(label)s \(nums)"
+    }
+}
+
+/// One day in the "this week" bucket list. Mirrors JS `widget_week` entries.
+public struct PsycleWeekDay: Codable, Equatable {
+    public let day: String        // local "YYYY-MM-DD"
+    public let count: Int
+    public let firstStart: String // ISO-8601 string
+
+    public var date: Date? {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = .current
+        return f.date(from: day)
+    }
+}
+
+/// Class-type → slot label, mirroring native-bridge.js `_nativeSlotLabel`.
+public enum PsycleSlotLabel {
+    public static func label(for typeName: String) -> String {
+        let n = typeName.uppercased()
+        if n.contains("REFORMER") { return "Bed" }
+        if n.contains("RIDE") { return "Bike" }
+        if n.contains("PILATES") { return "Bed" }
+        if n.contains("STRENGTH") || n.contains("LIFT") || n.contains("WEIGHTS") || n.contains("TREAD") { return "Bench" }
+        return "Spot"
+    }
+}
+
+/// Tolerant ISO-8601 parsing (handles fractional seconds + plain forms).
+public enum PsycleDateParser {
+    public static func parse(_ iso: String) -> Date? {
+        let f1 = ISO8601DateFormatter()
+        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f1.date(from: iso) { return d }
+        let f2 = ISO8601DateFormatter()
+        f2.formatOptions = [.withInternetDateTime]
+        if let d = f2.date(from: iso) { return d }
+        // Fallback: "yyyy-MM-dd'T'HH:mm:ss" without zone -> assume current TZ.
+        let f3 = DateFormatter()
+        f3.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        f3.timeZone = .current
+        return f3.date(from: iso)
+    }
+}
+
+/// Reads the snapshot the web app persisted into the shared App Group.
+public enum PsycleSnapshotStore {
+
+    /// Shared defaults for the App Group. nil only if the App Group
+    /// capability/id is misconfigured (see NATIVE_FEATURES.md).
+    public static var defaults: UserDefaults? {
+        UserDefaults(suiteName: PsycleAppGroup.id)
+    }
+
+    /// The next upcoming class, or nil if none / not yet written.
+    public static func nextClass() -> PsycleNextClass? {
+        guard let raw = string(forKey: PsycleSnapshotKey.nextClass),
+              let data = raw.data(using: .utf8) else { return nil }
+        // JS writes the literal string "null" when there's no next class.
+        if raw == "null" { return nil }
+        return try? JSONDecoder().decode(PsycleNextClass.self, from: data)
+    }
+
+    /// This week's day buckets (possibly empty).
+    public static func week() -> [PsycleWeekDay] {
+        guard let raw = string(forKey: PsycleSnapshotKey.week),
+              let data = raw.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([PsycleWeekDay].self, from: data)) ?? []
+    }
+
+    /// Reads a key from the App Group suite, falling back to the namespaced
+    /// Capacitor Preferences key ("PsycleFinderSettings.<key>") in case the
+    /// App Group mirror wasn't written (defensive — see NATIVE_FEATURES.md).
+    private static func string(forKey key: String) -> String? {
+        guard let d = defaults else { return nil }
+        if let v = d.string(forKey: key) { return v }
+        return d.string(forKey: "PsycleFinderSettings.\(key)")
+    }
+}
