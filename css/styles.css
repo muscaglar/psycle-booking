@@ -105,6 +105,17 @@ select:focus, input:focus {
   border-color: var(--accent, #e94560);
 }
 
+/* iOS Safari auto-zooms into any focused field whose font-size is < 16px and
+   frequently won't zoom back out afterwards (worse in standalone PWA mode,
+   leaving the app stuck zoomed in). Pin every form control to 16px on mobile so
+   focusing a field — e.g. the instructor search — never zooms the viewport.
+   Desktop (>=1024px) keeps the compact sizes defined elsewhere. */
+@media (max-width: 1023px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
 .btn {
   background: var(--accent, #e94560);
   /* Always white — accent backgrounds are constant across themes, and

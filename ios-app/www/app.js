@@ -118,6 +118,16 @@ function slotLabelForEvent(eventId) {
 }
 
 /**
+ * Format a booked slot list with the correct noun for the class type.
+ * e.g. formatSlots('Bench', [12, 15]) -> "Benches 12 & 15", ('Bike', [7]) -> "Bike 7"
+ */
+function formatSlots(label, slots) {
+  if (!slots || !slots.length) return '';
+  const plural = label === 'Bench' ? 'Benches' : label + 's';
+  return (slots.length === 1 ? label : plural) + ' ' + slots.join(' & ');
+}
+
+/**
  * Wrap an instructor name in a clickable link that opens their profile modal.
  */
 function instrLink(name, instrId) {
@@ -1209,7 +1219,7 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       const isWaitlist = !!opts.waitlist;
       const label = isWaitlist
         ? 'Waitlisted ✓'
-        : (slots?.length ? `Bikes ${slots.join(' & ')} ✓` : 'Booked ✓');
+        : (slots?.length ? `${formatSlots(slotLabelForEvent(eventId), slots)} ✓` : 'Booked ✓');
       btn.textContent = label;
       btn.className = 'book-btn booked';
       const bookingId = data?.data?.id || data?.id;
@@ -1274,9 +1284,7 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   }
 
   // Build slot label
-  const slotStr = slotsArr.length
-    ? `${_SL}${slotsArr.length > 1 ? 's' : ''} ${slotsArr.join(' & ')}`
-    : '';
+  const slotStr = formatSlots(_SL, slotsArr);
 
   // Class info line
   const classLine = [typeName, instrName].filter(Boolean).join(' \u00b7 ');
@@ -1617,7 +1625,7 @@ async function confirmUnbook(bookingId, eventId, btn) {
 function applyBookedState(btn, eventId, booking) {
   const slotLabel = booking.waitlisted
     ? 'Waitlisted ✓'
-    : (booking.slots.length ? `Bikes ${booking.slots.join(' & ')} ✓` : 'Booked ✓');
+    : (booking.slots.length ? `${formatSlots(slotLabelForEvent(eventId), booking.slots)} ✓` : 'Booked ✓');
   btn.textContent = slotLabel;
   btn.className = 'book-btn booked';
   btn.disabled = false;
@@ -1666,10 +1674,9 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
 
   let bookLabel, bookCls, bookDisabled, bookOnclick;
   if (myBooking) {
-    const slotLabel = myBooking.waitlisted
+    bookLabel = myBooking.waitlisted
       ? 'Waitlisted ✓'
-      : (myBooking.slots.length ? `Bikes ${myBooking.slots.join(' & ')} ✓` : 'Booked ✓');
-    bookLabel = slotLabel;
+      : (myBooking.slots.length ? `${formatSlots(slotLabel(type?.name), myBooking.slots)} ✓` : 'Booked ✓');
     bookCls = 'book-btn booked';
     bookDisabled = '';
     // Open picker to show/cancel seats; fall back to direct cancel if no layout
@@ -3095,8 +3102,8 @@ window.openClassDetail = function (eventId) {
   const myBooking = _myBookings[String(eventId)];
   let bookBtnHtml;
   if (myBooking) {
-    const slotLabel = myBooking.slots.length ? 'Bikes ' + myBooking.slots.join(' & ') + ' ✓' : 'Booked ✓';
-    bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">' + escapeHTML(slotLabel) + '</button>';
+    const bookedLabel = myBooking.slots.length ? formatSlots(slotLabelForEvent(eventId), myBooking.slots) + ' ✓' : 'Booked ✓';
+    bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">' + escapeHTML(bookedLabel) + '</button>';
   } else if (evt.is_fully_booked && !evt.is_waitlistable) {
     bookBtnHtml = '<button class="cds-book-btn" disabled>Full</button>';
   } else if (evt.is_fully_booked && evt.is_waitlistable) {

@@ -101,13 +101,16 @@ function _icsFold(line) {
 }
 
 /**
- * Build slot/bike label for description.
- * e.g. [12, 15] -> "Bikes 12 & 15", [7] -> "Bike 7", [] -> ""
+ * Build a slot label for the description, using the right noun for the class
+ * type (Bike / Bed / Bench / Spot).
+ * e.g. ([12, 15], 'Reformer') -> "Beds 12 & 15", ([7], 'Ride') -> "Bike 7", [] -> ""
  */
-function _slotLabel(slots) {
+function _slotLabel(slots, typeName) {
   if (!slots || slots.length === 0) return '';
-  if (slots.length === 1) return 'Bike ' + slots[0];
-  return 'Bikes ' + slots.join(' & ');
+  const label = (typeof slotLabel === 'function') ? slotLabel(typeName) : 'Spot';
+  return (typeof formatSlots === 'function')
+    ? formatSlots(label, slots)
+    : (slots.length === 1 ? label + ' ' + slots[0] : label + 's ' + slots.join(' & '));
 }
 
 /**
@@ -133,7 +136,7 @@ function generateICS(entriesArg) {
   for (const entry of entries) {
     const start = new Date(entry.startAt);
     const end = new Date(start.getTime() + (entry.duration || 45) * 60 * 1000);
-    const slots = _slotLabel(entry.slots);
+    const slots = _slotLabel(entry.slots, entry.typeName);
     let summary = entry.instrName
       ? `${entry.typeName} - ${entry.instrName}`
       : entry.typeName;
@@ -249,7 +252,7 @@ function addToGoogleCalendar() {
   const fmt = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const title = encodeURIComponent(e.instrName ? e.typeName + ' - ' + e.instrName : e.typeName);
   const loc = encodeURIComponent(e.address || e.locName || '');
-  const slots = _slotLabel(e.slots);
+  const slots = _slotLabel(e.slots, e.typeName);
   const details = encodeURIComponent(
     (e.instrName ? 'Instructor: ' + e.instrName + '\n' : '') +
     (slots ? slots + '\n' : '') +

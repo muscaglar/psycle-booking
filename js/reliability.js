@@ -291,7 +291,7 @@
 
       // 2. Optimistically update UI immediately
       const optimisticLabel = (slots && slots.length)
-        ? 'Bikes ' + slots.join(' & ') + ' \u2713'
+        ? formatSlots(slotLabelForEvent(eventId), slots) + ' \u2713'
         : 'Booked \u2713';
       btn.textContent = optimisticLabel;
       btn.className = 'book-btn booked';
