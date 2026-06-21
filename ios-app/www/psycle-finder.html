@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="cloud">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="tabs.css">
 <link rel="stylesheet" href="settings.css">
 <link rel="stylesheet" href="explore.css">
-<meta name="theme-color" content="#08080a">
+<meta name="theme-color" content="#efeee9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Psync">
@@ -155,9 +155,12 @@
     <input type="hidden" id="daysAhead" value="7">
   </div>
 
-  <div class="control-group" style="justify-content:space-between;gap:8px;flex-direction:row;align-items:flex-end">
-    <button onclick="clearFilters()" style="padding:6px 12px;width:auto;background:none;border:none;color:var(--text-ghost,#555);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px">Clear filters</button>
-    <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
+  <div class="control-group" style="justify-content:space-between;gap:8px;flex-direction:row;align-items:center;flex-wrap:wrap">
+    <span id="lastUpdated" class="last-updated"></span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="clearFilters()" style="padding:6px 12px;width:auto;background:none;border:none;color:var(--text-ghost,#555);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px">Clear filters</button>
+      <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
+    </div>
   </div>
   </div>
 </div>
@@ -193,6 +196,7 @@
 <script defer src="state.js"></script>
 <script defer src="security.js"></script>
 <script defer src="theme.js"></script>
+<script defer src="facets.js"></script>
 <script defer src="app.js"></script>
 <script defer src="reliability.js"></script>
 <script defer src="interactions.js"></script>

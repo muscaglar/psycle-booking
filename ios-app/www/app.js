@@ -545,10 +545,16 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   updateDiscoverEmptyState();
   updateFiltersSummary();
 
-  // Feature 13: restore the last search instantly (kills the empty-state →
-  // results layout jump), then re-run it silently so availability is fresh.
-  if (restoreLastResults() && getBearerToken()) {
-    setTimeout(() => { try { search(); } catch {} }, 800);
+  // Pre-load the full timetable on launch: restore the last view instantly
+  // (kills the empty-state → results layout jump), then let search() hydrate
+  // the cached window (instant smart filtering) and revalidate in the
+  // background. Always run search when signed in so the window loads even on
+  // a fresh session with no last-results.
+  if (getBearerToken()) {
+    const shown = restoreLastResults();
+    setTimeout(() => { try { search(); } catch {} }, shown ? 800 : 200);
+  } else {
+    restoreLastResults();
   }
 })();
 
@@ -668,15 +674,13 @@ function clearFilters() {
     });
   }
   document.getElementById('instrSearch').value = '';
-  renderInstrChips();
-  renderInstrDropdown();
   selectedLocations.clear();
-  renderLocationChips();
   selectedCategories.clear();
   selectedStrengthSubs.clear();
   selectedStrengthSubs.add('UPPER'); selectedStrengthSubs.add('LOWER'); selectedStrengthSubs.add('FULL');
-  renderCategoryPills();
+  renderInstrChips();
   renderStrengthSubPills();
+  refreshFacetCounts(); // re-renders the instructor dropdown, studio chips, and class-type pills
   document.getElementById('startDate').value = localDateStr();
   document.getElementById('daysAhead').value = 7;
   document.getElementById('results').innerHTML = '<div class="status">Pick an instructor, studio, or date to search.</div>';
@@ -718,7 +722,155 @@ async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds, isS
 
 let _searchSeq = 0;
 
-async function search() {
+// ── Pre-loaded timetable window + stale-while-revalidate cache ───────
+// On launch we hydrate the full all-studios window from localStorage
+// (instant smart filtering), then revalidate in the background so
+// availability stays fresh. Studio/instructor/type filtering is entirely
+// client-side over this window; only a date change or explicit Search
+// re-fetches. Booking is validated server-side, so brief staleness can't
+// cause a bad booking.
+const WINDOW_CACHE_KEY = 'psycle_window_cache';
+const WINDOW_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function currentWindowDates() {
+  const startDate = document.getElementById('startDate').value;
+  const days = parseInt(document.getElementById('daysAhead').value) || 14;
+  let endDateStr;
+  if (_dateQuickMode === 'today' || _dateQuickMode === 'tomorrow') {
+    endDateStr = startDate;
+  } else {
+    const [y, m, d] = startDate.split('-').map(Number);
+    const end = new Date(y, m - 1, d + days);
+    endDateStr = [end.getFullYear(), String(end.getMonth() + 1).padStart(2, '0'), String(end.getDate()).padStart(2, '0')].join('-');
+  }
+  return { startDate, endDateStr, windowKey: startDate + '|' + endDateStr };
+}
+
+function currentFilters() {
+  const { startDate, endDateStr } = currentWindowDates();
+  return {
+    instructorId: [...selectedInstructors],
+    locationIds: [...selectedLocations],
+    categoryKeys: new Set(selectedCategories),
+    startDate, endDateStr,
+    strengthSubs: new Set(selectedStrengthSubs),
+  };
+}
+
+// Lite per-event view that powers the cascading facet counts. Rebuilt
+// whenever the window data changes (fetch / hydrate / revalidate) — NOT on
+// filter changes (those reuse it), which keeps counts stable + correct.
+function _buildFacetClasses(events, relations) {
+  const studioMap = Object.fromEntries((relations.studios || []).map(s => [s.id, s]));
+  const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
+  const now = new Date();
+  window._facetClasses = (events || [])
+    .filter(e => new Date(e.start_at) >= now)
+    .map(e => ({
+      instr: String(e.instructor_id),
+      loc: String((studioMap[e.studio_id] || {}).location_id || ''),
+      cat: getCategory((typeMap[e.event_type_id] || {}).name || '').key,
+      start_at: e.start_at,
+    }));
+  refreshFacetCounts();
+}
+
+function _setWindow(windowKey, events, relations, fetchedAt) {
+  window._windowKey = windowKey;
+  window._windowEvents = events;
+  window._windowRelations = relations;
+  window._windowFetchedAt = fetchedAt || Date.now();
+}
+
+function _persistWindow(windowKey, events, relations) {
+  try {
+    localStorage.setItem(WINDOW_CACHE_KEY, JSON.stringify({ key: windowKey, fetchedAt: Date.now(), events, relations }));
+  } catch (e) { /* quota / serialization — non-fatal; the in-memory cache still works */ }
+}
+
+function _readWindowCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(WINDOW_CACHE_KEY) || 'null');
+    if (c && c.events && c.relations && c.fetchedAt && (Date.now() - c.fetchedAt) < WINDOW_CACHE_TTL) return c;
+  } catch (e) {}
+  return null;
+}
+
+function renderFromWindow(filters) {
+  const cont = document.getElementById('results');
+  if (cont) cont.innerHTML = '';
+  render(window._windowEvents, window._windowRelations, filters, true);
+  if (typeof refreshFacetCounts === 'function') refreshFacetCounts();
+  renderLastUpdated();
+}
+
+// Fetch the full window (every studio) for a date range.
+async function fetchFullWindow(startDate, endDateStr, stale) {
+  const seenIds = new Set();
+  let allEvents = [], relations = null;
+  const locs = locations.filter(l => l.handle !== 'psycle-at-home');
+  await Promise.all(locs.map(async loc => {
+    const r = await fetchEventsForLocation(loc.id, startDate, endDateStr, seenIds, stale);
+    if (stale && stale()) return;
+    allEvents = allEvents.concat(r.events);
+    if (!relations) relations = r.relations;
+    else if (r.relations) mergeRelations(relations, r.relations);
+  }));
+  return { events: allEvents, relations };
+}
+
+// Background refresh: silently re-fetch the current window, update the
+// cache + facets, and re-render unless the user has moved on. No spinner.
+async function revalidateWindow() {
+  if (!getBearerToken()) return;
+  const { startDate, endDateStr, windowKey } = currentWindowDates();
+  const mySeq = ++_searchSeq;
+  const stale = () => mySeq !== _searchSeq;
+  let result;
+  try { result = await fetchFullWindow(startDate, endDateStr, stale); }
+  catch (e) { return; }
+  if (!result || !result.relations) return;
+  if (currentWindowDates().windowKey !== windowKey) return; // date changed mid-flight
+  _setWindow(windowKey, result.events, result.relations);
+  _persistWindow(windowKey, result.events, result.relations);
+  _buildFacetClasses(result.events, result.relations);
+  if (stale()) return; // a newer user action owns the view
+  renderFromWindow(currentFilters());
+}
+
+// ── "Last updated" + manual refresh (Discover filters) ──────────────
+function _relativeTime(ts) {
+  if (!ts) return '';
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'yesterday' : d + 'd ago';
+}
+
+function renderLastUpdated() {
+  const el = document.getElementById('lastUpdated');
+  if (!el) return;
+  if (!window._windowFetchedAt) { el.innerHTML = ''; return; }
+  el.innerHTML = 'Updated ' + _relativeTime(window._windowFetchedAt) +
+    ' · <button type="button" class="refresh-link" onclick="refreshWindow()">Refresh</button>';
+}
+
+// Manual refresh — silently re-fetch the current window (results stay
+// visible while loading) and restamp "last updated".
+async function refreshWindow() {
+  const el = document.getElementById('lastUpdated');
+  const btn = el && el.querySelector('.refresh-link');
+  if (btn) { btn.textContent = 'Refreshing…'; btn.disabled = true; }
+  try { await revalidateWindow(); } catch (e) {}
+  renderLastUpdated();
+}
+
+async function search(opts) {
+  opts = opts || {};
+  const force = !!opts.force;
   const instructorId = [...selectedInstructors];
   const locationIds  = [...selectedLocations];
   const categoryKeys = new Set(selectedCategories);
@@ -745,6 +897,36 @@ async function search() {
     ].join('-');
   }
 
+  const windowKey = startDate + '|' + endDateStr;
+  const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs) };
+
+  // 1. In-memory window: studio/instructor/type filtering is entirely
+  //    client-side, so when only those change (same date range) we re-render
+  //    from the cached window instantly — no refetch.
+  if (!force && window._windowKey === windowKey && Array.isArray(window._windowEvents) && window._windowRelations) {
+    renderFromWindow(filters);
+    return;
+  }
+
+  // 2. Persistent window (cross-launch): on first load only (no in-memory
+  //    window yet) AND only when the cached date range matches the current
+  //    one, hydrate instantly with NO network call. Otherwise fall through to
+  //    a real fetch. A later date change has an in-memory window, so it also
+  //    falls through to a fetch for that range.
+  if (!force && !window._windowEvents) {
+    const cached = _readWindowCache();
+    if (cached && cached.key === windowKey) {
+      // Daily model: a fresh (<24h), same-range cache loads with no network
+      // call. It's refreshed only when it ages out (>24h), the date range
+      // changes (new key → cache miss → fetch), or the user taps Refresh /
+      // pull-to-refresh. Booking re-fetches live availability regardless.
+      _setWindow(windowKey, cached.events, cached.relations, cached.fetchedAt);
+      _buildFacetClasses(cached.events, cached.relations);
+      renderFromWindow(filters);
+      return;
+    }
+  }
+
   const btn = document.getElementById('searchBtn');
   btn.disabled = false;
   btn.textContent = 'Stop';
@@ -753,14 +935,14 @@ async function search() {
 
   setStatus('<span class="spinner"></span>Connecting…');
 
-  const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs) };
   let allEvents = [], relations = null;
   const seenIds = new Set();
 
-  // Which locations to query (empty selection = all studios)
-  const locationsToFetch = locationIds.length
-    ? locations.filter(l => locationIds.includes(String(l.id)))
-    : locations.filter(l => l.handle !== 'psycle-at-home');
+  // Always fetch the FULL window (every studio) so the faceted counts reflect
+  // the complete timetable; the studio chips filter the displayed results
+  // client-side. The window is cached so subsequent studio/instructor/type
+  // changes don't refetch.
+  const locationsToFetch = locations.filter(l => l.handle !== 'psycle-at-home');
 
   try {
     if (locationsToFetch.length === 1) {
@@ -814,7 +996,13 @@ async function search() {
 
     if (!stale()) {
       if (!relations) setStatus('No classes found.');
-      else render(allEvents, relations, filters, true);
+      else {
+        _setWindow(windowKey, allEvents, relations);
+        _persistWindow(windowKey, allEvents, relations);
+        render(allEvents, relations, filters, true);
+        _buildFacetClasses(allEvents, relations);
+        renderLastUpdated();
+      }
     }
 
   } catch (e) {
@@ -824,7 +1012,7 @@ async function search() {
     if (mySeq === _searchSeq) {
       btn.disabled = false;
       btn.textContent = 'Search';
-      btn.onclick = search;
+      btn.onclick = () => search({ force: true });
     }
   }
 }
@@ -1747,6 +1935,11 @@ function render(events, relations, filters, done) {
   });
 
   const now = new Date();
+
+  // (Facet counts are rebuilt at the data source — _buildFacetClasses() on
+  // fetch/hydrate/revalidate — not here, so they don't depend on render's
+  // progressive `done` flag and stay correct on multi-location fetches.)
+
   const filtered = events.filter(e => {
     // Never show classes that have already started
     if (new Date(e.start_at) < now) return false;
@@ -1896,14 +2089,58 @@ function render(events, relations, filters, done) {
 // selectedLocations: Set of location IDs (strings). Empty = all studios.
 const selectedLocations = new Set();
 
+// ── Faceted filter counts ────────────────────────────────────────
+// The filter controls show LIVE match-counts from the fetched timetable
+// window (window._facetClasses, built in render()) and dim options that
+// would yield zero results given the OTHER active selections. Counts
+// exclude their own dimension (via PsycleFacets), so options narrow as
+// you stack filters — multi-select preserved. Until the first search
+// populates the window, _facetResult is null and controls render plainly.
+function discoverFacets() {
+  return PsycleFacets.run(window._facetClasses || [], {
+    instructor: [...selectedInstructors],
+    location: [...selectedLocations],
+    category: [...selectedCategories],
+  }, {
+    accessors: {
+      instructor: c => c.instr,
+      location: c => c.loc,
+      category: c => c.cat,
+    },
+  });
+}
+
+function refreshFacetCounts() {
+  window._facetResult =
+    (typeof PsycleFacets !== 'undefined' && window._facetClasses && window._facetClasses.length)
+      ? discoverFacets()
+      : null;
+  renderInstrDropdown();
+  renderLocationChips();
+  renderCategoryPills();
+}
+
+// value -> count map for one dimension, or null before the first search.
+function _facetCounts(dim) {
+  const r = window._facetResult;
+  if (!r || !r.facets || !r.facets[dim]) return null;
+  const m = Object.create(null);
+  r.facets[dim].forEach(o => { m[o.value] = o.count; });
+  return m;
+}
+
 function renderLocationChips() {
   const box = document.getElementById('locationChips');
   if (!box) return;
+  const counts = _facetCounts('location');
   const allActive = selectedLocations.size === 0;
   let html = `<button class="loc-chip${allActive ? ' active' : ''}" onclick="toggleLocation('')">All</button>`;
   html += locations.map(l => {
     const active = selectedLocations.has(String(l.id));
-    return `<button class="loc-chip${active ? ' active' : ''}" onclick="toggleLocation('${l.id}')">${escapeHTML(l.name.replace('Psycle ', ''))}</button>`;
+    const n = counts ? (counts[String(l.id)] || 0) : null;
+    const dim = (counts && n === 0 && !active) ? ' dimmed' : '';
+    const badge = n != null ? `<span class="chip-count">${n}</span>` : '';
+    return `<button class="loc-chip${active ? ' active' : ''}${dim}" onclick="toggleLocation('${l.id}')">${escapeHTML(l.name.replace('Psycle ', ''))}${badge}</button>`;
   }).join('');
   box.innerHTML = html;
   updateLocationHint();
@@ -1917,7 +2154,7 @@ function toggleLocation(id) {
     if (selectedLocations.has(sid)) selectedLocations.delete(sid);
     else selectedLocations.add(sid);
   }
-  renderLocationChips();
+  refreshFacetCounts();
   triggerAutoSearch();
 }
 
@@ -2013,22 +2250,35 @@ function renderInstrDropdown() {
   const dd = document.getElementById('instrDropdown');
   if (!dd) return;
   const list = getFilteredInstructors();
-  instrFocusIdx = -1;
-  // Sort: favourites first, then alphabetical
+  // Don't reset keyboard-nav focus if the dropdown is open (e.g. a background
+  // refreshFacetCounts shouldn't break arrow-key navigation mid-use).
+  if (dd.style.display === 'none') instrFocusIdx = -1;
+  const counts = _facetCounts('instructor');
+  // Sort: favourites first, then available-before-dimmed (zero-count last),
+  // preserving the alphabetical order within each group.
   const sorted = [...list].sort((a, b) => {
     const aFav = favouriteInstructors.has(String(a.id));
     const bFav = favouriteInstructors.has(String(b.id));
     if (aFav !== bFav) return aFav ? -1 : 1;
+    if (counts) {
+      const aZero = (counts[String(a.id)] || 0) === 0;
+      const bZero = (counts[String(b.id)] || 0) === 0;
+      if (aZero !== bZero) return aZero ? 1 : -1;
+    }
     return 0;
   });
   dd.innerHTML = sorted.length
     ? sorted.map((i, idx) => {
         const sel = selectedInstructors.has(String(i.id));
         const fav = favouriteInstructors.has(String(i.id));
-        return `<div class="instr-option${sel ? ' selected' : ''}" data-id="${i.id}" data-idx="${idx}"
+        const n = counts ? (counts[String(i.id)] || 0) : null;
+        const dim = (counts && n === 0 && !sel) ? ' dimmed' : '';
+        const badge = n != null ? `<span class="instr-count">${n}</span>` : '';
+        return `<div class="instr-option${sel ? ' selected' : ''}${dim}" data-id="${i.id}" data-idx="${idx}"
           onmousedown="event.preventDefault();toggleInstructor('${i.id}')">
           <span class="check">${sel ? '✓' : ''}</span>
           <span style="flex:1">${escapeHTML(i.full_name)}</span>
+          ${badge}
           <span class="fav-star${fav ? ' fav-on' : ''}" title="${fav ? 'Remove favourite' : 'Add favourite'}"
             onmousedown="event.preventDefault();toggleFavourite('${i.id}',event)">★</span>
         </div>`;
@@ -2042,14 +2292,14 @@ function toggleInstructor(id) {
   else selectedInstructors.add(sid);
   document.getElementById('instrSearch').value = '';
   renderInstrChips();
-  renderInstrDropdown();
+  refreshFacetCounts();
   triggerAutoSearch();
 }
 
 function removeInstructor(id) {
   selectedInstructors.delete(String(id));
   renderInstrChips();
-  renderInstrDropdown();
+  refreshFacetCounts();
   triggerAutoSearch();
 }
 
@@ -2107,18 +2357,21 @@ function renderCategoryPills() {
     presentCats.add(getCategory(t.name).key);
   }
   const catsToShow = CATEGORY_MAP.filter(c => presentCats.has(c.key) || eventTypes.length === 0);
+  const counts = _facetCounts('category');
   container.innerHTML = catsToShow.map(cat => {
     const active = selectedCategories.has(cat.key);
-    return `<button class="cat-pill${active ? ' active' : ''}"
-      style="color:${cat.color};border-color:${cat.color};${active ? `background:${cat.color}` : ''}"
-      onclick="toggleCategory('${cat.key}')">${cat.label}</button>`;
+    const n = counts ? (counts[cat.key] || 0) : null;
+    const dim = (counts && n === 0 && !active) ? ' dimmed' : '';
+    const badge = n != null ? `<span class="pill-count">${n}</span>` : '';
+    return `<button class="cat-pill${active ? ' active' : ''}${dim}"
+      onclick="toggleCategory('${cat.key}')">${cat.label}${badge}</button>`;
   }).join('');
 }
 
 function toggleCategory(key) {
   if (selectedCategories.has(key)) selectedCategories.delete(key);
   else selectedCategories.add(key);
-  renderCategoryPills();
+  refreshFacetCounts();
   renderStrengthSubPills();
   triggerAutoSearch();
 }

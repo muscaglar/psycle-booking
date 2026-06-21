@@ -83,7 +83,8 @@
     }
     if (tabId === 'tab-discover') {
       var hasResults = document.querySelector('#results .day-group');
-      if (hasResults && typeof search === 'function') return search() || true;
+      // Force a real refetch (the window cache would otherwise just re-filter).
+      if (hasResults && typeof search === 'function') return search({ force: true }) || true;
     }
     return null;
   }
@@ -393,6 +394,10 @@
       }
 
       if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
+      // Re-apply the restored selections against the (cached) window: refresh
+      // the cascading facet counts and re-render results to match the chips.
+      if (typeof refreshFacetCounts === 'function') refreshFacetCounts();
+      if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
     } catch (e) {
       // Silently fail if stored data is corrupt
     }

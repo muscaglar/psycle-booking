@@ -14,20 +14,24 @@
 
 // ── A. Themes ───────────────────────────────────────────────────
 // Every theme is a [data-theme="id"] token block in css/theme.css.
-// 'dark' is the :root default (no attribute). The header sun/moon
-// button quick-flips between the light/dark bases; flavour themes are
-// picked in Membership → Theme (or deep-linked with ?theme=id).
+// 'cloud' is the default (set as <html data-theme="cloud"> so the first
+// paint is correct). The header sun/moon button quick-flips between the
+// light/dark bases (Cloud ↔ Graphite); flavour themes are picked in
+// Membership → Theme (or deep-linked with ?theme=id).
 
 const THEME_KEY = 'psycle_theme';
 
 const APP_THEMES = [
-  { id: 'dark',      name: 'Noir',      base: 'dark',  bg: '#09090b', accent: '#e94560' },
-  { id: 'light',     name: 'Daylight',  base: 'light', bg: '#f7f7f8', accent: '#e94560' },
+  { id: 'cloud',     name: 'Cloud',     base: 'light', bg: '#efeee9', accent: '#1f6f5c' },
+  { id: 'linen',     name: 'Linen',     base: 'light', bg: '#e8e1d5', accent: '#b5573c' },
+  { id: 'graphite',  name: 'Graphite',  base: 'dark',  bg: '#131418', accent: '#7fc2a6' },
   { id: 'terminal',  name: 'Terminal',  base: 'dark',  bg: '#060906', accent: '#2bd96b' },
   { id: 'synthwave', name: 'Synthwave', base: 'dark',  bg: '#140a24', accent: '#ff2d95' },
   { id: 'gameboy',   name: 'Handheld',  base: 'dark',  bg: '#0f380f', accent: '#9bbc0f' },
   { id: 'blueprint', name: 'Blueprint', base: 'dark',  bg: '#0a1c30', accent: '#38bdf8' },
 ];
+
+const DEFAULT_THEME = 'cloud';
 window.APP_THEMES = APP_THEMES;
 
 function _themeById(id) {
@@ -38,11 +42,9 @@ function _themeById(id) {
 }
 
 function _applyTheme(id) {
-  if (id === 'dark') {
-    document.documentElement.removeAttribute('data-theme');
-  } else {
-    document.documentElement.setAttribute('data-theme', id);
-  }
+  // Always set an explicit attribute — Cloud (the default) is a real
+  // [data-theme="cloud"] block, so there is no attribute-less base.
+  document.documentElement.setAttribute('data-theme', id);
   // Status area / PWA chrome follows the theme background
   const meta = document.querySelector('meta[name="theme-color"]');
   const t = _themeById(id);
@@ -52,9 +54,9 @@ function _applyTheme(id) {
 function _resolveTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (_themeById(saved)) return saved;
-  // No (valid) preference — follow the system
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
-  return 'dark';
+  // No (valid) preference — follow the system (dark → Graphite, else Cloud)
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'graphite';
+  return DEFAULT_THEME;
 }
 
 window.getAppTheme = _resolveTheme;
@@ -92,10 +94,10 @@ function initTheme() {
 }
 
 function toggleTheme() {
-  // Quick toggle flips between the light/dark bases (and exits any
-  // flavour theme). First tap with no preference flips the system theme.
+  // Quick toggle flips between the light/dark bases Cloud ↔ Graphite
+  // (and exits any flavour theme).
   const cur = _themeById(_resolveTheme());
-  const next = cur && cur.base === 'light' ? 'dark' : 'light';
+  const next = cur && cur.base === 'light' ? 'graphite' : 'cloud';
   window.setAppTheme(next);
 }
 
@@ -300,7 +302,9 @@ function wrapSearch() {
   window._themeSearchWrapped = true;
   const originalSearch = window.search;
   window.search = async function() {
-    showSkeletonLoading();
+    // Skip the skeleton when a cached window exists — those searches re-filter
+    // instantly from cache, so the skeleton would just flash.
+    if (!window._windowEvents) showSkeletonLoading();
     haptic('tap');
     return originalSearch.apply(this, arguments);
   };
