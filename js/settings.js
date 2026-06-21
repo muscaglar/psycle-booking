@@ -112,7 +112,7 @@
 
     var _slPill = (typeof slotLabelForEvent === 'function') ? slotLabelForEvent(nextEvtId) : 'Bike';
     var slots = (booking && booking.slots && booking.slots.length)
-      ? _slPill + (booking.slots.length > 1 ? 's ' : ' ') + booking.slots.join(' & ')
+      ? formatSlots(_slPill, booking.slots)
       : '';
 
     _pillEl.innerHTML =

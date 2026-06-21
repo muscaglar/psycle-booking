@@ -118,13 +118,22 @@ function slotLabelForEvent(eventId) {
 }
 
 /**
+ * Pluralize a slot noun, preserving case: Bench -> Benches; Bike -> Bikes,
+ * Bed -> Beds, Spot -> Spots (and the lowercase variants used in the picker).
+ */
+function pluralizeSlotLabel(label) {
+  if (!label) return label;
+  return /^bench$/i.test(label) ? label + 'es' : label + 's';
+}
+
+/**
  * Format a booked slot list with the correct noun for the class type.
  * e.g. formatSlots('Bench', [12, 15]) -> "Benches 12 & 15", ('Bike', [7]) -> "Bike 7"
  */
 function formatSlots(label, slots) {
   if (!slots || !slots.length) return '';
-  const plural = label === 'Bench' ? 'Benches' : label + 's';
-  return (slots.length === 1 ? label : plural) + ' ' + slots.join(' & ');
+  const noun = slots.length === 1 ? label : pluralizeSlotLabel(label);
+  return noun + ' ' + slots.join(' & ');
 }
 
 /**
@@ -1004,7 +1013,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   const hasMySlots = mySlotIds.size > 0;
   const _sl = slotLabelForEvent(eventId).toLowerCase();
   const _SL = slotLabelForEvent(eventId);
-  document.getElementById('modalTitle').textContent = hasMySlots ? 'Your booking' : `Select your ${_sl}(s)`;
+  document.getElementById('modalTitle').textContent = hasMySlots ? 'Your booking' : `Select your ${pluralizeSlotLabel(_sl)}`;
 
   // Feature 4: Enhanced class summary header
   const _evt = _eventCache[String(eventId)];
@@ -1026,8 +1035,8 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   }
 
   document.getElementById('modalHint').textContent = hasMySlots
-    ? `Your ${_sl}(s) shown in green — click to cancel. Select another to book.`
-    : `Select up to ${MAX_SEATS} ${_sl}s`;
+    ? `Your ${pluralizeSlotLabel(_sl)} shown in green — click to cancel. Select another to book.`
+    : `Select up to ${MAX_SEATS} ${pluralizeSlotLabel(_sl)}`;
   document.getElementById('confirmBookBtn').disabled = true;
 
   const slots = layout.slots;
@@ -1109,9 +1118,9 @@ function selectBike(slotId) {
   const count = _selectedSlots.length;
   const _sl2 = _bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot';
   document.getElementById('modalHint').textContent =
-    count === 0 ? `Select up to ${MAX_SEATS} ${_sl2.toLowerCase()}s`
+    count === 0 ? `Select up to ${MAX_SEATS} ${pluralizeSlotLabel(_sl2.toLowerCase())}`
     : count === 1 ? `${_sl2} ${_selectedSlots[0]} selected — pick a second or confirm`
-    : `${_sl2}s ${_selectedSlots.join(' & ')} selected`;
+    : `${formatSlots(_sl2, _selectedSlots)} selected`;
   document.getElementById('confirmBookBtn').disabled = count === 0;
 }
 

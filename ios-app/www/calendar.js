@@ -108,9 +108,7 @@ function _icsFold(line) {
 function _slotLabel(slots, typeName) {
   if (!slots || slots.length === 0) return '';
   const label = (typeof slotLabel === 'function') ? slotLabel(typeName) : 'Spot';
-  return (typeof formatSlots === 'function')
-    ? formatSlots(label, slots)
-    : (slots.length === 1 ? label + ' ' + slots[0] : label + 's ' + slots.join(' & '));
+  return formatSlots(label, slots);
 }
 
 /**
