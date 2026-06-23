@@ -175,6 +175,7 @@
   var CAL_ENABLED_KEY = 'psycle_calendar_enabled';    // '0' disables sync entirely
   var PSYCLE_CAL_TITLE = 'Psycle';
   var PSYCLE_CAL_COLOR = '#e94560';
+  var PSYCLE_EVENT_MARKER = 'psycle-event-id:'; // stable owner tag in event notes for safe orphan removal
 
   function _loadCalMap() {
     try { return JSON.parse(localStorage.getItem(CAL_EVENT_MAP_KEY) || '{}'); } catch (e) { return {}; }
@@ -235,60 +236,22 @@
     }
   }
 
-  async function _resolveTargetCalendarId() {
-    var mode = localStorage.getItem(CAL_MODE_KEY) || 'auto';
-
-    // User picked a specific calendar — verify it still exists.
-    if (mode === 'custom') {
-      var target = localStorage.getItem(CAL_TARGET_KEY);
-      if (target) {
-        var list = await _listNativeCalendars();
-        if (list.some(function (c) { return String(c.id) === String(target); })) {
-          return target;
-        }
-        // Target disappeared (user deleted it) — fall through to auto.
-      }
-    }
-
-    // 'default' = let iOS pick (no calendarId on createEvent).
-    if (mode === 'default') return null;
-
-    // 'auto' (default): dedicated "Psycle" calendar, create if absent.
-    var cachedId = localStorage.getItem(CAL_ID_KEY);
-    if (cachedId) {
-      var cachedList = await _listNativeCalendars();
-      if (cachedList.some(function (c) { return String(c.id) === String(cachedId); })) {
-        return cachedId;
-      }
-      // Cached calendar was deleted — drop it and recreate below.
-      localStorage.removeItem(CAL_ID_KEY);
-    }
-
-    try {
-      var all = await _listNativeCalendars();
-      var existing = all.find(function (c) { return c.title === PSYCLE_CAL_TITLE; });
-      if (existing) {
-        localStorage.setItem(CAL_ID_KEY, existing.id);
-        return existing.id;
-      }
-      var created = await Calendar.createCalendar({
-        title: PSYCLE_CAL_TITLE,
-        color: PSYCLE_CAL_COLOR,
-      });
-      var calId = (created.result || created).id || created.id;
-      if (calId) {
-        localStorage.setItem(CAL_ID_KEY, calId);
-        console.log('[native-cal] created Psycle calendar:', calId);
-        return calId;
-      }
-    } catch (e) {
-      console.warn('[native-cal] calendar creation failed (using default):', e);
-    }
-    return null;
+  // Has the user explicitly chosen a calendar to write into? We NEVER
+  // auto-create or presume a calendar — nothing is written until a pick.
+  function hasChosenCalendar() {
+    return localStorage.getItem(CAL_MODE_KEY) === 'custom' && !!localStorage.getItem(CAL_TARGET_KEY);
   }
 
-  // Back-compat alias
-  var _ensurePsycleCalendar = _resolveTargetCalendarId;
+  async function _resolveTargetCalendarId() {
+    // Only an explicitly user-picked calendar is ever used — no auto-create,
+    // no implicit system-default write. Returns null when nothing is chosen or
+    // the chosen calendar no longer exists (callers must then write nothing).
+    if (localStorage.getItem(CAL_MODE_KEY) !== 'custom') return null;
+    var target = localStorage.getItem(CAL_TARGET_KEY);
+    if (!target) return null;
+    var list = await _listNativeCalendars();
+    return list.some(function (c) { return String(c.id) === String(target); }) ? target : null;
+  }
 
   // ── Add / Update / Remove Events ─────────────────────────────────
 
@@ -318,6 +281,7 @@
     if (slotStr) desc.push(slotStr);
     if (evt._studioName) desc.push('Studio: ' + evt._studioName);
     desc.push('Duration: ' + (evt.duration || 45) + 'min');
+    desc.push(PSYCLE_EVENT_MARKER + eventId);
 
     return {
       title: title,
@@ -369,6 +333,7 @@
   async function addBookingToCalendar(eventId) {
     if (!Calendar) return;
     if (!calendarSyncEnabled()) return;
+    if (!hasChosenCalendar()) return; // never write/create without a chosen calendar
     var ok = await _ensureCalendarPermission();
     if (!ok) return;
 
@@ -376,7 +341,8 @@
     if (!data) return;
 
     var calId = await _resolveTargetCalendarId();
-    if (calId) data.calendarId = calId;
+    if (!calId) return; // chosen calendar missing → write nothing (never system default)
+    data.calendarId = calId;
 
     var map = _loadCalMap();
 
@@ -533,6 +499,9 @@
   // ── Full Calendar Sync on Startup ─────────────────────────────────
 
   async function syncAllBookingsToCalendar() {
+    if (!calendarSyncEnabled() || !hasChosenCalendar()) {
+      return { added: 0, removed: 0, verified: 0, error: 'No calendar selected' };
+    }
     var ok = await _ensureCalendarPermission();
     if (!ok) return { added: 0, removed: 0, verified: 0, error: 'Permission denied' };
     var map = _loadCalMap();
@@ -568,12 +537,15 @@
       // skip verification in that case (add/remove still work).
     }
 
-    // 2. Remove calendar entries for cancelled bookings.
+    // 2. Remove calendar entries for cancelled bookings (skip on an empty
+    //    snapshot so a transient empty fetch can't wipe every booked event).
     map = _loadCalMap();
-    for (var calEvtId of Object.keys(map)) {
-      if (!bookings[calEvtId]) {
-        await removeBookingFromCalendar(calEvtId);
-        summary.removed++;
+    if (Object.keys(bookings).length > 0) {
+      for (var calEvtId of Object.keys(map)) {
+        if (!bookings[calEvtId]) {
+          await removeBookingFromCalendar(calEvtId);
+          summary.removed++;
+        }
       }
     }
 
@@ -602,9 +574,63 @@
     }
     _saveCalMap(cleanedMap);
 
+    // 5. Sweep app-owned orphan events whose booking no longer exists, even
+    //    when the local map link was lost (reinstall / web / other-device).
+    try {
+      var orphans = await removeOrphanedCalendarEvents();
+      if (orphans && orphans.removed) summary.removed += orphans.removed;
+    } catch (e) { /* sweep is best-effort */ }
+
     console.log('[native-cal] sync result:', summary);
     return summary;
   }
+
+  // Remove calendar events the app created whose booking no longer exists
+  // ("unhooked" classes — cancelled on web/another device, or after a
+  // map-loss). Matches ONLY future events carrying our stable marker, so
+  // personal events are never touched even in a user-chosen shared calendar.
+  async function removeOrphanedCalendarEvents() {
+    if (!Calendar || !hasChosenCalendar()) return { scanned: 0, removed: 0 };
+    // Never sweep on an empty bookings snapshot — a transient empty fetch would
+    // otherwise delete every still-booked event. In-app cancels remove their own
+    // event directly, so the legitimately-zero case is already covered.
+    var bookings = _myBookings || {};
+    if (Object.keys(bookings).length === 0) return { scanned: 0, removed: 0 };
+    var calId = await _resolveTargetCalendarId();
+    if (!calId) return { scanned: 0, removed: 0 };
+    var now = Date.now();
+    var events = [];
+    try {
+      var q = await Calendar.listEventsInRange({ startDate: now, endDate: now + 120 * 86400000 });
+      events = q.result || q || [];
+      if (!Array.isArray(events)) events = [];
+    } catch (e) {
+      return { scanned: 0, removed: 0, error: 'query failed' };
+    }
+    var map = _loadCalMap();
+    var removed = 0, scanned = 0, dirty = false;
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (!ev) continue;
+      if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) continue;
+      var notes = ev.notes || ev.description || '';
+      var mm = /psycle-event-id:(\d+)/.exec(notes);
+      if (!mm) continue; // not app-owned → never touch a personal event
+      var evStart = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
+      if (evStart < now) continue; // past classes are history, not "unhooked"
+      scanned++;
+      if (bookings[mm[1]]) continue; // still a current booking → keep
+      try {
+        await Calendar.deleteEvent({ id: ev.id || ev.eventId });
+        removed++;
+        if (map[mm[1]]) { delete map[mm[1]]; dirty = true; }
+      } catch (e) { /* may already be gone */ }
+    }
+    if (dirty) _saveCalMap(map);
+    console.log('[native-cal] orphan sweep:', { scanned: scanned, removed: removed });
+    return { scanned: scanned, removed: removed };
+  }
+  window.psycleRemoveOrphanedEvents = removeOrphanedCalendarEvents;
 
   // Run sync after bookings load
   var _origRenderNative = window.renderMyBookings;
@@ -614,7 +640,7 @@
       _origRenderNative.apply(this, arguments);
       if (!_calSynced && calendarSyncEnabled() && Object.keys(_myBookings || {}).length > 0) {
         _calSynced = true;
-        syncAllBookingsToCalendar();
+        _scheduleCalReconcile(); // shared debounce+guard with the bookings:loaded listener (no double-sync)
       }
     };
   }
@@ -629,7 +655,8 @@
     if (typeof fetchMyBookings === 'function') {
       try { await fetchMyBookings(); } catch (e) {}
     }
-    return syncAllBookingsToCalendar();
+    clearTimeout(_calReconcileTimer); // fetchMyBookings armed a debounced run — run once here instead
+    return _runCalSync();
   };
 
   /**
@@ -643,6 +670,7 @@
     if (!Calendar) return { scanned: 0, removed: 0, error: 'Calendar plugin unavailable' };
     var ok = await _ensureCalendarPermission();
     if (!ok) return { scanned: 0, removed: 0, error: 'Permission denied' };
+    if (!hasChosenCalendar()) return { scanned: 0, removed: 0, error: 'No calendar selected' };
 
     var calId = await _resolveTargetCalendarId();
     // Scan a wide window (past 7 days through next 90 days) so we catch
@@ -665,7 +693,10 @@
     var candidates = events.filter(function (ev) {
       if (!ev || !ev.title) return false;
       if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) return false;
-      return true;
+      // Only ever touch events Psync created (carry our marker) — never the
+      // user's personal events in a shared/chosen calendar.
+      var notes = ev.notes || ev.description || '';
+      return notes.indexOf(PSYCLE_EVENT_MARKER) !== -1;
     });
 
     // Group by "title|startMinute" (round to minute to tolerate plugin drift).
@@ -731,7 +762,7 @@
   window.psycleGetCalendarConfig = function () {
     return {
       enabled: calendarSyncEnabled(),
-      mode: localStorage.getItem(CAL_MODE_KEY) || 'auto',
+      mode: localStorage.getItem(CAL_MODE_KEY) || 'unset',
       targetId: localStorage.getItem(CAL_TARGET_KEY) || null,
       psycleCalendarId: localStorage.getItem(CAL_ID_KEY) || null,
     };
@@ -747,7 +778,7 @@
    */
   window.psycleSetCalendarConfig = async function (cfg) {
     cfg = cfg || {};
-    var prevMode = localStorage.getItem(CAL_MODE_KEY) || 'auto';
+    var prevMode = localStorage.getItem(CAL_MODE_KEY) || 'unset';
     var prevTarget = localStorage.getItem(CAL_TARGET_KEY) || '';
 
     if (typeof cfg.enabled === 'boolean') {
@@ -1111,6 +1142,30 @@
       // Seat-level changes alter slot lists shown on the widget too.
       PsycleEvents.on('seat:cancelled', updateWidgetSnapshot);
     } catch (e) {}
+  }
+
+  // Auto-reconcile the calendar whenever bookings change — covers classes
+  // cancelled on the web / another device and map-loss orphans. Debounced +
+  // in-flight guarded so the cold-start burst doesn't run several sweeps.
+  var _calReconcileTimer = null, _calReconcileInFlight = false, _calReconcilePending = false;
+  // Single-flight calendar sync. If a change arrives mid-run, remember it and
+  // re-run once the in-flight pass finishes (so a cancel is never missed).
+  async function _runCalSync() {
+    if (_calReconcileInFlight) { _calReconcilePending = true; return; }
+    _calReconcileInFlight = true;
+    var res;
+    try { res = await syncAllBookingsToCalendar(); } catch (e) { res = { error: 'sync failed' }; }
+    _calReconcileInFlight = false;
+    if (_calReconcilePending) { _calReconcilePending = false; _scheduleCalReconcile(); }
+    return res;
+  }
+  function _scheduleCalReconcile() {
+    if (!calendarSyncEnabled() || !hasChosenCalendar()) return;
+    clearTimeout(_calReconcileTimer);
+    _calReconcileTimer = setTimeout(_runCalSync, 1200);
+  }
+  if (typeof PsycleEvents !== 'undefined' && PsycleEvents && typeof PsycleEvents.on === 'function') {
+    try { PsycleEvents.on('bookings:loaded', _scheduleCalReconcile); } catch (e) {}
   }
 
   // Refresh whenever the app returns to the foreground (a class may have

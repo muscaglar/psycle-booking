@@ -81,11 +81,9 @@
     if (tabId === 'tab-bookings') {
       return (typeof fetchMyBookings === 'function') ? (fetchMyBookings() || true) : null;
     }
-    if (tabId === 'tab-discover') {
-      var hasResults = document.querySelector('#results .day-group');
-      // Force a real refetch (the window cache would otherwise just re-filter).
-      if (hasResults && typeof search === 'function') return search({ force: true }) || true;
-    }
+    // Discover uses the explicit "Updated · Refresh" link instead of
+    // pull-to-refresh — the gesture was firing during normal scrolling and
+    // re-rendering the list, so it's a no-op here.
     return null;
   }
 
@@ -151,6 +149,30 @@
     }
     pullStartY = 0;
     pullCurrentY = 0;
+  }, { passive: true });
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // A2. Keyboard scroll-drift fix (iOS WKWebView)
+  // iOS scrolls the whole webview UP to lift a focused input above the
+  // keyboard, and does NOT restore it when the keyboard dismisses — so the
+  // app stays shoved up. The real scroller is .tab-content, so the document
+  // itself should never hold a scroll offset. Snap it back to 0 once focus
+  // leaves all text fields (i.e. the keyboard is going away).
+  // ═══════════════════════════════════════════════════════════════════
+  function _isTextField(el) {
+    return !!(el && el.matches &&
+      el.matches('input:not([type=checkbox]):not([type=radio]):not([type=button]), textarea, [contenteditable]'));
+  }
+  document.addEventListener('focusout', function (e) {
+    if (!_isTextField(e.target)) return;
+    // Defer so we run after the keyboard-dismiss + any focus move settles.
+    setTimeout(function () {
+      if (_isTextField(document.activeElement)) return; // moved to another field — keyboard still up
+      window.scrollTo(0, 0);
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    }, 100);
   }, { passive: true });
 
 

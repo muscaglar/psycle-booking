@@ -1,0 +1,507 @@
+/* ============================================================================
+   redesign.css — "Psync Redesign" skin (Discover page + top bar).
+   Loaded LAST so it wins the cascade. Colours come from the existing theme
+   tokens (--surface/--ink/--line/--accent/--accent-soft/--accent-ink, aliased
+   in theme.css), so this file is layout + typography only and themes for free
+   across Cloud / Linen / Graphite and the flavour themes.
+   ============================================================================ */
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+header {
+  background: var(--surface, #fff);
+  border-bottom: none;
+  padding: 4px 22px 14px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+header h1, .brand-name {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: var(--ink, #17181c);
+  line-height: 1;
+}
+header h1::after { content: none; } /* drop the old accent full-stop */
+.header-subtitle, header .header-subtitle {
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3, #9a9c9f);
+  line-height: 1;
+}
+.header-right { display: flex; align-items: center; gap: var(--space-3); }
+
+/* Avatar / account button — accent-soft circle with the rider's initials */
+.header-avatar {
+  width: 38px; height: 38px; flex: none;
+  border: none; border-radius: 50%;
+  background: var(--accent-soft, #e4efe9);
+  color: var(--accent, #1f6f5c);
+  font: 700 14px/1 var(--font-display);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.header-avatar:active { transform: scale(0.95); }
+
+/* Keep the theme quick-toggle, but as a flat circular control matching the avatar */
+header .theme-toggle {
+  width: 38px; height: 38px;
+  border: 1px solid var(--line, #e7e5df);
+  background: var(--surface, #fff);
+  color: var(--ink-2, #5c5e63);
+  margin-left: 0;
+}
+
+/* ── Discover: page title ────────────────────────────────────────────────── */
+.disc-title {
+  font: 700 30px/1.02 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--ink, #17181c);
+  margin: 0;
+}
+/* Header row: title left, freshness/refresh + clear filters top-right */
+.disc-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin-bottom: 4px;
+}
+.disc-header .disc-title { margin: 0; }
+.disc-actions {
+  flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+  padding-top: 6px; text-align: right;
+}
+.disc-actions .last-updated {
+  font: 500 11px/1.3 var(--font-body); color: var(--ink-3, #9a9c9f); white-space: nowrap;
+}
+.disc-actions .refresh-link { color: var(--accent, #1f6f5c); font: inherit; }
+.disc-clear-btn {
+  background: none; border: none; padding: 0; width: auto;
+  color: var(--ink-3, #9a9c9f); font: 500 11px/1.3 var(--font-body);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
+}
+
+/* ── Discover: unified search ───────────────────────────────────────────── */
+.disc-search {
+  margin-top: 18px;
+  display: flex; align-items: center; gap: 10px;
+  height: 48px; padding: 0 16px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 14px;
+}
+.disc-search svg { flex: none; }
+.disc-search input {
+  flex: 1; min-width: 0; border: none; outline: none; background: none;
+  font: 400 15px/1 var(--font-body);
+  color: var(--ink, #17181c);
+}
+
+/* ── Discover: "N = classes matching your selection" count chip ─────────── */
+.disc-count {
+  margin-top: 16px;
+  display: flex; align-items: center; gap: 7px;
+  color: var(--ink-3, #9a9c9f);
+}
+.disc-count-n {
+  min-width: 19px; height: 19px; padding: 0 6px;
+  border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  font: 700 11px/1 var(--font-body);
+  background: var(--surface-2, #f5f4ef); color: var(--ink-2, #5c5e63);
+}
+.disc-count-label { font: 500 12px/1.3 var(--font-body); }
+
+/* ── Discover: filter rows (section label + horizontal-scroll pills) ─────── */
+/* The filters are inline on the page now — no card chrome; #tab-discover
+   provides the uniform 22px side padding (the design's gutter). */
+.controls { background: var(--bg, #efeee9); border: none; border-radius: 0; padding: 0; margin-top: 14px; }
+#tab-discover { padding: 18px 22px 120px; }
+#tab-discover .results { padding-left: 0; padding-right: 0; }
+.disc-title, .disc-search, .disc-count { margin-left: 0; margin-right: 0; }
+.controls-toggle { display: none; } /* design shows filters inline — no collapse header */
+/* flex-wrap:nowrap is critical — the max-width:640px base rule sets
+   flex-wrap:wrap, which combined with column direction made the filter
+   groups wrap into clipped extra columns in portrait (only Studios showed). */
+.controls-body { display: flex !important; flex-direction: column; flex-wrap: nowrap !important; gap: 14px; }
+.control-group { gap: 8px; }
+.control-group > label,
+.controls-body label {
+  font: 600 11px/1 var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3, #9a9c9f);
+}
+
+/* horizontal, edge-to-edge scrollable pill rows */
+/* Each filter is a single horizontal side-scrolling row (no wrap, no bleed).
+   The row scrolls internally; the page never scrolls horizontally. */
+#tab-discover .location-chips,
+#tab-discover #categoryPills,
+#tab-discover .date-presets,
+#tab-discover .instr-matches {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin: 0;
+  padding: 0 0 2px;
+  max-width: 100%;
+}
+/* strength sub-pills: a nested, indented row directly under the Class Type
+   pills, with a left connector so they clearly belong to the selected type
+   (scroll WHEN shown — JS toggles display). */
+#tab-discover #strengthSubPills {
+  flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; gap: 7px;
+  margin: 8px 0 0 4px;
+  padding: 0 0 2px 12px;
+  border-top: none;
+  border-left: 2px solid var(--line, #e7e5df);
+}
+/* sub-type pills read as secondary/children: smaller than top-level pills */
+.sub-pill {
+  flex: none;
+  height: 32px; padding: 0 13px;
+  display: inline-flex; align-items: center;
+  border-radius: 99px;
+  border: 1px solid var(--line, #e7e5df);
+  background: var(--surface, #fff);
+  color: var(--ink-2, #5c5e63);
+  font: 600 12px/1 var(--font-body);
+  white-space: nowrap;
+}
+.sub-pill.active {
+  background: var(--accent, #1f6f5c);
+  border-color: var(--accent, #1f6f5c);
+  color: var(--accent-ink, #fff);
+}
+#tab-discover .location-chips::-webkit-scrollbar,
+#tab-discover #categoryPills::-webkit-scrollbar,
+#tab-discover #strengthSubPills::-webkit-scrollbar,
+#tab-discover .date-presets::-webkit-scrollbar,
+#tab-discover .instr-matches::-webkit-scrollbar { display: none; }
+/* pills never shrink inside the scroll row */
+.loc-chip, .cat-pill, .date-quick-btn, .sub-pill { flex: none; }
+/* icon-only "pick a date" pill at the end of the date row */
+.date-pick { padding: 0 11px; flex: none; }
+.date-pick svg { display: block; }
+
+/* Filter rows + Instructor box: full-width, left-aligned (fixes the centred /
+   narrow Instructor box and any right-alignment from the base mobile rule). */
+#tab-discover .controls-body { align-items: stretch; }
+#tab-discover .control-group { align-items: stretch; min-width: 0; gap: 8px; margin: 0; }
+#tab-discover .control-group > label { align-self: flex-start; text-align: left; }
+#tab-discover .instr-box { width: 100%; min-width: 0; max-width: none; }
+
+/* Guard against any horizontal overflow in portrait */
+/* Use overflow-x:CLIP (not hidden) to guard horizontal bleed: `hidden` would
+   force overflow-y to compute as `auto`, turning these into scroll containers
+   that CLIP the absolutely-positioned instructor dropdown opening below the
+   last filter row. `clip` is compatible with overflow-y:visible, so the
+   dropdown escapes downward at any panel height. Pill rows self-scroll. */
+.controls, .controls-body, #tab-discover { max-width: 100%; overflow-x: clip; }
+#tab-discover .control-group { min-width: 0; }
+
+/* date preset pills */
+.date-quick-btn {
+  flex: none;
+  height: 38px; padding: 0 14px;
+  border-radius: 99px;
+  border: 1px solid var(--line, #e7e5df);
+  background: var(--surface, #fff);
+  color: var(--ink-2, #5c5e63);
+  font: 600 13px/1 var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.date-quick-btn.active {
+  background: var(--accent, #1f6f5c);
+  border-color: var(--accent, #1f6f5c);
+  color: var(--accent-ink, #fff);
+}
+
+/* studio / class-type option pills */
+.loc-chip, .cat-pill {
+  flex: none;
+  height: 38px; padding: 0 14px;
+  display: inline-flex; align-items: center;
+  border-radius: 99px;
+  border: 1px solid var(--line, #e7e5df);
+  background: var(--surface, #fff);
+  color: var(--ink-2, #5c5e63);
+  font: 600 13px/1 var(--font-body);
+  letter-spacing: 0; text-transform: none;
+  white-space: nowrap;
+}
+.loc-chip.active, .cat-pill.active {
+  background: var(--accent, #1f6f5c);
+  border-color: var(--accent, #1f6f5c);
+  color: var(--accent-ink, #fff);
+}
+/* count badge on a pill */
+.chip-count, .pill-count {
+  margin-left: 8px;
+  min-width: 19px; height: 19px; padding: 0 6px;
+  border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  font: 700 11px/1 var(--font-body);
+  background: var(--surface-2, #f5f4ef); color: var(--ink-2, #5c5e63);
+  opacity: 1;
+}
+.loc-chip.active .chip-count, .cat-pill.active .pill-count {
+  background: rgba(255,255,255,.22); color: var(--accent-ink, #fff);
+}
+
+/* instructor selected chips + add-search + matches */
+.instr-box {
+  min-height: 44px; padding: 4px 14px;
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  align-items: center;
+}
+.instr-search { font: 400 14px/1 var(--font-body); color: var(--ink, #17181c); }
+.instr-chip {
+  height: 36px; padding: 0 13px 0 15px; gap: 8px;
+  border-radius: 99px;
+  background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
+  border: 1px solid var(--accent, #1f6f5c);
+  font: 600 13px/1 var(--font-body);
+}
+#instrChips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── Discover: grouped day headers ──────────────────────────────────────── */
+.day-group { margin-bottom: 34px; }
+.day-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font: 800 15px/1.1 var(--font-body);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink, #17181c);
+  border-bottom: 1px solid var(--line, #e7e5df);
+  padding: 4px 0 11px; margin: 6px 0 16px;
+}
+.type-section-header { border-bottom: none; margin: 14px 0 8px; }
+.class-grid { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Discover: class card (time │ divider │ info │ action) ───────────────── */
+.class-card {
+  display: flex; align-items: stretch; gap: 14px;
+  padding: 16px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+}
+.class-card.is-booked { border-left: 3px solid var(--accent, #1f6f5c); }
+.class-card:hover { border-color: var(--accent, #1f6f5c); }
+
+.cc-time { flex: none; width: 58px; display: flex; flex-direction: column; gap: 3px; }
+.cc-time-h {
+  font: 700 19px/1 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--ink, #17181c);
+}
+.cc-ampm { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); margin-left: 2px; }
+.cc-dur { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
+.cc-rule { width: 1px; flex: none; background: var(--line, #e7e5df); }
+
+.cc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.cc-name {
+  font: 600 16px/1.1 var(--font-display);
+  color: var(--ink, #17181c);
+}
+.cc-sub { font: 500 13px/1.2 var(--font-body); color: var(--ink-2, #5c5e63); }
+.cc-sub .instructor-link { color: inherit; border: none; }
+.cc-spots { font: 600 12px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
+.cc-spots.low { color: var(--accent, #1f6f5c); }
+.cc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1px; }
+
+.cc-action { flex: none; align-self: center; display: flex; }
+.cc-action .book-btn {
+  height: 36px; padding: 0 16px; width: auto;
+  border-radius: 99px;
+  font: 600 13px/1 var(--font-body);
+  background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
+  border: 1px solid var(--accent, #1f6f5c);
+}
+.cc-action .book-btn.booked { background: var(--accent-soft, #e2ede7); color: var(--accent, #1f6f5c); border-color: var(--accent-soft, #e2ede7); }
+.cc-action .book-btn:disabled { opacity: 0.5; }
+
+/* ── Discover: empty state ──────────────────────────────────────────────── */
+.no-results {
+  margin-top: 8px; padding: 34px 22px; text-align: center;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+  color: var(--ink-3, #9a9c9f);
+  font: 500 13px/1.4 var(--font-body);
+}
+
+/* ── Header avatar: hide the redundant pill name/avatar (the header avatar
+   carries the initials); keep the log-out control. ─────────────────────── */
+.header-right .user-avatar,
+.header-right .user-name { display: none; }
+.header-right .auth-pill { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; border: none; }
+
+/* ── Pick-a-date calendar ───────────────────────────────────────────────── */
+#startDate { display: none; } /* the custom calendar drives the date now */
+.date-picker {
+  margin-top: 12px; padding: 16px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 16px;
+}
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.cal-title { font: 600 15px/1 var(--font-display); color: var(--ink, #17181c); }
+.cal-nav {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  border-radius: 9px; border: 1px solid var(--line, #e7e5df);
+  background: var(--surface, #fff); color: var(--ink, #17181c);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+.cal-wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px; }
+.cal-wd span { text-align: center; font: 600 10px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-grid > span { aspect-ratio: 1; }
+.cal-cell {
+  position: relative; aspect-ratio: 1; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; border-radius: 50%;
+  font: 600 13px/1 var(--font-body); color: var(--ink, #17181c); cursor: pointer;
+}
+.cal-cell.sel { background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff); }
+.cal-cell.past { color: var(--ink-3, #9a9c9f); opacity: 0.3; cursor: default; }
+.cal-cell.today { box-shadow: inset 0 0 0 1.5px var(--accent, #1f6f5c); }
+.cal-dot {
+  position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: var(--accent, #1f6f5c);
+}
+.cal-cell.sel .cal-dot { background: var(--accent-ink, #fff); }
+.cal-legend { margin-top: 12px; display: flex; align-items: center; gap: 7px; font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
+.cal-legend .cal-dot { position: static; transform: none; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Membership tab — account · appearance · settings list · sign out
+   ════════════════════════════════════════════════════════════════════════ */
+#tab-membership { padding: 18px 22px 120px; }
+
+/* #membershipInfo wraps the account + plan cards — it has no card chrome itself */
+#tab-membership > #membershipInfo { background: none; border: none; padding: 0; margin: 0; }
+
+/* Account card (avatar + name + email) */
+.ms-account {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+  margin-bottom: 16px;
+}
+.ms-account-avatar {
+  flex: none; width: 52px; height: 52px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft, #e3efe9);
+  color: var(--accent, #1f6f5c);
+  font: 700 16px/1 var(--font-body); letter-spacing: 0.03em;
+}
+.ms-account-info { min-width: 0; }
+.ms-account-name { font: 700 17px/1.2 var(--font-body); color: var(--ink, #17181c); }
+.ms-account-email {
+  font: 500 13px/1.3 var(--font-body); color: var(--ink-3, #9a9c9f); margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px;
+}
+
+/* Plan / cost cards: premium card chrome */
+#tab-membership .membership-card,
+#tab-membership .cost-section {
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+/* Section heading (Appearance) */
+.ms-section { margin-bottom: 16px; }
+.ms-section-title {
+  font: 600 11px/1 var(--font-body);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-3, #9a9c9f);
+  margin: 0 0 10px 2px;
+}
+
+/* Appearance: theme cards */
+#tab-membership .theme-chips {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+#tab-membership .theme-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+  padding: 15px 14px;
+  background: var(--surface, #fff);
+  border: 1.5px solid var(--line, #e7e5df);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: border-color var(--transition-base, .15s);
+}
+#tab-membership .theme-chip.active { border-color: var(--accent, #1f6f5c); }
+#tab-membership .theme-swatch {
+  display: inline-flex; gap: 6px; width: auto; height: auto; background: none; border: none; padding: 0;
+}
+#tab-membership .theme-swatch i {
+  width: 22px; height: 22px; border-radius: 50%; display: block;
+  border: 1px solid rgba(0,0,0,.10);
+}
+#tab-membership .theme-chip-name { font: 700 15px/1 var(--font-body); color: var(--ink, #17181c); }
+
+/* Settings list */
+.ms-list {
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.ms-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 16px 18px;
+  background: none; border: none; border-bottom: 1px solid var(--line, #e7e5df);
+  text-align: left; cursor: pointer;
+}
+.ms-row:last-child { border-bottom: none; }
+.ms-row:active { background: var(--surface-2, #f5f4ef); }
+.ms-row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ms-row-label { font: 700 15px/1.2 var(--font-body); color: var(--ink, #17181c); }
+.ms-row-sub { font: 500 13px/1.3 var(--font-body); color: var(--ink-3, #9a9c9f); }
+.ms-row-chev { flex: none; color: var(--ink-3, #9a9c9f); font: 400 20px/1 var(--font-body); }
+
+/* Sign out */
+.ms-signout {
+  display: block; width: 100%;
+  padding: 15px 18px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+  color: #b3261e;
+  font: 700 15px/1 var(--font-body);
+  text-align: center; cursor: pointer;
+  margin-bottom: 18px;
+}
+.ms-signout:active { background: var(--surface-2, #f5f4ef); }
+
+/* Rankings card + footer */
+#tab-membership > .insights-section:not(#membershipInfo) {
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e7e5df);
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+#tab-membership .about-block { text-align: center; padding: 20px 0 4px; }
+#tab-membership .about-mark { letter-spacing: 0.32em; color: var(--ink-3, #9a9c9f); }
+#tab-membership .about-text { color: var(--ink-3, #9a9c9f); }

@@ -89,6 +89,10 @@ const CATEGORY_MAP = [
 
 function getCategory(typeName) {
   const n = (typeName || '').toUpperCase();
+  // Reformer is a Pilates/reformer class even when the name also contains
+  // "Strength" (e.g. "Reformer Strength") — match it before the generic loop
+  // so it never falls into the STRENGTH bucket via includes().
+  if (n.includes('REFORMER')) return CATEGORY_MAP.find(c => c.key === 'PILATES');
   for (const cat of CATEGORY_MAP) {
     if (cat.key === 'OTHER') continue;
     if (cat.prefixes.some(p => n.startsWith(p) || n.includes(p))) return cat;
@@ -344,8 +348,16 @@ async function checkAuth() {
         || null;
       const name = currentUser.first_name || currentUser.email || 'You';
       const initial = (name.trim()[0] || '?').toUpperCase();
-      pill.innerHTML = `<span class="user-chip" title="${escapeHTML(name)}"><span class="user-avatar">${escapeHTML(initial)}</span><span class="auth-full user-name"><strong>${escapeHTML(name)}</strong></span></span>
-        <a href="#" onclick="event.preventDefault();clearToken()" class="disconnect-link" title="Log out"><span class="auth-full">Log out</span><span class="auth-icon">✕</span></a>`;
+      // Redesign: the header avatar shows the rider's initials.
+      if (gear) {
+        const _fn = (currentUser.first_name || '').trim();
+        const _ln = (currentUser.last_name || '').trim();
+        const inits = ((_fn[0] || name.trim()[0] || '?') + (_ln[0] || '')).toUpperCase();
+        gear.innerHTML = '<span>' + escapeHTML(inits) + '</span>';
+      }
+      // Top bar shows only the avatar when signed in — sign-out lives in the
+      // Membership tab now.
+      pill.innerHTML = '';
       updateDiscoverEmptyState();
       fetchMyBookings();
       // After first login, offer to sync booking history
@@ -517,7 +529,9 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   });
 
   instructors = iRes.data.filter(i => i.is_visible).sort((a, b) => a.full_name.localeCompare(b.full_name));
-  locations = lRes.data.filter(l => l.is_visible && l.handle !== 'psycle-at-home');
+  // Exclude non-studio entries: the at-home stream and the "- Stock Room"
+  // back-office location (it's not a bookable studio).
+  locations = lRes.data.filter(l => l.is_visible && l.handle !== 'psycle-at-home' && !/stock\s*room/i.test(l.name || ''));
   eventTypes = tRes.data || [];
 
   renderInstrDropdown();
@@ -568,6 +582,14 @@ let _autoSearchTimer = null;
 function triggerAutoSearch() {
   updateFiltersSummary();
   if (!getBearerToken()) return;
+  // If the window for the current date range is already cached, re-filter it
+  // client-side instantly — no debounce, no network. This makes every filter
+  // (including instructor) update results immediately, so there's no Search button.
+  const wk = (typeof currentWindowDates === 'function') ? currentWindowDates().windowKey : null;
+  if (wk && window._windowKey === wk && Array.isArray(window._windowEvents) && window._windowRelations) {
+    renderFromWindow(currentFilters());
+    return;
+  }
   clearTimeout(_autoSearchTimer);
   _autoSearchTimer = setTimeout(() => search(), 600);
 }
@@ -648,9 +670,9 @@ function onDateInputChange() {
 }
 
 // ── Collapsible filters (mobile) ─────────────────────────────────
-// Collapsed by default on phones (≤640px, where the toggle is visible);
-// the desktop sidebar stays expanded via CSS !important.
-let _filtersCollapsed = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches;
+// Redesign: filters are shown inline by default (the design has no collapse
+// header); the toggle is hidden via CSS, but kept functional as a fallback.
+let _filtersCollapsed = false;
 
 function applyFiltersCollapsedState() {
   const body = document.getElementById('controlsBody');
@@ -804,6 +826,85 @@ function renderFromWindow(filters) {
   renderLastUpdated();
 }
 
+// Unified Discover search (instructor / studio / class). Filters the cached
+// window instantly; the per-dimension pill counts stay selection-based.
+function onDiscoverSearch(v) {
+  window._discoverQuery = (v || '').trim().toLowerCase();
+  if (window._windowEvents) renderFromWindow(currentFilters());
+  else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
+}
+
+// ── Pick-a-date calendar (redesign) ─────────────────────────────────
+let _calMonth = null; // { y, m }
+function toggleDatePicker() {
+  const el = document.getElementById('datePicker');
+  const btn = document.getElementById('pickDateBtn');
+  if (!el) return;
+  const willOpen = el.style.display === 'none' || !el.style.display;
+  if (willOpen) {
+    if (!_calMonth) { const d = new Date(); _calMonth = { y: d.getFullYear(), m: d.getMonth() }; }
+    renderCalendar();
+    el.style.display = '';
+    if (btn) btn.classList.add('active');
+  } else {
+    el.style.display = 'none';
+    if (btn) btn.classList.remove('active');
+  }
+}
+function calStep(dir) {
+  if (!_calMonth) return;
+  let { y, m } = _calMonth; m += dir;
+  if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+  _calMonth = { y, m }; renderCalendar();
+}
+function pickCalDate(ds) {
+  document.getElementById('startDate').value = ds;
+  document.getElementById('daysAhead').value = 1;
+  _dateQuickMode = null;
+  document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('datePicker'); if (el) el.style.display = 'none';
+  const btn = document.getElementById('pickDateBtn'); if (btn) btn.classList.remove('active');
+  if (typeof onDateInputChange === 'function') onDateInputChange();
+  else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
+}
+// Days (YYYY-MM-DD) that have classes in the cached window — drives the dots.
+function _classDays() {
+  const s = new Set();
+  (window._facetClasses || []).forEach(c => { if (c.start_at) s.add(String(c.start_at).slice(0, 10)); });
+  return s;
+}
+function renderCalendar() {
+  const el = document.getElementById('datePicker');
+  if (!el || !_calMonth) return;
+  const { y, m } = _calMonth;
+  const first = new Date(y, m, 1);
+  const startW = (first.getDay() + 6) % 7; // Monday-first grid
+  const days = new Date(y, m + 1, 0).getDate();
+  const today = localDateStr(new Date());
+  const sel = document.getElementById('startDate').value;
+  const classDays = _classDays();
+  const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  let cells = '';
+  for (let i = 0; i < startW; i++) cells += '<span></span>';
+  for (let d = 1; d <= days; d++) {
+    const ds = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const past = ds < today;
+    let cls = 'cal-cell';
+    if (ds === sel) cls += ' sel'; else if (past) cls += ' past'; else if (ds === today) cls += ' today';
+    const dot = classDays.has(ds) ? '<span class="cal-dot"></span>' : '';
+    const click = past ? '' : ` onclick="pickCalDate('${ds}')"`;
+    cells += `<button class="${cls}"${click}>${d}${dot}</button>`;
+  }
+  el.innerHTML =
+    `<div class="cal-head"><button class="cal-nav" onclick="calStep(-1)" aria-label="Previous month">‹</button>` +
+    `<span class="cal-title">${MON[m]} ${y}</span>` +
+    `<button class="cal-nav" onclick="calStep(1)" aria-label="Next month">›</button></div>` +
+    `<div class="cal-wd">${WD.map(w => `<span>${w}</span>`).join('')}</div>` +
+    `<div class="cal-grid">${cells}</div>` +
+    `<div class="cal-legend"><span class="cal-dot"></span>Days with classes</div>`;
+}
+
 // Fetch the full window (every studio) for a date range.
 async function fetchFullWindow(startDate, endDateStr, stale) {
   const seenIds = new Set();
@@ -928,9 +1029,11 @@ async function search(opts) {
   }
 
   const btn = document.getElementById('searchBtn');
-  btn.disabled = false;
-  btn.textContent = 'Stop';
-  btn.onclick = () => { window._searchAborted = true; };
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Stop';
+    btn.onclick = () => { window._searchAborted = true; };
+  }
   window._searchAborted = false;
 
   setStatus('<span class="spinner"></span>Connecting…');
@@ -1353,6 +1456,27 @@ function _cleanWaitlisted() {
   return map;
 }
 
+// Verify-first instrumentation. The waitlist payload (POST {event_id} with no
+// slots) is an UNVERIFIED assumption — the API may reject it, or silently
+// create a normal billable booking. Capture the real server response (field
+// NAMES + status only, no PII) so the next live waitlist attempt reveals the
+// true contract before we trust the badge or build multi-spot support.
+function _captureWaitlistResponse(eventId, res, data) {
+  try {
+    const body = (data && (data.data || data)) || {};
+    const fields = (body && typeof body === 'object') ? Object.keys(body) : [];
+    const info = 'event=' + eventId + ' status=' + res.status + ' ok=' + res.ok +
+      ' fields=[' + fields.join(',') + ']' +
+      ' hasBookingId=' + !!(data?.data?.id || data?.id) +
+      ' hasSeat=' + !!(body.slot || body.slots || body.seat || body.seats);
+    if (typeof pushError === 'function') pushError('[waitlist] ' + info);
+    if (window.PsycleDiag && typeof window.PsycleDiag.record === 'function') {
+      try { window.PsycleDiag.record('waitlist-response', body); } catch (e) {}
+    }
+    console.warn('[waitlist-diag]', info);
+  } catch (e) { /* diagnostics must never break booking */ }
+}
+
 // ── Bike-preference memory ───────────────────────────────────────
 // Remembers which slots the user books, keyed by studio + instructor, so the
 // bike picker can surface and pre-select their "usual" spot next time.
@@ -1412,6 +1536,7 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
+    if (opts.waitlist) _captureWaitlistResponse(eventId, res, data);
     if (res.ok) {
       const isWaitlist = !!opts.waitlist;
       const label = isWaitlist
@@ -1431,7 +1556,16 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings, waitlisted: isWaitlist };
       // Remember the booked slot(s) per studio+instructor for next time.
       if (!isWaitlist && slotsArr.length) _recordBikeHistory(eventId, slotsArr);
-      if (isWaitlist) _markWaitlisted(eventId, _eventCache[String(eventId)]?.start_at);
+      if (isWaitlist) {
+        _markWaitlisted(eventId, _eventCache[String(eventId)]?.start_at);
+        // Safety net (payload unverified): if the server assigned an actual
+        // seat, this was a real booking, not a waitlist place — warn so the
+        // user can check (and cancel) rather than be silently committed/billed.
+        const _wb = data?.data || data || {};
+        if (_wb.slot || _wb.slots || _wb.seat || _wb.seats) {
+          toast('Heads up: this may have booked a spot, not a waitlist place — check My Bookings', 'info');
+        }
+      }
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
       showBookingConfirmation(eventId, slotsArr, { waitlist: isWaitlist });
       refreshUpcomingPanel();
@@ -1445,7 +1579,8 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       // 401/403 already handled globally by apiFetch → showSessionExpired()
       btn.textContent = 'Failed — retry';
       btn.disabled = false;
-      toast(data.message || data.error || `Error ${res.status}`, 'error');
+      const _fb = opts.waitlist ? "Couldn't join the waitlist" : `Error ${res.status}`;
+      toast(data.message || data.error || _fb, 'error');
     } else {
       btn.textContent = 'Book';
       btn.disabled = false;
@@ -1889,20 +2024,37 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     bookLabel = 'Book'; bookCls = 'book-btn'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
   }
 
+  // Availability line, in the redesign's wording.
+  let spotsHtml = '';
+  if (!myBooking) {
+    if (isFull) spotsHtml = '<span class="cc-spots">Waitlist only</span>';
+    else if (isWaitlist) spotsHtml = '<span class="cc-spots">Waitlist open</span>';
+    else if (typeof evt.capacity_remaining === 'number') {
+      const r = evt.capacity_remaining;
+      if (r <= 0) spotsHtml = '<span class="cc-spots">Waitlist only</span>';
+      else if (r <= 3) spotsHtml = `<span class="cc-spots low">Only ${r} left</span>`;
+      else spotsHtml = `<span class="cc-spots">${r} spots left</span>`;
+    }
+  }
+  const onlineMeta = evt.is_live_stream ? '<div class="cc-meta"><span class="badge highlight">Online</span></div>' : '';
+
   return `<div class="class-card${myBooking ? ' is-booked' : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
     onclick="openClassDetail(${evt.id})" style="cursor:pointer">
-    <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
-    <div class="class-info">
-      <div class="class-type">${escapeHTML(type?.name || 'Class')}</div>
-      <div class="class-instructor">${instrLink(instr?.full_name, instr?.id)}</div>
-      <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
-      <div class="class-meta">${badges}</div>
-      <div class="card-actions">
-        <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
-          ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
-          onclick="event.stopPropagation();${bookOnclick}">${bookLabel}</button>
-        <button class="share-class-btn" onclick="event.stopPropagation();shareClass(${evt.id})" title="Share this class"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg></button>
-      </div>
+    <div class="cc-time">
+      <span class="cc-time-h">${h12}:${mins}<span class="cc-ampm">${ampm}</span></span>
+      <span class="cc-dur">${evt.duration} min</span>
+    </div>
+    <div class="cc-rule"></div>
+    <div class="cc-info">
+      <span class="cc-name">${escapeHTML(type?.name || 'Class')}</span>
+      <span class="cc-sub">${instrLink(instr?.full_name, instr?.id)}${locName ? ' · ' + escapeHTML(locName) : ''}</span>
+      ${spotsHtml}
+      ${onlineMeta}
+    </div>
+    <div class="cc-action">
+      <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
+        ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
+        onclick="event.stopPropagation();${bookOnclick}">${bookLabel}</button>
     </div>
   </div>`;
 }
@@ -1966,6 +2118,14 @@ function render(events, relations, filters, done) {
       const studio = studioMap[e.studio_id];
       if (!studio || !locIds.includes(String(studio.location_id))) return false;
     }
+    // Unified text search across instructor / studio / class
+    if (window._discoverQuery) {
+      const studio = studioMap[e.studio_id];
+      const loc = studio ? locationMap[studio.location_id] : null;
+      const hay = (typeName + ' ' + (instrMap[e.instructor_id]?.full_name || '') + ' ' +
+        (loc ? loc.name : '') + ' ' + (studio ? studio.name : '')).toLowerCase();
+      if (hay.indexOf(window._discoverQuery) === -1) return false;
+    }
     return true;
   });
 
@@ -1997,7 +2157,7 @@ function render(events, relations, filters, done) {
   summary.innerHTML = `${done ? '' : '<span class="spinner" style="width:12px;height:12px;border-width:2px;margin-right:6px;vertical-align:middle"></span>'}
     <strong>${filtered.length}</strong> class${filtered.length !== 1 ? 'es' : ''}
     ${instructorName ? `with <strong>${escapeHTML(instructorName)}</strong>` : ''}
-    ${done ? `— <strong>${filters.startDate}</strong> to <strong>${filters.endDateStr}</strong>` : 'found so far…'}`;
+    ${done ? '' : 'found so far…'}`;
   if (done) refreshUpcomingPanel();
   // Incrementally update day groups
   const sortedDays = Object.keys(byDay).sort();
@@ -2020,52 +2180,26 @@ function render(events, relations, filters, done) {
 
     const body = group.querySelector('.day-body');
 
-    // Group events by category, sorted by time within each category
-    const byCat = {};
-    for (const evt of dayEvents) {
-      const typeName = typeMap[evt.event_type_id]?.name || '';
-      const cat = getCategory(typeName);
-      if (!byCat[cat.key]) byCat[cat.key] = { cat, events: [] };
-      byCat[cat.key].events.push(evt);
+    // All of the day's classes in ONE list, mixed across types and time-sorted
+    // (no per-category sections) — so multiple selected class types interleave.
+    let grid = body.querySelector('.class-grid');
+    if (!grid) {
+      grid = document.createElement('div');
+      grid.className = 'class-grid';
+      body.appendChild(grid);
     }
-
-    // Render/update each category section
-    for (const { cat, events: catEvents } of Object.values(byCat)) {
-      let section = body.querySelector(`[data-cat="${cat.key}"]`);
-      if (!section) {
-        section = document.createElement('div');
-        section.dataset.cat = cat.key;
-        section.innerHTML = `
-          <div class="type-section-header">
-            <span class="type-dot" style="background:${cat.color}"></span>
-            <span style="color:${cat.color}">${cat.label}</span>
-          </div>
-          <div class="class-grid"></div>`;
-        // Insert category sections in CATEGORY_MAP order
-        const catOrder = CATEGORY_MAP.map(c => c.key);
-        const insertIdx = catOrder.indexOf(cat.key);
-        const siblings = [...body.querySelectorAll('[data-cat]')];
-        const after = siblings.find(s => catOrder.indexOf(s.dataset.cat) > insertIdx);
-        after ? body.insertBefore(section, after) : body.appendChild(section);
-      }
-
-      const grid = section.querySelector('.class-grid');
-      const existingIds = new Set([...grid.querySelectorAll('[data-id]')].map(el => el.dataset.id));
-
-      // Insert new cards in time-sorted order
-      for (const evt of catEvents.sort((a, b) => a.start_at.localeCompare(b.start_at))) {
-        if (existingIds.has(String(evt.id))) continue;
-        const newCard = document.createElement('div');
-        newCard.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
-        const card = newCard.firstElementChild;
-        // Insert in time order
-        const existing = [...grid.querySelectorAll('[data-id]')];
-        const insertBefore = existing.find(el => {
-          const elEvt = dayEvents.find(e => String(e.id) === el.dataset.id);
-          return elEvt && elEvt.start_at > evt.start_at;
-        });
-        insertBefore ? grid.insertBefore(card, insertBefore) : grid.appendChild(card);
-      }
+    const existingIds = new Set([...grid.querySelectorAll('[data-id]')].map(el => el.dataset.id));
+    for (const evt of dayEvents) { // dayEvents is already time-sorted above
+      if (existingIds.has(String(evt.id))) continue;
+      const newCard = document.createElement('div');
+      newCard.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
+      const card = newCard.firstElementChild;
+      const existing = [...grid.querySelectorAll('[data-id]')];
+      const insertBefore = existing.find(el => {
+        const elEvt = dayEvents.find(e => String(e.id) === el.dataset.id);
+        return elEvt && elEvt.start_at > evt.start_at;
+      });
+      insertBefore ? grid.insertBefore(card, insertBefore) : grid.appendChild(card);
     }
   }
 

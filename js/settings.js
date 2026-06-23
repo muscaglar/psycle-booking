@@ -174,8 +174,7 @@
           // App-focused settings only — instructor rankings/favourites
           // live on the Membership tab with the rest of the personal data.
           '<div class="settings-section">' +
-            '<div class="settings-section-title">Appearance</div>' +
-            '<div class="theme-picker" id="themePicker"></div>' +
+            '<div class="settings-section-title">Reminders</div>' +
             '<div id="reminderRow"></div>' +
           '</div>' +
           '<div class="settings-section">' +
@@ -370,10 +369,12 @@
     var cfg = window.psycleGetCalendarConfig();
     var calendars = await window.psycleListCalendars();
 
-    var options = ['<option value="__auto">Psycle (dedicated calendar)</option>'];
+    var chosen = cfg.mode === 'custom' && cfg.targetId;
+    // Placeholder first; NO auto-create option — the user must pick an existing
+    // calendar before anything is written. Psync never creates a calendar.
+    var options = ['<option value="" disabled' + (chosen ? '' : ' selected') + '>Choose a calendar…</option>'];
     calendars.forEach(function (c) {
-      if (c.isPsycle) return; // already represented by __auto
-      var sel = cfg.mode === 'custom' && String(cfg.targetId) === String(c.id) ? ' selected' : '';
+      var sel = chosen && String(cfg.targetId) === String(c.id) ? ' selected' : '';
       options.push('<option value="' + escapeHTML(String(c.id)) + '"' + sel + '>' +
         escapeHTML(c.title) + '</option>');
     });
@@ -390,19 +391,18 @@
           options.join('') +
         '</select>' +
       '</label>' +
+      (enabled && !chosen ?
+        '<div class="cal-sync-hint" style="color:var(--accent,#1f6f5c)">Choose a calendar to start syncing — nothing is added until you pick one.</div>' : '') +
       '<div class="cal-sync-actions">' +
         '<button class="cal-sync-resync" onclick="onCalendarResync(this)">Re-sync now</button>' +
         (typeof window.psycleCleanupDuplicates === 'function' ?
           '<button class="cal-sync-resync" onclick="onCalendarCleanupDupes(this)">Remove duplicates</button>' : '') +
       '</div>' +
       '<div class="cal-sync-hint">' +
-        'Events are deduplicated by title and start time. Switching target moves all your ' +
-        'existing bookings into the new calendar (the old entries are deleted automatically).' +
+        'Psync never creates a calendar — it only writes bookings into the calendar you choose. ' +
+        'Switching calendars moves your existing bookings across (old entries are deleted), and ' +
+        'cancelled classes are removed automatically.' +
       '</div>';
-
-    // Preselect current mode
-    var sel = document.getElementById('calSyncTarget');
-    if (sel && cfg.mode !== 'custom') sel.value = '__auto';
   }
 
   window.onCalendarSyncToggle = async function (checkbox) {
@@ -412,13 +412,11 @@
 
   window.onCalendarTargetChange = async function (select) {
     var val = select.value;
+    if (!val) return; // placeholder ("Choose a calendar…") — nothing picked yet
     // Prevent rapid re-entry while delete/sync is in flight
     select.disabled = true;
     try {
-      var cfg = val === '__auto'
-        ? { mode: 'auto' }
-        : { mode: 'custom', targetId: val };
-      var result = await window.psycleSetCalendarConfig(cfg);
+      var result = await window.psycleSetCalendarConfig({ mode: 'custom', targetId: val });
       if (typeof window.psycleResyncCalendar === 'function') {
         await window.psycleResyncCalendar();
       }

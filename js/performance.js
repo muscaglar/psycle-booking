@@ -136,18 +136,13 @@ function _makePlaceholder(cardHtml, eventId) {
   };
 
   window.render = function (events, relations, filters, done) {
-    // Enable virtual mode for large result sets
-    _virtualMode = (events.length > 50);
-
-    // Call the original render
-    _origRender(events, relations, filters, done);
-
-    // After render, observe any new placeholders
-    if (_virtualMode) {
-      initVirtualScroll();
-    }
-
+    // Virtual scrolling disabled: the redesign pre-loads the full all-studios
+    // window, so events.length is almost always > 50 — which made the
+    // placeholder→card swap fire constantly while scrolling (looked like the
+    // list "refreshing"). The redesign's cards are light enough to render in
+    // full, so we render real cards directly.
     _virtualMode = false;
+    _origRender(events, relations, filters, done);
   };
 })();
 

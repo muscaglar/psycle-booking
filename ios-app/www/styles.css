@@ -812,7 +812,6 @@ select:focus, input:focus {
   flex-wrap: wrap;
   align-items: center;
   min-height: 36px;
-  padding-top: 2px;
 }
 
 .loc-chip {

@@ -61,12 +61,28 @@
 
     controls.parentNode.insertBefore(discoverPanel, controls);
 
-    // Weekly planner at top
-    var discoverWeekView = document.createElement('div');
-    discoverWeekView.id = 'weekView';
-    discoverWeekView.className = 'week-view';
-    discoverWeekView.style.display = 'none';
-    discoverPanel.appendChild(discoverWeekView);
+    // Redesign: header row — title left, freshness/refresh + clear filters right
+    var discHeader = document.createElement('div');
+    discHeader.className = 'disc-header';
+    var discTitle = document.createElement('div');
+    discTitle.className = 'disc-title';
+    discTitle.innerHTML = 'Find your<br>next class';
+    var discActions = document.createElement('div');
+    discActions.className = 'disc-actions';
+    discActions.innerHTML =
+      '<span id="lastUpdated" class="last-updated"></span>' +
+      '<button type="button" class="disc-clear-btn" onclick="clearFilters()">Clear filters</button>';
+    discHeader.appendChild(discTitle);
+    discHeader.appendChild(discActions);
+    discoverPanel.appendChild(discHeader);
+
+    // (Top unified search bar removed — the filters cover instructor/studio/type.)
+
+    // Redesign: "N = classes matching your selection" count chip
+
+    // Weekly planner / "save this week as a template" calendar removed from
+    // Discover (not part of the redesign). #weekView is no longer created, so
+    // renderWeekView() no-ops via its null-check and the section never appears.
 
     // Instructor discovery sections (New to you + You might like)
     var discoverExplore = document.createElement('div');
@@ -140,8 +156,22 @@
     // (theme, reminders, data) live in the Settings panel.
     membershipPanel.innerHTML =
       '<div id="membershipSignin" class="tab-empty" style="display:none"></div>' +
-      '<div id="membershipInfo" class="insights-section" style="display:none"></div>' +
       '<div id="costSection" class="cost-section" style="display:none"></div>' +
+      '<div id="membershipInfo" class="insights-section" style="display:none"></div>' +
+      // Appearance (theme cards) — moved out of the Settings overlay
+      '<div class="ms-section">' +
+        '<div class="ms-section-title">Appearance</div>' +
+        '<div id="themePicker"></div>' +
+      '</div>' +
+      // Settings list — each row opens the Settings panel
+      '<div class="ms-list">' +
+        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Bike preferences</span><span class="ms-row-sub">Default studio · favourite bikes</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Reminders</span><span class="ms-row-sub">Class reminders · waitlist alerts</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Calendar sync</span><span class="ms-row-sub">Add bookings to your calendar</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Data &amp; privacy</span><span class="ms-row-sub">Export · import · clear local data</span></span><span class="ms-row-chev">›</span></button>' +
+      '</div>' +
+      // Sign out (signed-in only — toggled in renderMembershipInfo)
+      '<button id="signOutRow" class="ms-signout" onclick="if(typeof clearToken===\'function\')clearToken()" style="display:none">Sign out</button>' +
       '<div class="insights-section">' +
         '<div class="insights-title">Instructor Rankings & Favourites</div>' +
         '<div class="tier-group-label">Ranked</div>' +
@@ -151,13 +181,6 @@
         '<div class="tier-group-label" style="margin-top:16px">Search all instructors</div>' +
         '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
         '<div class="tier-list" id="tierListSearch" style="display:none"></div>' +
-      '</div>' +
-      '<div class="insights-section app-section">' +
-        '<button class="app-row" onclick="openSettings()">' +
-          '<span class="app-row-text"><span class="app-row-label">Settings</span>' +
-          '<span class="app-row-detail">Theme · bike preferences · reminders · data</span></span>' +
-          '<span class="app-row-chevron">›</span>' +
-        '</button>' +
       '</div>' +
       '<div class="about-block">' +
         '<div class="about-mark">PSYNC</div>' +
@@ -1026,6 +1049,11 @@
     var container = document.getElementById('membershipInfo');
     if (!container) return;
 
+    // Appearance picker + Sign-out live in the Membership tab now.
+    if (typeof renderThemePicker === 'function') renderThemePicker();
+    var _signOut = document.getElementById('signOutRow');
+    if (_signOut) _signOut.style.display = (typeof currentUser !== 'undefined' && currentUser) ? '' : 'none';
+
     var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
     var user = (typeof currentUser !== 'undefined') ? currentUser : null;
     var signinEl = document.getElementById('membershipSignin');
@@ -1044,7 +1072,7 @@
     if (signinEl) signinEl.style.display = 'none';
     container.style.display = '';
 
-    var html = '<div class="insights-title">Your Membership</div>';
+    var html = '';
 
     if (sub) {
       var planName = sub.name || 'Subscription';
@@ -1090,18 +1118,21 @@
       html += '</div>';
     }
 
-    // User info
+    // Account card (avatar + name + email), rendered above the plan/usage card.
+    var acctHTML = '';
     if (user) {
-      html += '<div class="membership-account">';
-      html += '<div class="membership-detail">' + escapeHTML((user.first_name || '') + ' ' + (user.last_name || '')) + '</div>';
-      html += '<div class="membership-detail" style="color:var(--text-ghost)">' + escapeHTML(user.email || '') + '</div>';
-      if (user.booking_cutoff) {
-        html += '<div class="membership-detail" style="margin-top:8px">Can book until: ' + new Date(user.booking_cutoff).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + '</div>';
-      }
-      html += '</div>';
+      var _fn = ((user.first_name || '') + ' ' + (user.last_name || '')).trim() || 'You';
+      var _ini = ((user.first_name || user.email || '?').trim().charAt(0) + (user.last_name ? user.last_name.trim().charAt(0) : '')).toUpperCase();
+      acctHTML = '<div class="ms-account">' +
+        '<div class="ms-account-avatar">' + escapeHTML(_ini) + '</div>' +
+        '<div class="ms-account-info">' +
+          '<div class="ms-account-name">' + escapeHTML(_fn) + '</div>' +
+          (user.email ? '<div class="ms-account-email">' + escapeHTML(user.email) + '</div>' : '') +
+        '</div>' +
+      '</div>';
     }
 
-    container.innerHTML = html;
+    container.innerHTML = acctHTML + html;
   }
 
   // ── Cost Per Class Tracker ─────────────────────────────────────
@@ -1254,11 +1285,10 @@
     if (!box || !window.APP_THEMES) return;
     var current = (typeof getAppTheme === 'function') ? getAppTheme() : 'dark';
     box.innerHTML =
-      '<div class="theme-picker-label">Theme</div>' +
       '<div class="theme-chips">' +
       window.APP_THEMES.map(function (t) {
         return '<button class="theme-chip' + (t.id === current ? ' active' : '') + '" onclick="window._pickTheme(\'' + t.id + '\')">' +
-          '<span class="theme-swatch" style="background:' + t.bg + '"><i style="background:' + t.accent + '"></i></span>' +
+          '<span class="theme-swatch"><i style="background:' + t.accent + '"></i><i style="background:' + t.bg + '"></i></span>' +
           '<span class="theme-chip-name">' + t.name + '</span>' +
         '</button>';
       }).join('') +

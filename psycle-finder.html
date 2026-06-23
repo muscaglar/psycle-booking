@@ -2,7 +2,7 @@
 <html lang="en" data-theme="cloud">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <!-- Defense-in-depth: restrict network + plugin surface, block framing.
      'unsafe-inline' kept for script/style because the UI uses inline
      onclick handlers and style attributes throughout. -->
@@ -18,6 +18,8 @@
 <link rel="stylesheet" href="css/tabs.css">
 <link rel="stylesheet" href="css/settings.css">
 <link rel="stylesheet" href="css/explore.css">
+<link rel="stylesheet" href="css/redesign.css">
+<link rel="stylesheet" href="css/discover-layout-fix.css">
 <meta name="theme-color" content="#efeee9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,17 +28,21 @@
 <body>
 
 <header>
-  <h1>Psync</h1>
-  <span class="header-subtitle">Psycle Companion</span>
+  <div class="brand">
+    <h1>Psync</h1>
+    <span class="header-subtitle">Psycle Companion</span>
+  </div>
+  <div class="header-right">
   <div class="auth-pill" id="authPill">
     <a href="#" onclick="event.preventDefault();if(typeof openLoginPopup==='function')openLoginPopup();else location.href='./login.html'" class="signin-pill">Sign in</a>
   </div>
-  <button id="settingsGear" class="settings-gear" aria-label="Settings" title="Settings" hidden onclick="if(typeof openSettings==='function')openSettings()">
+  <button id="settingsGear" class="settings-gear header-avatar" aria-label="Account & membership" title="Account & membership" hidden onclick="if(typeof switchTab==='function')switchTab('membership')">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="3"></circle>
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
     </svg>
   </button>
+  </div>
 </header>
 
 <div id="sessionBanner" style="display:none;background:#1a0f0a;border-bottom:1px solid #4a2010;padding:10px 24px;font-size:13px;color:#e07040;align-items:center;gap:12px">
@@ -120,48 +126,43 @@
     <span class="controls-chevron" id="controlsChevron">▼</span>
   </div>
   <div class="controls-body" id="controlsBody">
-  <div class="control-group" style="position:relative">
-    <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors">★ Favs</button></label>
-    <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
-      <div id="instrChips"></div>
-      <input id="instrSearch" class="instr-search" placeholder="Search…" autocomplete="off"
-        oninput="filterInstrDropdown()" onfocus="showInstrDropdown()" onblur="hideInstrDropdown()" onkeydown="instrKeydown(event)">
-    </div>
-    <div id="instrDropdown" class="instr-dropdown" style="display:none"></div>
-  </div>
-
-  <div class="control-group">
-    <label>Studios <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
-    <div id="locationChips" class="location-chips"></div>
-  </div>
-
-  <div class="control-group" style="position:relative">
-    <label>Class Type</label>
-    <div id="categoryPills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:36px;padding-top:2px"></div>
-    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center"></div>
-  </div>
-
   <div class="control-group">
     <label>Date</label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <div class="date-presets">
       <button class="date-quick-btn" onclick="setDateQuick('today')">Today</button>
       <button class="date-quick-btn" onclick="setDateQuick('tomorrow')">Tomorrow</button>
       <button class="date-quick-btn" onclick="setDateQuick('week')">7 days</button>
       <button class="date-quick-btn" onclick="setDateQuick('2week')">14 days</button>
+      <button class="date-quick-btn date-pick" id="pickDateBtn" onclick="toggleDatePicker()" aria-label="Pick a date" title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg></button>
     </div>
-    <div style="margin-top:8px">
+    <div id="datePicker" class="date-picker" style="display:none"></div>
+    <div style="display:none">
       <input type="date" id="startDate" onchange="onDateInputChange()" style="min-width:140px">
     </div>
     <input type="hidden" id="daysAhead" value="7">
   </div>
 
-  <div class="control-group" style="justify-content:space-between;gap:8px;flex-direction:row;align-items:center;flex-wrap:wrap">
-    <span id="lastUpdated" class="last-updated"></span>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button onclick="clearFilters()" style="padding:6px 12px;width:auto;background:none;border:none;color:var(--text-ghost,#555);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px">Clear filters</button>
-      <button class="btn" id="searchBtn" onclick="search()" style="padding:9px 20px;width:auto;display:inline-block">Search</button>
-    </div>
+  <div class="control-group">
+    <label>Location <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
+    <div id="locationChips" class="location-chips"></div>
   </div>
+
+  <div class="control-group" style="position:relative">
+    <label>Class Type</label>
+    <div id="categoryPills" style="min-height:36px"></div>
+    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center"></div>
+  </div>
+
+  <div class="control-group" style="position:relative">
+    <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors">★ Favs</button></label>
+    <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
+      <div id="instrChips"></div>
+      <input id="instrSearch" class="instr-search" placeholder="Add an instructor" autocomplete="off"
+        oninput="filterInstrDropdown()" onfocus="showInstrDropdown()" onblur="hideInstrDropdown()" onkeydown="instrKeydown(event)">
+    </div>
+    <div id="instrDropdown" class="instr-dropdown" style="display:none"></div>
+  </div>
+
   </div>
 </div>
 

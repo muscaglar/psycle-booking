@@ -1,0 +1,44 @@
+/* ============================================================================
+   discover-layout-fix.css — corrects the Discover filter layout (from handoff).
+
+   PROBLEM: on ≥1024px the integration rendered the filter column as a wrapping
+   multi-column flex (#tab-discover .controls-body{flex-wrap:wrap} +
+   .control-group{flex:1 1 200px}), which reordered the rows, right-shifted the
+   Date pills, and let the Studios row bleed off the left edge.
+
+   FIX: a single, full-width, top-to-bottom column matching the prototype.
+
+   NOTE: the markup is already reordered to Date → Location → Class Type →
+   Instructor, so the handoff's `order:` nth-child block is intentionally
+   omitted (per the README: "If you reorder the markup instead, delete this
+   block"). DOM order now drives the display order on every viewport.
+   ========================================================================== */
+
+@media (min-width: 1024px) {
+  /* Stack the filter groups vertically instead of wrapping into columns. */
+  #tab-discover .controls-body {
+    display: flex !important;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 14px; /* match the mobile row gap (redesign.css) so rhythm is equal across breakpoints */
+    align-items: stretch;
+  }
+
+  /* Each filter row spans the full panel width (was: flex:1 1 200px). */
+  #tab-discover .control-group {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Each pill row is a single horizontal side-scrolling row, left-aligned and
+   contained (no negative-margin bleed; the row scrolls, the page doesn't). */
+#tab-discover .location-chips,
+#tab-discover #categoryPills,
+#tab-discover .date-presets {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  justify-content: flex-start;
+  margin: 0;               /* nuke any negative-margin bleed trick */
+}
