@@ -28,6 +28,8 @@
 	<string>Psycle Finder adds your booked classes to your calendar and removes them when you cancel.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Psycle Finder adds your booked classes to your calendar and removes them when you cancel.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

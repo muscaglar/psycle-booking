@@ -919,17 +919,17 @@
   // ActivityKit Live Activity, and the "What's my next class?" App Intent
   // all read these keys from the SHARED UserDefaults(suiteName: appGroup).
   //
-  // IMPORTANT (Capacitor ↔ native mapping):
-  //   capacitor.config.json sets Preferences.group = "PsycleFinderSettings".
-  //   Capacitor's iOS Preferences plugin stores values in
-  //   UserDefaults(suiteName: "<group>"), namespacing each key as
-  //   "<group>.<key>" -> so widget_next_class is persisted under the
-  //   defaults key "PsycleFinderSettings.widget_next_class".
-  //   A plain UserDefaults(suiteName: "PsycleFinderSettings") is NOT an
-  //   App Group container and is NOT shareable with an extension. To let
-  //   the widget/Live Activity/intent read the snapshot we ALSO mirror it
-  //   into a real App Group suite (WIDGET_APP_GROUP below) under the bare
-  //   keys "widget_next_class" / "widget_week". See NATIVE_FEATURES.md.
+  // IMPORTANT (Capacitor ↔ native mapping — verified against the installed
+  // @capacitor/preferences v6 source):
+  //   The standard Preferences plugin writes to UserDefaults.STANDARD with
+  //   the configured "group" as a KEY PREFIX ("<group>.<key>"). It never
+  //   touches UserDefaults(suiteName:) — so nothing it writes is readable
+  //   by an app extension, regardless of what the group is named.
+  //   The LIVE path to the widget/Live Activity/intent is therefore the
+  //   in-app AppGroupPreferences plugin (App/AppGroupPreferences.swift),
+  //   which _appGroupSet() below calls to write the BARE keys into the real
+  //   shared suite UserDefaults(suiteName: WIDGET_APP_GROUP).
+  //   See NATIVE_FEATURES.md (status block) for the full story.
 
   // App Group container id. MUST match the App Group capability you add in
   // Xcode to BOTH the main app target and every extension target. This is a
@@ -940,8 +940,9 @@
   var WIDGET_NEXT_KEY = 'widget_next_class';
   var WIDGET_WEEK_KEY = 'widget_week';
 
-  // Capacitor Preferences plugin: writes to UserDefaults(suiteName: group)
-  // under "<group>.<key>". Always available (web build excluded earlier).
+  // Standard Preferences plugin: lands in UserDefaults.standard under
+  // "<group>.<key>" (NOT extension-readable — kept for in-app consumers
+  // and diagnostics). Always available (web build excluded earlier).
   function _prefSet(key, value) {
     try { Preferences.set({ key: key, value: value }).catch(function () {}); } catch (e) {}
   }
@@ -978,7 +979,10 @@
       var slots = (booking && Array.isArray(booking.slots)) ? booking.slots.slice() : [];
       return {
         eventId: String(eventId),
-        startAt: evt.start_at,                          // ISO string
+        // The API emits 'YYYY-MM-DD HH:MM:SS'; PsycleDateParser on the Swift
+        // side needs the ISO 'T' form — normalize BEFORE persisting or the
+        // widget countdown and Live Activity silently never work.
+        startAt: String(evt.start_at).replace(' ', 'T'),
         instrName: evt._instrName || '',
         typeName: evt._typeName || 'Class',
         studioName: evt._studioName || '',
@@ -1032,7 +1036,8 @@
           String(d.getMonth() + 1).padStart(2, '0') + '-' +
           String(d.getDate()).padStart(2, '0');
         if (!byDay[dayKey]) {
-          byDay[dayKey] = { day: dayKey, count: 0, firstStart: cache[String(u.id)].start_at };
+          // Same space→T normalization as startAt above.
+          byDay[dayKey] = { day: dayKey, count: 0, firstStart: String(cache[String(u.id)].start_at).replace(' ', 'T') };
         }
         byDay[dayKey].count++;
       }

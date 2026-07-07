@@ -210,6 +210,9 @@ struct PsycleWidget: Widget {
 struct PsycleWidgetBundle: WidgetBundle {
     var body: some Widget {
         PsycleWidget()
+        if #available(iOS 16.1, *) {
+            PsycleLiveActivityWidget()
+        }
     }
 }
 
