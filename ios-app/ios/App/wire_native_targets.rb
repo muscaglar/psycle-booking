@@ -120,6 +120,23 @@ ext_sources.each do |ref|
   puts "Ext sources += #{ref.path}"
 end
 
+# ── 4b. Privacy manifests (required-reason API declarations) ───────────────
+# Both binaries touch UserDefaults (CA92.1) — each target bundles its own
+# PrivacyInfo.xcprivacy as a RESOURCE (not a compiled source).
+app_privacy_ref = app_group.files.find { |f| f.path == 'PrivacyInfo.xcprivacy' } ||
+                  app_group.new_reference('PrivacyInfo.xcprivacy')
+ext_privacy_ref = ext_g.files.find { |f| f.path == 'PrivacyInfo.xcprivacy' } ||
+                  ext_g.new_reference('PrivacyInfo.xcprivacy')
+
+unless app_target.resources_build_phase.files_references.include?(app_privacy_ref)
+  app_target.resources_build_phase.add_file_reference(app_privacy_ref)
+  puts 'App resources += PrivacyInfo.xcprivacy'
+end
+unless ext.resources_build_phase.files_references.include?(ext_privacy_ref)
+  ext.resources_build_phase.add_file_reference(ext_privacy_ref)
+  puts 'Ext resources += PrivacyInfo.xcprivacy'
+end
+
 # ── 5. Embed the extension in the app ───────────────────────────────────────
 app_target.add_dependency(ext) unless app_target.dependencies.any? { |d| d.target == ext }
 

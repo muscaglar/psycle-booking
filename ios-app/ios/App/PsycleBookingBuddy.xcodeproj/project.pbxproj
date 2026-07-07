@@ -24,9 +24,11 @@
 		931C2C018286D391138CDF1E /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27ED0A0A598791FAE604B96 /* MainViewController.swift */; };
 		B3E8BCBAB72196A40F1018A2 /* NextClassIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4ADF391480AE69D75DE69D /* NextClassIntent.swift */; };
 		C609163A7F1EB75EFF7C2762 /* PsycleSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210BAA823C3990B28607661D /* PsycleSnapshot.swift */; };
+		CE018090B34D73F713E1FE40 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 9DDB62B019A4759A25FDEDBF /* PrivacyInfo.xcprivacy */; };
 		D08D396783F5BC3EDE3BC015 /* PsycleLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF1DDB31D25EA13E14852867 /* PsycleLiveActivityAttributes.swift */; };
 		DD8EA7129C55415377F5E35E /* PsycleWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 715F53C1DD6AF6DE65D320D2 /* PsycleWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E659D50F0A7523315FD62515 /* PsycleWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138CC2B3CCD4E67C3245C2F3 /* PsycleWidget.swift */; };
+		F2DC180AB0D87DE3D4A1AAB9 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D99B23819395B5C58C986985 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,11 +77,13 @@
 		8236EAE45FEFA06ECEED2260 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		83CD02FD4644AB42491B73E5 /* AppShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
 		8ADD961922F1A5EA9D3F27EB /* Pods-PsycleBookingBuddy.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PsycleBookingBuddy.debug.xcconfig"; path = "Pods/Target Support Files/Pods-PsycleBookingBuddy/Pods-PsycleBookingBuddy.debug.xcconfig"; sourceTree = "<group>"; };
+		9DDB62B019A4759A25FDEDBF /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A1599AD00CF8C3AE993A8FB7 /* NotificationCategories.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationCategories.swift; sourceTree = "<group>"; };
 		A27ED0A0A598791FAE604B96 /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		CF1DDB31D25EA13E14852867 /* PsycleLiveActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PsycleLiveActivityAttributes.swift; sourceTree = "<group>"; };
 		D059FACA4F7DAF1170C0A1CB /* PsycleLiveActivityController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PsycleLiveActivityController.swift; sourceTree = "<group>"; };
 		D3FAEE0DC6CF5ACD49431385 /* PsycleWidgetExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PsycleWidgetExtension.entitlements; sourceTree = "<group>"; };
+		D99B23819395B5C58C986985 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -168,6 +172,7 @@
 				7B9A581D88135682C49890B4 /* AppGroupPreferences.swift */,
 				A27ED0A0A598791FAE604B96 /* MainViewController.swift */,
 				8236EAE45FEFA06ECEED2260 /* App.entitlements */,
+				9DDB62B019A4759A25FDEDBF /* PrivacyInfo.xcprivacy */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -197,6 +202,7 @@
 			children = (
 				4C5B7C910DFE7D321C6E4CDD /* Info.plist */,
 				D3FAEE0DC6CF5ACD49431385 /* PsycleWidgetExtension.entitlements */,
+				D99B23819395B5C58C986985 /* PrivacyInfo.xcprivacy */,
 			);
 			name = PsycleWidgetExtension;
 			path = PsycleWidgetExtension;
@@ -306,6 +312,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				CE018090B34D73F713E1FE40 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -313,6 +320,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F2DC180AB0D87DE3D4A1AAB9 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

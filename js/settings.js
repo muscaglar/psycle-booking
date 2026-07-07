@@ -840,9 +840,30 @@
     return sections.join('\n');
   }
 
-  window.downloadBugReport = function () {
+  window.downloadBugReport = async function () {
     var report = buildBugReport();
     var date = new Date().toISOString().split('T')[0];
+
+    // iOS app: <a download> blob clicks are dead in WKWebView — route
+    // through the native share sheet instead (Mail / Messages / AirDrop /
+    // Save to Files), which is also how TestFlight testers send us the
+    // JS-layer diagnostics that native crash reporting can't see.
+    if (typeof window.nativeShare === 'function' &&
+        window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+      // Prefer the richer native report (device info + native logs) when
+      // the bridge exposes it.
+      var fullReport = report;
+      if (typeof window.getDiagnosticReport === 'function') {
+        try { fullReport = await window.getDiagnosticReport(); } catch (e) {}
+      }
+      var shared = await window.nativeShare('Psync bug report ' + date, fullReport, null);
+      if (shared) { toast('Bug report ready to send', 'success'); return; }
+      // false usually means the user CANCELLED the share sheet — don't
+      // clobber their clipboard or claim success; just point at the option.
+      toast('Share cancelled — use "Copy" if you want it on the clipboard', 'info');
+      return;
+    }
+
     var blob = new Blob([report], { type: 'text/plain' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');

@@ -54,6 +54,31 @@ Store Connect (bundle id `com.psyclefinder.app`).
 Signing is handled by Xcode Cloud's managed distribution certs — if it asks,
 let it create the cloud signing assets for the team.
 
+## Tester feedback & logs (TestFlight)
+
+Three channels, no third-party services:
+
+1. **TestFlight screenshot feedback (built-in, zero setup).** Testers take a
+   screenshot inside the app → iOS offers "Share Beta Feedback" → comment +
+   image goes to App Store Connect → your app → TestFlight → **Feedback
+   (Screenshots)**. Available for builds ≤ 90 days old; also reachable from
+   the TestFlight app ("Send Beta Feedback").
+2. **Crashes (built-in).** Any native crash in a TestFlight build prompts the
+   tester for comments and uploads the log: ASC → TestFlight → **Feedback
+   (Crashes)**, and symbolicated in Xcode → Organizer → Crashes (plus hangs/
+   energy in the other Organizer tabs). No SDK needed.
+3. **In-app bug report (ours — covers what TestFlight can't see).** JS errors
+   in the webview are NOT native crashes, so channels 1–2 never see them. The
+   app keeps its own logs (`psycle_error_log` / `psycle_action_log`, mirrored
+   to Preferences) and Membership → Settings → **Bug report** now opens the
+   native share sheet with the full `getDiagnosticReport()` output (device +
+   app + error/action logs) — testers Mail/AirDrop it in one tap. On the web
+   build the same button downloads a .txt.
+
+Worth doing in ASC: set **Beta App Information → Feedback Email**, and put
+"shake out of it? Use Settings → Bug report and share it to us" in the
+build's **What to Test** notes so testers know channel 3 exists.
+
 ## Notes / gotchas
 
 - **Build numbers are handled by Xcode Cloud** — it stamps its own run number
