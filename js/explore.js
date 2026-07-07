@@ -145,9 +145,13 @@
       if (!isNaN(ts) && ts > profiles[hid].lastBookedTs) profiles[hid].lastBookedTs = ts;
     }
 
-    // Also count current bookings
+    // Also count current bookings — but skip any that are already in the
+    // history (features.js records every in-app booking there immediately,
+    // so counting both would double-count every upcoming class).
+    var histIds = new Set(history.map(function (e) { return String(e.eventId); }));
     var bIds = Object.keys(bookings);
     for (var b = 0; b < bIds.length; b++) {
+      if (histIds.has(String(bIds[b]))) continue;
       var bevt = cache[bIds[b]];
       if (!bevt || !bevt.instructor_id) continue;
       var bid = String(bevt.instructor_id);
@@ -554,11 +558,14 @@
       if (history[h].typeName) instrStats[hid].classTypes.add(history[h].typeName);
     }
 
-    // From current bookings
+    // From current bookings — skipping any already counted via history
+    // (in-app bookings are added to history at booking time).
     var cache = (typeof _eventCache !== 'undefined') ? _eventCache : {};
     var bookings = (typeof _myBookings !== 'undefined') ? _myBookings : {};
+    var histEventIds = new Set(history.map(function (e) { return String(e.eventId); }));
     var bIds = Object.keys(bookings);
     for (var b = 0; b < bIds.length; b++) {
+      if (histEventIds.has(String(bIds[b]))) continue;
       var evt = cache[bIds[b]];
       if (!evt || !evt.instructor_id) continue;
       var bid = String(evt.instructor_id);
@@ -688,7 +695,7 @@
       for (var u = 0; u < data.unrankedList.length; u++) {
         var ui = data.unrankedList[u];
         html += '<button class="explore-unranked-item" onclick="window._explore_openSettingsForInstructor(\'' +
-          escapeHtml(ui.name).replace(/'/g, "\\'") + '\')">' +
+          escapeForJsString(ui.name) + '\')">' +
           '<span class="explore-unranked-name">' + escapeHtml(ui.name) + '</span>' +
           '<span class="explore-unranked-count">' + ui.count + ' class' + (ui.count !== 1 ? 'es' : '') + '</span>' +
         '</button>';
@@ -747,20 +754,22 @@
       locHtml = '<div class="explore-loc-tag">' + escapeHtml(locs.join(' / ')) + '</div>';
     }
 
-    var nameEscaped = profile.name.replace(/'/g, "\\'");
+    // The name goes inside a single-quoted JS string in an onclick attribute.
+    var nameEscaped = escapeForJsString(profile.name);
+    var idEscaped = escapeHtml(String(profile.id));
 
     return '<div class="explore-card">' +
       (whyLabel ? '<div class="explore-why">' + escapeHtml(whyLabel) + '</div>' : '') +
       '<div class="explore-card-header">' +
         '<span class="explore-card-name" onclick="event.stopPropagation();' +
-          'window._features_openInstructorModal(\'' + nameEscaped + '\',\'' + profile.id + '\')">' +
+          'window._features_openInstructorModal(\'' + nameEscaped + '\',\'' + idEscaped + '\')">' +
           escapeHtml(profile.name) + '</span>' +
         tierBadge +
       '</div>' +
       tagHtml +
       locHtml +
       '<button class="explore-card-action" onclick="' +
-        'window._features_filterByInstructor(\'' + profile.id + '\');' +
+        'window._features_filterByInstructor(\'' + idEscaped + '\');' +
         'window.switchTab(\'discover\')' +
       '">View classes</button>' +
     '</div>';
@@ -851,6 +860,8 @@
     }
 
     var allBookings = [];
+    var _syncIncomplete = false;   // a pagination page failed — data missing
+    var _syncFailedDetails = 0;    // event-detail fetches that were dropped
 
     try {
       // Strategy 1: Try /bookings with type=previous (confirmed Psycle API pattern)
@@ -878,7 +889,7 @@
                 var sep = baseUrl.includes('?') ? '&' : '?';
                 if (btn) btn.textContent = 'Fetching page ' + pg + ' of ' + totalPages + '...';
                 var pgRes = await apiFetch(baseUrl + sep + 'page=' + pg);
-                if (!pgRes.ok) break;
+                if (!pgRes.ok) { _syncIncomplete = true; break; } // partial sync — don't mark as fully synced
                 var pgData = await pgRes.json();
                 var pgList = Array.isArray(pgData) ? pgData : (pgData.data || []);
                 if (pgList.length === 0) break;
@@ -944,7 +955,7 @@
           var evtId = String(booking.event_id);
           try {
             var r = await apiFetch('/events/' + evtId);
-            if (!r.ok) return;
+            if (!r.ok) { _syncFailedDetails++; return; }
             var d = await r.json();
             var evt = d.data || d;
             var rels = d.relations || {};
@@ -987,7 +998,7 @@
                 _studioName: studio ? studio.name : '',
               };
             }
-          } catch (e) { /* skip failed event fetches */ }
+          } catch (e) { _syncFailedDetails++; /* entry omitted this round */ }
         }));
       }
 
@@ -1003,10 +1014,22 @@
       });
       if (merged.length > 1000) merged.length = 1000;
       localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
+
+      // Only mark the sync complete when nothing was dropped — a partial sync
+      // (failed page / failed detail fetches) must stay retryable, not
+      // silently report success and suppress the sync prompt forever.
+      var partial = _syncIncomplete || _syncFailedDetails > 0;
+      if (!partial) {
+        localStorage.setItem(SYNC_KEY, new Date().toISOString());
+      }
 
       if (typeof toast === 'function') {
-        toast('Synced ' + newEntries.length + ' past booking' + (newEntries.length !== 1 ? 's' : '') + ' (' + merged.length + ' total in history)', 'success');
+        if (partial) {
+          toast('Synced ' + newEntries.length + ' booking' + (newEntries.length !== 1 ? 's' : '') +
+            ' — ' + (_syncFailedDetails || 'some') + ' could not be fetched. Tap Sync again to retry the rest.', 'info');
+        } else {
+          toast('Synced ' + newEntries.length + ' past booking' + (newEntries.length !== 1 ? 's' : '') + ' (' + merged.length + ' total in history)', 'success');
+        }
       }
 
       // Re-render all tabs that use history

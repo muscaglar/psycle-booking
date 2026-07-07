@@ -19,9 +19,10 @@
     "@capacitor/local-notifications": "^6.0.0",
     "@capacitor/preferences": "^6.0.0",
     "@capacitor/share": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
     "@ebarooni/capacitor-calendar": "^6.0.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.3.0"
+    "@capacitor/cli": "^6.0.0"
   }
 }

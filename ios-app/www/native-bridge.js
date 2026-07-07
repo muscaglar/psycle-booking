@@ -71,16 +71,23 @@
 
   var SYNC_KEYS = [
     'psycle_bearer_token', 'psycle_bearer_token_enc',
+    // AES key backup (written by security.js on native only). Without it an
+    // IndexedDB purge makes the mirrored _enc ciphertext undecryptable and
+    // the user is silently signed out forever.
+    'psycle_sec_key_backup',
     'psycle_fav_instructors', 'psycle_saved_filters',
     'psycle_instructor_tiers', 'psycle_bike_prefs',
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
     'psycle_notify_watchlist', 'psycle_calendar_data',
     'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
+    'psycle_waitlisted_events', 'psycle_weekly_template',
+    'psycle_bike_history', 'psycle_recent_searches', 'psycle_onboarded_v1',
+    'psycle_weekly_reminder',
     // Calendar integration state — must survive iOS storage purges
     // or duplicates are created on the next full sync.
     'psycle_native_cal_events', 'psycle_native_cal_id',
     'psycle_calendar_target_id', 'psycle_calendar_mode',
-    'psycle_calendar_enabled',
+    'psycle_calendar_enabled', 'psycle_calendar_owned_ack',
   ];
 
   // On startup: restore from native storage to localStorage
@@ -124,8 +131,21 @@
     syncToNative(key, null);
   };
 
-  // Restore on startup
-  restoreFromNative();
+  // Restore on startup. security.js's securityReady WAITS on this flag
+  // before reading localStorage (token ciphertext + AES key backup) — an
+  // unordered race meant a post-purge launch read an empty store and showed
+  // "Sign in" even though the token was restored milliseconds later. Set
+  // the flag even on failure so startup can never hang on it.
+  window._psycleNativeRestoreDone = false;
+  restoreFromNative()
+    .catch(function () {})
+    .then(function () {
+      window._psycleNativeRestoreDone = true;
+      // Resolve the handshake promise security.js created (it loads first).
+      if (typeof window._psycleNativeRestoreResolve === 'function') {
+        window._psycleNativeRestoreResolve();
+      }
+    });
 
 
   // ── Native Haptics ─────────────────────────────────────────────
@@ -173,6 +193,9 @@
   var CAL_TARGET_KEY = 'psycle_calendar_target_id';   // user-selected target calendar ID
   var CAL_MODE_KEY = 'psycle_calendar_mode';          // 'auto' | 'custom' | 'default'
   var CAL_ENABLED_KEY = 'psycle_calendar_enabled';    // '0' disables sync entirely
+  // '1' once the user has picked/confirmed the target under the full-ownership
+  // contract — only then may the reconcile delete events WITHOUT our marker.
+  var CAL_OWNED_ACK_KEY = 'psycle_calendar_owned_ack';
   var PSYCLE_CAL_TITLE = 'Psycle';
   var PSYCLE_CAL_COLOR = '#e94560';
   var PSYCLE_EVENT_MARKER = 'psycle-event-id:'; // stable owner tag in event notes for safe orphan removal
@@ -185,15 +208,12 @@
   }
 
   /**
-   * Get the slot label for a class type (matches app.js slotLabel).
-   * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
+   * Slot label for a class type. Delegates to app.js's slotLabel (same page,
+   * loaded earlier) so the calendar/widget noun can never drift from the UI;
+   * the inline fallback only covers a missing global.
    */
   function _nativeSlotLabel(typeName) {
-    var n = (typeName || '').toUpperCase();
-    if (n.includes('REFORMER')) return 'Bed';
-    if (n.includes('RIDE')) return 'Bike';
-    if (n.includes('PILATES')) return 'Bed';
-    if (n.includes('STRENGTH') || n.includes('LIFT') || n.includes('WEIGHTS') || n.includes('TREAD')) return 'Bench';
+    if (typeof window.slotLabel === 'function') return window.slotLabel(typeName);
     return 'Spot';
   }
 
@@ -260,8 +280,12 @@
     if (!evt) return null;
     var booking = (_myBookings || {})[String(eventId)];
     if (!booking) return null;
+    // A waitlist place is not a confirmed class — never put it in the
+    // calendar as if the user had a seat.
+    if (booking.waitlisted) return null;
 
-    var start = new Date(evt.start_at);
+    var start = new Date(String(evt.start_at).replace(' ', 'T'));
+    if (isNaN(start.getTime())) start = new Date(evt.start_at);
     var end = new Date(start.getTime() + (evt.duration || 45) * 60 * 1000);
     var slots = booking.slots || [];
     var label = _nativeSlotLabel(evt._typeName);
@@ -283,354 +307,268 @@
     desc.push('Duration: ' + (evt.duration || 45) + 'min');
     desc.push(PSYCLE_EVENT_MARKER + eventId);
 
+    // Field names match the installed @ebarooni/capacitor-calendar v6 API:
+    // `notes` (NOT `description`) and `alertOffsetInMinutes` (NOT `alerts`).
+    // The old names were silently ignored — events carried no ownership
+    // marker and no reminders.
     return {
       title: title,
       location: location,
       startDate: start.getTime(),
       endDate: end.getTime(),
-      description: desc.join('\n'),
+      notes: desc.join('\n'),
       isAllDay: false,
-      alerts: [-60, -15], // 1 hour and 15 minutes before class
+      alertOffsetInMinutes: [-60, -15], // 1 hour and 15 minutes before class
     };
   }
 
-  /**
-   * Look for an existing native event with the same start time and title
-   * within the target calendar. Used to dedupe when the local map was lost
-   * (iOS storage purge, reinstall) or when creation succeeded but the
-   * mapping write failed.
-   */
-  async function _findExistingNativeEvent(calId, data) {
-    if (!Calendar || !data) return null;
-    // Search a narrow window around the event start.
-    var windowMs = 60 * 60 * 1000; // ±1h
-    var rangeStart = new Date(data.startDate - windowMs);
-    var rangeEnd = new Date(data.endDate + windowMs);
+  // ── v6-plugin-correct primitives ─────────────────────────────────
+
+  /** Extract the Psycle event id from a native event's notes, or null. */
+  function _markerEventId(ev) {
+    var notes = (ev && (ev.notes || ev.description)) || '';
+    var m = /psycle-event-id:(\d+)/.exec(notes);
+    return m ? m[1] : null;
+  }
+
+  /** Millisecond start time of a native event, across plugin shapes. */
+  function _nativeStartMs(ev) {
+    return typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
+  }
+
+  /** The created-event id from a createEvent() result, across versions.
+   *  v6 returns { result: "<id string>" } — the old `(result.result||result).id`
+   *  parse yielded undefined, so no event was ever recorded in the map and
+   *  every sync re-created every event (the "massive duplication" bug). */
+  function _createdEventId(result) {
+    if (!result) return null;
+    if (typeof result === 'string') return result;
+    if (typeof result.result === 'string') return result.result;
+    var r = result.result || result;
+    return (r && (r.id || r.eventId)) || null;
+  }
+
+  /** Delete native events by id. v6 has deleteEventsById({ids}) ONLY —
+   *  the old code called a nonexistent deleteEvent({id}), which threw and
+   *  was swallowed, so nothing was EVER deleted (cancel cleanup, target
+   *  switches, orphan sweeps and duplicate cleanup were all no-ops). */
+  async function _deleteNativeEvents(ids) {
+    ids = (ids || []).filter(Boolean).map(String);
+    if (!Calendar || ids.length === 0) return 0;
     try {
-      var q = await Calendar.listEventsInRange({
-        startDate: rangeStart.getTime(),
-        endDate: rangeEnd.getTime(),
-      });
-      var events = q.result || q || [];
-      if (!Array.isArray(events)) return null;
-      // Match on exact start time + title (title encodes class+instructor+slot).
-      var match = events.find(function (ev) {
-        if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) return false;
-        var evStart = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
-        return Math.abs(evStart - data.startDate) < 60 * 1000 && ev.title === data.title;
-      });
-      return match ? (match.id || match.eventId) : null;
+      var res = await Calendar.deleteEventsById({ ids: ids });
+      var out = (res && res.result) || {};
+      return (out.deleted && out.deleted.length) || ids.length;
     } catch (e) {
-      // listEventsInRange may not be available on all plugin versions — ignore.
-      return null;
+      // Older/newer plugin versions: fall back to per-id deleteEvent.
+      var n = 0;
+      for (var i = 0; i < ids.length; i++) {
+        try { await Calendar.deleteEvent({ id: ids[i] }); n++; } catch (e2) {}
+      }
+      return n;
     }
+  }
+
+  /** Normalized listEventsInRange (ms timestamps in, array out). */
+  async function _listNativeEvents(startMs, endMs) {
+    if (!Calendar) return [];
+    var q = await Calendar.listEventsInRange({ startDate: startMs, endDate: endMs });
+    var events = (q && q.result) || q || [];
+    return Array.isArray(events) ? events : [];
   }
 
   function calendarSyncEnabled() {
     return localStorage.getItem(CAL_ENABLED_KEY) !== '0';
   }
 
-  async function addBookingToCalendar(eventId) {
-    if (!Calendar) return;
-    if (!calendarSyncEnabled()) return;
-    if (!hasChosenCalendar()) return; // never write/create without a chosen calendar
-    var ok = await _ensureCalendarPermission();
-    if (!ok) return;
-
-    var data = _buildCalEventData(eventId);
-    if (!data) return;
-
-    var calId = await _resolveTargetCalendarId();
-    if (!calId) return; // chosen calendar missing → write nothing (never system default)
-    data.calendarId = calId;
-
-    var map = _loadCalMap();
-
-    // If we already have a mapping, don't create again.
-    if (map[String(eventId)]) return;
-
-    // Dedupe: an event matching this title+time may already exist if the
-    // local mapping was lost (storage purge / reinstall).
-    var existingNativeId = await _findExistingNativeEvent(calId, data);
-    if (existingNativeId) {
-      map[String(eventId)] = existingNativeId;
-      _saveCalMap(map);
-      console.log('[native-cal] adopted existing:', eventId, '→', existingNativeId);
-      return;
-    }
-
-    try {
-      var result = await Calendar.createEvent(data);
-      var nativeId = (result.result || result).id || result.id;
-      if (nativeId) {
-        map[String(eventId)] = nativeId;
-        _saveCalMap(map);
-        console.log('[native-cal] added:', eventId, '→', nativeId);
-      }
-    } catch (e) {
-      console.warn('[native-cal] create failed:', e);
-    }
-  }
-
-  async function updateBookingInCalendar(eventId) {
-    // Remove old entry and re-add with updated data (slot changes etc.)
-    await removeBookingFromCalendar(eventId);
-    // Only re-add if booking still exists
-    if ((_myBookings || {})[String(eventId)]) {
-      await addBookingToCalendar(eventId);
-    }
-  }
-
-  async function removeBookingFromCalendar(eventId) {
-    if (!Calendar) return;
-    var map = _loadCalMap();
-    var calEventId = map[String(eventId)];
-
-    // Fallback: if we have no mapping (map wiped by target switch, reinstall,
-    // iOS storage purge, or booking was created via web/another device), try
-    // to locate the native event by matching the class start time against
-    // events in the target calendar. Without this, cancels silently fail
-    // to clean up the calendar.
-    if (!calEventId) {
-      var evt = (_eventCache || {})[String(eventId)];
-      if (evt && evt.start_at) {
-        try {
-          var start = new Date(evt.start_at).getTime();
-          var end = start + (evt.duration || 45) * 60 * 1000;
-          var windowMs = 2 * 60 * 60 * 1000;
-          var q = await Calendar.listEventsInRange({
-            startDate: start - windowMs,
-            endDate: end + windowMs,
-          });
-          var events = q.result || q || [];
-          if (Array.isArray(events)) {
-            var typeName = evt._typeName || '';
-            // Scan ALL calendars (not just the current target) so orphan
-            // events from a previous target are also cleaned up on cancel.
-            var match = events.find(function (ev) {
-              var evStart = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
-              if (Math.abs(evStart - start) >= 60 * 1000) return false;
-              // Match by class-type prefix in the title so we don't nuke
-              // unrelated events the user may have put at the same time.
-              return !typeName || (ev.title || '').indexOf(typeName) === 0;
-            });
-            calEventId = match ? (match.id || match.eventId) : null;
-            if (calEventId) console.log('[native-cal] located by search:', eventId, '→', calEventId);
-          }
-        } catch (e) { /* listEventsInRange may not be supported */ }
-      }
-    }
-
-    if (!calEventId) {
-      console.log('[native-cal] remove: no mapping/match for', eventId);
-      return;
-    }
-
-    try {
-      await Calendar.deleteEvent({ id: calEventId });
-      console.log('[native-cal] removed:', eventId);
-    } catch (e) {
-      // Event may already be deleted by user — that's fine
-      console.log('[native-cal] remove skipped (may not exist):', eventId);
-    }
-    delete map[String(eventId)];
-    _saveCalMap(map);
-  }
+  // (No incremental add/remove functions: every mutation flows through the
+  // authoritative reconcile below, so there is exactly one code path that
+  // writes to the calendar.)
 
   // ── Hook into booking / cancel / seat-cancel flows ────────────────
+  // Every mutation routes through ONE debounced, single-flight reconcile
+  // (_scheduleCalReconcile → syncAllBookingsToCalendar). The reconcile is
+  // authoritative over the whole target calendar, so adds, removes, slot
+  // swaps and title changes are all the same operation — no per-hook
+  // add/remove races, no duplicate writes.
 
   var _origSubmitBookingNative = window.submitBooking;
   if (_origSubmitBookingNative) {
-    window.submitBooking = async function (eventId, slots, btn) {
-      await _origSubmitBookingNative.call(this, eventId, slots, btn);
-      if (btn.classList.contains('booked')) {
-        addBookingToCalendar(eventId);
-      }
+    // Forward ALL args — the 4th (opts, { waitlist: true }) drives the
+    // waitlist flow and must survive the wrapper chain.
+    window.submitBooking = async function () {
+      await _origSubmitBookingNative.apply(this, arguments);
+      _scheduleCalReconcile();
     };
   }
 
   var _origConfirmUnbookNative = window.confirmUnbook;
   if (_origConfirmUnbookNative) {
-    window.confirmUnbook = async function (bookingId, eventId, btn) {
-      await _origConfirmUnbookNative.call(this, bookingId, eventId, btn);
-      if (!_myBookings[String(eventId)]) {
-        removeBookingFromCalendar(eventId);
-      }
+    window.confirmUnbook = async function () {
+      await _origConfirmUnbookNative.apply(this, arguments);
+      _scheduleCalReconcile();
     };
   }
 
   var _origUpcomingCancelNative = window.upcomingCancel;
   if (_origUpcomingCancelNative) {
-    window.upcomingCancel = async function (eventId, btn) {
-      await _origUpcomingCancelNative.call(this, eventId, btn);
-      if (!_myBookings[String(eventId)]) {
-        removeBookingFromCalendar(eventId);
-      }
+    window.upcomingCancel = async function () {
+      await _origUpcomingCancelNative.apply(this, arguments);
+      _scheduleCalReconcile();
     };
   }
 
-  // Seat cancel: booking still exists but title needs updating
   var _origCancelBikeSlotNative = window.cancelBikeSlot;
   if (_origCancelBikeSlotNative) {
-    window.cancelBikeSlot = async function (slotId, eventId) {
-      await _origCancelBikeSlotNative.call(this, slotId, eventId);
-      var booking = _myBookings[String(eventId)];
-      if (booking) {
-        updateBookingInCalendar(eventId); // still booked, update title
-      } else {
-        removeBookingFromCalendar(eventId); // all seats cancelled
-      }
+    window.cancelBikeSlot = async function () {
+      await _origCancelBikeSlotNative.apply(this, arguments);
+      _scheduleCalReconcile();
     };
   }
 
   var _origUpcomingSeatCancelNative = window.upcomingSeatCancel;
   if (_origUpcomingSeatCancelNative) {
-    window.upcomingSeatCancel = async function (eventId, slotId, btn) {
-      await _origUpcomingSeatCancelNative.call(this, eventId, slotId, btn);
-      var booking = _myBookings[String(eventId)];
-      if (booking) {
-        updateBookingInCalendar(eventId);
-      } else {
-        removeBookingFromCalendar(eventId);
-      }
+    window.upcomingSeatCancel = async function () {
+      await _origUpcomingSeatCancelNative.apply(this, arguments);
+      _scheduleCalReconcile();
     };
   }
 
-  // ── Full Calendar Sync on Startup ─────────────────────────────────
+  // ── Full Calendar Reconcile ───────────────────────────────────────
+  //
+  // CONTRACT: the calendar the user picks is FULLY Psync-owned — the app may
+  // freely delete and rewrite anything in it. That makes sync a simple
+  // authoritative reconcile instead of incremental add/remove bookkeeping:
+  //
+  //   desired = upcoming, non-waitlisted bookings
+  //   actual  = every FUTURE event in the target calendar
+  //   → delete every future event that doesn't match a desired booking
+  //     (this self-cleans all historical duplicates on the first run)
+  //   → create whatever's missing
+  //   → events whose slot/title changed are deleted + recreated
+  //
+  // Past events are left untouched (they're the user's workout history).
+  // The eventId↔nativeId map is rebuilt from scratch each pass — it's a
+  // cache, never a correctness requirement, so map loss can't duplicate.
 
   async function syncAllBookingsToCalendar() {
     if (!calendarSyncEnabled() || !hasChosenCalendar()) {
-      return { added: 0, removed: 0, verified: 0, error: 'No calendar selected' };
+      return { added: 0, removed: 0, kept: 0, error: 'No calendar selected' };
+    }
+    // Signed out ≠ no bookings: never treat a logged-out session as "delete
+    // every event". The calendar reconciles again after the next sign-in.
+    if (typeof getBearerToken === 'function' && !getBearerToken()) {
+      return { added: 0, removed: 0, kept: 0, skipped: 'signed out' };
     }
     var ok = await _ensureCalendarPermission();
-    if (!ok) return { added: 0, removed: 0, verified: 0, error: 'Permission denied' };
-    var map = _loadCalMap();
+    if (!ok) return { added: 0, removed: 0, kept: 0, error: 'Permission denied' };
+    var calId = await _resolveTargetCalendarId();
+    if (!calId) return { added: 0, removed: 0, kept: 0, error: 'Chosen calendar missing' };
+
     var bookings = _myBookings || {};
     var now = Date.now();
-    var summary = { added: 0, removed: 0, verified: 0 };
+    var summary = { added: 0, removed: 0, kept: 0 };
 
-    // 1. Verify each mapped native event still exists in the calendar.
-    //    If the user deleted an event from the Calendar app, the mapping
-    //    lies — drop it so step 3 re-creates the event.
+    // An empty snapshot is only trusted when the server confirmed it (the
+    // bookings:loaded listener flags that). Otherwise skip: a signed-out
+    // wipe or not-yet-fetched state must not read as "delete everything".
+    // The confirmed-empty case MUST reconcile — cancelling your last
+    // remaining booking is exactly when its calendar event needs removing.
+    if (Object.keys(bookings).length === 0 && !_calServerConfirmedEmpty) {
+      return { added: 0, removed: 0, kept: 0, skipped: 'unconfirmed empty bookings snapshot' };
+    }
+
+    // Desired end-state: future, non-waitlisted bookings we have data for.
+    var desired = {}; // eventId -> built event data
+    Object.keys(bookings).forEach(function (evtId) {
+      var data = _buildCalEventData(evtId); // null for waitlisted/unknown
+      if (data && data.startDate > now) desired[String(evtId)] = data;
+    });
+
+    // Actual state: every FUTURE event currently in the target calendar.
+    var events;
     try {
-      var q = await Calendar.listEventsInRange({
-        startDate: now - 7 * 86400000,
-        endDate: now + 120 * 86400000,
-      });
-      var evs = q.result || q || [];
-      if (Array.isArray(evs)) {
-        var known = new Set();
-        evs.forEach(function (ev) { if (ev && ev.id) known.add(String(ev.id)); });
-        var dirty = false;
-        for (var mId in map) {
-          if (!known.has(String(map[mId]))) {
-            delete map[mId];
-            dirty = true;
-          } else {
-            summary.verified++;
-          }
-        }
-        if (dirty) _saveCalMap(map);
-      }
+      events = await _listNativeEvents(now, now + 120 * 86400000);
     } catch (e) {
-      // listEventsInRange may not be supported on some plugin versions —
-      // skip verification in that case (add/remove still work).
+      return { added: 0, removed: 0, kept: 0, error: 'calendar query failed' };
     }
 
-    // 2. Remove calendar entries for cancelled bookings (skip on an empty
-    //    snapshot so a transient empty fetch can't wipe every booked event).
-    map = _loadCalMap();
-    if (Object.keys(bookings).length > 0) {
-      for (var calEvtId of Object.keys(map)) {
-        if (!bookings[calEvtId]) {
-          await removeBookingFromCalendar(calEvtId);
-          summary.removed++;
+    // Full-ownership deletes (removing events WITHOUT our marker) only after
+    // the user has picked/confirmed the calendar under the new contract —
+    // a target chosen before this contract shipped may hold personal events,
+    // and those must never be destroyed without an explicit user action.
+    var ownedAck = localStorage.getItem(CAL_OWNED_ACK_KEY) === '1';
+
+    var newMap = {};
+    var victims = [];
+    var satisfied = {}; // eventId -> true (a matching native event exists)
+
+    events.forEach(function (ev) {
+      if (!ev) return;
+      var markerId = _markerEventId(ev);
+      // Attribution guard: other calendars are NEVER touched. If the plugin
+      // didn't report a calendarId, only events carrying our ownership
+      // marker are considered — unattributable events are left alone.
+      if (ev.calendarId != null) {
+        if (String(ev.calendarId) !== String(calId)) return;
+      } else if (!markerId) {
+        return;
+      }
+      var nid = ev.id || ev.eventId;
+      if (!nid) return;
+      if (!markerId && !ownedAck) return; // pre-contract target: leave unmarked events alone
+      var booking = markerId ? bookings[markerId] : null;
+      if (markerId && !satisfied[markerId]) {
+        var want = desired[markerId];
+        if (want) {
+          // Same class still booked — keep it only if title and start still
+          // match (a slot swap or time change means delete + recreate).
+          var sameStart = Math.abs(_nativeStartMs(ev) - want.startDate) < 60 * 1000;
+          if (sameStart && ev.title === want.title) {
+            satisfied[markerId] = true;
+            newMap[markerId] = nid;
+            summary.kept++;
+            return;
+          }
+        } else if (booking && !booking.waitlisted) {
+          // Still booked but we couldn't build its event data this pass
+          // (e.g. a transient /events/{id} failure left _eventCache empty).
+          // NEVER delete a live booking's event over missing metadata.
+          satisfied[markerId] = true;
+          newMap[markerId] = nid;
+          summary.kept++;
+          return;
         }
       }
+      // Everything else in a Psync-owned calendar — cancelled classes,
+      // duplicates, stale slot titles, unmarked strays from the buggy era —
+      // gets removed.
+      victims.push(nid);
+    });
+
+    if (victims.length) {
+      summary.removed = await _deleteNativeEvents(victims);
     }
 
-    // 3. Add upcoming bookings not yet in the calendar.
-    map = _loadCalMap();
-    for (var evtId of Object.keys(bookings)) {
-      var evt = _eventCache[evtId];
-      if (!evt) continue;
-      if (new Date(evt.start_at).getTime() < now) continue;
-      if (!map[evtId]) {
-        var before = Object.keys(_loadCalMap()).length;
-        await addBookingToCalendar(evtId);
-        var after = Object.keys(_loadCalMap()).length;
-        if (after > before) summary.added++;
-      }
-    }
+    // Create what's missing (concurrently — each create is an independent
+    // EventKit bridge call), then persist the rebuilt map once.
+    var missingIds = Object.keys(desired).filter(function (id) { return !satisfied[id]; });
+    await Promise.all(missingIds.map(function (evtId) {
+      var data = desired[evtId];
+      data.calendarId = calId;
+      return Calendar.createEvent(data)
+        .then(function (result) {
+          var nativeId = _createdEventId(result);
+          if (nativeId) newMap[evtId] = nativeId;
+          summary.added++;
+        })
+        .catch(function (e) { console.warn('[native-cal] create failed:', evtId, e); });
+    }));
+    _saveCalMap(newMap);
 
-    // 4. Forget stale mappings (events older than 7 days).
-    var cleanedMap = _loadCalMap();
-    var staleThreshold = now - 7 * 86400000;
-    for (var sEvtId of Object.keys(cleanedMap)) {
-      var sEvt = _eventCache[sEvtId];
-      if (sEvt && new Date(sEvt.start_at).getTime() < staleThreshold) {
-        delete cleanedMap[sEvtId];
-      }
-    }
-    _saveCalMap(cleanedMap);
-
-    // 5. Sweep app-owned orphan events whose booking no longer exists, even
-    //    when the local map link was lost (reinstall / web / other-device).
-    try {
-      var orphans = await removeOrphanedCalendarEvents();
-      if (orphans && orphans.removed) summary.removed += orphans.removed;
-    } catch (e) { /* sweep is best-effort */ }
-
-    console.log('[native-cal] sync result:', summary);
+    console.log('[native-cal] reconcile:', summary);
     return summary;
   }
-
-  // Remove calendar events the app created whose booking no longer exists
-  // ("unhooked" classes — cancelled on web/another device, or after a
-  // map-loss). Matches ONLY future events carrying our stable marker, so
-  // personal events are never touched even in a user-chosen shared calendar.
-  async function removeOrphanedCalendarEvents() {
-    if (!Calendar || !hasChosenCalendar()) return { scanned: 0, removed: 0 };
-    // Never sweep on an empty bookings snapshot — a transient empty fetch would
-    // otherwise delete every still-booked event. In-app cancels remove their own
-    // event directly, so the legitimately-zero case is already covered.
-    var bookings = _myBookings || {};
-    if (Object.keys(bookings).length === 0) return { scanned: 0, removed: 0 };
-    var calId = await _resolveTargetCalendarId();
-    if (!calId) return { scanned: 0, removed: 0 };
-    var now = Date.now();
-    var events = [];
-    try {
-      var q = await Calendar.listEventsInRange({ startDate: now, endDate: now + 120 * 86400000 });
-      events = q.result || q || [];
-      if (!Array.isArray(events)) events = [];
-    } catch (e) {
-      return { scanned: 0, removed: 0, error: 'query failed' };
-    }
-    var map = _loadCalMap();
-    var removed = 0, scanned = 0, dirty = false;
-    for (var i = 0; i < events.length; i++) {
-      var ev = events[i];
-      if (!ev) continue;
-      if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) continue;
-      var notes = ev.notes || ev.description || '';
-      var mm = /psycle-event-id:(\d+)/.exec(notes);
-      if (!mm) continue; // not app-owned → never touch a personal event
-      var evStart = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
-      if (evStart < now) continue; // past classes are history, not "unhooked"
-      scanned++;
-      if (bookings[mm[1]]) continue; // still a current booking → keep
-      try {
-        await Calendar.deleteEvent({ id: ev.id || ev.eventId });
-        removed++;
-        if (map[mm[1]]) { delete map[mm[1]]; dirty = true; }
-      } catch (e) { /* may already be gone */ }
-    }
-    if (dirty) _saveCalMap(map);
-    console.log('[native-cal] orphan sweep:', { scanned: scanned, removed: removed });
-    return { scanned: scanned, removed: removed };
-  }
-  window.psycleRemoveOrphanedEvents = removeOrphanedCalendarEvents;
 
   // Run sync after bookings load
   var _origRenderNative = window.renderMyBookings;
@@ -652,6 +590,11 @@
    */
   window.psycleResyncCalendar = async function () {
     _calSynced = false;
+    // An explicit user-triggered resync (Settings button) confirms the
+    // full-ownership contract for the current target.
+    if (hasChosenCalendar()) {
+      try { localStorage.setItem(CAL_OWNED_ACK_KEY, '1'); } catch (e) {}
+    }
     if (typeof fetchMyBookings === 'function') {
       try { await fetchMyBookings(); } catch (e) {}
     }
@@ -660,80 +603,16 @@
   };
 
   /**
-   * Scan the target calendar for duplicate Psycle events and remove all but
-   * one per (title, start-time) group. Returns { scanned, removed }.
-   *
-   * Used by Settings → "Remove duplicate events" to clean up duplicates
-   * created before the dedupe logic was in place.
+   * Settings → "Remove duplicates". The authoritative reconcile already
+   * deletes every future event that doesn't correspond to exactly one
+   * current booking — duplicates, orphans and stale titles included — so
+   * this simply forces a fresh reconcile (with a bookings refresh first).
    */
   window.psycleCleanupDuplicates = async function () {
     if (!Calendar) return { scanned: 0, removed: 0, error: 'Calendar plugin unavailable' };
-    var ok = await _ensureCalendarPermission();
-    if (!ok) return { scanned: 0, removed: 0, error: 'Permission denied' };
-    if (!hasChosenCalendar()) return { scanned: 0, removed: 0, error: 'No calendar selected' };
-
-    var calId = await _resolveTargetCalendarId();
-    // Scan a wide window (past 7 days through next 90 days) so we catch
-    // orphan events from previous sync runs.
-    var now = Date.now();
-    var rangeStart = now - 7 * 86400000;
-    var rangeEnd = now + 90 * 86400000;
-
-    var events = [];
-    try {
-      var q = await Calendar.listEventsInRange({ startDate: rangeStart, endDate: rangeEnd });
-      events = q.result || q || [];
-      if (!Array.isArray(events)) events = [];
-    } catch (e) {
-      return { scanned: 0, removed: 0, error: 'Calendar query failed' };
-    }
-
-    // Filter to events in the target calendar (when the plugin reports calendarId).
-    // If the plugin omits calendarId, accept everything matching a Psycle title pattern.
-    var candidates = events.filter(function (ev) {
-      if (!ev || !ev.title) return false;
-      if (calId && ev.calendarId && String(ev.calendarId) !== String(calId)) return false;
-      // Only ever touch events Psync created (carry our marker) — never the
-      // user's personal events in a shared/chosen calendar.
-      var notes = ev.notes || ev.description || '';
-      return notes.indexOf(PSYCLE_EVENT_MARKER) !== -1;
-    });
-
-    // Group by "title|startMinute" (round to minute to tolerate plugin drift).
-    var groups = {};
-    candidates.forEach(function (ev) {
-      var start = typeof ev.startDate === 'number' ? ev.startDate : new Date(ev.startDate).getTime();
-      var key = ev.title + '|' + Math.floor(start / 60000);
-      (groups[key] = groups[key] || []).push({ ev: ev, start: start });
-    });
-
-    // For each group with >1 event, keep the one already in our map (if any),
-    // otherwise keep the first, and delete the rest.
-    var map = _loadCalMap();
-    var mappedIds = new Set(Object.values(map).map(String));
-    var removed = 0;
-    for (var key in groups) {
-      var grp = groups[key];
-      if (grp.length < 2) continue;
-      var keepIdx = grp.findIndex(function (g) { return mappedIds.has(String(g.ev.id)); });
-      if (keepIdx < 0) keepIdx = 0;
-      for (var i = 0; i < grp.length; i++) {
-        if (i === keepIdx) continue;
-        var victimId = grp[i].ev.id;
-        if (!victimId) continue;
-        try {
-          await Calendar.deleteEvent({ id: victimId });
-          removed++;
-          // Remove any stale map entries pointing at the deleted event.
-          for (var evtId in map) {
-            if (String(map[evtId]) === String(victimId)) delete map[evtId];
-          }
-        } catch (e) { /* ignore individual failures */ }
-      }
-    }
-    _saveCalMap(map);
-    console.log('[native-cal] cleanup:', { scanned: candidates.length, removed: removed });
-    return { scanned: candidates.length, removed: removed };
+    var res = await window.psycleResyncCalendar();
+    res = res || {};
+    return { scanned: (res.kept || 0) + (res.removed || 0), removed: res.removed || 0, error: res.error };
   };
 
   window.syncAllBookingsToCalendar = syncAllBookingsToCalendar;
@@ -787,6 +666,9 @@
     if (cfg.mode) localStorage.setItem(CAL_MODE_KEY, cfg.mode);
     if (cfg.mode === 'custom' && cfg.targetId) {
       localStorage.setItem(CAL_TARGET_KEY, String(cfg.targetId));
+      // Picking a calendar in the Settings UI (which states the ownership
+      // contract) is the explicit consent for full-ownership reconciles.
+      localStorage.setItem(CAL_OWNED_ACK_KEY, '1');
     }
 
     var targetChanged =
@@ -795,19 +677,33 @@
 
     var movedFromOld = 0;
     if (targetChanged) {
-      // Delete every previously-created event from the OLD calendar so
-      // switching targets doesn't orphan duplicates. EventKit's deleteEvent
-      // takes an event id and removes it from whichever calendar holds it,
-      // so we don't need to know the old calendar id explicitly.
-      var oldMap = _loadCalMap();
-      var oldIds = Object.values(oldMap);
-      if (oldIds.length && Calendar) {
+      // The OLD calendar was fully Psync-owned while it was the target —
+      // clear every future event out of it (mapped ids AND anything the map
+      // lost track of), so switching never strands duplicates behind.
+      if (Calendar) {
         await _ensureCalendarPermission();
-        await Promise.all(oldIds.map(function (id) {
-          return Calendar.deleteEvent({ id: id })
-            .then(function () { movedFromOld++; })
-            .catch(function () { /* may have been deleted by user */ });
-        }));
+        var oldIds = Object.values(_loadCalMap()).map(String);
+        var victims = {};
+        oldIds.forEach(function (id) { victims[id] = true; });
+        if (prevTarget) {
+          try {
+            var now = Date.now();
+            var evs = await _listNativeEvents(now, now + 120 * 86400000);
+            evs.forEach(function (ev) {
+              if (!ev) return;
+              // Same attribution guard as the reconcile: without a reported
+              // calendarId, only delete events carrying our marker.
+              if (ev.calendarId != null) {
+                if (String(ev.calendarId) !== String(prevTarget)) return;
+              } else if (!_markerEventId(ev)) {
+                return;
+              }
+              var nid = ev.id || ev.eventId;
+              if (nid) victims[String(nid)] = true;
+            });
+          } catch (e) { /* fall back to mapped ids only */ }
+        }
+        movedFromOld = await _deleteNativeEvents(Object.keys(victims));
       }
       localStorage.removeItem(CAL_EVENT_MAP_KEY);
       _calSynced = false;
@@ -821,30 +717,61 @@
   // the new booking week opening at noon.
 
   var LocalNotifications = Capacitor.Plugins.LocalNotifications;
-  var REMINDER_ID = 9999;
+  // Eight rolling one-shot notifications (the next 8 Mondays). Absolute `at:`
+  // times are used instead of an hour-of-day repeat: the old hour-offset
+  // math broke whenever the device's calendar DATE differed from London's
+  // (e.g. a New York Monday evening computed `hour: 30` — a reminder that
+  // never fires). Rescheduled on every launch, so the window keeps rolling;
+  // eight weeks covers long stretches without opening the app.
+  var REMINDER_IDS = [9999, 9998, 9997, 9996, 9995, 9994, 9993, 9992];
 
   /**
-   * Compute the device-local hour that corresponds to 11:59 UK time.
-   * UK is UTC+0 in winter (GMT) and UTC+1 in summer (BST).
+   * The next `count` occurrences of Monday 11:59 Europe/London as absolute
+   * Date instants, DST-correct for any device timezone.
    */
-  function _ukHourInLocalTime(ukHour) {
-    // Create a date for next Monday in UK and read the offset
-    var now = new Date();
-    // Use Intl to get the current UK offset
+  function _nextMondays1159London(count) {
+    var DAY = 86400000;
+    var out = [];
     try {
-      var ukStr = now.toLocaleString('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hour12: false });
-      var localStr = now.toLocaleString('en-GB', { hour: 'numeric', hour12: false });
-      var ukNow = parseInt(ukStr);
-      var localNow = parseInt(localStr);
-      var diff = localNow - ukNow; // positive if ahead of UK
-      return ukHour + diff;
-    } catch (e) {
-      // Fallback: assume device is in UK
-      return ukHour;
-    }
+      var dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+      var wdFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' });
+      var hmFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false });
+
+      // Exact UTC instant of 11:59 London on a given London calendar date:
+      // start from 11:59 UTC and correct by whatever offset London reports.
+      var instantFor = function (dateStr) {
+        var p = dateStr.split('-').map(Number);
+        var guess = Date.UTC(p[0], p[1] - 1, p[2], 11, 59, 0);
+        for (var k = 0; k < 3; k++) {
+          var hm = hmFmt.format(new Date(guess)).split(':').map(Number);
+          var deltaMin = (hm[0] * 60 + hm[1]) - (11 * 60 + 59);
+          if (deltaMin === 0) break;
+          guess -= deltaMin * 60000;
+        }
+        return guess;
+      };
+
+      var now = Date.now();
+      for (var d = 0; d < 7 * (count + 1) + 2 && out.length < count; d++) {
+        var probe = new Date(now + d * DAY);
+        if (wdFmt.format(probe) !== 'Mon') continue;
+        var ts = instantFor(dateFmt.format(probe));
+        if (ts > now + 60000) out.push(new Date(ts));
+      }
+    } catch (e) { /* Intl/timezone unavailable — fall through */ }
+    if (out.length === 0) out.push(new Date(Date.now() + 7 * DAY)); // defensive
+    return out;
   }
 
   var REMINDER_PREF = 'psycle_weekly_reminder'; // 'on' | 'off' | unset (off)
+
+  async function _cancelReminders() {
+    try {
+      await LocalNotifications.cancel({
+        notifications: REMINDER_IDS.map(function (id) { return { id: id }; }),
+      });
+    } catch (e) { /* may not exist */ }
+  }
 
   /**
    * @param interactive true = user just asked for this, OK to show the
@@ -864,31 +791,23 @@
       }
 
       // Cancel existing to reschedule (handles timezone/DST changes)
-      try {
-        await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
-      } catch (e) { /* may not exist */ }
+      await _cancelReminders();
 
-      var localHour = _ukHourInLocalTime(11);
-
+      var mondays = _nextMondays1159London(REMINDER_IDS.length);
       await LocalNotifications.schedule({
-        notifications: [{
-          id: REMINDER_ID,
-          title: 'New booking week opens now',
-          body: 'Psycle classes for next week are available — grab your favourite spots!',
-          schedule: {
-            on: {
-              weekday: 2,  // Monday (1=Sunday, 2=Monday)
-              hour: localHour,
-              minute: 59,
-            },
-            every: 'week',
-            allowWhileIdle: true,
-          },
-          sound: 'default',
-        }],
+        notifications: mondays.map(function (at, i) {
+          return {
+            id: REMINDER_IDS[i],
+            title: 'New booking week opens now',
+            body: 'Psycle classes for next week are available — grab your favourite spots!',
+            schedule: { at: at, allowWhileIdle: true },
+            sound: 'default',
+          };
+        }),
       });
 
-      console.log('[native] weekly reminder scheduled: Mondays at ' + localHour + ':59 local (11:59 UK)');
+      console.log('[native] weekly reminders scheduled for: ' +
+        mondays.map(function (d) { return d.toISOString(); }).join(', '));
       return true;
     } catch (e) {
       console.warn('[native] failed to schedule weekly reminder:', e);
@@ -908,9 +827,7 @@
     },
     disable: async function () {
       localStorage.setItem(REMINDER_PREF, 'off');
-      try {
-        await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
-      } catch (e) { /* may not exist */ }
+      await _cancelReminders();
     },
   };
 
@@ -1084,12 +1001,16 @@
       var now = Date.now();
 
       // Collect upcoming booked events (have a cache entry + future start).
+      // Waitlist places are NOT confirmed seats — the widget must not show
+      // one as "Next class". start_at may be 'YYYY-MM-DD HH:MM:SS', which
+      // iOS WebKit won't parse without the space→T normalization.
       var upcoming = [];
       for (var id in bookings) {
         if (!Object.prototype.hasOwnProperty.call(bookings, id)) continue;
+        if (bookings[id] && bookings[id].waitlisted) continue;
         var evt = cache[String(id)];
         if (!evt || !evt.start_at) continue;
-        var ts = new Date(evt.start_at).getTime();
+        var ts = new Date(String(evt.start_at).replace(' ', 'T')).getTime();
         if (isNaN(ts) || ts < now) continue;
         upcoming.push({ id: id, ts: ts });
       }
@@ -1164,8 +1085,17 @@
     clearTimeout(_calReconcileTimer);
     _calReconcileTimer = setTimeout(_runCalSync, 1200);
   }
+  // Tracks whether the latest bookings state came from a successful server
+  // fetch. Only a server-confirmed EMPTY state may drive a delete-everything
+  // reconcile (cancelling the last booking); a signed-out wipe may not.
+  var _calServerConfirmedEmpty = false;
   if (typeof PsycleEvents !== 'undefined' && PsycleEvents && typeof PsycleEvents.on === 'function') {
-    try { PsycleEvents.on('bookings:loaded', _scheduleCalReconcile); } catch (e) {}
+    try {
+      PsycleEvents.on('bookings:loaded', function (map) {
+        _calServerConfirmedEmpty = Object.keys(map || _myBookings || {}).length === 0;
+        _scheduleCalReconcile();
+      });
+    } catch (e) {}
   }
 
   // Refresh whenever the app returns to the foreground (a class may have
@@ -1185,14 +1115,25 @@
   // Set status bar style based on theme
 
   function updateStatusBar() {
-    var theme = document.documentElement.getAttribute('data-theme');
-    if (window.Capacitor && Capacitor.Plugins.StatusBar) {
-      var StatusBar = Capacitor.Plugins.StatusBar;
-      if (theme === 'light') {
-        StatusBar.setStyle({ style: 'DARK' }).catch(function () {}); // dark text on light bg
-      } else {
-        StatusBar.setStyle({ style: 'LIGHT' }).catch(function () {}); // light text on dark bg
+    var StatusBar = window.Capacitor && Capacitor.Plugins.StatusBar;
+    if (!StatusBar) return; // @capacitor/status-bar not installed/synced yet
+    var themeId = document.documentElement.getAttribute('data-theme');
+    // Resolve the theme's light/dark BASE from the registry — theme ids are
+    // flavour names (cloud/linen/graphite/terminal/...), never 'light'.
+    // No data-theme yet (following the system) → use the system scheme.
+    var base = 'dark';
+    if (!themeId) {
+      base = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    } else {
+      var reg = window.APP_THEMES || [];
+      for (var i = 0; i < reg.length; i++) {
+        if (reg[i].id === themeId) { base = reg[i].base || 'dark'; break; }
       }
+    }
+    if (base === 'light') {
+      StatusBar.setStyle({ style: 'DARK' }).catch(function () {}); // dark text on light bg
+    } else {
+      StatusBar.setStyle({ style: 'LIGHT' }).catch(function () {}); // light text on dark bg
     }
   }
 

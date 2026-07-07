@@ -689,11 +689,15 @@
     }
   };
 
+  var _templateWeekRunning = false;
   window.bookTemplateWeek = async function () {
     if (typeof window.bookWeeklyTemplate !== 'function') {
       toast('Template booking isn\'t available yet', 'info');
       return;
     }
+    // Double-tap guard — a second concurrent sweep would double-book.
+    if (_templateWeekRunning) return;
+    _templateWeekRunning = true;
     toast('Booking your template week…', 'info');
     try {
       var res = await window.bookWeeklyTemplate();
@@ -710,6 +714,8 @@
     } catch (e) {
       console.error('[template] book failed:', e);
       toast('Couldn\'t book your template week', 'error');
+    } finally {
+      _templateWeekRunning = false;
     }
   };
 
@@ -871,12 +877,15 @@
   // with >=1 attended class. Milestones at 10/25/50/100 total classes.
 
   // Monday-anchored week index: whole weeks since a fixed epoch Monday.
+  // Computed from CALENDAR components in UTC space so DST transitions can't
+  // shift a local-midnight timestamp across a week boundary (mixing local
+  // getTime() with a UTC epoch made every BST week land one index early,
+  // breaking streaks at each clock change).
   function _weekIndex(date) {
-    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    // Shift so Monday=0; epoch 1970-01-05 was a Monday.
     var dayMs = 86400000;
-    var shifted = d.getTime() - ((d.getDay() + 6) % 7) * dayMs;
-    return Math.floor((shifted - Date.UTC(1970, 0, 5)) / (7 * dayMs));
+    var dayUTC = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+    var mondayShift = (date.getDay() + 6) % 7; // Monday=0
+    return Math.round((dayUTC - mondayShift * dayMs - Date.UTC(1970, 0, 5)) / (7 * dayMs));
   }
 
   function renderStreaks() {
@@ -975,14 +984,19 @@
     var history = [];
     try { history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch (e) {}
 
-    // Merge current bookings + history for a richer picture
+    // Merge current bookings + history for a richer picture. Skip cancelled
+    // history entries (never attended) and history entries whose event is
+    // also in _myBookings (in-app bookings land in history immediately —
+    // counting both would double-weight every upcoming class).
     var allEvents = [];
     Object.entries(bookings).forEach(function (entry) {
       var evt = cache[entry[0]];
       if (evt) allEvents.push(evt);
     });
     history.forEach(function (h) {
-      if (h.date) allEvents.push({ start_at: h.date });
+      if (h.cancelledAt || !h.date) return;
+      if (bookings[String(h.eventId)]) return;
+      allEvents.push({ start_at: h.date });
     });
 
     if (allEvents.length < 2) { container.style.display = 'none'; return; }
@@ -1152,7 +1166,7 @@
     var costPerClass = made > 0 ? priceGbp / made : priceGbp;
     var costAtMax = priceGbp / max;
     var remaining = Math.max(0, max - made);
-    var daysLeft = _daysLeftInBillingPeriod();
+    var daysLeft = _daysLeftInBillingPeriod(sub);
 
     // Savings message
     var savingsMsg = '';
@@ -1335,9 +1349,18 @@
     return '£' + amount.toFixed(2);
   }
 
-  function _daysLeftInBillingPeriod() {
-    // Approximate: days left in current calendar month
+  function _daysLeftInBillingPeriod(sub) {
     var now = new Date();
+    // Use the subscription's REAL billing period when available (same
+    // normalization as _forecastHtml) — plans rarely renew on the 1st, and
+    // pacing against the calendar month gave wildly wrong "per week needed".
+    if (sub && sub.period_end) {
+      var end = new Date(String(sub.period_end).replace(' ', 'T'));
+      if (!isNaN(end.getTime()) && end > now) {
+        return Math.max(0, Math.round((end - now) / 86400000));
+      }
+    }
+    // Fallback: days left in current calendar month
     var endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     return Math.max(0, endOfMonth.getDate() - now.getDate());
   }

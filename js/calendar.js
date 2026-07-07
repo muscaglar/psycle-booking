@@ -40,6 +40,9 @@ function _lookupGeo(locName) {
 function syncCalendarData() {
   const entries = [];
   for (const [evtId, booking] of Object.entries(_myBookings)) {
+    // Waitlist places are NOT confirmed classes — exporting them as normal
+    // events sends the user to a class they may never have been admitted to.
+    if (booking && booking.waitlisted) continue;
     const evt = _eventCache[evtId];
     if (!evt) continue;
     // Use the API-provided address (from relations.locations) for calendar events
@@ -83,6 +86,19 @@ function syncCalendarData() {
 function _icsTimestamp(dateInput) {
   const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+/**
+ * Escape TEXT property values per RFC 5545 §3.3.11: backslash, semicolon,
+ * comma and newline. Street addresses are full of commas — without this,
+ * strict parsers (Outlook, some CalDAV servers) truncate or reject the event.
+ */
+function _icsEscapeText(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
 }
 
 /**
@@ -144,7 +160,8 @@ function generateICS(entriesArg) {
     if (entry.instrName) descParts.push('Instructor: ' + entry.instrName);
     if (slots) descParts.push(slots);
     descParts.push('Duration: ' + (entry.duration || 45) + 'min');
-    const description = descParts.join('\\n');
+    // Escape each part, then join with the literal \n sequence.
+    const description = descParts.map(_icsEscapeText).join('\\n');
 
     // Use full street address for LOCATION if available, otherwise display name
     const locDisplay = entry.address || entry.locName || '';
@@ -154,8 +171,8 @@ function generateICS(entriesArg) {
     lines.push('DTSTAMP:' + _icsTimestamp(new Date()));
     lines.push('DTSTART:' + _icsTimestamp(start));
     lines.push('DTEND:' + _icsTimestamp(end));
-    lines.push(_icsFold('SUMMARY:' + summary));
-    lines.push(_icsFold('LOCATION:' + locDisplay));
+    lines.push(_icsFold('SUMMARY:' + _icsEscapeText(summary)));
+    lines.push(_icsFold('LOCATION:' + _icsEscapeText(locDisplay)));
     lines.push(_icsFold('DESCRIPTION:' + description));
 
     // Geo coordinates for travel time / map integration
@@ -273,6 +290,14 @@ function addToGoogleCalendar() {
  * Called by renderMyBookings — only shows when there are bookings.
  */
 function renderCalendarActions() {
+  // Inside the iOS app the blob/window.open ICS mechanics don't work
+  // (WKWebView has no download manager) — native calendar sync in
+  // Membership → Settings replaces them, so don't render dead buttons.
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    return `<div class="cal-actions">
+      <button class="cal-btn" onclick="event.stopPropagation();openSettings()" title="Native calendar sync">📅 Calendar sync settings</button>
+    </div>`;
+  }
   return `<div class="cal-actions">
     <button class="cal-btn" onclick="event.stopPropagation();openICSInCalendar()" title="Open in Calendar app">📅 Add to Calendar</button>
     <button class="cal-btn" onclick="event.stopPropagation();addToGoogleCalendar()" title="Open in Google Calendar">Google Cal</button>

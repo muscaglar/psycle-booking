@@ -161,11 +161,15 @@
   function patchSubmitBooking() {
     const orig = window.submitBooking;
     if (!orig) return;
-    window.submitBooking = async function (eventId, slots, btn) {
-      const result = await orig.call(this, eventId, slots, btn);
+    // Forward ALL arguments — the 4th (opts, { waitlist: true }) drives the
+    // waitlist flow and must survive the whole wrapper chain.
+    window.submitBooking = async function (eventId, slots, btn, opts) {
+      const result = await orig.call(this, eventId, slots, btn, opts);
       // After successful booking, the button will have class 'booked'
-      // We check _myBookings to confirm success
-      if (window._myBookings?.[String(eventId)]) {
+      // We check _myBookings to confirm success. Waitlist joins are not
+      // attended classes — keep them out of the class history.
+      const entry = window._myBookings?.[String(eventId)];
+      if (entry && !entry.waitlisted) {
         addHistoryEntry(eventId, slots);
       }
       return result;

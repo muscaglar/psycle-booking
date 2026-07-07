@@ -35,6 +35,12 @@ function localDateStr(d = new Date()) {
 }
 const today = localDateStr();
 
+// Parse an API datetime that may be 'YYYY-MM-DD HH:MM:SS' — iOS WebKit
+// returns Invalid Date for the space-separated form, so normalize to ISO.
+function parsePsycleDate(v) {
+  return v ? new Date(String(v).replace(' ', 'T')) : null;
+}
+
 function apiUrl(path) {
   return IS_FILE
     ? PROXY + encodeURIComponent(DIRECT_API + path)
@@ -60,7 +66,11 @@ function apiFetch(path, opts = {}) {
   return fetch(apiUrl(path), { ...opts, headers, signal: ctrl.signal })
     .then(res => {
       clearTimeout(timer);
-      if ((res.status === 401 || res.status === 403) && getBearerToken()) {
+      // Only 401 means the session is dead. 403 is how the API says "not
+      // allowed" for business rules (plan doesn't cover the class, inside
+      // the late-cancel window, ...) with a perfectly valid token — treating
+      // it as expiry logged users out mid-booking.
+      if (res.status === 401 && getBearerToken()) {
         showSessionExpired();
       }
       return res;
@@ -145,7 +155,7 @@ function formatSlots(label, slots) {
  */
 function instrLink(name, instrId) {
   if (!name) return '';
-  var safeName = escapeHTML(name).replace(/'/g, "\\'");
+  var safeName = escapeForJsString(name);
   var sid = instrId ? String(instrId) : '';
   if (!sid && typeof instructors !== 'undefined') {
     var match = instructors.find(function (i) { return i.full_name === name; });
@@ -209,16 +219,28 @@ function _parseSlots(raw) {
   }).filter(Boolean);
 }
 
+// Supersede guard: fetchMyBookings is fired concurrently from many places
+// (visibility, pull-to-refresh, post-booking, offline replay). Only the
+// NEWEST call may rebuild _myBookings — a slow, stale response landing after
+// a fresh booking would otherwise wipe that booking from local state.
+let _bookingsSeq = 0;
+
+// Resolves to true when THIS call's response was applied to _myBookings
+// (false = superseded by a newer call or failed) so callers that need
+// fresh state can detect a no-op and retry.
 async function fetchMyBookings() {
+  const mySeq = ++_bookingsSeq;
   if (!getBearerToken()) {
     _myBookings = {};
     renderMyBookings(); // still render — the signed-out empty state lives there
-    return;
+    return true;
   }
   try {
     const res = await apiFetch('/bookings?limit=200');
-    if (!res.ok) return;
+    if (mySeq !== _bookingsSeq) return false; // a newer fetch superseded this one
+    if (!res.ok) return false;
     const data = await res.json();
+    if (mySeq !== _bookingsSeq) return false;
     const list = Array.isArray(data) ? data : (data.data || []);
 
     // The API returns one record per seat. Multiple seats for the same
@@ -242,10 +264,19 @@ async function fetchMyBookings() {
       }
     });
 
-    // Re-apply locally-tracked waitlist status (cleared once the class passes)
+    // Re-apply locally-tracked waitlist status (cleared once the class passes).
+    // Admission heuristic: if the server now reports an assigned seat for a
+    // tracked-waitlisted event, the user was admitted — clear the marker so
+    // the badge drops and calendar export resumes. (Waitlist places are
+    // joined without slots, so a slot appearing means a real seat.)
     const waitlisted = _cleanWaitlisted();
     Object.keys(waitlisted).forEach(id => {
-      if (_myBookings[id]) _myBookings[id].waitlisted = true;
+      if (!_myBookings[id]) return;
+      if (_myBookings[id].slots && _myBookings[id].slots.length > 0) {
+        _unmarkWaitlisted(id);
+      } else {
+        _myBookings[id].waitlisted = true;
+      }
     });
 
     // Fetch event details for any bookings not yet in _eventCache.
@@ -282,6 +313,7 @@ async function fetchMyBookings() {
       }));
     }
 
+    if (mySeq !== _bookingsSeq) return false; // superseded while fetching details
     PsycleEvents.emit('bookings:loaded', _myBookings);
     renderMyBookings();
     // Refresh any already-rendered search result booking buttons
@@ -292,7 +324,8 @@ async function fetchMyBookings() {
       if (!btn || btn.classList.contains('booked')) return;
       applyBookedState(btn, Number(evtId), booking);
     });
-  } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); }
+    return true;
+  } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); return false; }
 }
 
 // Refresh bookings when the page becomes visible after being hidden
@@ -362,8 +395,16 @@ async function checkAuth() {
       fetchMyBookings();
       // After first login, offer to sync booking history
       setTimeout(function () { showHistorySyncPrompt(); }, 1500);
-    } else {
+    } else if (res.status === 401 || res.status === 403) {
       showSessionExpired();
+    } else {
+      // Transient server trouble (5xx / 429) is NOT an expired session —
+      // never destroy the stored token for it. Show signed-out UI for now;
+      // the next visibility change / launch re-checks with the kept token.
+      currentUser = null;
+      pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
+      toast(`Psycle is unreachable right now (${res.status}) — your session has been kept`, 'info');
+      updateDiscoverEmptyState();
     }
   } catch {
     currentUser = null;
@@ -449,7 +490,12 @@ function validateToken() {
 }
 
 async function saveToken() {
-  const token = document.getElementById('tokenInput').value.trim();
+  // Users paste straight from devtools — tolerate a copied "Bearer " prefix
+  // and wrapping quotes rather than sending a doubled Authorization header.
+  const token = document.getElementById('tokenInput').value.trim()
+    .replace(/^["']+|["']+$/g, '')
+    .replace(/^bearer\s+/i, '')
+    .trim();
   if (window._secureTokenStore) await window._secureTokenStore.set(token);
   else localStorage.setItem('psycle_bearer_token', token);
   closeTokenDialog();
@@ -461,6 +507,11 @@ async function saveToken() {
 }
 
 function clearToken() {
+  // Deliberate sign-out: disarm the old token's expiry timers so they can't
+  // pop "session expiring/expired" UI at a signed-out user hours later.
+  if (typeof cancelTokenExpiryCheck === 'function') cancelTokenExpiryCheck();
+  const banner = document.getElementById('sessionBanner');
+  if (banner) banner.style.display = 'none';
   if (window._secureTokenStore) window._secureTokenStore.clear();
   else localStorage.removeItem('psycle_bearer_token');
   currentUser = null;
@@ -469,6 +520,7 @@ function clearToken() {
 
 function showSessionExpired() {
   currentUser = null;
+  if (typeof cancelTokenExpiryCheck === 'function') cancelTokenExpiryCheck();
   if (window._secureTokenStore) window._secureTokenStore.clear();
   else localStorage.removeItem('psycle_bearer_token');
   document.getElementById('sessionBanner').style.display = 'flex';
@@ -536,8 +588,16 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 
   renderInstrDropdown();
 
-  // Pre-select favourites if any saved, otherwise start with no selection
-  if (favouriteInstructors.size > 0) {
+  // Pre-select favourites if any saved — but only when there's no saved
+  // instructor filter to restore. interactions.js restores
+  // psycle_saved_filters on its own timer; racing it and ADDING favourites
+  // on top would corrupt the user's last-used selection.
+  let _hasSavedInstrFilter = false;
+  try {
+    const _sf = JSON.parse(localStorage.getItem('psycle_saved_filters') || 'null');
+    _hasSavedInstrFilter = !!(_sf && Array.isArray(_sf.instructorIds) && _sf.instructorIds.length > 0);
+  } catch (e) {}
+  if (favouriteInstructors.size > 0 && !_hasSavedInstrFilter) {
     favouriteInstructors.forEach(id => {
       if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
     });
@@ -587,6 +647,7 @@ function triggerAutoSearch() {
   // (including instructor) update results immediately, so there's no Search button.
   const wk = (typeof currentWindowDates === 'function') ? currentWindowDates().windowKey : null;
   if (wk && window._windowKey === wk && Array.isArray(window._windowEvents) && window._windowRelations) {
+    clearTimeout(_autoSearchTimer); // pending debounced search is obsolete
     renderFromWindow(currentFilters());
     return;
   }
@@ -819,6 +880,11 @@ function _readWindowCache() {
 }
 
 function renderFromWindow(filters) {
+  // An instant cached render owns the view from this moment: supersede any
+  // in-flight search for a different range, or its late progressive renders
+  // would append foreign day-groups on top of this view and restamp the
+  // window key to the abandoned range.
+  _searchSeq++;
   const cont = document.getElementById('results');
   if (cont) cont.innerHTML = '';
   render(window._windowEvents, window._windowRelations, filters, true);
@@ -830,7 +896,11 @@ function renderFromWindow(filters) {
 // window instantly; the per-dimension pill counts stay selection-based.
 function onDiscoverSearch(v) {
   window._discoverQuery = (v || '').trim().toLowerCase();
-  if (window._windowEvents) renderFromWindow(currentFilters());
+  // Instant path only when the cached window matches the SELECTED range —
+  // renderFromWindow supersedes in-flight fetches, and rendering a stale
+  // range here would strand the fetch for the range the user actually picked.
+  const wk = (typeof currentWindowDates === 'function') ? currentWindowDates().windowKey : null;
+  if (window._windowEvents && wk && window._windowKey === wk) renderFromWindow(currentFilters());
   else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
 }
 
@@ -1080,21 +1150,35 @@ async function search(opts) {
         }
       })();
     } else {
-      // All studios: fetch each location concurrently, merge as they arrive
+      // All studios: fetch each location concurrently, merge as they arrive.
+      // A single failing studio must not kill the whole search or leave the
+      // "found so far…" spinner running forever — it still counts toward
+      // completion and gets reported once everything settles.
       const total = locationsToFetch.length;
       let done = 0;
+      const failedStudios = [];
 
       const promises = locationsToFetch.map(async loc => {
-        const { events, relations: rel } = await fetchEventsForLocation(loc.id, startDate, endDateStr, seenIds, stale);
-        if (stale()) return;
-        allEvents = allEvents.concat(events);
-        if (!relations) relations = rel;
-        else if (rel) mergeRelations(relations, rel);
-        done++;
-        if (relations) render(allEvents, relations, filters, done === total);
+        try {
+          const { events, relations: rel } = await fetchEventsForLocation(loc.id, startDate, endDateStr, seenIds, stale);
+          if (stale()) return;
+          allEvents = allEvents.concat(events);
+          if (!relations) relations = rel;
+          else if (rel) mergeRelations(relations, rel);
+        } catch (e) {
+          failedStudios.push(loc.name ? loc.name.replace('Psycle ', '') : String(loc.id));
+        } finally {
+          done++;
+          if (!stale() && relations) render(allEvents, relations, filters, done === total);
+        }
       });
 
       await Promise.all(promises);
+
+      if (!stale() && failedStudios.length) {
+        if (failedStudios.length === total) throw new Error('All studios failed to load');
+        toast(`Couldn't load ${failedStudios.join(', ')} — showing the other studios`, 'info');
+      }
     }
 
     if (!stale()) {
@@ -1111,11 +1195,19 @@ async function search(opts) {
   } catch (e) {
     if (!stale()) showSearchError(e);
   } finally {
-    // Only the most recent search owns the button state
+    // Only the most recent search owns the button state. (btn is null in the
+    // redesigned live-filter UI, which has no standalone Search button.)
     if (mySeq === _searchSeq) {
-      btn.disabled = false;
-      btn.textContent = 'Search';
-      btn.onclick = () => search({ force: true });
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Search';
+        btn.onclick = () => search({ force: true });
+      }
+      if (window._searchAborted) {
+        // Stopped by the user — never leave a live spinner behind.
+        if (relations) render(allEvents, relations, filters, true);
+        else setStatus('Search stopped — tap Search to retry.');
+      }
     }
   }
 }
@@ -1320,7 +1412,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     const line1 = [_evt._typeName, _evt._instrName, `${_dateStr}, ${_timeStr}`].filter(Boolean).join(' \u00b7 ');
     const line2 = [_evt._locName, _evt._studioName].filter(Boolean).join(' \u00b7 ');
     const sub = document.getElementById('modalSubtitle');
-    sub.innerHTML = `<span class="modal-subtitle-line">${line1}</span><br><span class="modal-subtitle-line">${line2}</span>`;
+    sub.innerHTML = `<span class="modal-subtitle-line">${escapeHTML(line1)}</span><br><span class="modal-subtitle-line">${escapeHTML(line2)}</span>`;
   } else {
     document.getElementById('modalSubtitle').textContent = studioName;
   }
@@ -1328,7 +1420,13 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   document.getElementById('modalHint').textContent = hasMySlots
     ? `Your ${pluralizeSlotLabel(_sl)} shown in green — click to cancel. Select another to book.`
     : `Select up to ${MAX_SEATS} ${pluralizeSlotLabel(_sl)}`;
-  document.getElementById('confirmBookBtn').disabled = true;
+  // Fully reset the confirm button on every open — changeSpot() overrides the
+  // label and handler for swap mode, and without this reset those overrides
+  // (and a stale "Swapping..." label) would leak into later normal bookings.
+  const _confirmBtn = document.getElementById('confirmBookBtn');
+  _confirmBtn.disabled = true;
+  _confirmBtn.textContent = 'Confirm booking';
+  _confirmBtn.onclick = confirmBikeBooking;
 
   const slots = layout.slots;
   const objects = layout.objects || [];
@@ -1369,7 +1467,11 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     const isUsual = usualAvailable && id === Number(usualSlot);
     const label = slot.label ?? slot.id;
     const cls = isMine ? 'mine' : isUsual ? 'selected usual' : isAvailable ? 'available' : 'taken';
-    const click = isMine ? `onclick="cancelBikeSlot(${slot.id}, ${eventId})"` : isAvailable ? `onclick="selectBike(${slot.id})"` : '';
+    // In swap mode a tap on your own seat retargets which seat to change —
+    // it must never be a live cancel button there.
+    const click = isMine
+      ? (isChangeSpot ? `onclick="setChangeSpotTarget(${slot.id})"` : `onclick="cancelBikeSlot(${slot.id}, ${eventId})"`)
+      : isAvailable ? `onclick="selectBike(${slot.id})"` : '';
     return `<g class="bike-slot ${cls}" data-slot="${slot.id}" ${click}>
       <rect x="${sx(slot.x)}" y="${sy(slot.y)}" width="${SLOT}" height="${SLOT}" rx="6" stroke-width="1.5"/>
       <text x="${sx(slot.x)+SLOT/2}" y="${sy(slot.y)+SLOT/2+4}"
@@ -1392,19 +1494,27 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
 
 function selectBike(slotId) {
   const id = Number(slotId);
+  const swapMode = !!window._changeSpotContext;
   const idx = _selectedSlots.indexOf(id);
   if (idx !== -1) {
     // deselect
     _selectedSlots.splice(idx, 1);
     document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('selected', 'available');
   } else {
-    if (_selectedSlots.length >= MAX_SEATS) {
-      // deselect oldest
+    // A swap replaces exactly one seat, so swap mode is single-select.
+    const maxSel = swapMode ? 1 : MAX_SEATS;
+    while (_selectedSlots.length >= maxSel) {
       const evicted = _selectedSlots.shift();
       document.querySelector(`.bike-slot[data-slot="${evicted}"]`)?.classList.replace('selected', 'available');
     }
     _selectedSlots.push(id);
     document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('available', 'selected');
+  }
+  if (swapMode) {
+    // Keep the change-spot chips + swap hint instead of the generic booking hint.
+    renderChangeSpotHint();
+    document.getElementById('confirmBookBtn').disabled = _selectedSlots.length === 0;
+    return;
   }
   const count = _selectedSlots.length;
   const _sl2 = _bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot';
@@ -1419,6 +1529,15 @@ function closeBikePicker() {
   document.getElementById('bikeModal').style.display = 'none';
   _bookingContext = null;
   _selectedSlots = [];
+  // Abandoning a swap must not leave its context or button overrides behind —
+  // a stale context would make the next booking's confirm cancel the wrong class.
+  window._changeSpotContext = null;
+  const confirmBtn = document.getElementById('confirmBookBtn');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Confirm booking';
+    confirmBtn.onclick = confirmBikeBooking;
+  }
 }
 
 async function confirmBikeBooking() {
@@ -1454,6 +1573,15 @@ function _cleanWaitlisted() {
   });
   if (changed) localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
   return map;
+}
+// Leaving a waitlist (or any cancel) must drop the local marker, or a later
+// REAL booking of the same event would wrongly wear the Waitlisted badge.
+function _unmarkWaitlisted(eventId) {
+  const map = _getWaitlisted();
+  if (map[String(eventId)] !== undefined) {
+    delete map[String(eventId)];
+    localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
+  }
 }
 
 // Verify-first instrumentation. The waitlist payload (POST {event_id} with no
@@ -1575,8 +1703,10 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       btn.className = 'book-btn booked';
       btn.disabled = true;
       toast("You're already in this class", 'info');
-    } else if (res.status !== 401 && res.status !== 403) {
-      // 401/403 already handled globally by apiFetch → showSessionExpired()
+    } else if (res.status !== 401) {
+      // 401 is handled globally by apiFetch → showSessionExpired(). Every
+      // other failure — including 403 business-rule denials (plan doesn't
+      // cover the class, no credits left) — surfaces the server's reason.
       btn.textContent = 'Failed — retry';
       btn.disabled = false;
       const _fb = opts.waitlist ? "Couldn't join the waitlist" : `Error ${res.status}`;
@@ -1629,8 +1759,8 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
       <div class="bc-check">&#10003;</div>
       <div class="bc-text">
         <div class="bc-title">${opts.waitlist ? 'On the waitlist!' : 'Booked!'}</div>
-        <div class="bc-detail">${classLine}</div>
-        ${dateTimeStr ? `<div class="bc-detail bc-dim">${dateTimeStr}</div>` : ''}
+        <div class="bc-detail">${escapeHTML(classLine)}</div>
+        ${dateTimeStr ? `<div class="bc-detail bc-dim">${escapeHTML(dateTimeStr)}</div>` : ''}
         ${opts.waitlist ? `<div class="bc-detail bc-dim">You'll be notified if a spot opens up</div>` : ''}
         ${slotStr ? `<div class="bc-slot">${slotStr}</div>` : ''}
       </div>
@@ -1758,7 +1888,9 @@ window.confirmModal = confirmModal;
 
 /**
  * Turn a failed cancel into a user-friendly message. Distinguishes session
- * expiry (401/403), offline, and server errors (prefers server `message`).
+ * expiry (401), offline, and server errors (prefers server `message`).
+ * 403 is a policy denial (e.g. inside the late-cancel window) with a valid
+ * session — show the server's reason, not "session expired".
  */
 function describeCancelError(failedResponse, data, err) {
   if (err) {
@@ -1769,10 +1901,13 @@ function describeCancelError(failedResponse, data, err) {
     return err.message || 'Cancel failed';
   }
   if (failedResponse) {
-    if (failedResponse.status === 401 || failedResponse.status === 403) {
+    if (failedResponse.status === 401) {
       return 'Session expired — sign in and try again.';
     }
     if ((data && data.message)) return data.message;
+    if (failedResponse.status === 403) {
+      return "Psycle wouldn't allow this cancellation (it may be inside the late-cancel window).";
+    }
     return `Cancel failed (${failedResponse.status})`;
   }
   return 'Cancel failed';
@@ -1884,6 +2019,7 @@ async function confirmUnbook(bookingId, eventId, btn) {
   if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
     queueOfflineCancel(eventId, bookingIds);
     delete _myBookings[String(eventId)];
+    _unmarkWaitlisted(eventId);
     btn.textContent = 'Book';
     btn.className = 'book-btn';
     btn.disabled = false;
@@ -1903,10 +2039,12 @@ async function confirmUnbook(bookingId, eventId, btn) {
       const path = bid ? `/bookings/${bid}` : `/bookings?event_id=${eventId}`;
       return apiFetch(path, { method: 'DELETE' });
     }));
-    const isOk = r => r.ok || r.status === 204 || r.status === 200;
+    // 404 = already gone (e.g. a retried DELETE landed) — counts as cancelled.
+    const isOk = r => r.ok || r.status === 204 || r.status === 200 || r.status === 404;
     const allOk = results.every(isOk);
     if (allOk) {
       delete _myBookings[String(eventId)];
+      _unmarkWaitlisted(eventId);
       btn.textContent = 'Book';
       btn.className = 'book-btn';
       btn.disabled = false;
@@ -2047,7 +2185,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     <div class="cc-rule"></div>
     <div class="cc-info">
       <span class="cc-name">${escapeHTML(type?.name || 'Class')}</span>
-      <span class="cc-sub">${instrLink(instr?.full_name, instr?.id)}${locName ? ' · ' + escapeHTML(locName) : ''}</span>
+      <span class="cc-sub">${instrLink(instr?.full_name, instr?.id)}${window.tierBadgeHTML ? window.tierBadgeHTML(instr?.id) : ''}${locName ? ' · ' + escapeHTML(locName) : ''}</span>
       ${spotsHtml}
       ${onlineMeta}
     </div>
@@ -2067,23 +2205,27 @@ function render(events, relations, filters, done) {
   const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
   Object.assign(_studioMap, studioMap); // expose globally for bookClass
 
-  // Cache event metadata for the upcoming panel
+  // Cache event metadata for the upcoming panel. Always REFRESH existing
+  // entries — the class detail sheet reads availability (is_fully_booked,
+  // capacity) from this cache, and an insert-only cache would pin the
+  // first-seen snapshot all day while refreshed cards show current state.
+  // Merge over any existing entry so richer fields written by detail
+  // fetches (history sync) survive a list-shaped refresh.
   events.forEach(e => {
-    if (!_eventCache[String(e.id)]) {
-      const type = typeMap[e.event_type_id];
-      const instr = instrMap[e.instructor_id];
-      const studio = studioMap[e.studio_id];
-      const loc = studio ? locationMap[studio.location_id] : null;
-      _eventCache[String(e.id)] = {
-        ...e,
-        _typeName: type?.name || 'Class',
-        _instrName: instr?.full_name || '',
-        _locName: loc ? loc.name.replace('Psycle ', '') : '',
-        _locFullName: loc ? loc.name : '',
-        _locAddress: loc ? (loc.address || '') : '',
-        _studioName: studio ? studio.name : '',
-      };
-    }
+    const type = typeMap[e.event_type_id];
+    const instr = instrMap[e.instructor_id];
+    const studio = studioMap[e.studio_id];
+    const loc = studio ? locationMap[studio.location_id] : null;
+    _eventCache[String(e.id)] = {
+      ...(_eventCache[String(e.id)] || {}),
+      ...e,
+      _typeName: type?.name || 'Class',
+      _instrName: instr?.full_name || '',
+      _locName: loc ? loc.name.replace('Psycle ', '') : '',
+      _locFullName: loc ? loc.name : '',
+      _locAddress: loc ? (loc.address || '') : '',
+      _studioName: studio ? studio.name : '',
+    };
   });
 
   const now = new Date();
@@ -2651,10 +2793,10 @@ function renderMyBookings() {
   const availableCredits = currentUser?.available_credits || [];
 
   if (_activeSubscription) {
-    periodStart = _activeSubscription.period_start ? new Date(_activeSubscription.period_start) : null;
-    periodEnd = _activeSubscription.period_end ? new Date(_activeSubscription.period_end) : null;
+    periodStart = parsePsycleDate(_activeSubscription.period_start);
+    periodEnd = parsePsycleDate(_activeSubscription.period_end);
     const periods = _activeSubscription.upcoming_billing_periods || [];
-    nextPeriodStart = periods.length > 0 ? new Date(periods[0].start) : null;
+    nextPeriodStart = periods.length > 0 ? parsePsycleDate(periods[0].start) : null;
 
     // Only show the standalone sub-bar if there's NO period split
     // (when there IS a split, the period section headers replace it)
@@ -2766,7 +2908,9 @@ function renderMyBookings() {
 
       // Next period sub-bar (collapsible, starts open)
       const nextPeriod = periods.length > 0 ? periods[0] : null;
-      const nextLabel = nextPeriod ? `${fmtDate(new Date(nextPeriod.start))} — ${fmtDate(new Date(nextPeriod.end))}` : '';
+      const nextLabel = nextPeriod
+        ? `${fmtDate(parsePsycleDate(nextPeriod.start))} — ${fmtDate(parsePsycleDate(nextPeriod.end))}`
+        : '';
       const nextMax = _activeSubscription?.max_bookings || 0;
 
       html += `<div class="mb-period-section">`;
@@ -2865,7 +3009,7 @@ function renderMyBookings() {
         <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
         <div class="class-info">
           <div class="class-type">${escapeHTML(typeName)}</div>
-          <div class="class-instructor">${instrLink(instrName, evt.instructor_id)}</div>
+          <div class="class-instructor">${instrLink(instrName, evt.instructor_id)}${window.tierBadgeHTML ? window.tierBadgeHTML(evt.instructor_id) : ''}</div>
           <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
           <div class="class-meta">${badges}</div>
           ${seatHtml}
@@ -3015,6 +3159,26 @@ async function rebookNextWeek(eventId) {
 // ── Change Spot ─────────────────────────────────────────────────
 // Opens bike picker. When user selects a new spot, cancels old + books new.
 window.changeSpot = async function(eventId) {
+  // A fresh multi-seat booking maps every seat to the single returned booking
+  // id until fetchMyBookings corrects it — swapping off that stale map would
+  // cancel the wrong seat. Refresh ONLY when the local record looks
+  // suspicious (optimistic null id, or seats sharing one booking id), and
+  // retry once if a concurrent fetch superseded ours without applying.
+  const _mapLooksStale = (b) => {
+    if (!b) return true;
+    if (b.bookingId === null) return true;
+    if ((b.slots || []).length > 1) {
+      const distinct = new Set(Object.values(b.slotBookings || {}).map(String));
+      return distinct.size < b.slots.length;
+    }
+    return false;
+  };
+  if (_mapLooksStale(_myBookings[String(eventId)])) {
+    try {
+      const applied = await fetchMyBookings();
+      if (!applied) await fetchMyBookings();
+    } catch (e) { /* fall back to local state */ }
+  }
   const booking = _myBookings[String(eventId)];
   const evt = _eventCache[String(eventId)];
   if (!booking || !evt) return;
@@ -3085,14 +3249,19 @@ function renderChangeSpotHint() {
   if (!hint) return;
   const label = slotLabelForEvent(ctx.eventId);
   const low = label.toLowerCase();
+  const picked = _selectedSlots.length ? _selectedSlots[0] : null;
+  const tail = picked != null
+    ? ' &rarr; ' + label + ' ' + picked + '. Tap Swap to confirm.'
+    : ' — now pick a new ' + low + ' on the layout.';
   if (ctx.booking.slots.length > 1) {
     const chips = ctx.booking.slots.map(function (s) {
       const cls = 'change-chip' + (s === ctx.slotToChange ? ' is-active' : '');
       return '<button type="button" class="' + cls + '" onclick="setChangeSpotTarget(' + s + ')">' +
         label + ' ' + s + '</button>';
     }).join('');
-    hint.innerHTML = 'Changing: <span class="change-chip-row">' + chips + '</span>' +
-      ' — now pick a new ' + low + ' on the layout.';
+    hint.innerHTML = 'Changing: <span class="change-chip-row">' + chips + '</span>' + tail;
+  } else if (picked != null) {
+    hint.textContent = label + ' ' + ctx.slotToChange + ' → ' + label + ' ' + picked + '. Tap Swap to confirm.';
   } else {
     hint.textContent = 'Select a new ' + low + ' to replace ' + label + ' ' + ctx.slotToChange;
   }
@@ -3108,53 +3277,117 @@ window.setChangeSpotTarget = function (slot) {
   renderChangeSpotHint();
 };
 
+// Keep the "usual spot" memory honest after a swap: the seat the user moved
+// away from loses a count, the seat they chose gains one.
+function _adjustBikeHistoryForSwap(eventId, oldSlot, newSlot) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt || evt.studio_id == null || evt.instructor_id == null) return;
+  const hist = _getBikeHistory();
+  const counts = hist[String(evt.studio_id)]?.[String(evt.instructor_id)];
+  if (counts) {
+    const oldKey = String(Number(oldSlot));
+    if (counts[oldKey]) {
+      counts[oldKey] -= 1;
+      if (counts[oldKey] <= 0) delete counts[oldKey];
+    }
+    try { localStorage.setItem(BIKE_HISTORY_KEY, JSON.stringify(hist)); } catch (e) {}
+  }
+  _recordBikeHistory(eventId, [Number(newSlot)]);
+}
+
+let _swapInFlight = false;
 async function executeSpotSwap() {
   const ctx = window._changeSpotContext;
-  if (!ctx || _selectedSlots.length === 0) return;
+  if (!ctx || _selectedSlots.length === 0 || _swapInFlight) return;
 
   const newSlot = _selectedSlots[0];
   const label = slotLabelForEvent(ctx.eventId);
+  const low = label.toLowerCase();
   const confirmBtn = document.getElementById('confirmBookBtn');
+  _swapInFlight = true;
   if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Swapping...'; }
 
+  // On failure the context is KEPT and the button restored, so the user can
+  // simply tap Swap again — never a dead "Swapping..." button.
+  const failRetryable = (msg) => {
+    toast(msg, 'error');
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Swap ' + low; }
+  };
+
   try {
-    // Step 1: Cancel the old slot
-    const cancelPath = ctx.bookingId ? '/bookings/' + ctx.bookingId : '/bookings?event_id=' + ctx.eventId;
-    const cancelRes = await apiFetch(cancelPath, { method: 'DELETE' });
-    if (!cancelRes.ok && cancelRes.status !== 204) {
-      throw new Error('Failed to cancel old spot');
+    // Step 1: cancel the old seat (skipped if a previous attempt already did).
+    if (!ctx.cancelDone) {
+      const cancelPath = ctx.bookingId ? '/bookings/' + ctx.bookingId : '/bookings?event_id=' + ctx.eventId;
+      let cancelRes;
+      try {
+        cancelRes = await apiFetch(cancelPath, { method: 'DELETE' });
+      } catch (e) {
+        // Nothing cancelled yet — fully safe to retry.
+        failRetryable('Swap failed: ' + e.message);
+        return;
+      }
+      // 404 = the booking is already gone (e.g. an earlier attempt landed
+      // server-side) — treat as cancelled rather than a dead end.
+      if (!cancelRes.ok && cancelRes.status !== 204 && cancelRes.status !== 404) {
+        const cErr = await cancelRes.json().catch(() => ({}));
+        failRetryable('Swap failed: ' + (cErr.message || 'could not release your current ' + low));
+        return;
+      }
+      ctx.cancelDone = true;
     }
 
-    // Step 2: Book the new slot
-    const bookRes = await apiFetch('/bookings', {
+    // Book a seat in this event. retries:0 — a timed-out POST may have booked
+    // server-side, and an auto-retry could double-book.
+    const postSeat = (slot) => apiFetch('/bookings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ event_id: Number(ctx.eventId), slots: [newSlot] }),
+      body: JSON.stringify({ event_id: Number(ctx.eventId), slots: [Number(slot)] }),
+      retries: 0,
     });
 
-    if (bookRes.ok || bookRes.status === 201) {
+    // Step 2: book the new seat.
+    let bookRes = null, bookErr = null;
+    try { bookRes = await postSeat(newSlot); } catch (e) { bookErr = e; }
+
+    if (bookRes && (bookRes.ok || bookRes.status === 201)) {
       toast(label + ' changed: ' + ctx.slotToChange + ' → ' + newSlot, 'success');
-      closeBikePicker();
+      _adjustBikeHistoryForSwap(ctx.eventId, ctx.slotToChange, newSlot);
+      closeBikePicker(); // resets the confirm button and clears the swap context
       fetchMyBookings();
       PsycleEvents.emit('booking:complete', ctx.eventId, [newSlot]);
-    } else {
-      const err = await bookRes.json().catch(() => ({}));
-      toast('Swap failed: ' + (err.message || 'could not book new spot'), 'error');
-      // Try to re-book the original slot as recovery
-      await apiFetch('/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ event_id: Number(ctx.eventId), slots: [ctx.slotToChange] }),
-      });
-      fetchMyBookings();
+      return;
     }
-  } catch (e) {
-    toast('Swap failed: ' + e.message, 'error');
-    fetchMyBookings(); // refresh to show actual state
-  }
 
-  window._changeSpotContext = null;
-  if (confirmBtn) { confirmBtn.disabled = false; }
+    // Booking the new seat failed — try to win the original seat back, then
+    // let the SERVER say whether we actually hold it (a 409 on the recovery
+    // POST is ambiguous: "you already have it" vs "someone else took it").
+    const bErr = bookRes ? await bookRes.json().catch(() => ({})) : {};
+    const reason = bookErr ? bookErr.message : (bErr.message || 'could not book ' + low + ' ' + newSlot);
+    try { await postSeat(ctx.slotToChange); } catch (e) { /* judged by the refetch below */ }
+
+    let recovered = false;
+    try {
+      await fetchMyBookings();
+      const after = _myBookings[String(ctx.eventId)];
+      recovered = !!after && (after.slots || []).map(Number).includes(Number(ctx.slotToChange));
+      if (recovered) {
+        // Retarget the context at the CURRENT booking record for that seat so
+        // a retried swap cancels the right one.
+        ctx.booking = after;
+        ctx.bookingId = after.slotBookings?.[ctx.slotToChange] || after.bookingId;
+        ctx.cancelDone = false;
+      }
+    } catch (e) { /* recovered stays false */ }
+
+    if (recovered) {
+      failRetryable('Swap failed: ' + reason + ' — kept ' + label + ' ' + ctx.slotToChange + '. Tap Swap to retry.');
+    } else {
+      failRetryable('Swap failed: ' + reason + ' — and ' + label + ' ' + ctx.slotToChange +
+        ' could not be restored. Check My Bookings and rebook.');
+    }
+  } finally {
+    _swapInFlight = false;
+  }
 }
 
 // ── Find Similar popup ──────────────────────────────────────────
@@ -3322,6 +3555,7 @@ async function upcomingCancel(eventId, btn) {
   if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
     queueOfflineCancel(eventId, bookingIds);
     delete _myBookings[String(eventId)];
+    _unmarkWaitlisted(eventId);
     const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
     if (card) {
       card.classList.remove('is-booked');
@@ -3346,10 +3580,13 @@ async function upcomingCancel(eventId, btn) {
       const path = bid ? `/bookings/${bid}` : `/bookings?event_id=${eventId}`;
       return apiFetch(path, { method: 'DELETE' });
     }));
-    const isOk = r => r.ok || r.status === 204 || r.status === 200;
+    // 404 counts as success: a retried DELETE whose first attempt landed
+    // server-side comes back 404 — the booking is gone either way.
+    const isOk = r => r.ok || r.status === 204 || r.status === 200 || r.status === 404;
     const allOk = results.every(isOk);
     if (allOk) {
       delete _myBookings[String(eventId)];
+      _unmarkWaitlisted(eventId);
       // Also update any rendered card
       const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
       if (card) {
@@ -3380,6 +3617,7 @@ async function upcomingCancel(eventId, btn) {
     if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
       queueOfflineCancel(eventId, bookingIds);
       delete _myBookings[String(eventId)];
+      _unmarkWaitlisted(eventId);
       refreshUpcomingPanel();
       toast("You're offline — cancel queued", 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
@@ -3517,7 +3755,7 @@ window.openClassDetail = function (eventId) {
   }
 
   // Instructor link
-  const safeInstrName = escapeHTML(instrName).replace(/'/g, "\\'");
+  const safeInstrName = escapeForJsString(instrName);
   const viewInstrHtml = instrId
     ? '<button class="cds-view-instr" onclick="document.getElementById(\'classDetailOverlay\').remove();window._features_openInstructorModal(\'' + safeInstrName + '\',\'' + instrId + '\')">View instructor profile</button>'
     : '';
@@ -3600,10 +3838,16 @@ function _resolveTemplateLocationId(id) {
 
 // Date of the given weekday (0=Sun..6=Sat) within the upcoming 7 days
 // (today counts as day 0). Returns a YYYY-MM-DD string.
-function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date()) {
+function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date(), timeMinutes = null) {
   const today0 = new Date(fromDate);
   today0.setHours(0, 0, 0, 0);
   let diff = (Number(dayOfWeek) - today0.getDay() + 7) % 7;
+  // Same weekday as today: if the template's class time has already passed,
+  // the user means NEXT week's occurrence, not this morning's class.
+  if (diff === 0 && timeMinutes != null) {
+    const nowMin = fromDate.getHours() * 60 + fromDate.getMinutes();
+    if (timeMinutes <= nowMin) diff = 7;
+  }
   const target = new Date(today0);
   target.setDate(target.getDate() + diff);
   return localDateStr(target);
@@ -3661,8 +3905,22 @@ async function _bookEventHeadless(eventId, studioId) {
 // same instructor if specified, within ±20 min), skip if already booked,
 // otherwise book it headlessly. One failure never aborts the rest.
 // Resolves to { booked, waitlisted, failed, skipped }.
+let _templateBookingInFlight = false;
 async function bookWeeklyTemplate() {
   const counts = { booked: 0, waitlisted: 0, failed: 0, skipped: 0 };
+  // Re-entrancy guard: a double tap on "Book my week" must not run two
+  // concurrent sweeps (both would pass the already-booked checks and
+  // double-book every entry).
+  if (_templateBookingInFlight) return counts;
+  _templateBookingInFlight = true;
+  try {
+    return await _bookWeeklyTemplateInner(counts);
+  } finally {
+    _templateBookingInFlight = false;
+  }
+}
+
+async function _bookWeeklyTemplateInner(counts) {
   const template = loadWeeklyTemplate();
   if (!template.length) return counts;
   if (!currentUser) { counts.failed = template.length; return counts; }
@@ -3693,19 +3951,18 @@ async function bookWeeklyTemplate() {
       const typeMap = Object.fromEntries((rel.event_types || []).map(t => [t.id, t]));
       Object.assign(_studioMap, studioMap);
       (data.data || []).forEach(e => {
-        if (!_eventCache[String(e.id)]) {
-          const studio = studioMap[e.studio_id];
-          const loc = studio ? locationMap[studio.location_id] : null;
-          _eventCache[String(e.id)] = {
-            ...e,
-            _typeName: typeMap[e.event_type_id]?.name || 'Class',
-            _instrName: instrMap[e.instructor_id]?.full_name || '',
-            _locName: loc ? loc.name.replace('Psycle ', '') : '',
-            _locFullName: loc ? loc.name : '',
-            _locAddress: loc ? (loc.address || '') : '',
-            _studioName: studio ? studio.name : '',
-          };
-        }
+        // Overwrite, never insert-only — keeps availability fields fresh.
+        const studio = studioMap[e.studio_id];
+        const loc = studio ? locationMap[studio.location_id] : null;
+        _eventCache[String(e.id)] = {
+          ...e,
+          _typeName: typeMap[e.event_type_id]?.name || 'Class',
+          _instrName: instrMap[e.instructor_id]?.full_name || '',
+          _locName: loc ? loc.name.replace('Psycle ', '') : '',
+          _locFullName: loc ? loc.name : '',
+          _locAddress: loc ? (loc.address || '') : '',
+          _studioName: studio ? studio.name : '',
+        };
       });
       return data.data || [];
     })().catch(() => []);
@@ -3715,8 +3972,8 @@ async function bookWeeklyTemplate() {
 
   const tasks = template.map(async entry => {
     try {
-      const dayStr = _upcomingWeekdayDate(entry.dayOfWeek);
       const targetMin = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
+      const dayStr = _upcomingWeekdayDate(entry.dayOfWeek, new Date(), targetMin);
       const locId = _resolveTemplateLocationId(entry.locationId);
 
       // Already booked something matching this slot? (same type, instructor if

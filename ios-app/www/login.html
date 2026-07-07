@@ -138,7 +138,12 @@ function onLoginSuccess() {
 }
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') doLogin();
+  if (e.key !== 'Enter') return;
+  var btn = document.getElementById('loginBtn');
+  // Respect the disabled state — Enter must not fire a duplicate POST while
+  // a login is in flight, nor re-run after success.
+  if (btn.disabled || document.getElementById('sLogin').style.display === 'none') return;
+  doLogin();
 });
 
 function showError(msg) {
@@ -151,7 +156,10 @@ function hideError() {
   document.getElementById('errMsg').style.display = 'none';
 }
 
+var _loginInFlight = false;
+
 async function doLogin() {
+  if (_loginInFlight) return;
   if (!checkRateLimit()) return;
 
   var email = document.getElementById('email').value.trim();
@@ -162,6 +170,7 @@ async function doLogin() {
     showError('Please enter your email and password.');
     return;
   }
+  _loginInFlight = true;
 
   hideError();
   btn.disabled = true;
@@ -183,7 +192,14 @@ async function doLogin() {
       if (token) {
         onLoginSuccess();
         if (window.opener) {
-          window.opener.postMessage({ type: 'PSYCLE_LOGIN_TOKEN', token: token }, '*');
+          // Never broadcast the token with '*': only our own origin may
+          // receive it. file:// contexts have no usable origin (the opener
+          // reports 'null', and some browsers report 'file://' here — both
+          // would make postMessage drop the token) — keep '*' there,
+          // matching the relaxed check on the receiving side.
+          var target = (location.protocol !== 'file:' && location.origin && location.origin !== 'null')
+            ? location.origin : '*';
+          window.opener.postMessage({ type: 'PSYCLE_LOGIN_TOKEN', token: token }, target);
         }
         localStorage.setItem('psycle_bearer_token', token);
         document.getElementById('password').value = '';
@@ -199,6 +215,7 @@ async function doLogin() {
         showError('Signed in but no token was returned. Check the console and report the field name.');
         btn.disabled = false;
         btn.textContent = 'Sign in';
+        _loginInFlight = false;
       }
     } else {
       onLoginFailure();
@@ -211,6 +228,7 @@ async function doLogin() {
         btn.disabled = false;
         btn.textContent = 'Sign in';
       }
+      _loginInFlight = false;
     }
   } catch (e) {
     onLoginFailure();
@@ -219,6 +237,7 @@ async function doLogin() {
       btn.disabled = false;
       btn.textContent = 'Sign in';
     }
+    _loginInFlight = false;
   }
 }
 </script>

@@ -399,9 +399,12 @@
           '<button class="cal-sync-resync" onclick="onCalendarCleanupDupes(this)">Remove duplicates</button>' : '') +
       '</div>' +
       '<div class="cal-sync-hint">' +
-        'Psync never creates a calendar — it only writes bookings into the calendar you choose. ' +
-        'Switching calendars moves your existing bookings across (old entries are deleted), and ' +
-        'cancelled classes are removed automatically.' +
+        'The calendar you pick becomes fully managed by Psync: upcoming events in it are ' +
+        'kept in lockstep with your bookings, so cancelled classes, slot changes and any ' +
+        'duplicates are cleaned up automatically — and anything else in that calendar will ' +
+        'be removed. Use a dedicated calendar (e.g. create a "Psycle" calendar in the ' +
+        'Calendar app), not your personal one. Past events are never touched. Switching ' +
+        'calendars moves your bookings across.' +
       '</div>';
   }
 
@@ -464,8 +467,8 @@
         if (r.removed) parts.push('−' + r.removed);
         btn.textContent = 'Synced (' + parts.join(' ') + ')';
       } else {
-        btn.textContent = r && r.verified
-          ? 'All ' + r.verified + ' up to date'
+        btn.textContent = r && r.kept
+          ? 'All ' + r.kept + ' up to date'
           : 'Synced ✓';
       }
     } catch (e) {
@@ -699,22 +702,14 @@
   // Integration: Tier Badges on Class Cards
   // ═══════════════════════════════════════════════════════════════════
 
-  var _origEventCard = window.eventCard;
-  if (_origEventCard && !window._eventCardTierPatched) {
-    window._eventCardTierPatched = true;
-    window.eventCard = function (evt, instrMap, studioMap, locationMap, typeMap) {
-      var html = _origEventCard.apply(this, arguments);
-      // Inject tier badge after instructor name
-      var tier = getInstructorTier(evt.instructor_id);
-      if (tier) {
-        var badge = '<span class="tier-badge tier-' + tier + '">' + tier + '</span>';
-        html = html.replace(/(class-instructor">)(.*?)(<\/div>)/, function (match, p1, p2, p3) {
-          return p1 + p2 + badge + p3;
-        });
-      }
-      return html;
-    };
-  }
+  // app.js (eventCard / renderMyBookings) calls this hook directly next to
+  // the instructor name. A direct hook instead of a regex patch over the
+  // card HTML: the old regex targeted markup that no longer exists in the
+  // redesigned eventCard, so badges silently stopped rendering.
+  window.tierBadgeHTML = function (instructorId) {
+    var tier = getInstructorTier(instructorId);
+    return tier ? '<span class="tier-badge tier-' + tier + '">' + tier + '</span>' : '';
+  };
 
 
   // ═══════════════════════════════════════════════════════════════════

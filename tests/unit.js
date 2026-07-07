@@ -107,29 +107,20 @@ function makeFakeLocalStorage() {
 // then read .innerHTML back HTML-escaped (& < > " '). We replicate the browser's
 // escaping precisely. Browsers escape &, <, > in text content; attribute-only
 // chars (" ') are NOT escaped by innerHTML of an element's text node, but
-// security.js / the app treat escapeHTML output as safe for interpolation, and
-// the task asks us to verify ' and " are made inert too. We model the *strict*
-// behaviour (escape & < > " ') because that is the security contract the test
-// is asserting. We document this expectation in the assertions below.
-//
-// NOTE on real browsers: `div.textContent = "'"; div.innerHTML` actually yields
-// `'` (apostrophe unescaped) and `"` unescaped — only & < > are escaped. So the
-// real XSS-safety of escapeHTML for the `x');alert(1)//` payload comes from the
-// fact that the app only ever injects escapeHTML output into *text/HTML element*
-// context (where ' and " are harmless), never into an unquoted JS string. Our
-// shim escapes ' and " as well, which is a SUPERSET (stricter) of the browser —
-// any string inert under our shim is inert under the browser too. The assertion
-// text spells this out.
+// BROWSER-ACCURATE text-node serialization: real browsers escape ONLY & < >
+// when reading innerHTML back from textContent — quotes pass through raw.
+// The shim must match, or assertions about quote-escaping would test the
+// shim instead of the shipped code. (escapeHTML in security.js no longer
+// uses the DOM at all — it string-replaces & < > " ' itself, and the
+// assertions below exercise that real implementation.)
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
 };
 
 function htmlEscape(str) {
-  return String(str).replace(/[&<>"']/g, (c) => HTML_ESCAPE_MAP[c]);
+  return String(str).replace(/[&<>]/g, (c) => HTML_ESCAPE_MAP[c]);
 }
 
 function makeFakeElement(tag) {
@@ -291,8 +282,8 @@ async function run() {
   // Expectation: the raw single-quote that would close a JS string and the
   // angle brackets that would open a tag are gone. After escaping, the output
   // contains no raw `'`, `<`, `>` — so it cannot break out of a quoted JS
-  // string literal or inject a tag. (Our shim escapes a SUPERSET of what real
-  // browsers escape, so anything inert here is inert in the browser too.)
+  // string literal or inject a tag. These assertions run against the REAL
+  // escapeHTML from js/security.js (pure string-replace, no DOM involved).
   const xss = "x');alert(1)//";
   const escaped = escapeHTML(xss);
   ok(escaped.indexOf("'") === -1, "XSS payload: no raw ' survives (cannot close a JS string)");

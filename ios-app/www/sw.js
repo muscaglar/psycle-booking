@@ -1,28 +1,36 @@
-const CACHE = 'psycle-3b592e9e';
+const CACHE = 'psycle-c39b6293';
 const SHELL = [
   './psycle-finder.html',
+  './index.html',
+  './login.html',
   './manifest.json',
+  './bricolage.woff2',
   './display.woff2',
-  './styles.css',
-  './theme.css',
-  './features.css',
-  './tabs.css',
-  './settings.css',
+  './hanken.woff2',
+  './discover-layout-fix.css',
   './explore.css',
-  './state.js',
-  './security.js',
-  './theme.js',
+  './features.css',
+  './redesign.css',
+  './settings.css',
+  './styles.css',
+  './tabs.css',
+  './theme.css',
+  './api-client.js',
   './app.js',
-  './reliability.js',
+  './calendar.js',
+  './diagnostic.js',
+  './explore.js',
+  './facets.js',
+  './features.js',
   './interactions.js',
   './performance.js',
-  './calendar.js',
-  './features.js',
-  './tabs.js',
+  './reliability.js',
+  './security.js',
   './settings.js',
-  './explore.js',
-  './api-client.js',
-  './diagnostic.js'
+  './state.js',
+  './tabs.js',
+  './theme.js',
+  './native-bridge.js'
 ];
 
 self.addEventListener('install', e => {
@@ -65,10 +73,30 @@ function _swIcsFold(line) {
   return parts.join('\r\n');
 }
 
-function _swSlotLabel(slots) {
+// Same noun logic as slotLabel in app.js: Bed for Reformer/Pilates,
+// Bench for Strength, Bike for Ride — the SW copy used to hardcode "Bike".
+function _swSlotNoun(typeName) {
+  const n = (typeName || '').toUpperCase();
+  if (n.includes('REFORMER') || n.includes('PILATES')) return 'Bed';
+  if (n.includes('STRENGTH') || n.includes('LIFT') || n.includes('WEIGHTS') || n.includes('TREAD')) return 'Bench';
+  if (n.includes('RIDE')) return 'Bike';
+  return 'Spot';
+}
+
+function _swSlotLabel(slots, typeName) {
   if (!slots || slots.length === 0) return '';
-  if (slots.length === 1) return 'Bike ' + slots[0];
-  return 'Bikes ' + slots.join(' & ');
+  const noun = _swSlotNoun(typeName);
+  if (slots.length === 1) return noun + ' ' + slots[0];
+  return noun + 's ' + slots.join(' & ');
+}
+
+// RFC 5545 §3.3.11 TEXT escaping (matches _icsEscapeText in calendar.js).
+function _swIcsEscapeText(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
 }
 
 function _swGenerateICS(entries) {
@@ -84,7 +112,7 @@ function _swGenerateICS(entries) {
   for (const entry of entries) {
     const start = new Date(entry.startAt);
     const end = new Date(start.getTime() + (entry.duration || 45) * 60 * 1000);
-    const slots = _swSlotLabel(entry.slots);
+    const slots = _swSlotLabel(entry.slots, entry.typeName);
     let summary = entry.instrName
       ? entry.typeName + ' - ' + entry.instrName
       : entry.typeName;
@@ -94,7 +122,7 @@ function _swGenerateICS(entries) {
     if (entry.instrName) descParts.push('Instructor: ' + entry.instrName);
     if (slots) descParts.push(slots);
     descParts.push('Duration: ' + (entry.duration || 45) + 'min');
-    const description = descParts.join('\\n');
+    const description = descParts.map(_swIcsEscapeText).join('\\n');
 
     var locDisplay = entry.address || entry.locName || '';
 
@@ -103,8 +131,8 @@ function _swGenerateICS(entries) {
     lines.push('DTSTAMP:' + _swIcsTimestamp(new Date()));
     lines.push('DTSTART:' + _swIcsTimestamp(start));
     lines.push('DTEND:' + _swIcsTimestamp(end));
-    lines.push(_swIcsFold('SUMMARY:' + summary));
-    lines.push(_swIcsFold('LOCATION:' + locDisplay));
+    lines.push(_swIcsFold('SUMMARY:' + _swIcsEscapeText(summary)));
+    lines.push(_swIcsFold('LOCATION:' + _swIcsEscapeText(locDisplay)));
     lines.push(_swIcsFold('DESCRIPTION:' + description));
     if (entry.lat != null && entry.lon != null) {
       lines.push('GEO:' + entry.lat + ';' + entry.lon);
@@ -199,8 +227,20 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Cache-first for static assets (JS/CSS/images).
+  // Cache-first for static assets (JS/CSS/images), with runtime caching of
+  // anything that wasn't in the precache SHELL — a hand-maintained (or
+  // generated) SHELL can lag behind new assets, and without this fallback
+  // those assets would 404 offline despite the app "supporting offline".
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(res => {
+        if (res && res.ok && url.origin === self.location.origin) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        }
+        return res;
+      });
+    })
   );
 });

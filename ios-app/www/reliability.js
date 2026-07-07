@@ -218,15 +218,25 @@
 
     // Rebuild apiFetch with retry logic.  We reproduce the same header /
     // auth logic from app.js but swap fetch() for fetchWithRetry().
+    // Callers may pass opts.retries to override the retry count.
     window.apiFetch = function apiFetchWithRetry(path, opts) {
       if (opts === undefined) opts = {};
       var token = getBearerToken();
       var headers = Object.assign({ 'Accept': 'application/json' }, opts.headers || {});
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
-      return fetchWithRetry(apiUrl(path), Object.assign({}, opts, { headers: headers }))
+      // POST is not idempotent here: a timed-out POST /bookings may have
+      // booked server-side, and an automatic retry can double-book (the
+      // retry's 409 then reads as "failed" to the caller). GETs/DELETEs
+      // retry as before (a re-DELETE of a gone booking is a harmless 404).
+      var method = String(opts.method || 'GET').toUpperCase();
+      var maxRetries = (typeof opts.retries === 'number') ? opts.retries : (method === 'POST' ? 0 : 3);
+
+      return fetchWithRetry(apiUrl(path), Object.assign({}, opts, { headers: headers }), maxRetries)
         .then(function (res) {
-          if ((res.status === 401 || res.status === 403) && getBearerToken()) {
+          // 401-only: 403 is a business-rule denial with a valid session
+          // (matches the base apiFetch in app.js).
+          if (res.status === 401 && getBearerToken()) {
             showSessionExpired();
           }
           // Log failed API calls (4xx/5xx) — path and status only, no tokens
@@ -249,22 +259,18 @@
   // B. Optimistic UI for Bookings
   // ═══════════════════════════════════════════════════════════════════
 
-  // Track when showSessionExpired fires. apiFetch RESOLVES on 401/403 (it
-  // does not throw) and calls showSessionExpired globally, so the optimistic
-  // wrapper below cannot rely on its catch block to detect an expired session.
-  var _sessionExpiredAt = 0;
-  if (typeof showSessionExpired === 'function') {
-    const _originalShowSessionExpired = showSessionExpired;
-    window.showSessionExpired = function trackedShowSessionExpired() {
-      _sessionExpiredAt = Date.now();
-      return _originalShowSessionExpired.apply(this, arguments);
-    };
-  }
+  // (The optimistic wrapper below detects ALL in-band failures — including
+  // session expiry — by checking for the ✓ success marker after the original
+  // returns, so no separate session-expiry tracking is needed.)
 
   if (typeof submitBooking === 'function') {
     const _originalSubmitBooking = submitBooking;
 
-    window.submitBooking = async function optimisticSubmitBooking(eventId, slots, btn) {
+    // NOTE: every submitBooking wrapper must forward ALL arguments \u2014 the 4th
+    // (opts, e.g. { waitlist: true }) drives the entire waitlist flow, and
+    // dropping it silently turned waitlist joins into normal bookings.
+    window.submitBooking = async function optimisticSubmitBooking(eventId, slots, btn, opts) {
+      const isWaitlist = !!(opts && opts.waitlist);
       // 1. Capture original state so we can revert on failure
       const origText = btn.textContent;
       const origClass = btn.className;
@@ -275,13 +281,7 @@
         ? JSON.parse(JSON.stringify(_myBookings[String(eventId)]))
         : undefined;
 
-      function revertOptimistic() {
-        btn.textContent = origText;
-        btn.className = origClass;
-        btn.disabled = origDisabled;
-        if (origOnclick) btn.onclick = origOnclick;
-
-        // Revert _myBookings
+      function revertBookingEntry() {
         if (hadBooking && prevBooking) {
           _myBookings[String(eventId)] = prevBooking;
         } else {
@@ -289,10 +289,20 @@
         }
       }
 
+      function revertOptimistic() {
+        btn.textContent = origText;
+        btn.className = origClass;
+        btn.disabled = origDisabled;
+        if (origOnclick) btn.onclick = origOnclick;
+        revertBookingEntry();
+      }
+
       // 2. Optimistically update UI immediately
-      const optimisticLabel = (slots && slots.length)
-        ? formatSlots(slotLabelForEvent(eventId), slots) + ' \u2713'
-        : 'Booked \u2713';
+      const optimisticLabel = isWaitlist
+        ? 'Waitlisted \u2713'
+        : (slots && slots.length)
+          ? formatSlots(slotLabelForEvent(eventId), slots) + ' \u2713'
+          : 'Booked \u2713';
       btn.textContent = optimisticLabel;
       btn.className = 'book-btn booked';
       btn.disabled = true;
@@ -301,19 +311,21 @@
       _myBookings[String(eventId)] = {
         bookingId: null, // unknown until server responds
         slots: slots ? slots.map(Number) : [],
+        waitlisted: isWaitlist,
       };
 
       // 3. Call the real submitBooking
-      const startedAt = Date.now();
       try {
-        await _originalSubmitBooking(eventId, slots, btn);
-        // On success the original function already sets the correct state.
-        // But on 401/403 it returns normally (apiFetch resolves and fires
-        // showSessionExpired) \u2014 the booking never happened, so revert the
-        // optimistic "Booked \u2713" state. The \u2713 check keeps a genuinely
-        // confirmed booking intact if the session timer expired mid-flight.
-        if (_sessionExpiredAt >= startedAt && btn.textContent.indexOf('\u2713') === -1) {
-          revertOptimistic();
+        await _originalSubmitBooking(eventId, slots, btn, opts);
+        // The original never throws \u2014 it handles failures in-band (4xx/5xx,
+        // timeouts, session expiry) by setting a non-\u2713 button label. Any
+        // outcome without \u2713 therefore means the booking did NOT happen, and
+        // the optimistic _myBookings entry must go, or a phantom "Booked"
+        // class haunts My Bookings, history and re-rendered cards.
+        if (btn.textContent.indexOf('\u2713') === -1) {
+          // Keep whatever failure label/handler the original set \u2014 only the
+          // state entry is reverted.
+          revertBookingEntry();
         }
       } catch (err) {
         // 4. Revert on failure
@@ -366,8 +378,28 @@
   /**
    * Process all queued offline operations (bookings + cancels) when
    * connectivity is restored.
+   *
+   * Single-flight: 'online' fires on every reconnect, and two concurrent
+   * runs would replay the same snapshot twice (duplicate POSTs/DELETEs) and
+   * then clobber each other's saved queue, resurrecting completed items.
    */
+  var _queueProcessing = false;
+  var _queueRerunWanted = false;
   async function processOfflineQueue() {
+    if (_queueProcessing) { _queueRerunWanted = true; return; }
+    _queueProcessing = true;
+    try {
+      await _processOfflineQueueInner();
+    } finally {
+      _queueProcessing = false;
+      if (_queueRerunWanted) {
+        _queueRerunWanted = false;
+        processOfflineQueue();
+      }
+    }
+  }
+
+  async function _processOfflineQueueInner() {
     var queue = getOfflineQueue();
     if (queue.length === 0) return;
 
@@ -391,6 +423,11 @@
           var isOk = function (r) { return r.ok || r.status === 204 || r.status === 200 || r.status === 404; };
           if (results.every(isOk)) {
             cancelOk++;
+            // A replayed cancel must also drop the local waitlist marker,
+            // like every in-app cancel path does.
+            if (typeof _unmarkWaitlisted === 'function') {
+              try { _unmarkWaitlisted(item.eventId); } catch (e) {}
+            }
           } else if (results.some(function (r) { return r.status >= 500; })) {
             // Transient server error — retry later
             remaining.push(item);
@@ -423,10 +460,15 @@
         var body = { event_id: item.eventId };
         if (item.slots && item.slots.length) body.slots = item.slots.map(Number);
 
+        // retries:3 — replay fires on the 'online' event, exactly when the
+        // radio is flakiest. Retrying POST is safe HERE because a duplicate
+        // lands as 409/"already booked", which the handler below counts as
+        // success.
         var res = await apiFetch('/bookings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(body),
+          retries: 3,
         });
 
         var data = await res.json().catch(function () { return {}; });
@@ -454,7 +496,11 @@
       }
     }
 
-    saveOfflineQueue(remaining);
+    // Keep anything enqueued while we were replaying (single-flight means
+    // only appends can happen concurrently), plus the items that need retry.
+    var current = getOfflineQueue();
+    var appendedWhileRunning = current.slice(queue.length);
+    saveOfflineQueue(remaining.concat(appendedWhileRunning));
 
     if (bookedOk > 0) {
       toast(bookedOk + ' queued booking' + (bookedOk !== 1 ? 's' : '') + ' confirmed!', 'success');
@@ -484,8 +530,16 @@
   if (typeof window.submitBooking === 'function') {
     var _submitAfterOptimistic = window.submitBooking;
 
-    window.submitBooking = async function offlineAwareSubmitBooking(eventId, slots, btn) {
+    window.submitBooking = async function offlineAwareSubmitBooking(eventId, slots, btn, opts) {
       if (!navigator.onLine) {
+        // A waitlist join is time-sensitive and its replay payload would be
+        // indistinguishable from a real booking \u2014 don't queue it.
+        if (opts && opts.waitlist) {
+          btn.textContent = 'Join Waitlist';
+          btn.disabled = false;
+          toast("You're offline \u2014 try joining the waitlist once you're back online", 'info');
+          return;
+        }
         // Queue booking for later
         var queue = getOfflineQueue();
         queue.push({
@@ -503,7 +557,7 @@
         return;
       }
 
-      return _submitAfterOptimistic(eventId, slots, btn);
+      return _submitAfterOptimistic(eventId, slots, btn, opts);
     };
   }
 

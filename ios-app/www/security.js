@@ -17,11 +17,25 @@
   // HTML Escaping — prevents XSS from API-sourced strings
   // ═══════════════════════════════════════════════════════════════════
 
-  var _escDiv = document.createElement('div');
+  // String-replace rather than the textContent→innerHTML div trick: browsers
+  // only escape & < > when serializing text nodes, but escapeHTML output is
+  // interpolated into double- and single-quoted ATTRIBUTES all over the app,
+  // so quotes must be escaped too or a crafted name breaks out of the
+  // attribute and injects event handlers.
+  var _ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
   window.escapeHTML = function (str) {
-    _escDiv.textContent = str || '';
-    return _escDiv.innerHTML;
+    if (str == null) return '';
+    return String(str).replace(/[&<>"']/g, function (c) { return _ESC_MAP[c]; });
+  };
+
+  // For interpolating a value into a single-quoted JS string INSIDE an HTML
+  // attribute (onclick="f('<here>')"). Order is load-bearing: JS-escape
+  // backslash+quote FIRST, then HTML-escape — the attribute parser decodes
+  // entities before the JS parser runs, so the decoded text must be a valid
+  // single-quoted JS string. Use this instead of hand-rolling the two steps.
+  window.escapeForJsString = function (str) {
+    return window.escapeHTML(String(str == null ? '' : str).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   };
 
 
@@ -69,15 +83,48 @@
 
   // ── AES-GCM helpers ────────────────────────────────────────────
 
+  // In the native app the AES key is also backed up to localStorage (which
+  // native-bridge mirrors into Capacitor Preferences). iOS can purge
+  // IndexedDB independently of Preferences — without this backup a purge
+  // makes the mirrored ciphertext permanently undecryptable and the user is
+  // silently signed out. On the web nothing is backed up: key stays in
+  // IndexedDB only, so at-rest encryption is unchanged there.
+  var KEY_BACKUP_KEY = 'psycle_sec_key_backup';
+  var _isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+  function _bufToB64(buf) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+  }
+  function _b64ToBuf(b64) {
+    return Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); }).buffer;
+  }
+
   async function _getOrCreateKey() {
     var db = await _openDB();
     var raw = await _idbGet(db, 'enc_key');
     if (raw) {
+      if (_isNativeApp) {
+        try {
+          if (!localStorage.getItem(KEY_BACKUP_KEY)) localStorage.setItem(KEY_BACKUP_KEY, _bufToB64(raw));
+        } catch (e) {}
+      }
       return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    }
+    var backup = null;
+    try { backup = localStorage.getItem(KEY_BACKUP_KEY); } catch (e) {}
+    if (backup) {
+      try {
+        var restored = _b64ToBuf(backup);
+        await _idbPut(db, 'enc_key', restored);
+        return await crypto.subtle.importKey('raw', restored, 'AES-GCM', false, ['encrypt', 'decrypt']);
+      } catch (e) { /* corrupt backup — fall through to a fresh key */ }
     }
     var key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     var exported = await crypto.subtle.exportKey('raw', key);
     await _idbPut(db, 'enc_key', exported);
+    if (_isNativeApp) {
+      try { localStorage.setItem(KEY_BACKUP_KEY, _bufToB64(exported)); } catch (e) {}
+    }
     return key;
   }
 
@@ -154,12 +201,17 @@
       _token = token;
       if (!token) { this.clear(); return; }
       try {
+        // Values carry a format marker ('aes:' / 'xor:') so startup always
+        // decodes with the right scheme — a crypto-availability flip between
+        // launches must never feed one format into the other decoder.
         if (_cryptoAvailable && _cryptoKey) {
           var enc = await _encrypt(token);
-          localStorage.setItem(ENC_TOKEN_KEY, enc);
+          localStorage.setItem(ENC_TOKEN_KEY, 'aes:' + enc);
           localStorage.removeItem(LEGACY_TOKEN_KEY);
         } else {
-          localStorage.setItem(ENC_TOKEN_KEY, _xorEncode(token));
+          console.warn('[security] Crypto unavailable — token stored XOR-obfuscated (NOT encrypted) at rest.');
+          _logSecurityError('Crypto unavailable — token stored XOR-obfuscated, not encrypted');
+          localStorage.setItem(ENC_TOKEN_KEY, 'xor:' + _xorEncode(token));
           localStorage.removeItem(LEGACY_TOKEN_KEY);
         }
       } catch (e) {
@@ -191,7 +243,29 @@
     ]);
   }
 
+  // Native app: native-bridge restores mirrored keys (token ciphertext, AES
+  // key backup) from Capacitor Preferences into localStorage asynchronously.
+  // Wait for that restore before reading localStorage, or a post-purge launch
+  // reads an empty store and signs the user out even though the token was
+  // restored milliseconds later. Promise handshake (security.js loads first
+  // and creates it; native-bridge resolves it), raced against a 4s cap so a
+  // bridge failure can't brick startup.
+  if (_isNativeApp) {
+    window._psycleNativeRestoreReady = new Promise(function (resolve) {
+      window._psycleNativeRestoreResolve = resolve;
+    });
+  }
+  async function _awaitNativeRestore() {
+    if (!_isNativeApp) return;
+    await Promise.race([
+      window._psycleNativeRestoreReady,
+      new Promise(function (r) { setTimeout(r, 4000); }),
+    ]);
+  }
+
   window.securityReady = (async function () {
+    await _awaitNativeRestore();
+
     try {
       if (_cryptoAvailable) {
         _cryptoKey = await _withTimeout(_getOrCreateKey(), 3000);
@@ -210,18 +284,44 @@
       return;
     }
 
-    // Decrypt stored encrypted token
+    // Decode the stored token according to its format marker.
     var enc = localStorage.getItem(ENC_TOKEN_KEY);
     if (enc) {
       try {
-        if (_cryptoAvailable && _cryptoKey) {
-          _token = await _decrypt(enc);
+        if (enc.indexOf('xor:') === 0) {
+          _token = _xorDecode(enc.slice(4)) || null;
+        } else if (enc.indexOf('aes:') === 0) {
+          if (_cryptoAvailable && _cryptoKey) {
+            _token = await _decrypt(enc.slice(4));
+          } else {
+            // AES blob but crypto didn't come up this launch (slow device /
+            // init timeout). Never XOR-decode it into garbage and never
+            // delete it — leave it for the next launch; this session just
+            // needs a fresh sign-in.
+            _logSecurityError('AES token stored but crypto unavailable this launch — blob kept');
+            _token = null;
+          }
         } else {
-          _token = _xorDecode(enc);
+          // Pre-marker blob — could be AES or XOR depending on how it was
+          // written. Try AES first, fall back to XOR; reject XOR output that
+          // is binary garbage (an XOR-decode of an AES blob), then re-store
+          // with a format marker.
+          if (_cryptoAvailable && _cryptoKey) {
+            try { _token = await _decrypt(enc); }
+            catch (eAes) { _token = _xorDecode(enc) || null; }
+          } else {
+            _token = _xorDecode(enc) || null;
+          }
+          if (_token && !/^[\x20-\x7E]+$/.test(_token)) _token = null;
+          if (_token) window._secureTokenStore.set(_token);
         }
       } catch (e) {
-        console.warn('[security] Token decryption failed, clearing');
-        localStorage.removeItem(ENC_TOKEN_KEY);
+        // Decrypt failed — most likely the AES key was lost/rotated. KEEP the
+        // blob: deleting it here would also propagate into the native
+        // Preferences mirror and destroy the last copy. A later launch with
+        // the right key can still recover it; this session needs a sign-in.
+        console.warn('[security] Token decryption failed — sign-in required (stored blob kept)');
+        _logSecurityError('Token decryption failed — possible key loss; blob kept for recovery');
         _token = null;
       }
     }
@@ -249,6 +349,7 @@
   };
 
   var _expiryTimer = null;
+  var _expiryTimer2 = null;
 
   // True when the token is within the warning window of expiry. Read by
   // bookClass() to warn BEFORE a booking attempt fails at checkout.
@@ -267,33 +368,50 @@
     if (typeof toast === 'function') toast('Session expiring soon — sign in again to keep booking', 'info');
   }
 
-  window.scheduleTokenExpiryCheck = function () {
-    if (_expiryTimer) clearTimeout(_expiryTimer);
+  // Cancel BOTH expiry timers (warning + final). Called on sign-out and on
+  // session expiry so no stale timer can fire against a signed-out state or
+  // a freshly re-issued token.
+  window.cancelTokenExpiryCheck = function () {
+    if (_expiryTimer) { clearTimeout(_expiryTimer); _expiryTimer = null; }
+    if (_expiryTimer2) { clearTimeout(_expiryTimer2); _expiryTimer2 = null; }
     try { if (typeof PsycleState !== 'undefined') PsycleState._tokenExpiringSoon = false; } catch (e) {}
+  };
+
+  window.scheduleTokenExpiryCheck = function () {
+    cancelTokenExpiryCheck();
     var expiry = getTokenExpiry();
     if (!expiry) return;
 
     var msLeft = expiry.getTime() - Date.now();
 
+    // Timers re-check the LIVE token before acting: if the user re-logged in
+    // meanwhile, the timer rearms for the new expiry instead of wiping it.
+    function _fireExpiredIfStillExpired() {
+      var exp = getTokenExpiry();
+      if (!exp) return; // token gone or no longer parseable — nothing to expire
+      if (exp.getTime() - Date.now() > 60 * 1000) { window.scheduleTokenExpiryCheck(); return; }
+      if (typeof showSessionExpired === 'function') showSessionExpired();
+    }
+
     // Warn 5 minutes before expiry
     var warnMs = msLeft - 5 * 60 * 1000;
     if (warnMs > 0) {
       _expiryTimer = setTimeout(function () {
+        var exp = getTokenExpiry();
+        if (!exp || exp.getTime() - Date.now() > 6 * 60 * 1000) {
+          window.scheduleTokenExpiryCheck(); // token changed — rearm
+          return;
+        }
         _emitExpiring();
-        // Set another timer for actual expiry
-        setTimeout(function () {
-          if (typeof showSessionExpired === 'function') showSessionExpired();
-        }, 5 * 60 * 1000);
+        _expiryTimer2 = setTimeout(_fireExpiredIfStillExpired, 5 * 60 * 1000);
       }, warnMs);
     } else if (msLeft > 0) {
       // Less than 5 min left
       _emitExpiring();
-      _expiryTimer = setTimeout(function () {
-        if (typeof showSessionExpired === 'function') showSessionExpired();
-      }, msLeft);
+      _expiryTimer = setTimeout(_fireExpiredIfStillExpired, msLeft);
     } else {
       // Already expired
-      if (typeof showSessionExpired === 'function') showSessionExpired();
+      _fireExpiredIfStillExpired();
     }
   };
 
@@ -303,7 +421,13 @@
   // ═══════════════════════════════════════════════════════════════════
 
   window.addEventListener('message', function (e) {
-    // Accept token from login.html (same origin or trusted opener)
+    // Only our own login page may hand us a token — an arbitrary page that
+    // holds a window reference must not be able to replace the session.
+    // (file:// contexts report origin 'null'; allow that only when we are
+    // ourselves running from file://.)
+    var sameOrigin = e.origin === location.origin ||
+      (e.origin === 'null' && location.protocol === 'file:');
+    if (!sameOrigin) return;
     if (!e.data || e.data.type !== 'PSYCLE_LOGIN_TOKEN') return;
     var token = e.data.token;
     if (!token || typeof token !== 'string' || token.length < 10) return;

@@ -115,6 +115,21 @@ function stampCacheVersion(swContent, hash) {
   );
 }
 
+/**
+ * Replace the `const SHELL = [...]` precache list with a generated one.
+ * The hand-maintained list rotted (new modules/css/fonts never added →
+ * broken offline PWA); the build already auto-discovers every shipped
+ * asset, so it is the single source of truth for the SHELL too.
+ * Returns content unchanged if no SHELL block is found.
+ */
+function stampShellList(swContent, shellPaths) {
+  const list = shellPaths.map((p) => `  './${p}'`).join(',\n');
+  return swContent.replace(
+    /const\s+SHELL\s*=\s*\[[\s\S]*?\];/,
+    `const SHELL = [\n${list}\n];`
+  );
+}
+
 /** Short, stable content hash (first 8 hex chars of sha256). */
 function shortHash(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex').slice(0, 8);
@@ -164,8 +179,25 @@ function buildPlan() {
     files.set(f, fs.readFileSync(path.join(ROOT, 'fonts', f)));
   }
 
-  // 5. Top-level files. psycle-finder.html and sw.js get path-flattening;
+  // 5. The generated SHELL lists. Root form keeps directory prefixes; the
+  //    www/ form is flat and additionally precaches native-bridge.js.
+  const rootShell = [
+    'psycle-finder.html',
+    'index.html',
+    'login.html',
+    'manifest.json',
+    ...fontFiles.map((f) => `fonts/${f}`),
+    ...cssFiles.map((f) => `css/${f}`),
+    ...jsFiles.map((f) => `js/${f}`),
+  ];
+  const wwwShell = [
+    ...rootShell.map((p) => p.replace(/^(?:js|css|fonts)\//, '')),
+    NATIVE_BRIDGE,
+  ];
+
+  // 6. Top-level files. psycle-finder.html and sw.js get path-flattening;
   //    psycle-finder.html additionally gets the native-bridge tag injected.
+  //    sw.js gets the generated (flat) SHELL list stamped in.
   //    index.html / login.html / manifest.json are copied verbatim (they carry
   //    no js//css//fonts/ prefixes — verified — so flattening is a no-op there,
   //    but we keep them verbatim to avoid surprising rewrites).
@@ -176,12 +208,13 @@ function buildPlan() {
       html = injectNativeBridge(html);
       buf = Buffer.from(html, 'utf8');
     } else if (f === 'sw.js') {
-      buf = Buffer.from(flattenAssetPaths(buf.toString('utf8')), 'utf8');
+      let sw = stampShellList(buf.toString('utf8'), wwwShell);
+      buf = Buffer.from(flattenAssetPaths(sw), 'utf8');
     }
     files.set(f, buf);
   }
 
-  // 6. Compute the shell content hash. The SHELL is the cacheable runtime
+  // 7. Compute the shell content hash. The SHELL is the cacheable runtime
   //    surface: HTML + manifest + fonts + CSS + JS (everything the SW caches).
   //    We hash the FLATTENED www/ bytes so the version reflects exactly what
   //    ships to the device. native-bridge.js is part of that runtime surface,
@@ -202,14 +235,16 @@ function buildPlan() {
   hashParts.push(nbBytes);
   const hash = shortHash(Buffer.concat(hashParts.map((p) => (Buffer.isBuffer(p) ? p : Buffer.from(p)))));
 
-  // 7. Stamp the hash into BOTH sw copies.
-  //    - www/sw.js: take the flattened sw bytes from the plan and stamp.
-  //    - root ../sw.js: stamp the ORIGINAL (non-flattened) root sw bytes.
+  // 8. Stamp the hash into BOTH sw copies (and the generated SHELL into the
+  //    root copy — the www copy already got its flat SHELL in step 6).
   const wwwSw = stampCacheVersion(files.get('sw.js').toString('utf8'), hash);
   files.set('sw.js', Buffer.from(wwwSw, 'utf8'));
 
   const rootSwRaw = fs.readFileSync(path.join(ROOT, 'sw.js')).toString('utf8');
-  const rootSw = Buffer.from(stampCacheVersion(rootSwRaw, hash), 'utf8');
+  const rootSw = Buffer.from(
+    stampCacheVersion(stampShellList(rootSwRaw, rootShell), hash),
+    'utf8'
+  );
 
   return { files, rootSw, hash };
 }
