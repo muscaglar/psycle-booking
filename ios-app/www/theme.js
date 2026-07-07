@@ -112,8 +112,12 @@ function injectThemeToggle() {
   btn.setAttribute('aria-label', 'Toggle dark/light mode');
   btn.setAttribute('title', 'Toggle dark/light mode');
   btn.onclick = toggleTheme;
-  if (authPill && authPill.nextSibling) {
-    header.insertBefore(btn, authPill.nextSibling);
+  // authPill is nested inside a wrapper div, NOT a direct child of <header> —
+  // inserting into header with a reference node from another parent throws
+  // NotFoundError (and the toggle never rendered). Insert next to the pill
+  // in its real parent instead.
+  if (authPill && authPill.parentNode) {
+    authPill.parentNode.insertBefore(btn, authPill.nextSibling);
   } else {
     header.appendChild(btn);
   }

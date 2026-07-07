@@ -1,11 +1,18 @@
-# App Store Listing — Psycle Class Finder
+# App Store Listing — Psync
 
 ## App Store Connect Fields
 
 ### App Name (30 chars max)
 ```
-Psycle Class Finder
+Psync: Class Booking Companion
 ```
+(exactly 30 chars — ASC hard-enforces the limit)
+> Deliberately NOT "Psycle ..." — using the studio's trademark in the app
+> NAME risks an App Review 4.1/5.2.1 (IP) flag. "Psycle" can appear in the
+> description as a factual compatibility statement ("companion for Psycle
+> studios"), which is standard practice. The ASC record was auto-created as
+> "PsycleBookingBuddy" (the Xcode product name) — rename it under App Store
+> Connect → App Information before submission.
 
 ### Subtitle (30 chars max)
 ```
