@@ -68,9 +68,22 @@ public final class PsycleLiveActivityController {
         if let activity = current, activity.attributes.eventId == next.eventId {
             update(activity, state: state)
         } else {
-            // A different class than what's showing — end the old, start fresh.
-            endAll()
-            start(next: next, state: state)
+            // A different class than what's showing — end the old ones and
+            // only THEN start fresh, serialized in one Task so the dying
+            // activity can't race the new one (transient duplicates / the
+            // next refresh matching the corpse). (self. is required: the
+            // local `start` Date constant shadows the method.)
+            let stale = Activity<PsycleClassActivityAttributes>.activities
+            Task {
+                for activity in stale {
+                    if #available(iOS 16.2, *) {
+                        await activity.end(nil, dismissalPolicy: .immediate)
+                    } else {
+                        await activity.end(dismissalPolicy: .immediate)
+                    }
+                }
+                self.start(next: next, state: state)
+            }
         }
         return true
     }

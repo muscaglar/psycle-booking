@@ -13,6 +13,17 @@
 (function () {
   'use strict';
 
+  // ── Clickjacking guard ──────────────────────────────────────────
+  // frame-ancestors can't be enforced from a <meta> CSP (header-only), so
+  // bust out of any framing here. Cross-origin top access throws — in that
+  // case hide the document instead (an opaque framed page is useless for
+  // clickjacking).
+  try {
+    if (window.top !== window.self) window.top.location = window.location;
+  } catch (e) {
+    try { document.documentElement.style.display = 'none'; } catch (e2) {}
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // HTML Escaping — prevents XSS from API-sourced strings
   // ═══════════════════════════════════════════════════════════════════

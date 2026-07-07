@@ -98,7 +98,13 @@ public enum PsycleDateParser {
         let f3 = DateFormatter()
         f3.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         f3.timeZone = .current
-        return f3.date(from: iso)
+        if let d = f3.date(from: iso) { return d }
+        // Last resort: the API's raw space-separated form, in case an
+        // un-normalized value ever reaches the snapshot.
+        let f4 = DateFormatter()
+        f4.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        f4.timeZone = .current
+        return f4.date(from: iso)
     }
 }
 
@@ -127,12 +133,17 @@ public enum PsycleSnapshotStore {
         return (try? JSONDecoder().decode([PsycleWeekDay].self, from: data)) ?? []
     }
 
-    /// Reads a key from the App Group suite, falling back to the namespaced
-    /// Capacitor Preferences key ("PsycleFinderSettings.<key>") in case the
-    /// App Group mirror wasn't written (defensive — see NATIVE_FEATURES.md).
+    /// Reads a key from the App Group suite. The LIVE path is the bare key:
+    /// native-bridge.js writes it via the in-app AppGroupPreferences plugin
+    /// straight into UserDefaults(suiteName: PsycleAppGroup.id). The two
+    /// namespaced lookups are purely defensive — the standard Capacitor
+    /// Preferences plugin writes to UserDefaults.standard (its "group" is a
+    /// key prefix, NOT a suite), so its values never appear here; these
+    /// fallbacks only matter if a future migration copies prefixed keys in.
     private static func string(forKey key: String) -> String? {
         guard let d = defaults else { return nil }
         if let v = d.string(forKey: key) { return v }
+        if let v = d.string(forKey: "\(PsycleAppGroup.id).\(key)") { return v }
         return d.string(forKey: "PsycleFinderSettings.\(key)")
     }
 }

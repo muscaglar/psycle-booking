@@ -69,11 +69,17 @@ load last (everything they wrap exists); diagnostic reads PsycleAPI.SCHEMAS.
   `npm run typecheck` (advisory tsc --checkJs), `npm run ci` (check+test+drift). CI in .github/workflows/ci.yml.
 - tests/smoke.html — load in a browser/sim to assert all critical globals exist (title → "SMOKE: PASS").
 
-## Native iOS (scaffolded — needs Xcode wiring)
-Home Screen widget, Lock Screen Live Activity, App Intents/Siri, notification actions.
-Swift sources under ios-app/ios/App/Psycle*/ + data bridge in native-bridge.js (writes
-widget_next_class / widget_week to Capacitor Preferences). See ios-app/NATIVE_FEATURES.md
-for the required Xcode target + App Group setup. Not in any target yet — main build unaffected.
+## Native iOS (WIRED — widget / Live Activity / Siri live in real targets)
+Home Screen widget + Lock Screen Live Activity build in the `PsycleWidgetExtension`
+target (iOS 16.1+, embedded in the app); the "next class" App Intent + Siri phrases
+compile in the app target. Data path: native-bridge.js writes widget_next_class /
+widget_week through the in-app `AppGroupPreferences` Capacitor plugin
+(App/AppGroupPreferences.swift, registered by App/MainViewController.swift) into
+`UserDefaults(suiteName: "group.com.psyclefinder.app")` — the standard Preferences
+plugin CANNOT reach extensions (its "group" is a key prefix in UserDefaults.standard).
+Project surgery is scripted+idempotent: ios-app/ios/App/wire_native_targets.rb.
+See ios-app/NATIVE_FEATURES.md status block (incl. the one manual signing step:
+the App Group + widget bundle id must be registered via a first signed build).
 
 ## Tab Structure (4 tabs)
 | Tab | Name | Contents |

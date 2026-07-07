@@ -3,10 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-<!-- Defense-in-depth: restrict network + plugin surface, block framing.
+<!-- Defense-in-depth: restrict network + plugin surface.
      'unsafe-inline' kept for script/style because the UI uses inline
-     onclick handlers and style attributes throughout. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self' https://psycle.codexfit.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+     onclick handlers and style attributes throughout.
+     NOTE: no frame-ancestors here — browsers IGNORE that directive in a
+     <meta> CSP (header-only) and log a console error for it. Clickjacking
+     protection is a JS framebust in security.js instead; a real
+     frame-ancestors / X-Frame-Options header belongs at the host if the
+     app ever gets public HTTP hosting. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self' https://psycle.codexfit.com; manifest-src 'self'; object-src 'none'; base-uri 'self';">
+<script>
+// Framebust before any content renders (the security.js copy runs deferred,
+// which would leave a clickable window during parse on slow loads).
+try { if (window.top !== window.self) window.top.location = window.location; }
+catch (e) { document.documentElement.style.display = 'none'; }
+</script>
 <!-- Save a DNS+TLS round-trip on the first API call. -->
 <link rel="preconnect" href="https://psycle.codexfit.com" crossorigin>
 <link rel="dns-prefetch" href="https://psycle.codexfit.com">

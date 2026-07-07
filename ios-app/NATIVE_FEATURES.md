@@ -1,5 +1,55 @@
 # iOS Native Features — Integration Guide
 
+> **STATUS (2026-07-07): WIRED.** Everything below the status block is the
+> original design guide, kept for reference. The actual wiring was done by
+> `ios/App/wire_native_targets.rb` (xcodeproj-gem surgery, idempotent) and
+> compiles clean. What exists now:
+>
+> - **`PsycleWidgetExtension` target** (WidgetKit app-extension, iOS 16.1+,
+>   bundle `com.psyclefinder.app.widgets`): PsycleWidget.swift,
+>   PsycleLiveActivityView.swift, PsycleLiveActivityAttributes.swift,
+>   PsycleSnapshot.swift. Embedded in the app via an "Embed Foundation
+>   Extensions" phase. Entitlements: `group.com.psyclefinder.app`.
+> - **App target additions**: PsycleSnapshot.swift,
+>   PsycleLiveActivityAttributes/Controller, NextClassIntent, AppShortcuts,
+>   plus `App/AppGroupPreferences.swift` (custom Capacitor plugin, see below)
+>   and `App/MainViewController.swift` (registers it —
+>   Main.storyboard's VC class). `App/App.entitlements` carries the same App
+>   Group. `NSSupportsLiveActivities` is set in Info.plist, and
+>   `applicationDidBecomeActive` calls
+>   `PsycleLiveActivityController.shared.refreshFromSnapshot()`.
+> - `NotificationCategories.swift` is deliberately in NO target (the
+>   Capacitor notification path is the live one — see section 6).
+>
+> **IMPORTANT CORRECTION to the original guide's "Option A":** the
+> @capacitor/preferences v6 plugin stores everything in
+> **`UserDefaults.standard`** — its `group` config is only a key PREFIX, not
+> a `UserDefaults(suiteName:)`. Pointing it at the App Group id would never
+> reach the shared container AND would orphan all previously mirrored data.
+> The live wiring is therefore **Option B done properly**: the custom
+> `AppGroupPreferences` plugin writes the widget snapshot into the real App
+> Group suite (`UserDefaults(suiteName: "group.com.psyclefinder.app")`), and
+> native-bridge.js already prefers that plugin when present. The Preferences
+> `group` stays `"PsycleFinderSettings"`.
+>
+> **One manual step remains (signing):** the App Group
+> `group.com.psyclefinder.app` and the new widget bundle id must exist in the
+> developer portal. With automatic signing, building once on a device from
+> Xcode registers both. Until then, Xcode Cloud archives may fail
+> provisioning for the extension.
+>
+> **Verification honesty:** what has been OBSERVED working (simulator,
+> unsigned build): the full workspace compiles; the app boots with
+> MainViewController + the AppGroupPreferences plugin registered; the JS
+> snapshot lands as bare keys in `UserDefaults(suiteName:
+> "group.com.psyclefinder.app")`. What has NOT been observed yet: the
+> **cross-process** read — unsigned builds carry no entitlements, so that
+> suite lives in the app's private container, and the widget process reading
+> it can only be exercised by a SIGNED device build. First signed build:
+> add the widget, log in, confirm it shows your next class (and that the
+> snapshot `startAt` parses — the space→T normalization in
+> `_snapshotEventFor` is load-bearing for the countdown/Live Activity).
+
 This guide wires up four native iOS features whose **data layer is already
 done in JavaScript** (`ios-app/www/native-bridge.js`) and whose **Swift UI is
 already written** (drop-in files under `ios-app/ios/App/`). What remains can
