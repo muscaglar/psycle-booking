@@ -17,6 +17,27 @@
 
 import Foundation
 import Capacitor
+import WidgetKit
+
+/// Lets the web layer nudge WidgetKit after the snapshot changes —
+/// native-bridge.js probes Capacitor.Plugins.WidgetCenter and calls
+/// reloadAllTimelines() after every booking change. Without this the
+/// Home Screen widget sits on a stale timeline for up to ~30 minutes.
+@objc(WidgetCenterPlugin)
+public class WidgetCenterPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "WidgetCenterPlugin"
+    public let jsName = "WidgetCenter"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "reloadAllTimelines", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func reloadAllTimelines(_ call: CAPPluginCall) {
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        call.resolve()
+    }
+}
 
 @objc(AppGroupPreferencesPlugin)
 public class AppGroupPreferencesPlugin: CAPPlugin, CAPBridgedPlugin {
