@@ -291,6 +291,25 @@ async function run() {
   ok(escaped.indexOf('>') === -1, 'XSS payload: no raw > survives');
   ok(escaped.indexOf('&#39;') !== -1, "XSS payload: the ' is encoded as &#39;");
 
+  // ── escapeForJsString ───────────────────────────────────────────────────
+  // The only sanctioned way to put a value inside a single-quoted JS string
+  // within an HTML attribute (onclick="f('<here>')"). Contract: JS-escape
+  // backslash+quote FIRST, then HTML-escape — the attribute parser decodes
+  // entities before the JS parser runs, so the decoded text must be a valid
+  // single-quoted JS string.
+  section('escapeForJsString (js/security.js)');
+  const escJs = sandbox.escapeForJsString;
+  ok(typeof escJs === 'function', 'window.escapeForJsString is a function');
+  eq(escJs("O'Brien"), 'O\\&#39;Brien', "quote is JS-escaped then HTML-encoded (\\&#39;)");
+  eq(escJs('back\\slash'), 'back\\\\slash', 'backslash is doubled');
+  eq(escJs('plain'), 'plain', 'plain text passes through');
+  eq(escJs(null), '', 'null → empty string');
+  // After the HTML attribute parser decodes entities, the JS source must
+  // contain \' (escaped quote), never a bare quote that closes the string.
+  const decodedJs = escJs("x');alert(1)//").replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  eq(decodedJs, "x\\');alert(1)//", 'decoded attribute text keeps the quote JS-escaped');
+
   // ── categorizeError ─────────────────────────────────────────────────────
   section('PsycleAPI.categorizeError (js/api-client.js)');
   ok(typeof API === 'object' && API, 'window.PsycleAPI exists');
