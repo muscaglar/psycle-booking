@@ -54,9 +54,10 @@ jobs:
   # dispatch) to keep runs fast and focused.
   #
   # TestFlight delivery itself is Xcode Cloud's job — see ios-app/CICD.md:
-  # pushing an `ios-v*` tag triggers the Xcode Cloud Archive → TestFlight
-  # workflow, with ios/App/ci_scripts/ci_post_clone.sh preparing the
-  # Capacitor toolchain on Apple's runners.
+  # every push to main triggers the "Beta Build" Archive → TestFlight
+  # workflow (Branch Changes condition), with ios/App/ci_scripts/
+  # ci_post_clone.sh preparing the Capacitor toolchain on Apple's runners.
+  # This job is the fast, free early-warning that runs alongside it.
   ios-build:
     name: iOS build check (unsigned)
     # Runs in parallel with the web job — it consumes nothing from it, and

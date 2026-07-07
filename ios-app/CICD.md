@@ -5,26 +5,29 @@ Two systems, clean split:
 | Leg | System | Trigger | What it does |
 |-----|--------|---------|--------------|
 | Web + native compile checks | GitHub Actions (`.github/workflows/ci.yml`) | every push/PR (web); main pushes + manual (iOS compile) | `npm run check` / `test` / `drift`, then an **unsigned** simulator build of `App.xcworkspace` on macOS |
-| Archive → TestFlight | Xcode Cloud | pushing a tag matching `ios-v*` | Builds on Apple's runners with **cloud-managed signing**, archives, uploads to TestFlight Internal Testing automatically |
+| Archive → TestFlight | Xcode Cloud ("Beta Build" workflow) | **every push to main** (Branch Changes) | Builds on Apple's runners with **cloud-managed signing**, archives, uploads to TestFlight Internal Testing automatically |
 
 No certificates, provisioning profiles, or App Store Connect API keys live in
 GitHub — that's the point of letting Xcode Cloud own the signing/upload leg.
 
 ## Release flow
 
-```bash
-# 1. land changes on main, wait for CI to go green
-# 2. bump the build number (App target → General → Build, i.e. CURRENT_PROJECT_VERSION)
-# 3. tag the CI-green remote main (NOT local HEAD, which may differ) and push:
-git fetch origin
-git tag ios-v1.0-b2 origin/main
-git push origin ios-v1.0-b2
-```
+Push to main. That's it — Xcode Cloud's Branch Changes condition picks up
+the push, runs `ci_scripts/ci_post_clone.sh` (installs Node, `npm ci`,
+`npm run sync` — so Pods and www/ are ready), archives, and the build lands
+in TestFlight ~20–30 min later. Internal testers get it with no review.
 
-Xcode Cloud picks up the tag, runs `ci_scripts/ci_post_clone.sh` (installs
-Node, `npm ci`, `npm run build`, `npx cap sync ios` — so Pods and www/ are
-ready), archives, and the build lands in TestFlight ~20–30 min later.
-Internal testers get it with no review.
+Build numbers are auto-assigned by Xcode Cloud (its run number becomes the
+uploaded build number), so there is nothing to bump between uploads.
+
+The GitHub Actions checks run in parallel on the same push — if Actions goes
+red, treat that TestFlight build as suspect even if it archived; push the
+fix and take the next build.
+
+Budget note: the developer program includes 25 Xcode Cloud compute hours per
+month and a build costs ~20–30 min, so roughly 50+ main pushes/month fit. If
+pushes get more frequent than that, batch work on a branch and merge to main
+when it's TestFlight-worthy (or switch the start condition to a tag).
 
 ## One-time Xcode Cloud setup (in Xcode, ~10 minutes)
 
@@ -37,7 +40,8 @@ Store Connect (bundle id `com.psyclefinder.app`).
    when prompted (installs Apple's GitHub App on `muscaglar/psycle-booking`).
 3. Edit the default workflow:
    - **Environment**: latest released Xcode, latest macOS.
-   - **Start Conditions**: remove the branch condition; add **Tag** →
+   - **Start Conditions**: keep **Branch Changes** on `main` (the live
+     setup). Alternative for deliberate-only uploads: replace it with **Tag** →
      matching `ios-v*`.
    - **Actions**: one **Archive** action, platform iOS, scheme **App**,
      deployment preparation **TestFlight (Internal Testing Only)**.
@@ -45,17 +49,16 @@ Store Connect (bundle id `com.psyclefinder.app`).
      internal tester group.
 4. Save. Xcode Cloud runs `ci_scripts/ci_post_clone.sh` automatically because
    it sits next to the workspace — nothing else to configure.
-5. First run: trigger manually from the Cloud tab (Start Build) or push a tag.
+5. First run: trigger manually from the Cloud tab (Start Build) or push to main.
 
 Signing is handled by Xcode Cloud's managed distribution certs — if it asks,
 let it create the cloud signing assets for the team.
 
 ## Notes / gotchas
 
-- **Build numbers must be unique per version.** Bump
-  `CURRENT_PROJECT_VERSION` before tagging, or enable Xcode Cloud's
-  "automatically increment build number" option in the Archive action (then
-  you can stop managing it by hand).
+- **Build numbers are handled by Xcode Cloud** — it stamps its own run number
+  as the uploaded build number (verified: uploads arrive as "Build 13" etc.
+  while `CURRENT_PROJECT_VERSION` stays 1). No manual bumping needed.
 - The drift check in GitHub Actions guarantees `www/` in the repo matches the
   source, and `ci_post_clone.sh` rebuilds it anyway — so Xcode Cloud never
   ships stale web assets.
