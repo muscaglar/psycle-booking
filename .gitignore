@@ -10,3 +10,6 @@ ios-app/ios/App/Pods/
 # Local Claude Code settings (machine-specific)
 .claude/settings.json
 .claude/settings.local.json
+
+# (Xcode build output and the generated config.xml are already covered by
+# ios-app/ios/.gitignore — iOS-specific ignores live there.)
