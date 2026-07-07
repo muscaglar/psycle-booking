@@ -1,0 +1,51 @@
+=== Psycle Bug Report ===
+Generated: 2026-07-07T15:00:07.468Z
+
+--- Device Info ---
+User Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36
+Screen: 1800x1169 (devicePixelRatio: 2)
+Viewport: 1200x921
+Theme: graphite
+Online: true
+Language: en-GB
+
+--- localStorage Summary ---
+  psycle_action_log: 792 bytes
+  psycle_api_contract: 90 bytes
+  psycle_api_schema_log: 100 bytes
+  psycle_bike_history: 20 bytes
+  psycle_cache_event-types: 161635 bytes
+  psycle_cache_instructors: 114087 bytes
+  psycle_cache_locations: 9154 bytes
+  psycle_calendar_data: 2 bytes
+  psycle_error_log: 1075 bytes
+  psycle_onboarded_v1: 1 bytes
+  psycle_theme: 8 bytes
+  psycle_waitlisted_events: 2 bytes
+  psycle_window_cache: 2479135 bytes
+  TOTAL: 2766101 bytes across 13 keys
+
+--- Event & Error Log ---
+[2026-07-07T11:36:43.895Z] [ERROR] UnhandledRejection: TypeError: Cannot set properties of null (setting 'disabled')
+    at search (http://127.0.0.1:8080/js/app.js:1180:20)
+    at async wrapped (http://127.0.0.1:8080/js/app.js:4670:15)
+[2026-07-07T11:38:39.683Z] [ACTION] bookings:loaded
+[2026-07-07T11:39:04.345Z] [ACTION] bookings:loaded
+[2026-07-07T11:39:04.748Z] [ACTION] booking:complete eventId=9001
+[2026-07-07T11:39:04.752Z] [ACTION] bookings:loaded
+[2026-07-07T11:39:39.373Z] [ERROR] [waitlist] event=9002 status=201 ok=true fields=[id] hasBookingId=true hasSeat=false
+[2026-07-07T11:39:39.375Z] [ACTION] booking:complete eventId=9002
+[2026-07-07T11:39:39.379Z] [ACTION] booking:cancelled eventId=9002
+[2026-07-07T11:40:08.956Z] [ERROR] Network POST /bookings → NETWORK_ERROR
+[2026-07-07T11:40:12.903Z] [ERROR] Network POST /bookings → 403
+[2026-07-07T11:40:12.904Z] [ERROR] Network GET /profile → 401
+[2026-07-07T11:40:52.467Z] [ERROR] UnhandledRejection: TypeError: Cannot set properties of null (setting 'innerHTML')
+    at checkAuth (http://127.0.0.1:8080/js/app.js:347:20)
+    at http://127.0.0.1:8080/js/app.js:545:3
+[2026-07-07T11:40:52.468Z] [ERROR] UnhandledRejection: TypeError: Cannot set properties of null (setting 'value')
+    at http://127.0.0.1:8080/js/app.js:596:46
+[2026-07-07T11:49:42.500Z] [ACTION] bookings:loaded
+[2026-07-07T11:49:42.503Z] [ACTION] bookings:loaded
+[2026-07-07T11:49:42.904Z] [ACTION] bookings:loaded
+[2026-07-07T11:50:12.353Z] [ACTION] bookings:loaded
+[2026-07-07T11:50:12.757Z] [ACTION] bookings:loaded
