@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   ci:
@@ -45,3 +46,50 @@ jobs:
       - name: Type check (advisory)
         run: npm run typecheck
         continue-on-error: true
+
+  # Unsigned compile of the full native project (pods + Swift + pbxproj) so
+  # iOS breakage surfaces on main, not at archive time. No certificates are
+  # involved (simulator destination + CODE_SIGNING_ALLOWED=NO). macOS runners
+  # are free on public repos, but this only runs on main pushes (and manual
+  # dispatch) to keep runs fast and focused.
+  #
+  # TestFlight delivery itself is Xcode Cloud's job — see ios-app/CICD.md:
+  # pushing an `ios-v*` tag triggers the Xcode Cloud Archive → TestFlight
+  # workflow, with ios/App/ci_scripts/ci_post_clone.sh preparing the
+  # Capacitor toolchain on Apple's runners.
+  ios-build:
+    name: iOS build check (unsigned)
+    # Runs in parallel with the web job — it consumes nothing from it, and
+    # serializing would just delay iOS feedback by the ubuntu job's runtime.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ios-app/package-lock.json
+
+      - name: Install iOS JS dependencies
+        working-directory: ios-app
+        run: npm ci
+
+      # Same recipe as local dev and Xcode Cloud's ci_post_clone.sh:
+      # www/ flatten + cap sync (web assets, Podfile plugin block, pod install).
+      - name: Build web assets + sync native project
+        working-directory: ios-app
+        run: npm run sync
+
+      # -quiet prints warnings/errors only (unbounded), so a failing Swift
+      # diagnostic is always visible in the log instead of being cut off.
+      - name: Compile (simulator, no signing)
+        working-directory: ios-app/ios/App
+        run: |
+          xcodebuild -quiet -workspace App.xcworkspace -scheme App \
+            -destination 'generic/platform=iOS Simulator' \
+            build CODE_SIGNING_ALLOWED=NO
