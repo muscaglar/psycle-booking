@@ -12,6 +12,8 @@ PODS:
     - Capacitor
   - CapacitorShare (6.0.4):
     - Capacitor
+  - CapacitorStatusBar (6.0.3):
+    - Capacitor
   - EbarooniCapacitorCalendar (6.7.2):
     - Capacitor
 
@@ -23,6 +25,7 @@ DEPENDENCIES:
   - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
+  - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
   - "EbarooniCapacitorCalendar (from `../../node_modules/@ebarooni/capacitor-calendar`)"
 
 EXTERNAL SOURCES:
@@ -40,6 +43,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/preferences"
   CapacitorShare:
     :path: "../../node_modules/@capacitor/share"
+  CapacitorStatusBar:
+    :path: "../../node_modules/@capacitor/status-bar"
   EbarooniCapacitorCalendar:
     :path: "../../node_modules/@ebarooni/capacitor-calendar"
 
@@ -51,8 +56,9 @@ SPEC CHECKSUMS:
   CapacitorLocalNotifications: 801867e687c42dd2b33c1e22e08f48e6738d2f72
   CapacitorPreferences: 5848e0691b36b4bb4acc98e481ab56d451578d30
   CapacitorShare: 77ff779e3b7c6ae9fb5461e52cf7ef805d429491
+  CapacitorStatusBar: 149cde8f1328ec3aa6cbdd872a55137ae3f98b16
   EbarooniCapacitorCalendar: fe76a0820c1a8273bf2d5bda343b61a6cb1c324f
 
-PODFILE CHECKSUM: 0b4c5f4f03d87281b063845a0ea2341cf26f3f2c
+PODFILE CHECKSUM: 35b08c7fe18d8b9d7813ae491182063495fc443e
 
 COCOAPODS: 1.16.2
