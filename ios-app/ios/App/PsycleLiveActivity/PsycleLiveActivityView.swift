@@ -42,7 +42,7 @@ struct PsycleLiveActivityWidget: Widget {
                         .font(.caption).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(timerInterval: Date()...context.state.startAt, countsDown: true)
+                    Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
                         .font(.system(.body, design: .rounded).weight(.semibold))
                         .monospacedDigit()
                         .frame(maxWidth: 64)
@@ -57,7 +57,7 @@ struct PsycleLiveActivityWidget: Widget {
             } compactLeading: {
                 Image(systemName: "figure.indoor.cycle")
             } compactTrailing: {
-                Text(timerInterval: Date()...context.state.startAt, countsDown: true)
+                Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
                     .monospacedDigit()
                     .frame(maxWidth: 44)
             } minimal: {
@@ -96,7 +96,7 @@ private struct LockScreenLiveActivityView: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(timerInterval: Date()...context.state.startAt, countsDown: true)
+                Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .monospacedDigit()
                     .foregroundColor(.psycleAccent)
@@ -120,3 +120,13 @@ private struct LockScreenLiveActivityView: View {
 // Type alias so the view signatures stay readable across iOS versions.
 @available(iOS 16.1, *)
 private typealias ActivityContext<T: ActivityAttributes> = ActivityViewContext<T>
+
+/// ClosedRange for Text(timerInterval:) that can never trap: the card stays
+/// visible for up to ~60s AFTER class start (the controller's dismissal
+/// cushion), and Date()...startAt with Date() > startAt violates the range
+/// precondition and would crash the extension on any re-render in that
+/// window. Clamped, it renders 0:00 instead.
+@available(iOS 16.1, *)
+private func countdownRange(to startAt: Date) -> ClosedRange<Date> {
+    min(Date(), startAt)...startAt
+}
