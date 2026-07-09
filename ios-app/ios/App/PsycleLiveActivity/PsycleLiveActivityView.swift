@@ -42,11 +42,16 @@ struct PsycleLiveActivityWidget: Widget {
                         .font(.caption).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
-                        .font(.system(.body, design: .rounded).weight(.semibold))
-                        .monospacedDigit()
-                        .frame(maxWidth: 64)
-                        .multilineTextAlignment(.trailing)
+                    if classStarted(context) {
+                        Text("In class")
+                            .font(.system(.body, design: .rounded).weight(.semibold))
+                    } else {
+                        Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
+                            .font(.system(.body, design: .rounded).weight(.semibold))
+                            .monospacedDigit()
+                            .frame(maxWidth: 64)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text(subtitle(context.attributes))
@@ -57,9 +62,13 @@ struct PsycleLiveActivityWidget: Widget {
             } compactLeading: {
                 Image(systemName: "figure.indoor.cycle")
             } compactTrailing: {
-                Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
-                    .monospacedDigit()
-                    .frame(maxWidth: 44)
+                if classStarted(context) {
+                    Text("Now")
+                } else {
+                    Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
+                        .monospacedDigit()
+                        .frame(maxWidth: 44)
+                }
             } minimal: {
                 Image(systemName: "figure.indoor.cycle")
             }
@@ -96,14 +105,23 @@ private struct LockScreenLiveActivityView: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
-                    .font(.system(.title2, design: .rounded).weight(.bold))
-                    .monospacedDigit()
-                    .foregroundColor(.psycleAccent)
-                    .frame(maxWidth: 90)
-                Text("until class")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                if classStarted(context) {
+                    Text("In class")
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                        .foregroundColor(.psycleAccent)
+                    Text("enjoy the ride")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                        .monospacedDigit()
+                        .foregroundColor(.psycleAccent)
+                        .frame(maxWidth: 90)
+                    Text("until class")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
@@ -121,11 +139,21 @@ private struct LockScreenLiveActivityView: View {
 @available(iOS 16.1, *)
 private typealias ActivityContext<T: ActivityAttributes> = ActivityViewContext<T>
 
-/// ClosedRange for Text(timerInterval:) that can never trap: the card stays
-/// visible for up to ~60s AFTER class start (the controller's dismissal
-/// cushion), and Date()...startAt with Date() > startAt violates the range
-/// precondition and would crash the extension on any re-render in that
-/// window. Clamped, it renders 0:00 instead.
+/// Has the class started? staleDate = classStart makes the system re-render
+/// the card at T0 with isStale = true — no process needed. The Date()
+/// comparison is the 16.1 fallback (no staleness there, so it only updates
+/// on whatever re-render happens naturally).
+@available(iOS 16.1, *)
+private func classStarted(_ context: ActivityContext<PsycleClassActivityAttributes>) -> Bool {
+    if #available(iOS 16.2, *), context.isStale { return true }
+    return context.state.startAt <= Date()
+}
+
+/// ClosedRange for Text(timerInterval:) that can never trap: the card can
+/// be rendered after class start (16.1 has no staleness, and even on 16.2
+/// classStarted()'s Date() and this Date() race by an instant), and
+/// Date()...startAt with Date() > startAt violates the range precondition —
+/// an extension crash. Clamped, it renders 0:00 instead.
 @available(iOS 16.1, *)
 private func countdownRange(to startAt: Date) -> ClosedRange<Date> {
     min(Date(), startAt)...startAt

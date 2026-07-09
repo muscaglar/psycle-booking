@@ -32,6 +32,7 @@ public enum PsycleAppGroup {
 public enum PsycleSnapshotKey {
     public static let nextClass = "widget_next_class"
     public static let week = "widget_week"
+    public static let upcoming = "widget_upcoming"
 }
 
 /// One upcoming class. Mirrors the JS `widget_next_class` shape.
@@ -131,6 +132,19 @@ public enum PsycleSnapshotStore {
         guard let raw = string(forKey: PsycleSnapshotKey.week),
               let data = raw.data(using: .utf8) else { return [] }
         return (try? JSONDecoder().decode([PsycleWeekDay].self, from: data)) ?? []
+    }
+
+    /// The next few classes (up to 5) for the widget's self-advancing
+    /// timeline. Falls back to the single next class for snapshots written
+    /// by older app builds.
+    public static func upcoming() -> [PsycleNextClass] {
+        if let raw = string(forKey: PsycleSnapshotKey.upcoming),
+           let data = raw.data(using: .utf8),
+           let list = try? JSONDecoder().decode([PsycleNextClass].self, from: data),
+           !list.isEmpty {
+            return list
+        }
+        return nextClass().map { [$0] } ?? []
     }
 
     /// Reads a key from the App Group suite. The LIVE path is the bare key:

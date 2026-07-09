@@ -38,6 +38,18 @@
 > Xcode registers both. Until then, Xcode Cloud archives may fail
 > provisioning for the extension.
 >
+> **Live Activity behavior (2026-07-09 redesign, empirically grounded):**
+> iOS only allows STARTING a Live Activity while the app is foregrounded
+> (no push server here), so the card appears when the app is opened within
+> **1 hour** of class start. Verified in the simulator: an ACTIVE request
+> presents on the Dynamic Island; the request-then-end(.after:) trick from
+> the previous design presents NOTHING and was removed. Cleanup at class
+> start is three-layered: staleDate flips the card to "In class" at T0
+> with no process running; a BGAppRefreshTask (com.psyclefinder.app.la-end,
+> registered in AppDelegate) ends it shortly after start; any app
+> foreground past start ends it immediately. The widget self-advances via
+> a multi-entry timeline built from `widget_upcoming` (next 5 classes).
+>
 > **Verification honesty:** what has been OBSERVED working (simulator,
 > unsigned build): the full workspace compiles; the app boots with
 > MainViewController + the AppGroupPreferences plugin registered; the JS

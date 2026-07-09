@@ -41,18 +41,34 @@ struct PsycleProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PsycleEntry>) -> Void) {
-        let entry = currentEntry()
-
-        // Refresh policy: re-read the snapshot a little after the current
-        // class is due to start (so it rolls to the next one), and otherwise
-        // ask the system to refresh in ~30 min. The app also nudges via
-        // WidgetCenter.reloadAllTimelines() when bookings change.
+        // MULTI-ENTRY timeline: one entry per upcoming class, each becoming
+        // current a minute after the previous class starts — so the widget
+        // rolls to the next class BY ITSELF, with no process running. (The
+        // snapshot data itself still only changes when the app runs; the app
+        // nudges WidgetCenter.reloadAllTimelines() on booking changes.)
         let now = Date()
-        var refreshDate = now.addingTimeInterval(30 * 60)
-        if let start = entry.nextClass?.startDate, start > now {
-            refreshDate = min(refreshDate, start.addingTimeInterval(60))
+        let week = PsycleSnapshotStore.week().reduce(0) { $0 + $1.count }
+
+        let upcoming = PsycleSnapshotStore.upcoming()
+            .compactMap { c in c.startDate.map { (c, $0) } }
+            .filter { $0.1 > now }
+            .sorted { $0.1 < $1.1 }
+
+        var entries: [PsycleEntry] = []
+        var entryDate = now
+        for (klass, start) in upcoming {
+            entries.append(PsycleEntry(date: entryDate, nextClass: klass, weekCount: week))
+            // Strictly increasing dates: two same-time classes (possible —
+            // e.g. simultaneous slots at two studios) would otherwise emit
+            // duplicate entry dates and one would shadow the other.
+            entryDate = max(start.addingTimeInterval(60), entryDate.addingTimeInterval(1))
         }
-        completion(Timeline(entries: [entry], policy: .after(refreshDate)))
+        // After the last known class starts: show the empty state instead of
+        // a stale "Now" forever.
+        entries.append(PsycleEntry(date: entryDate, nextClass: nil, weekCount: week))
+
+        // Periodic refresh keeps the data honest even without app nudges.
+        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(30 * 60))))
     }
 
     private func currentEntry() -> PsycleEntry {
