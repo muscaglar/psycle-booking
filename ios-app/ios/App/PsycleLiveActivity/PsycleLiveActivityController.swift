@@ -33,56 +33,35 @@ public final class PsycleLiveActivityController {
 
     /// Start a Live Activity within this many seconds before class start.
     /// Outside this window we don't show one (avoids a stale all-day banner).
-    private let leadWindow: TimeInterval = 2 * 60 * 60   // 2 hours
+    private let leadWindow: TimeInterval = 60 * 60   // 1 hour
 
-    /// App Group marker remembering which class already has a self-cleaning
-    /// activity scheduled. Needed because the schedule trick below puts the
-    /// activity into the 'ended' state immediately, and ended activities no
-    /// longer appear in Activity.activities — without the marker every app
-    /// foreground would stack a duplicate card.
-    ///
-    /// Keyed on eventId AND startAt: if the studio moves the class, the
-    /// marker no longer matches and a corrected card gets scheduled. It is
-    /// deliberately NOT cleared when the snapshot goes empty (a cancel):
-    /// the frozen card can't be retracted anyway, and keeping the marker
-    /// means a cancel→rebook of the same class doesn't stack a duplicate.
-    private let scheduledKey = "live_activity_scheduled_event"
-    private var scheduledMarker: String? {
-        get { PsycleSnapshotStore.defaults?.string(forKey: scheduledKey) }
-        set {
-            guard let d = PsycleSnapshotStore.defaults else { return }
-            if let v = newValue { d.set(v, forKey: scheduledKey) } else { d.removeObject(forKey: scheduledKey) }
-        }
+    private var current: Activity<PsycleClassActivityAttributes>? {
+        Activity<PsycleClassActivityAttributes>.activities.first
     }
 
-    private func marker(for next: PsycleNextClass) -> String {
-        "\(next.eventId)|\(next.startAt)"
-    }
-
-    /// Read the shared snapshot and reconcile the Live Activity:
-    /// schedule one for an imminent class, or clear what's showing.
-    /// Call this on app launch, on foreground, and after booking changes.
+    /// Read the shared snapshot and reconcile the Live Activity.
+    /// Call on app launch, foreground, booking changes, and from the
+    /// background end-task.
     ///
-    /// AUTO-CLEAR DESIGN: the app can't run code at class start, so the
-    /// countdown must clean itself up. ActivityKit's way to do that without
-    /// server pushes is to end the activity IMMEDIATELY after requesting it,
-    /// with `dismissalPolicy: .after(classStart)`: the Lock Screen card stays
-    /// visible with its live countdown (Text(timerInterval:) is rendered by
-    /// the system, no updates needed) and iOS removes it AT CLASS START even
-    /// if the app never runs again. Known trade-offs, accepted:
-    ///  - a class cancelled inside the 2h window can't retract its card
-    ///    (ended activities are unreachable) — it self-clears at start time;
-    ///  - the 'ended' state may drop the Dynamic Island presentation early
-    ///    on some iOS versions; the Lock Screen card is the primary surface.
+    /// DESIGN (empirically constrained): iOS only lets an app REQUEST a
+    /// Live Activity while foregrounded, and ending one removes its UI
+    /// immediately — verified in the simulator: the request+end(.after:)
+    /// trick presents nothing at all. So the card is requested ACTIVE when
+    /// the app is opened inside the 1h lead window, and cleanup at class
+    /// start happens in three layers:
+    ///  1. staleDate = classStart — at T0 the SYSTEM re-renders the card in
+    ///     its stale state ("In class", see PsycleLiveActivityView) with no
+    ///     process running;
+    ///  2. a BGAppRefreshTask scheduled for classStart calls this method to
+    ///     actually end/remove it (best-effort timing, usually minutes);
+    ///  3. any app foreground past start ends it immediately.
     @discardableResult
     public func refreshFromSnapshot() -> Bool {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
 
         guard let next = PsycleSnapshotStore.nextClass(),
               let start = next.startDate else {
-            // Cancelled/none upcoming: end active cards; the marker stays
-            // (see its doc comment) so a rebook doesn't duplicate.
-            endAll()
+            endAll() // cancelled / none upcoming — retract anything showing
             return false
         }
 
@@ -90,51 +69,53 @@ public final class PsycleLiveActivityController {
         let secondsUntil = start.timeIntervalSince(now)
 
         // Too far out, or already started — nothing should be showing.
-        // (<= 0 : "clear when the class has started", not 15 minutes after.)
         if secondsUntil > leadWindow || secondsUntil <= 0 {
             endAll()
-            if secondsUntil <= 0 { scheduledMarker = nil } // class began — marker done
             return false
         }
-
-        // Already scheduled a self-cleaning card for this class at this
-        // time — done. (A moved class changes the marker and falls through.)
-        if scheduledMarker == marker(for: next) { return true }
-
-        // Claim the marker SYNCHRONOUSLY before the async work: two rapid
-        // refresh calls (cold launch fires didBecomeActive + a JS nudge)
-        // must not both pass the guard and stack duplicate cards. Cleared
-        // again if the request below fails.
-        scheduledMarker = marker(for: next)
 
         let state = PsycleClassActivityAttributes.ContentState(
             startAt: start,
             status: "Starting soon"
         )
 
-        // End any still-active cards (older builds / other classes) first,
-        // serialized so the dying activity can't race the new one.
-        let stale = Activity<PsycleClassActivityAttributes>.activities
-        Task {
-            for activity in stale {
-                if #available(iOS 16.2, *) {
-                    await activity.end(nil, dismissalPolicy: .immediate)
-                } else {
-                    await activity.end(dismissalPolicy: .immediate)
+        if let activity = current, activity.attributes.eventId == next.eventId {
+            // Same class — push the (possibly moved) start time into it.
+            update(activity, state: state)
+        } else {
+            // Different class than what's showing. Synchronous in-flight
+            // guard first: start() runs inside a detached Task, so two
+            // rapid refresh calls (didBecomeActive + a future JS nudge)
+            // could otherwise both see no current activity and stack
+            // duplicate cards.
+            guard requestingEventId != next.eventId else { return true }
+            requestingEventId = next.eventId
+            // End old, then start, serialized so the dying activity can't
+            // race the new one.
+            let stale = Activity<PsycleClassActivityAttributes>.activities
+            Task {
+                for activity in stale {
+                    if #available(iOS 16.2, *) {
+                        await activity.end(nil, dismissalPolicy: .immediate)
+                    } else {
+                        await activity.end(dismissalPolicy: .immediate)
+                    }
                 }
+                self.start(next: next, state: state)
+                self.requestingEventId = nil
             }
-            self.scheduleSelfClearing(next: next, state: state, classStart: start)
         }
         return true
     }
 
-    /// Request the activity, then immediately end it with a dismissal date
-    /// at class start — the system keeps the countdown on the Lock Screen
-    /// until then and removes it on its own. (The .after date is clamped by
-    /// iOS to at most 4h out; our lead window is 2h, so it never clips.)
-    private func scheduleSelfClearing(next: PsycleNextClass,
-                                      state: PsycleClassActivityAttributes.ContentState,
-                                      classStart: Date) {
+    /// Event id with a request currently in flight (see guard above).
+    private var requestingEventId: String?
+
+    /// Request an ACTIVE activity (presents on Lock Screen + Dynamic
+    /// Island). staleDate = classStart flips it to the stale rendering at
+    /// T0 without any process running.
+    public func start(next: PsycleNextClass,
+                      state: PsycleClassActivityAttributes.ContentState) {
         let attributes = PsycleClassActivityAttributes(
             eventId: next.eventId,
             typeName: next.typeName,
@@ -142,29 +123,42 @@ public final class PsycleLiveActivityController {
             locName: next.locName.isEmpty ? next.studioName : next.locName,
             slotSummary: next.slotSummary
         )
-        // Small cushion so the card doesn't vanish a breath before "0:00"
-        // on devices with skewed clocks.
-        let clearAt = classStart.addingTimeInterval(60)
         do {
             if #available(iOS 16.2, *) {
-                let content = ActivityContent(state: state, staleDate: classStart)
+                let content = ActivityContent(state: state, staleDate: state.startAt)
                 let activity = try Activity.request(attributes: attributes, content: content, pushType: nil)
-                Task { await activity.end(content, dismissalPolicy: .after(clearAt)) }
+                NSLog("[PsycleLiveActivity] requested event=%@ active=%d", next.eventId, activity.activityState == .active ? 1 : 0)
             } else {
-                let activity = try Activity.request(attributes: attributes, contentState: state, pushType: nil)
-                Task { await activity.end(using: state, dismissalPolicy: .after(clearAt)) }
+                _ = try Activity.request(attributes: attributes, contentState: state, pushType: nil)
             }
         } catch {
-            // Release the claimed marker so a later refresh can retry.
-            scheduledMarker = nil
             NSLog("[PsycleLiveActivity] start failed: \(error.localizedDescription)")
         }
     }
 
-    /// Kept for API compatibility with older call sites.
-    public func start(next: PsycleNextClass,
-                      state: PsycleClassActivityAttributes.ContentState) {
-        scheduleSelfClearing(next: next, state: state, classStart: state.startAt)
+    private func update(_ activity: Activity<PsycleClassActivityAttributes>,
+                        state: PsycleClassActivityAttributes.ContentState) {
+        Task {
+            if #available(iOS 16.2, *) {
+                let content = ActivityContent(state: state, staleDate: state.startAt)
+                await activity.update(content)
+            } else {
+                await activity.update(using: state)
+            }
+        }
+    }
+
+    /// Awaitable variant for the background end-task: the BGTask must not
+    /// be marked complete until the end IPC has actually landed, or iOS
+    /// suspends the process first and the card stays up.
+    public func endAllAndWait() async {
+        for activity in Activity<PsycleClassActivityAttributes>.activities {
+            if #available(iOS 16.2, *) {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            } else {
+                await activity.end(dismissalPolicy: .immediate)
+            }
+        }
     }
 
     /// End every running Psycle activity immediately.

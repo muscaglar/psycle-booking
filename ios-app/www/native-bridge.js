@@ -939,6 +939,11 @@
 
   var WIDGET_NEXT_KEY = 'widget_next_class';
   var WIDGET_WEEK_KEY = 'widget_week';
+  // Next few classes (same shape as widget_next_class, array of up to 5) so
+  // the widget can build a MULTI-ENTRY timeline and roll to the next class
+  // by itself when one starts — without this it sat on a passed class until
+  // the app next ran.
+  var WIDGET_UPCOMING_KEY = 'widget_upcoming';
 
   // Standard Preferences plugin: lands in UserDefaults.standard under
   // "<group>.<key>" (NOT extension-readable — kept for in-app consumers
@@ -1023,6 +1028,14 @@
       // 1) Next class snapshot (or null when nothing upcoming).
       var next = upcoming.length ? _snapshotEventFor(upcoming[0].id) : null;
       _writeSnapshotKey(WIDGET_NEXT_KEY, JSON.stringify(next));
+
+      // 1b) The next few classes for the widget's self-advancing timeline.
+      var upcomingList = [];
+      for (var ui = 0; ui < upcoming.length && upcomingList.length < 5; ui++) {
+        var snap = _snapshotEventFor(upcoming[ui].id);
+        if (snap) upcomingList.push(snap);
+      }
+      _writeSnapshotKey(WIDGET_UPCOMING_KEY, JSON.stringify(upcomingList));
 
       // 2) This-week buckets: next 7 days from now, one entry per day that
       //    has >=1 booking, with the day's first start time.
