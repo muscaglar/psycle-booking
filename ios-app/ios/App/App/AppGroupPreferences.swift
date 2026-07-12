@@ -39,6 +39,33 @@ public class WidgetCenterPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
+/// Lets the web layer nudge the Live Activity reconcile right after it
+/// writes a fresh snapshot. Critical for reliability: didBecomeActive
+/// fires BEFORE the JS booking fetch rewrites the snapshot, so without
+/// this nudge the controller reconciles against stale data and the
+/// countdown card only appears on the NEXT app open.
+@objc(PsycleLiveActivityPlugin)
+public class PsycleLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "PsycleLiveActivityPlugin"
+    public let jsName = "PsycleLiveActivity"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "refresh", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func refresh(_ call: CAPPluginCall) {
+        if #available(iOS 16.1, *) {
+            // Plugin calls arrive on a background queue; reconcile on main
+            // like the didBecomeActive path (the app is foregrounded here,
+            // so Activity.request is permitted).
+            DispatchQueue.main.async {
+                NSLog("[PsycleLiveActivity] js refresh nudge")
+                PsycleLiveActivityController.shared.refreshFromSnapshot()
+            }
+        }
+        call.resolve()
+    }
+}
+
 @objc(AppGroupPreferencesPlugin)
 public class AppGroupPreferencesPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "AppGroupPreferencesPlugin"

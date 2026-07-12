@@ -38,8 +38,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     /// be removed even if the phone stays untouched. Timing is at the
     /// system's discretion (usually within minutes of earliestBeginDate).
     private func scheduleLiveActivityEndTask() {
-        guard let next = PsycleSnapshotStore.nextClass(),
-              let start = next.startDate, start > Date() else { return }
+        // Same stale-tolerant selection as the controller: the single
+        // next_class key can point at a passed class.
+        guard let (_, start) = PsycleSnapshotStore.firstClass(startingAfter: Date()) else { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.liveActivityEndTaskId)
         request.earliestBeginDate = start.addingTimeInterval(30)
         // Throws in the simulator (BGTaskScheduler unsupported) — fine.
@@ -72,7 +73,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             let iso = ISO8601DateFormatter().string(from: start)
             d?.set("{\"eventId\":\"999\",\"startAt\":\"\(iso)\",\"instrName\":\"Test Instructor\",\"typeName\":\"RIDE 45\",\"studioName\":\"Studio 1\",\"locName\":\"Bank\",\"slots\":[7]}",
                    forKey: PsycleSnapshotKey.nextClass)
-            d?.removeObject(forKey: "live_activity_scheduled_event")
+            // firstClass() prefers the multi-class list — clear it so a
+            // previous session's list can't shadow the seeded class.
+            d?.removeObject(forKey: PsycleSnapshotKey.upcoming)
         }
         #endif
         // Reconcile the next-class Live Activity against the shared snapshot

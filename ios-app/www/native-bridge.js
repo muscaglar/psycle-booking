@@ -1065,6 +1065,16 @@
           WC.reloadAllTimelines().catch(function () {});
         }
       } catch (e) {}
+
+      // Nudge the Live Activity reconcile too — the native foreground hook
+      // (didBecomeActive) runs BEFORE this fresh snapshot exists, so without
+      // this call the countdown card would only appear on the NEXT app open.
+      try {
+        var LA = Capacitor.Plugins.PsycleLiveActivity;
+        if (LA && typeof LA.refresh === 'function') {
+          LA.refresh().catch(function () {});
+        }
+      } catch (e) {}
     } catch (e) {
       // Last-resort guard: never let snapshot computation break the app.
       try { console.warn('[native-widget] snapshot failed:', e); } catch (_) {}

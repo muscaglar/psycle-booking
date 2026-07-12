@@ -10,12 +10,13 @@
 //  PsycleLiveActivityAttributes.swift and PsycleShared/PsycleSnapshot.swift
 //  in the app target.
 //
-//  ── HOW THE APP WOULD CALL IT ────────────────────────────────────────────
-//  The web app drives bookings, so to actually trigger this you'd add a small
-//  Capacitor plugin method (e.g. `PsycleLiveActivity.refresh()`) that calls
-//  `PsycleLiveActivityController.shared.refreshFromSnapshot()`. Wiring that
-//  plugin is a follow-up; this controller is the deliverable. See
-//  NATIVE_FEATURES.md "Live Activity" section.
+//  ── HOW THE APP CALLS IT ────────────────────────────────────────────────
+//  Two triggers, both required for reliability:
+//   - AppDelegate.applicationDidBecomeActive (native, fires immediately on
+//     foreground — but often against a STALE snapshot);
+//   - the PsycleLiveActivityPlugin.refresh() nudge from native-bridge.js,
+//     fired right after every fresh snapshot write (the one that actually
+//     has current data on a cold open).
 //
 //  Requires iOS 16.1+.
 //
@@ -33,7 +34,7 @@ public final class PsycleLiveActivityController {
 
     /// Start a Live Activity within this many seconds before class start.
     /// Outside this window we don't show one (avoids a stale all-day banner).
-    private let leadWindow: TimeInterval = 60 * 60   // 1 hour
+    private let leadWindow: TimeInterval = 90 * 60   // 90 minutes
 
     private var current: Activity<PsycleClassActivityAttributes>? {
         Activity<PsycleClassActivityAttributes>.activities.first
@@ -47,7 +48,7 @@ public final class PsycleLiveActivityController {
     /// Live Activity while foregrounded, and ending one removes its UI
     /// immediately — verified in the simulator: the request+end(.after:)
     /// trick presents nothing at all. So the card is requested ACTIVE when
-    /// the app is opened inside the 1h lead window, and cleanup at class
+    /// the app is opened inside the 90-min lead window, and cleanup at class
     /// start happens in three layers:
     ///  1. staleDate = classStart — at T0 the SYSTEM re-renders the card in
     ///     its stale state ("In class", see PsycleLiveActivityView) with no
@@ -59,17 +60,21 @@ public final class PsycleLiveActivityController {
     public func refreshFromSnapshot() -> Bool {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
 
-        guard let next = PsycleSnapshotStore.nextClass(),
-              let start = next.startDate else {
+        let now = Date()
+
+        // Pick the first FUTURE class from the multi-class list, not the
+        // single next_class key — that key is whatever the app wrote last
+        // session and may point at a class that has since passed, which
+        // would wrongly clear the card instead of showing the real next one.
+        guard let (next, start) = PsycleSnapshotStore.firstClass(startingAfter: now) else {
             endAll() // cancelled / none upcoming — retract anything showing
             return false
         }
 
-        let now = Date()
         let secondsUntil = start.timeIntervalSince(now)
 
-        // Too far out, or already started — nothing should be showing.
-        if secondsUntil > leadWindow || secondsUntil <= 0 {
+        // Too far out — nothing should be showing yet.
+        if secondsUntil > leadWindow {
             endAll()
             return false
         }

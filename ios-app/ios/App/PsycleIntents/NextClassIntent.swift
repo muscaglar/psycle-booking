@@ -32,7 +32,11 @@ struct NextClassIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
-        guard let next = PsycleSnapshotStore.nextClass() else {
+        // Stale-tolerant: the snapshot is from the last app run, and its
+        // single next_class key may point at a class that already started —
+        // firstClass picks the real next one from the multi-class list, so
+        // Siri never answers with this morning's passed class.
+        guard let (next, _) = PsycleSnapshotStore.firstClass(startingAfter: Date()) else {
             let none = "You have no upcoming Psycle classes booked."
             return .result(value: none, dialog: IntentDialog(stringLiteral: none))
         }

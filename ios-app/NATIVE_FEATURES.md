@@ -41,7 +41,13 @@
 > **Live Activity behavior (2026-07-09 redesign, empirically grounded):**
 > iOS only allows STARTING a Live Activity while the app is foregrounded
 > (no push server here), so the card appears when the app is opened within
-> **1 hour** of class start. Verified in the simulator: an ACTIVE request
+> **90 minutes** of class start. Reliability depends on TWO triggers: the
+> didBecomeActive hook (fires immediately, often against a stale snapshot)
+> AND the `PsycleLiveActivity.refresh()` nudge native-bridge.js sends right
+> after each fresh snapshot write — without the nudge the card only
+> appeared on the second app open. Class selection reads the multi-class
+> `widget_upcoming` list (stale-tolerant), not the single next_class key.
+> Verified in the simulator: an ACTIVE request
 > presents on the Dynamic Island; the request-then-end(.after:) trick from
 > the previous design presents NOTHING and was removed. Cleanup at class
 > start is three-layered: staleDate flips the card to "In class" at T0
@@ -337,7 +343,7 @@ code — pick one path.
   file; keep only `PsycleWidget.swift`'s bundle.
 - **Live Activity never appears** → missing `NSSupportsLiveActivities` in the
   app Info.plist, or `refreshFromSnapshot()` is never called, or the class is
-  outside the 2h lead window.
+  outside the 90-minute lead window.
 - **Stale widget** → the app nudges `WidgetCenter.reloadAllTimelines()` only if
   a reload plugin is present; otherwise the timeline refreshes on its own
   policy (~30 min, or just after the current class starts).
