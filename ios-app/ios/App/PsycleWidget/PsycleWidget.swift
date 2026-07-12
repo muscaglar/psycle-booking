@@ -72,7 +72,9 @@ struct PsycleProvider: TimelineProvider {
     }
 
     private func currentEntry() -> PsycleEntry {
-        let next = PsycleSnapshotStore.nextClass()
+        // Stale-tolerant (same reasoning as the timeline): don't show a
+        // passed class in the gallery/transient snapshot.
+        let next = PsycleSnapshotStore.firstClass(startingAfter: Date())?.klass
         let week = PsycleSnapshotStore.week().reduce(0) { $0 + $1.count }
         return PsycleEntry(date: Date(), nextClass: next, weekCount: week)
     }

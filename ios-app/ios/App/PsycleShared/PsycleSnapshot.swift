@@ -134,6 +134,19 @@ public enum PsycleSnapshotStore {
         return (try? JSONDecoder().decode([PsycleWeekDay].self, from: data)) ?? []
     }
 
+    /// First class starting after `date`, from the multi-class list. Use
+    /// this instead of nextClass() for anything time-sensitive: the single
+    /// next_class key is a snapshot from the LAST time the app wrote it and
+    /// can point at a class that has since passed, while the list usually
+    /// still contains the real next one.
+    public static func firstClass(startingAfter date: Date) -> (klass: PsycleNextClass, start: Date)? {
+        upcoming()
+            .compactMap { c in c.startDate.map { (c, $0) } }
+            .filter { $0.1 > date }
+            .sorted { $0.1 < $1.1 }
+            .first
+    }
+
     /// The next few classes (up to 5) for the widget's self-advancing
     /// timeline. Falls back to the single next class for snapshots written
     /// by older app builds.

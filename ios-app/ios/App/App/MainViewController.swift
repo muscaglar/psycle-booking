@@ -13,5 +13,6 @@ class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(AppGroupPreferencesPlugin())
         bridge?.registerPluginInstance(WidgetCenterPlugin())
+        bridge?.registerPluginInstance(PsycleLiveActivityPlugin())
     }
 }
