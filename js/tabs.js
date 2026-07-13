@@ -1325,13 +1325,45 @@
     if (!row) return;
     if (!window._nativeReminder) { row.innerHTML = ''; return; }
     var on = window._nativeReminder.isOn();
-    row.innerHTML =
+    var html =
       '<button class="app-row" onclick="window._toggleReminder()">' +
         '<span class="app-row-text"><span class="app-row-label">Monday booking reminder</span>' +
         '<span class="app-row-detail">11:59 UK — when the new booking week opens</span></span>' +
         '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
       '</button>';
+    if (window._nativeClassReminders) {
+      var cOn = window._nativeClassReminders.isOn();
+      html +=
+        '<button class="app-row" onclick="window._toggleClassReminders()">' +
+          '<span class="app-row-text"><span class="app-row-label">Class reminders</span>' +
+          '<span class="app-row-detail">90 minutes before each class — opens the live countdown</span></span>' +
+          '<span class="app-row-switch' + (cOn ? ' on' : '') + '" aria-hidden="true"></span>' +
+        '</button>';
+    }
+    row.innerHTML = html;
   }
+
+  window._toggleClassReminders = async function () {
+    if (!window._nativeClassReminders) return;
+    if (window._nativeClassReminders.isOn()) {
+      // The pref defaults ON but scheduling needs notification permission.
+      // An ON-looking toggle that never armed should PROMPT on tap, not
+      // silently flip to off (the opposite of what the user wants).
+      var hasPerm = window._nativeClassReminders.hasPermission
+        ? await window._nativeClassReminders.hasPermission() : true;
+      if (!hasPerm) {
+        var granted = await window._nativeClassReminders.enable();
+        toast(granted ? 'Class reminders on — 90 minutes before each class' : 'Enable notifications for Psync in iOS Settings first', granted ? 'success' : 'error');
+      } else {
+        await window._nativeClassReminders.disable();
+        toast('Class reminders off', 'info');
+      }
+    } else {
+      var ok = await window._nativeClassReminders.enable();
+      toast(ok ? 'Class reminders on — 90 minutes before each class' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
+    }
+    renderReminderRow();
+  };
 
   window._toggleReminder = async function () {
     if (!window._nativeReminder) return;

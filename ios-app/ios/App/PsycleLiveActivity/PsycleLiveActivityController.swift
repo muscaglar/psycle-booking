@@ -58,7 +58,10 @@ public final class PsycleLiveActivityController {
     ///  3. any app foreground past start ends it immediately.
     @discardableResult
     public func refreshFromSnapshot() -> Bool {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            NSLog("[PsycleLiveActivity] declined: Live Activities disabled in Settings")
+            return false
+        }
 
         let now = Date()
 
@@ -67,6 +70,7 @@ public final class PsycleLiveActivityController {
         // session and may point at a class that has since passed, which
         // would wrongly clear the card instead of showing the real next one.
         guard let (next, start) = PsycleSnapshotStore.firstClass(startingAfter: now) else {
+            NSLog("[PsycleLiveActivity] declined: no future class in snapshot")
             endAll() // cancelled / none upcoming — retract anything showing
             return false
         }
@@ -75,6 +79,7 @@ public final class PsycleLiveActivityController {
 
         // Too far out — nothing should be showing yet.
         if secondsUntil > leadWindow {
+            NSLog("[PsycleLiveActivity] declined: next class in %.0f min (window 90)", secondsUntil / 60)
             endAll()
             return false
         }

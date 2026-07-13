@@ -234,6 +234,8 @@ Auth: Bearer token via `Authorization` header.
 | psycle_bike_history | {studioId:{instructorId:{slot:count}}} — your usual spot, pre-selected in the picker |
 | psycle_recent_searches | Last 5 search filter states (deduped) for the Discover pills |
 | psycle_onboarded_v1 | First-run onboarding-tour completion flag |
+| psycle_class_reminders | 'off' disables the T-90min class notifications (iOS; default on, permission-gated) |
+| psycle_class_reminder_map | {eventId: {id, startAt}} of scheduled class reminders (device-local) |
 | psycle_api_contract | Snapshot of expected API response shapes (field names only) for drift detection |
 | psycle_api_schema_log | Observed response shapes + missing-field counters (field names only, no PII) |
 | psycle_api_last_drift | ISO timestamp of the last detected API drift |

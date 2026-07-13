@@ -82,7 +82,7 @@
     'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
     'psycle_waitlisted_events', 'psycle_weekly_template',
     'psycle_bike_history', 'psycle_recent_searches', 'psycle_onboarded_v1',
-    'psycle_weekly_reminder',
+    'psycle_weekly_reminder', 'psycle_class_reminders',
     // Calendar integration state — must survive iOS storage purges
     // or duplicates are created on the next full sync.
     'psycle_native_cal_events', 'psycle_native_cal_id',
@@ -1003,10 +1003,20 @@
    * Recompute the widget snapshot from current app state and persist it.
    * Defensive: never throws. Safe to call before state exists (writes null).
    */
+  // Only trust an EMPTY bookings map after the server confirmed it
+  // (bookings:loaded fired this session). The 4s post-launch pass runs
+  // before the bookings fetch completes on a cold start — writing an empty
+  // snapshot then would blank the widget, destroy the stale-but-valid data
+  // the Live Activity relies on, and the refresh nudge would retract a
+  // card that was just correctly started. That was exactly the "opened the
+  // app in the window, no card" failure.
+  var _snapServerConfirmed = false;
+
   function updateWidgetSnapshot() {
     try {
       var bookings = (typeof _myBookings !== 'undefined' && _myBookings) ? _myBookings : {};
       var cache = (typeof _eventCache !== 'undefined' && _eventCache) ? _eventCache : {};
+      if (Object.keys(bookings).length === 0 && !_snapServerConfirmed) return;
       var now = Date.now();
 
       // Collect upcoming booked events (have a cache entry + future start).
@@ -1036,6 +1046,11 @@
         if (snap) upcomingList.push(snap);
       }
       _writeSnapshotKey(WIDGET_UPCOMING_KEY, JSON.stringify(upcomingList));
+
+      // Backstop for the Live Activity's foreground-only constraint: a
+      // local notification 90 minutes before each class. Tapping it opens
+      // the app, which starts the countdown card.
+      _scheduleClassReminders(upcomingList);
 
       // 2) This-week buckets: next 7 days from now, one entry per day that
       //    has >=1 booking, with the day's first start time.
@@ -1082,10 +1097,157 @@
   }
   window.updateWidgetSnapshot = updateWidgetSnapshot;
 
+  // ── Class-start reminders (T-90 minutes) ─────────────────────────
+  // iOS only lets the app START a Live Activity while foregrounded, so a
+  // phone that never opens the app in the 90-minute window gets no card.
+  // These notifications close that gap: fire at start-90min, tap → app
+  // opens → didBecomeActive + snapshot nudge start the card.
+  //
+  // Permission-gated (never prompts on its own — the toggle's enable()
+  // prompts) and idempotent per snapshot pass: stale reminders (cancelled
+  // or moved classes) are cancelled, missing ones scheduled. IDs live in
+  // the 8000–8899 range (weekly reminder owns 9992–9999).
+
+  var CLASS_REMINDER_PREF = 'psycle_class_reminders'; // 'off' disables; default ON
+  var CLASS_REMINDER_MAP = 'psycle_class_reminder_map'; // {eventId: {id, startAt}}
+
+  function _classRemindersEnabled() {
+    return localStorage.getItem(CLASS_REMINDER_PREF) !== 'off';
+  }
+
+  function _loadReminderMap() {
+    try { return JSON.parse(localStorage.getItem(CLASS_REMINDER_MAP) || '{}'); } catch (e) { return {}; }
+  }
+  function _saveReminderMap(map) {
+    try { localStorage.setItem(CLASS_REMINDER_MAP, JSON.stringify(map)); } catch (e) {}
+  }
+
+  function _reminderIdFor(eventId, map) {
+    // Stable, collision-avoiding id in 8000–8899.
+    var candidate = 8000 + (Math.abs(Number(eventId) || 0) % 900);
+    var taken = {};
+    Object.keys(map).forEach(function (k) { taken[map[k].id] = k; });
+    while (taken[candidate] && taken[candidate] !== String(eventId)) {
+      candidate = 8000 + ((candidate - 8000 + 1) % 900);
+    }
+    return candidate;
+  }
+
+  // Serialized: overlapping snapshot passes (booking events fire in quick
+  // succession) must not interleave the load-reconcile-save cycle, or a
+  // cancelled class's reminder can be resurrected by an in-flight pass.
+  var _reminderChain = Promise.resolve();
+  function _scheduleClassReminders(upcomingList) {
+    _reminderChain = _reminderChain
+      .then(function () { return _scheduleClassRemindersInner(upcomingList); })
+      .catch(function () {});
+    return _reminderChain;
+  }
+
+  async function _scheduleClassRemindersInner(upcomingList) {
+    if (!LocalNotifications || !_classRemindersEnabled()) return;
+    try {
+      var perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') return; // never prompt from the automatic path
+
+      var map = _loadReminderMap();
+      var wanted = {}; // eventId -> entry
+      (upcomingList || []).forEach(function (c) { wanted[String(c.eventId)] = c; });
+
+      // Cancel reminders for classes no longer upcoming or whose time moved.
+      var toCancel = [];
+      Object.keys(map).forEach(function (evtId) {
+        var w = wanted[evtId];
+        if (!w || w.startAt !== map[evtId].startAt) {
+          toCancel.push({ id: map[evtId].id });
+          delete map[evtId];
+        }
+      });
+      if (toCancel.length) {
+        try { await LocalNotifications.cancel({ notifications: toCancel }); } catch (e) {}
+      }
+
+      // Schedule new ones where T-90 is still in the future.
+      var toSchedule = [];
+      Object.keys(wanted).forEach(function (evtId) {
+        if (map[evtId]) return; // already scheduled for this exact time
+        var c = wanted[evtId];
+        var fireAt = new Date(c.startAt).getTime() - 90 * 60 * 1000;
+        if (!isFinite(fireAt) || fireAt <= Date.now()) return;
+        var id = _reminderIdFor(evtId, map);
+        map[evtId] = { id: id, startAt: c.startAt };
+        toSchedule.push({
+          id: id,
+          title: (c.typeName || 'Class') + ' starts in 90 minutes',
+          body: [c.instrName, c.locName || c.studioName].filter(Boolean).join(' · ') +
+            ' — open Psync for the live countdown.',
+          schedule: { at: new Date(fireAt), allowWhileIdle: true },
+          sound: 'default',
+          extra: { eventId: evtId },
+        });
+      });
+      if (toSchedule.length) {
+        try { await LocalNotifications.schedule({ notifications: toSchedule }); } catch (e) {}
+      }
+      _saveReminderMap(map);
+    } catch (e) { /* reminders are best-effort */ }
+  }
+
+  // Settings toggle API (rendered by tabs.js next to the weekly reminder).
+  window._nativeClassReminders = {
+    isOn: function () { return _classRemindersEnabled(); },
+    // The pref defaults ON but scheduling is permission-gated — the toggle
+    // uses this to prompt instead of "turning off" a switch that never
+    // actually armed.
+    hasPermission: async function () {
+      if (!LocalNotifications) return false;
+      try { return (await LocalNotifications.checkPermissions()).display === 'granted'; }
+      catch (e) { return false; }
+    },
+    enable: async function () {
+      if (!LocalNotifications) return false;
+      try {
+        var perm = await LocalNotifications.requestPermissions();
+        if (perm.display !== 'granted') return false;
+      } catch (e) { return false; }
+      localStorage.setItem(CLASS_REMINDER_PREF, 'on');
+      updateWidgetSnapshot(); // re-runs scheduling with current classes
+      return true;
+    },
+    disable: async function () {
+      localStorage.setItem(CLASS_REMINDER_PREF, 'off');
+      var map = _loadReminderMap();
+      var ids = Object.keys(map).map(function (k) { return { id: map[k].id }; });
+      if (ids.length && LocalNotifications) {
+        try { await LocalNotifications.cancel({ notifications: ids }); } catch (e) {}
+      }
+      _saveReminderMap({});
+    },
+  };
+
+  // Deliberate sign-out must blank the snapshot and cancel pending class
+  // reminders — otherwise the previous account's classes stay on the widget
+  // forever (the unconfirmed-empty guard would keep skipping) and their
+  // "starts in 90 minutes" notifications keep firing. Session EXPIRY is
+  // deliberately not wrapped: the bookings still exist server-side, so the
+  // stale-but-true snapshot should keep serving the widget until re-login.
+  var _origClearTokenNative = window.clearToken;
+  if (typeof _origClearTokenNative === 'function') {
+    window.clearToken = function () {
+      var result = _origClearTokenNative.apply(this, arguments);
+      _snapServerConfirmed = true; // empty is now the truth
+      try { updateWidgetSnapshot(); } catch (e) {}
+      return result;
+    };
+  }
+
   // Recompute on the booking lifecycle events the app emits.
   if (typeof PsycleEvents !== 'undefined' && PsycleEvents && typeof PsycleEvents.on === 'function') {
     try {
-      PsycleEvents.on('bookings:loaded', updateWidgetSnapshot);
+      PsycleEvents.on('bookings:loaded', function () {
+        _snapServerConfirmed = true; // server has spoken — empty now means empty
+        updateWidgetSnapshot();
+      });
       PsycleEvents.on('booking:complete', updateWidgetSnapshot);
       PsycleEvents.on('booking:cancelled', updateWidgetSnapshot);
       // Seat-level changes alter slot lists shown on the widget too.
