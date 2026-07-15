@@ -27,6 +27,7 @@ const PsycleState = {
   selectedInstructors: new Set(),
   selectedCategories: new Set(),
   selectedStrengthSubs: new Set(['UPPER', 'LOWER', 'FULL']),
+  selectedReformerSubs: new Set(['SIGNATURE', 'STRENGTH']),
   favouriteInstructors: new Set(),
 
   // ── Booking modal state ───────────────────────────────────────
@@ -166,6 +167,7 @@ const PsycleState = {
     'selectedInstructors',
     'selectedCategories',
     'selectedStrengthSubs',
+    'selectedReformerSubs',
     'favouriteInstructors',
     '_bookingContext',
     '_selectedSlots',

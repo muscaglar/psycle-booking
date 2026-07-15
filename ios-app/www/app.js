@@ -93,15 +93,20 @@ const CATEGORY_MAP = [
   { key: 'YOGA',     label: 'Yoga',     color: '#9b59b6', prefixes: ['YOGA', 'FLOW', 'RESTORE', 'MEDITATION'] },
   { key: 'HIIT',     label: 'HIIT',     color: '#e67e22', prefixes: ['HIIT', 'CIRCUIT', 'INTERVAL'] },
   { key: 'PILATES',  label: 'Pilates',  color: '#27ae60', prefixes: ['PILATES', 'REFORMER'] },
+  { key: 'LAGREE',   label: 'Lagree',   color: '#1abc9c', prefixes: ['LAGREE', 'MEGAFORMER'] },
   { key: 'BARRE',    label: 'Barre',    color: '#e91e8c', prefixes: ['BARRE'] },
   { key: 'OTHER',    label: 'Other',    color: '#888',    prefixes: [] },
 ];
 
 function getCategory(typeName) {
   const n = (typeName || '').toUpperCase();
-  // Reformer is a Pilates/reformer class even when the name also contains
-  // "Strength" (e.g. "Reformer Strength") — match it before the generic loop
-  // so it never falls into the STRENGTH bucket via includes().
+  // Equipment-defined categories win over discipline words in the name:
+  // "LAGREE: Upper Body & Core" is Lagree (not Strength), and
+  // "REFORMER: Strength" is a reformer class (not Strength) — match these
+  // BEFORE the generic loop so variant names can never leak into other
+  // buckets via includes(). Order-independent by design: don't rely on
+  // CATEGORY_MAP ordering for correctness.
+  if (n.includes('LAGREE') || n.includes('MEGAFORMER')) return CATEGORY_MAP.find(c => c.key === 'LAGREE');
   if (n.includes('REFORMER')) return CATEGORY_MAP.find(c => c.key === 'PILATES');
   for (const cat of CATEGORY_MAP) {
     if (cat.key === 'OTHER') continue;
@@ -112,7 +117,8 @@ function getCategory(typeName) {
 
 /**
  * Get the slot label for a class type.
- * Ride → Bike, Reformer/Pilates → Bed, Strength → Bench, else → Spot
+ * Ride → Bike, Reformer/Pilates → Bed, Lagree → Machine (Megaformer),
+ * Strength → Bench, else → Spot
  */
 function slotLabel(typeName) {
   const n = (typeName || '').toUpperCase();
@@ -121,6 +127,7 @@ function slotLabel(typeName) {
   if (!cat) return 'Spot';
   if (cat.key === 'RIDE') return 'Bike';
   if (cat.key === 'PILATES') return 'Bed';
+  if (cat.key === 'LAGREE') return 'Machine';
   if (cat.key === 'STRENGTH') return 'Bench';
   return 'Spot';
 }
@@ -175,6 +182,42 @@ const STRENGTH_SUBS = [
   { key: 'FULL',  label: 'Full Body', match: 'Full Body',  color: '#4a9eff' },
 ];
 // selectedStrengthSubs is managed by state.js (default: all selected)
+
+// ── Reformer sub-filter (variants of the Pilates category) ───────
+// Mirrors STRENGTH_SUBS: shown when Pilates is selected, matches the
+// variant word in the type name ("REFORMER: Signature 55" / "REFORMER:
+// Strength 50"). A class matching neither sub always shows.
+const REFORMER_SUBS = [
+  { key: 'SIGNATURE', label: 'Signature', match: 'Signature', color: '#27ae60' },
+  { key: 'STRENGTH',  label: 'Strength',  match: 'Strength',  color: '#27ae60' },
+];
+// selectedReformerSubs is managed by state.js (default: all selected)
+
+function renderReformerSubPills() {
+  const container = document.getElementById('reformerSubPills');
+  if (!container) return;
+  const pilatesActive = selectedCategories.has('PILATES');
+  container.style.display = pilatesActive ? 'flex' : 'none';
+  if (!pilatesActive) return;
+  container.innerHTML = REFORMER_SUBS.map(s => {
+    const active = selectedReformerSubs.has(s.key);
+    return `<button class="sub-pill${active ? ' active' : ''}"
+      style="color:${s.color};border-color:${s.color};${active ? `background:${s.color}` : ''}"
+      onclick="toggleReformerSub('${s.key}')">${s.label}</button>`;
+  }).join('');
+}
+
+function toggleReformerSub(key) {
+  if (selectedReformerSubs.has(key)) {
+    // Don't allow deselecting all
+    if (selectedReformerSubs.size === 1) return;
+    selectedReformerSubs.delete(key);
+  } else {
+    selectedReformerSubs.add(key);
+  }
+  renderReformerSubPills();
+  triggerAutoSearch();
+}
 
 function renderStrengthSubPills() {
   const container = document.getElementById('strengthSubPills');
@@ -609,6 +652,7 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 
   renderCategoryPills();
   renderStrengthSubPills();
+  renderReformerSubPills();
   document.getElementById('startDate').value = today;
   document.getElementById('daysAhead').value = 7;
   // Mark "7 days" as the default active quick button
@@ -761,8 +805,11 @@ function clearFilters() {
   selectedCategories.clear();
   selectedStrengthSubs.clear();
   selectedStrengthSubs.add('UPPER'); selectedStrengthSubs.add('LOWER'); selectedStrengthSubs.add('FULL');
+  selectedReformerSubs.clear();
+  REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
   renderInstrChips();
   renderStrengthSubPills();
+  renderReformerSubPills();
   refreshFacetCounts(); // re-renders the instructor dropdown, studio chips, and class-type pills
   document.getElementById('startDate').value = localDateStr();
   document.getElementById('daysAhead').value = 7;
@@ -837,6 +884,7 @@ function currentFilters() {
     categoryKeys: new Set(selectedCategories),
     startDate, endDateStr,
     strengthSubs: new Set(selectedStrengthSubs),
+    reformerSubs: new Set(selectedReformerSubs),
   };
 }
 
@@ -1069,7 +1117,7 @@ async function search(opts) {
   }
 
   const windowKey = startDate + '|' + endDateStr;
-  const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs) };
+  const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs), reformerSubs: new Set(selectedReformerSubs) };
 
   // 1. In-memory window: studio/instructor/type filtering is entirely
   //    client-side, so when only those change (same date range) we re-render
@@ -2253,6 +2301,14 @@ function render(events, relations, filters, done) {
         if (matchedSub && !filters.strengthSubs.has(matchedSub.key)) return false;
       }
     }
+    // Reformer sub-filter — same semantics for Pilates variants
+    if (filters.reformerSubs && filters.reformerSubs.size < REFORMER_SUBS.length) {
+      const cat = getCategory(typeName);
+      if (cat.key === 'PILATES') {
+        const matchedSub = REFORMER_SUBS.find(s => typeName.includes(s.match));
+        if (matchedSub && !filters.reformerSubs.has(matchedSub.key)) return false;
+      }
+    }
     const locIds = (filters.locationIds && filters.locationIds.length)
       ? filters.locationIds
       : (filters.locationId ? [filters.locationId] : []); // legacy restored sessions
@@ -2355,6 +2411,7 @@ function render(events, relations, filters, done) {
         startDate: filters.startDate,
         endDateStr: filters.endDateStr,
         strengthSubs: [...(filters.strengthSubs || [])],
+        reformerSubs: [...(filters.reformerSubs || [])],
         _isTodaySchedule: filters._isTodaySchedule || false,
       }}));
     } catch (e) { console.warn('[psycle] sessionStorage save failed:', e); }
@@ -2459,6 +2516,7 @@ function restoreLastResults() {
       startDate: saved.filters.startDate || '',
       endDateStr: saved.filters.endDateStr || '',
       strengthSubs: new Set(saved.filters.strengthSubs || ['UPPER', 'LOWER', 'FULL']),
+      reformerSubs: new Set(saved.filters.reformerSubs || REFORMER_SUBS.map(s => s.key)),
     };
     render(saved.events, saved.relations, filters, true);
     return true;
@@ -2649,6 +2707,7 @@ function toggleCategory(key) {
   else selectedCategories.add(key);
   refreshFacetCounts();
   renderStrengthSubPills();
+  renderReformerSubPills();
   triggerAutoSearch();
 }
 // ────────────────────────────────────────────────────────────────
@@ -4099,6 +4158,7 @@ function _currentSearchState() {
     locations: [...selectedLocations],
     categories: [...selectedCategories],
     strengthSubs: [...selectedStrengthSubs],
+    reformerSubs: [...selectedReformerSubs],
     dateMode: _dateQuickMode || null,
     startDate: document.getElementById('startDate')?.value || '',
     daysAhead: document.getElementById('daysAhead')?.value || '7',
@@ -4168,6 +4228,8 @@ function getSearchPresets() {
         selectedCategories.clear();
         selectedStrengthSubs.clear();
         ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+        selectedReformerSubs.clear();
+        REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
         _dateQuickMode = 'today';
         document.getElementById('startDate').value = localDateStr();
         document.getElementById('daysAhead').value = 1;
@@ -4182,6 +4244,8 @@ function getSearchPresets() {
         selectedCategories.add('STRENGTH');
         selectedStrengthSubs.clear();
         ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+        selectedReformerSubs.clear();
+        REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
         _dateQuickMode = 'week';
         document.getElementById('startDate').value = localDateStr();
         document.getElementById('daysAhead').value = 7;
@@ -4208,6 +4272,7 @@ function _syncFilterUI() {
   if (typeof renderLocationChips === 'function') renderLocationChips();
   if (typeof renderCategoryPills === 'function') renderCategoryPills();
   if (typeof renderStrengthSubPills === 'function') renderStrengthSubPills();
+  if (typeof renderReformerSubPills === 'function') renderReformerSubPills();
   if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
 }
 
@@ -4224,6 +4289,9 @@ function applySavedSearch(obj) {
   selectedStrengthSubs.clear();
   ((obj.strengthSubs && obj.strengthSubs.length) ? obj.strengthSubs : ['UPPER', 'LOWER', 'FULL'])
     .forEach(k => selectedStrengthSubs.add(k));
+  selectedReformerSubs.clear();
+  ((obj.reformerSubs && obj.reformerSubs.length) ? obj.reformerSubs : REFORMER_SUBS.map(s => s.key))
+    .forEach(k => selectedReformerSubs.add(k));
 
   _dateQuickMode = obj.dateMode || null;
   if (obj.startDate) document.getElementById('startDate').value = obj.startDate;
@@ -4577,6 +4645,8 @@ function bookPrediction(pred) {
   selectedCategories.clear();
   selectedStrengthSubs.clear();
   ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+  selectedReformerSubs.clear();
+  REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
 
   if (pred.instructorId != null) selectedInstructors.add(String(pred.instructorId));
 

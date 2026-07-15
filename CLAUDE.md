@@ -139,7 +139,7 @@ Window accessors mean you can read/write `instructors`, `_myBookings`, `_eventCa
 
 **Waitlist**: full+waitlistable classes skip the bike picker — `bookClass` shows a confirm dialog and POSTs `{event_id}` with no slots. Joined waitlists are tracked in `psycle_waitlisted_events` and badged in My Bookings.
 
-**Slot labels**: `slotLabel(typeName)` returns Bike/Bed/Bench/Spot based on class type. `slotLabelForEvent(eventId)` resolves via event cache.
+**Slot labels**: `slotLabel(typeName)` returns Bike/Bed/Machine (Lagree)/Bench/Spot based on class type. `slotLabelForEvent(eventId)` resolves via event cache.
 
 **Instructor links**: `instrLink(name, id)` wraps any instructor name in a clickable span that opens the profile modal. Used in all cards, lists, and insights.
 

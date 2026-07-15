@@ -1130,6 +1130,46 @@
       }
 
       html += '</div>';
+    } else if (user) {
+      // No recurring plan — pay-as-you-go with top-up credits. Surface the
+      // balance and per-pack expiries here too, not just the small bar in
+      // My Bookings (previously this tab showed nothing but the account).
+      var stats = user.stats || {};
+      var packs = user.available_credits || [];
+      var totalCredits = Number(stats.credits_remaining) || packs.reduce(function (sum, c) {
+        return sum + (Number(c.remaining != null ? c.remaining : c.credits_remaining) || 0);
+      }, 0);
+
+      html += '<div class="membership-card">';
+      html += '<div class="membership-plan">Credit Pack</div>';
+      html += '<div class="membership-status">Pay as you go</div>';
+      if (totalCredits > 0) {
+        html += '<div class="membership-usage">' + totalCredits + ' credit' + (totalCredits !== 1 ? 's' : '') + ' remaining</div>';
+      } else {
+        html += '<div class="membership-usage">No credits remaining — top up on psyclelondon.com to book</div>';
+      }
+      // Per-pack breakdown with expiry when the API provides it (fields are
+      // read defensively — pack shapes vary).
+      var packRows = packs.map(function (c) {
+        var left = Number(c.remaining != null ? c.remaining : c.credits_remaining) || 0;
+        if (left <= 0) return '';
+        var name = c.name || c.title || c.plan_name || 'Credits';
+        var expiry = c.expires_at || c.expiry || c.valid_until || '';
+        var expiryLabel = '';
+        if (expiry) {
+          var d = new Date(String(expiry).replace(' ', 'T'));
+          if (!isNaN(d.getTime())) {
+            expiryLabel = ' · expires ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          }
+        }
+        return '<div class="membership-period-item">' + escapeHTML(name) + ': ' + left +
+          ' credit' + (left !== 1 ? 's' : '') + expiryLabel + '</div>';
+      }).filter(Boolean);
+      if (packRows.length > 0) {
+        html += '<div class="membership-upcoming-title">Your packs</div>';
+        html += '<div class="membership-periods">' + packRows.join('') + '</div>';
+      }
+      html += '</div>';
     }
 
     // Account card (avatar + name + email), rendered above the plan/usage card.

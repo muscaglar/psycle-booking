@@ -78,6 +78,7 @@ public struct PsycleWeekDay: Codable, Equatable {
 public enum PsycleSlotLabel {
     public static func label(for typeName: String) -> String {
         let n = typeName.uppercased()
+        if n.contains("LAGREE") || n.contains("MEGAFORMER") { return "Machine" }
         if n.contains("REFORMER") { return "Bed" }
         if n.contains("RIDE") { return "Bike" }
         if n.contains("PILATES") { return "Bed" }
