@@ -1,4 +1,4 @@
-const CACHE = 'psycle-4f6d4240';
+const CACHE = 'psycle-1347581c';
 const SHELL = [
   './psycle-finder.html',
   './index.html',
@@ -76,9 +76,12 @@ function _swIcsFold(line) {
 // Bench for Strength, Bike for Ride — the SW copy used to hardcode "Bike".
 function _swSlotNoun(typeName) {
   const n = (typeName || '').toUpperCase();
+  if (n.includes('LAGREE') || n.includes('MEGAFORMER')) return 'Machine';
   if (n.includes('REFORMER') || n.includes('PILATES')) return 'Bed';
-  if (n.includes('STRENGTH') || n.includes('LIFT') || n.includes('WEIGHTS') || n.includes('TREAD')) return 'Bench';
+  // RIDE before STRENGTH to match app.js getCategory's map order —
+  // "RIDE: STRENGTH 45" is a bike class.
   if (n.includes('RIDE')) return 'Bike';
+  if (n.includes('STRENGTH') || n.includes('LIFT') || n.includes('WEIGHTS') || n.includes('TREAD')) return 'Bench';
   return 'Spot';
 }
 

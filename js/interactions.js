@@ -303,6 +303,7 @@
         locationIds: typeof selectedLocations !== 'undefined' ? [...selectedLocations] : [],
         categories: typeof selectedCategories !== 'undefined' ? [...selectedCategories] : [],
         strengthSubs: typeof selectedStrengthSubs !== 'undefined' ? [...selectedStrengthSubs] : [],
+        reformerSubs: typeof selectedReformerSubs !== 'undefined' ? [...selectedReformerSubs] : [],
         startDate: document.getElementById('startDate')?.value || '',
         daysAhead: document.getElementById('daysAhead')?.value || '7',
         dateQuickMode: typeof _dateQuickMode !== 'undefined' ? _dateQuickMode : null,
@@ -361,6 +362,15 @@
           selectedStrengthSubs.clear();
           filters.strengthSubs.forEach(function (key) { selectedStrengthSubs.add(key); });
           if (typeof renderStrengthSubPills === 'function') renderStrengthSubPills();
+        }
+      }
+
+      // Restore reformer subs
+      if (filters.reformerSubs && Array.isArray(filters.reformerSubs) && filters.reformerSubs.length > 0) {
+        if (typeof selectedReformerSubs !== 'undefined') {
+          selectedReformerSubs.clear();
+          filters.reformerSubs.forEach(function (key) { selectedReformerSubs.add(key); });
+          if (typeof renderReformerSubPills === 'function') renderReformerSubPills();
         }
       }
 
@@ -452,6 +462,7 @@
   wrapGlobal('applyFavouritesAsFilter', saveFilters);
   wrapGlobal('toggleCategory', saveFilters);
   wrapGlobal('toggleStrengthSub', saveFilters);
+  wrapGlobal('toggleReformerSub', saveFilters);
   wrapGlobal('setDateQuick', saveFilters);
   wrapGlobal('onDateInputChange', saveFilters);
 
