@@ -4,11 +4,14 @@
   "description": "Psycle Class Finder — iOS app via Capacitor",
   "private": true,
   "scripts": {
+    "postinstall": "node patch-plugins.js",
+    "patch": "node patch-plugins.js",
+    "patch:check": "node patch-plugins.js --check",
     "build": "node build.js",
     "sync:check": "node build.js --check",
-    "sync": "node build.js && npx cap sync ios",
+    "sync": "node patch-plugins.js && node build.js && npx cap sync ios",
     "open": "npx cap open ios",
-    "build:open": "node build.js && npx cap sync ios && npx cap open ios",
+    "build:open": "npm run sync && npx cap open ios",
     "update-web": "node build.js"
   },
   "dependencies": {
@@ -20,7 +23,7 @@
     "@capacitor/preferences": "^6.0.0",
     "@capacitor/share": "^6.0.0",
     "@capacitor/status-bar": "^6.0.0",
-    "@ebarooni/capacitor-calendar": "^6.0.0"
+    "@ebarooni/capacitor-calendar": "6.7.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0"

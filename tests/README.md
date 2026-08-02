@@ -5,7 +5,7 @@ packages, nothing to install. Two deliverables:
 
 | File | Runs in | Covers |
 |------|---------|--------|
-| `unit.js` | Node (`node tests/unit.js`) | The pure, testable logic of the three resilience-layer modules: `security.js` (escapeHTML), `api-client.js` (PsycleAPI), `diagnostic.js` (PsycleDiag) |
+| `unit.js` | Node (`node tests/unit.js`) | The pure, testable logic of the three resilience-layer modules: `security.js` (escapeHTML), `api-client.js` (PsycleAPI), `diagnostic.js` (PsycleDiag) — plus the native bridge's Europe/London class-time resolver |
 | `smoke.html` | Browser / iOS simulator | Loads ALL real app scripts in production order and asserts the critical globals exist and a few pure functions behave |
 
 ## 1. Unit tests — `node tests/unit.js`

@@ -12,6 +12,82 @@
 (function () {
   'use strict';
 
+  // ── Gym Time (Europe/London) ────────────────────────────────────
+  // Psycle is a UK gym. The API sends class times as naive wall-clock
+  // strings ("2026-08-05 07:00:00") in the GYM's local time, with no UTC
+  // offset. `new Date("2026-08-05T07:00:00")` parses that as DEVICE-local
+  // time — right only while the phone happens to be in the UK. A booking
+  // made (or a calendar reconciled) from abroad landed the class at the
+  // wrong instant, tagged with the wrong zone. The calendar path (and the
+  // weekly Monday-11:59 reminder) resolve class times through the gym's zone
+  // explicitly, and calendar events are stamped Europe/London.
+  // (Known follow-up: the widget/Live Activity snapshot, T-90 class reminders
+  // and the web ICS/Google export still parse start_at device-locally.)
+  //
+  // Pure helpers, deliberately BEFORE the Capacitor guard: they need nothing
+  // native, and tests/unit.js evaluates this file without Capacitor to
+  // exercise the DST math via window._psycleClassStartMs.
+
+  var GYM_TZ = 'Europe/London';
+  var _gymWallFmt = null; // lazy: Intl formatter reporting London wall clock for an instant
+
+  /**
+   * Absolute UTC ms for a wall-clock time in the gym's zone (DST-correct,
+   * independent of the device timezone). Starts from the same clock reading
+   * taken as UTC, then corrects by the offset London reports at that instant —
+   * looped, because the correction can itself cross a DST boundary.
+   * Throws if the JS engine has no Europe/London zone data (callers fall
+   * back to a device-local parse).
+   */
+  function _gymWallToUtcMs(y, mo, d, h, mi, s) {
+    if (!_gymWallFmt) {
+      _gymWallFmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: GYM_TZ, hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+    }
+    var target = Date.UTC(y, mo - 1, d, h, mi, s || 0); // the clock reading, as if UTC
+    var guess = target;
+    for (var k = 0; k < 3; k++) {
+      var wall = {};
+      _gymWallFmt.formatToParts(new Date(guess)).forEach(function (p) {
+        if (p.type !== 'literal') wall[p.type] = Number(p.value);
+      });
+      // London wall clock at `guess`, re-read as a UTC epoch, minus what we want.
+      var deltaMs = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second) - target;
+      if (deltaMs === 0) break;
+      guess -= deltaMs;
+    }
+    return guess;
+  }
+
+  /**
+   * Absolute UTC ms of an API class time. Naive "YYYY-MM-DD HH:MM[:SS[.fff]]"
+   * (space or 'T') strings are the gym's UK wall clock. Anything else — an
+   * epoch number, a string carrying its own Z / ±hh:mm offset, a date-only or
+   * otherwise unexpected shape — goes to the engine's own parser exactly as
+   * before this change, so explicit offsets and legacy inputs are respected
+   * as-is. NaN only when nothing can parse it.
+   */
+  function _classStartMs(startAt) {
+    if (typeof startAt === 'number') return isFinite(startAt) ? startAt : NaN;
+    var s = String(startAt == null ? '' : startAt).trim();
+    if (!s) return NaN;
+    var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(s);
+    if (m) {
+      try {
+        return _gymWallToUtcMs(+m[1], +m[2], +m[3], +m[4], +m[5], +(m[6] || 0));
+      } catch (e) {
+        // No Europe/London tz data in the engine — fall through to the old
+        // device-local parse (correct whenever the phone is in the UK).
+      }
+    }
+    var t = Date.parse(s.replace(' ', 'T'));
+    return isNaN(t) ? Date.parse(s) : t; // e.g. "YYYY-MM-DD HH:MM:SS +01:00"
+  }
+  window._psycleClassStartMs = _classStartMs; // exported for tests/unit.js (and future native callers)
+
   // Wait for Capacitor to be ready
   if (!window.Capacitor) {
     console.log('[native] Not running in Capacitor — skipping native bridge');
@@ -184,7 +260,9 @@
 
   // ── Native Calendar Integration ─────────────────────────────────
   // Auto-add events to iOS Calendar on booking, auto-remove on cancel.
-  // Uses @ebarooni/capacitor-calendar v8 plugin for EventKit access.
+  // Uses the @ebarooni/capacitor-calendar v6 plugin (patched — see
+  // ios-app/patch-plugins.js) for EventKit access. Events are stamped with
+  // the gym's Europe/London zone, never the device's current zone.
   // Production-hardened: dedicated calendar, reminders, proper error handling.
 
   var Calendar = Capacitor.Plugins.CapacitorCalendar;
@@ -284,9 +362,12 @@
     // calendar as if the user had a seat.
     if (booking.waitlisted) return null;
 
-    var start = new Date(String(evt.start_at).replace(' ', 'T'));
-    if (isNaN(start.getTime())) start = new Date(evt.start_at);
-    var end = new Date(start.getTime() + (evt.duration || 45) * 60 * 1000);
+    // start_at is UK wall-clock time (the gym's zone) — resolve it through
+    // Europe/London so the event lands at the right instant even when the
+    // phone is abroad, and stamp the event with that zone below.
+    var startMs = _classStartMs(evt.start_at);
+    if (isNaN(startMs)) return null; // unparseable start — nothing sane to write
+    var endMs = startMs + (evt.duration || 45) * 60 * 1000;
     var slots = booking.slots || [];
     var label = _nativeSlotLabel(evt._typeName);
     var slotStr = slots.length === 1 ? label + ' ' + slots[0]
@@ -310,15 +391,21 @@
     // Field names match the installed @ebarooni/capacitor-calendar v6 API:
     // `notes` (NOT `description`) and `alertOffsetInMinutes` (NOT `alerts`).
     // The old names were silently ignored — events carried no ownership
-    // marker and no reminders.
+    // marker and no reminders. `timeZone` is honoured by our patched plugin
+    // (ios-app/patch-plugins.js) — upstream v6 has no create-time zone
+    // parameter and silently stamped every event with the device's zone.
     return {
       title: title,
       location: location,
-      startDate: start.getTime(),
-      endDate: end.getTime(),
+      startDate: startMs,
+      endDate: endMs,
+      timeZone: GYM_TZ,
       notes: desc.join('\n'),
       isAllDay: false,
-      alertOffsetInMinutes: [-60, -15], // 1 hour and 15 minutes before class
+      // Positive = minutes BEFORE the event; the plugin negates it into the
+      // EKAlarm and IGNORES negative values (the old [-60, -15] created no
+      // alarms at all — events synced with 'Alert: None').
+      alertOffsetInMinutes: [60, 15], // 1 hour and 15 minutes before class
     };
   }
 
@@ -733,22 +820,14 @@
     var DAY = 86400000;
     var out = [];
     try {
-      var dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
-      var wdFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' });
-      var hmFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false });
+      var dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: GYM_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+      var wdFmt = new Intl.DateTimeFormat('en-GB', { timeZone: GYM_TZ, weekday: 'short' });
 
-      // Exact UTC instant of 11:59 London on a given London calendar date:
-      // start from 11:59 UTC and correct by whatever offset London reports.
+      // Exact UTC instant of 11:59 London on a given London calendar date —
+      // the shared gym-zone wall-clock resolver (see _gymWallToUtcMs).
       var instantFor = function (dateStr) {
         var p = dateStr.split('-').map(Number);
-        var guess = Date.UTC(p[0], p[1] - 1, p[2], 11, 59, 0);
-        for (var k = 0; k < 3; k++) {
-          var hm = hmFmt.format(new Date(guess)).split(':').map(Number);
-          var deltaMin = (hm[0] * 60 + hm[1]) - (11 * 60 + 59);
-          if (deltaMin === 0) break;
-          guess -= deltaMin * 60000;
-        }
-        return guess;
+        return _gymWallToUtcMs(p[0], p[1], p[2], 11, 59, 0);
       };
 
       var now = Date.now();

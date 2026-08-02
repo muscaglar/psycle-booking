@@ -39,6 +39,18 @@ jobs:
       - name: iOS www drift check
         run: npm run drift
 
+      # Install the iOS wrapper's JS deps (pure npm — no Xcode needed) so the
+      # postinstall plugin patcher (ios-app/patch-plugins.js) runs against the
+      # real node_modules here. A plugin bump that breaks a patch anchor then
+      # fails on every PR, not only at the mac build / Xcode Cloud archive.
+      - name: Install iOS deps (runs plugin patcher)
+        working-directory: ios-app
+        run: npm ci
+
+      - name: iOS plugin patch check
+        working-directory: ios-app
+        run: npm run patch:check
+
       # Advisory only: surfaces type/typo issues without failing the build.
       # The vanilla-JS global pattern means strict tsc would be noisy, so this
       # is informational. `continue-on-error` keeps a red typecheck from

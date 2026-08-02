@@ -64,9 +64,13 @@ load last (everything they wrap exists); diagnostic reads PsycleAPI.SCHEMAS.
 ## Build & CI
 - `cd ios-app && npm run build` — deterministic www/ flatten (auto-discovers js/css modules)
   + content-hashed SW cache version (no manual bumps). `npm run sync` also runs `cap sync ios`.
+- `ios-app/patch-plugins.js` — dependency-free anchored-edit patcher for native plugin source in
+  node_modules (currently: `timeZone` support in @ebarooni/capacitor-calendar 6.7.2 — see Calendar contract).
+  Runs on `postinstall` (so `npm ci` on Xcode Cloud / GH Actions patches before `cap sync`) and at the top of
+  `npm run sync`; pinned to the exact plugin version and FAILS LOUD on upstream drift. `npm run patch:check` verifies.
 - `npm run sync:check` (or root `npm run drift`) — fails if www/ drifted from source (CI + pre-commit; see ios-app/PRECOMMIT.md).
-- Root: `npm run check` (node --check all JS), `npm test` (tests/unit.js, 42 assertions on the resilience layer),
-  `npm run typecheck` (advisory tsc --checkJs), `npm run ci` (check+test+drift). CI in .github/workflows/ci.yml.
+- Root: `npm run check` (node --check all JS), `npm test` (tests/unit.js — resilience layer + native-bridge
+  Europe/London date resolution), `npm run typecheck` (advisory tsc --checkJs), `npm run ci` (check+test+drift). CI in .github/workflows/ci.yml.
 - tests/smoke.html — load in a browser/sim to assert all critical globals exist (title → "SMOKE: PASS").
 
 ## Native iOS (WIRED — widget / Live Activity / Siri live in real targets)
@@ -249,6 +253,7 @@ Auth: Bearer token via `Authorization` header.
 - Capacitor 6 wrapper in `ios-app/` (CLI pinned to 6 — must match core's major)
 - Sync web assets: `cd ios-app && npm run sync`
 - Native features: calendar integration, haptics, local notifications (Monday 11:59 UK, scheduled as absolute Europe/London instants — 4 rolling one-shots re-armed each launch), persistent storage
-- **Calendar contract**: the user-picked calendar is FULLY Psync-owned. Sync is an authoritative reconcile (`syncAllBookingsToCalendar` in native-bridge.js): every future event in that calendar that doesn't match a current booking is deleted; missing bookings are created. Plugin calls must match @ebarooni/capacitor-calendar **v6** (`notes`, `alertOffsetInMinutes`, `deleteEventsById`, `createEvent` → `{result: "<id>"}`).
+- **Calendar contract**: the user-picked calendar is FULLY Psync-owned. Sync is an authoritative reconcile (`syncAllBookingsToCalendar` in native-bridge.js): every future event in that calendar that doesn't match a current booking is deleted; missing bookings are created. Plugin calls must match @ebarooni/capacitor-calendar **v6** (`notes`, `alertOffsetInMinutes`, `deleteEventsById`, `createEvent` → `{result: "<id>"}`) plus our patched-in `timeZone` (IANA id → `EKEvent.timeZone`).
+- **Gym time**: the API's `start_at` is a naive UK wall-clock string. For calendar events, native-bridge resolves it to an absolute instant through Europe/London (`_classStartMs` / `_gymWallToUtcMs`, exported as `window._psycleClassStartMs`) — not the device zone — and stamps every event `timeZone: 'Europe/London'`, so entries are right even when booked/reconciled from abroad. The Monday-11:59 reminder shares the same resolver. Still device-local (known follow-up): the widget/Live Activity snapshot (`updateWidgetSnapshot` + the Swift `PsycleSnapshot` parser using `.current`), T-90 class reminders (`_scheduleClassReminders`), and the web ICS/Google export in js/calendar.js.
 - security.js waits for `window._psycleNativeRestoreDone` (set by native-bridge after the Preferences→localStorage restore) before reading the stored token; the AES key is backed up via `psycle_sec_key_backup`.
 - Bug report: `window.getDiagnosticReport()` returns full device + app + log diagnostics

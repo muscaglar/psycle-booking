@@ -12,8 +12,13 @@
  *     js/api-client.js (PsycleAPI: categorizeError, validate, field, parseJson, SCHEMAS)
  *     js/diagnostic.js (PsycleDiag: record, checkContract, captureContract)
  *
+ * plus ios-app/www/native-bridge.js, which (with no window.Capacitor) bails
+ * immediately but first exports its pure Europe/London class-time resolver
+ * (window._psycleClassStartMs) — the DST math is asserted here with the
+ * process pinned to a NON-UK zone.
+ *
  * We deliberately do NOT load app.js / tabs.js / etc — those need a full DOM.
- * Only these three modules export pure-ish, testable logic that we can drive
+ * Only these modules export pure-ish, testable logic that we can drive
  * with a thin shim.
  *
  * Exit code is 1 if any assertion fails, 0 otherwise.
@@ -21,12 +26,20 @@
 
 'use strict';
 
+// Run the whole suite as a NON-UK device. The gym is Europe/London and the
+// API's class times are naive UK wall-clock strings; native-bridge.js must
+// resolve them through Europe/London, never the device zone. Pinning the
+// process to New York makes a device-local parse visibly disagree with the
+// correct London instant (Node re-reads TZ on assignment, v13+).
+process.env.TZ = 'America/New_York';
+
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const JS_DIR = path.join(REPO_ROOT, 'js');
+const NATIVE_BRIDGE = path.join(REPO_ROOT, 'ios-app', 'www', 'native-bridge.js');
 
 // ════════════════════════════════════════════════════════════════════════
 // Tiny test harness: assert + PASS/FAIL counters
@@ -253,6 +266,21 @@ function buildSandbox() {
   loadModule('api-client.js');
   loadModule('diagnostic.js');
 
+  // ios-app/www/native-bridge.js — the Capacitor bridge. With no
+  // window.Capacitor in the sandbox its IIFE bails at once, but not before
+  // exporting its pure Europe/London date helper (window._psycleClassStartMs),
+  // which we test below. Its "[native] Not running in Capacitor" line is
+  // muted to keep the report clean.
+  const realLog = sandbox.console.log;
+  sandbox.console = Object.assign({}, sandbox.console, {
+    log(...args) {
+      if (typeof args[0] === 'string' && args[0].startsWith('[native]')) return;
+      realLog.apply(console, args);
+    },
+  });
+  vm.runInContext(fs.readFileSync(NATIVE_BRIDGE, 'utf8'), sandbox, { filename: 'native-bridge.js' });
+  sandbox.console = console;
+
   return { sandbox, fakeLocalStorage, fakeDocument };
 }
 
@@ -432,6 +460,35 @@ async function run() {
   const driftFinding = findings.find((f) => f.kind === 'event');
   ok(driftFinding && driftFinding.missingRequired.indexOf('start_at') !== -1,
     "after recording an event missing 'start_at', checkContract surfaces it as missing-required drift");
+
+  // ── Europe/London class-time resolution ─────────────────────────────────
+  // The gym is UK-based and the API sends naive UK wall-clock times with no
+  // offset. native-bridge.js must turn them into absolute instants through
+  // Europe/London — NOT the device zone. This whole suite runs with
+  // TZ=America/New_York (see top of file), so a device-local parse would
+  // land 5h (EDT) / 5h (EST) away from the correct London instant.
+  section('Europe/London class-time resolution (ios-app/www/native-bridge.js)');
+  const classStartMs = sandbox._psycleClassStartMs;
+  ok(typeof classStartMs === 'function', 'window._psycleClassStartMs is exported by the bridge');
+  const utc = (y, mo, d, h, mi, s) => Date.UTC(y, mo - 1, d, h, mi || 0, s || 0);
+  eq(classStartMs('2026-01-15 07:00:00'), utc(2026, 1, 15, 7, 0), 'winter class (GMT): 07:00 London = 07:00Z');
+  eq(classStartMs('2026-08-05 07:00:00'), utc(2026, 8, 5, 6, 0), 'summer class (BST): 07:00 London = 06:00Z');
+  eq(classStartMs('2026-03-28 18:30:00'), utc(2026, 3, 28, 18, 30), 'eve of spring-forward is still GMT (+0)');
+  eq(classStartMs('2026-03-29 07:00:00'), utc(2026, 3, 29, 6, 0), 'morning after spring-forward is BST (+1)');
+  eq(classStartMs('2026-10-24 18:00:00'), utc(2026, 10, 24, 17, 0), 'day before autumn-back is BST (+1)');
+  eq(classStartMs('2026-10-25 12:00:00'), utc(2026, 10, 25, 12, 0), 'after autumn-back is GMT (+0)');
+  eq(classStartMs('2026-08-05T07:00:00'), utc(2026, 8, 5, 6, 0), "the 'T' separator form is equivalent");
+  eq(classStartMs('2026-08-05 07:00'), utc(2026, 8, 5, 6, 0), 'the no-seconds form is equivalent');
+  eq(classStartMs('2026-08-05 07:00:00.000'), utc(2026, 8, 5, 6, 0), 'fractional-seconds serialization is UK wall clock too');
+  eq(classStartMs('2026-08-05T06:00:00Z'), utc(2026, 8, 5, 6, 0), 'an explicit Z is respected as-is');
+  eq(classStartMs('2026-08-05T07:00:00+01:00'), utc(2026, 8, 5, 6, 0), 'an explicit offset is respected as-is');
+  eq(classStartMs('2026-08-05 07:00:00 +01:00'), utc(2026, 8, 5, 6, 0), 'a space-separated offset still parses (legacy rescue path)');
+  eq(classStartMs(utc(2026, 8, 5, 6, 0)), utc(2026, 8, 5, 6, 0), 'a numeric epoch passes straight through');
+  eq(classStartMs('2026-08-05'), Date.UTC(2026, 7, 5), 'a date-only string keeps its old spec meaning (UTC midnight)');
+  ok(classStartMs('2026-08-05 07:00:00') !== Date.parse('2026-08-05T07:00:00'),
+    'on a non-UK device (TZ=America/New_York) the result differs from a device-local parse — the bug this guards');
+  ok(Number.isNaN(classStartMs('not a date')), 'unparseable input → NaN');
+  ok(Number.isNaN(classStartMs('')) && Number.isNaN(classStartMs(null)), 'empty/null → NaN');
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(50));
