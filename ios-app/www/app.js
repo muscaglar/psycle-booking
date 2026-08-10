@@ -268,17 +268,145 @@ function _parseSlots(raw) {
 // a fresh booking would otherwise wipe that booking from local state.
 let _bookingsSeq = 0;
 
+// Local writes to _myBookings (book / join / leave / cancel / claim). A fetch
+// that STARTED before the last write is working from a stale server snapshot:
+// it must not "release" buttons and should heal itself with a re-run.
+let _bookingsLocalWriteAt = 0;
+function _noteLocalBookingWrite() { _bookingsLocalWriteAt = Date.now(); }
+
+// Hydrate _eventCache for the given event ids from GET /events/{id}.
+async function _hydrateEventDetails(ids) {
+  await Promise.all(ids.map(async evtId => {
+    try {
+      const r = await apiFetch(`/events/${evtId}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      const evt = d.data || d;
+      const rels = d.relations || {};
+      const instrMap = Object.fromEntries((rels.instructors || []).map(i => [i.id, i]));
+      const studioMap = Object.fromEntries((rels.studios || []).map(s => [s.id, s]));
+      const locationMap = Object.fromEntries((rels.locations || []).map(l => [l.id, l]));
+      const typeMap = Object.fromEntries((rels.event_types || []).map(t => [t.id, t]));
+      Object.assign(_studioMap, studioMap);
+      const type = typeMap[evt.event_type_id];
+      const instr = instrMap[evt.instructor_id];
+      const studio = studioMap[evt.studio_id];
+      const loc = studio ? locationMap[studio.location_id] : null;
+      _eventCache[evtId] = {
+        ...evt,
+        _typeName: type?.name || 'Class',
+        _instrName: instr?.full_name || '',
+        _locName: loc ? loc.name.replace('Psycle ', '') : '',
+        _locFullName: loc ? loc.name : '',
+        _locAddress: loc ? (loc.address || '') : '',
+        _studioName: studio ? studio.name : '',
+      };
+    } catch (e) { console.warn('[psycle] event detail failed:', evtId, e); }
+  }));
+}
+
+// A waitlist entry already carries its class — seed _eventCache from it for
+// any event GET /events/{id} couldn't hydrate so the place still renders.
+function _seedEventCacheFromEntries(map, entries) {
+  (entries || []).forEach(entry => {
+    const id = String(entry.eventId);
+    if (map[id] && !_eventCache[id]) {
+      const seeded = _eventCacheEntryFromWaitlist(entry.event);
+      if (seeded) _eventCache[id] = seeded;
+    }
+  });
+}
+
+// Re-apply the held state to every rendered Discover button, and release
+// cards whose booking/place no longer exists (unless a local write may have
+// raced this snapshot).
+function _resyncDiscoverButtons(allowRelease) {
+  const midFlight = btn => btn.dataset.busy === '1' || btn.textContent === '…';
+  if (allowRelease) {
+    document.querySelectorAll('.class-card:not(.my-booking-card) .book-btn.booked').forEach(btn => {
+      const id = btn.closest('.class-card')?.dataset?.id;
+      if (id && !_myBookings[String(id)] && !midFlight(btn)) _syncCardButtonsForEvent(id);
+    });
+  }
+  Object.entries(_myBookings).forEach(([evtId, booking]) => {
+    document.querySelectorAll(`.class-card[data-id="${Number(evtId)}"]:not(.my-booking-card) .book-btn`).forEach(btn => {
+      if (midFlight(btn)) return; // a booking flow is in progress on this button
+      applyBookedState(btn, Number(evtId), booking);
+    });
+  });
+}
+
+// True while a user-facing dialog is up (a background announcement must not
+// replace it — confirmModal is single-instance).
+function _dialogOpen() {
+  if (document.getElementById('psycleConfirmOverlay')) return true;
+  const bike = document.getElementById('bikeModal');
+  return !!(bike && bike.style.display && bike.style.display !== 'none');
+}
+
+// Persist the place memory from the LIVE state at write time (never from an
+// older snapshot — a join/leave/claim may have updated it in between): places
+// come from _myBookings; `allocated` is the union of what's remembered (still
+// a seat) and what this pass found.
+function _persistPlacesNow(diffAllocated) {
+  const cur = _readWaitlistPlaces();
+  const places = {};
+  const allocated = {};
+  Object.keys(_myBookings).forEach(id => {
+    const b = _myBookings[id];
+    if (b && b.waitlist && b.waitlist.id) places[id] = b.waitlist.id;
+  });
+  const isSeat = id => !!(_myBookings[id] && !_myBookings[id].waitlisted && (_myBookings[id].bookingId || (_myBookings[id].slots || []).length));
+  Object.keys(cur.allocated || {}).forEach(id => { if (isSeat(id)) allocated[id] = cur.allocated[id]; });
+  Object.keys(diffAllocated || {}).forEach(id => { allocated[id] = diffAllocated[id]; });
+  // A place the memory knows about that is neither held nor a seat right now
+  // simply lapsed — but keep places recorded since this pass started (join).
+  Object.keys(cur.places || {}).forEach(id => { if (!places[id] && _myBookings[id]?.waitlist?.id === cur.places[id]) places[id] = cur.places[id]; });
+  _writeWaitlistPlaces({ places, allocated });
+}
+
+// Announce waitlist places Psycle turned into real (chargeable) seats. Waits
+// for any open dialog to close first, then persists that they were announced.
+let _allocAnnounceTimer = null;
+function _announceAllocations(eventIds, diffToPersist) {
+  const ids = (eventIds || []).map(String);
+  if (!ids.length) return;
+  const show = () => {
+    if (_dialogOpen()) { _allocAnnounceTimer = setTimeout(show, 700); return; }
+    _allocAnnounceTimer = null;
+    if (diffToPersist) _persistPlacesNow(diffToPersist.allocated);
+    PsycleEvents.emit('waitlist:allocated', ids.map(Number));
+    if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
+    const line = _waitlistClassLine(ids[0]) || 'a class';
+    const more = ids.length > 1 ? ` (+${ids.length - 1} more)` : '';
+    confirmModal({
+      title: "You're in — Psycle gave you a spot",
+      body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings (and your calendar/widget if you sync).`,
+      warn: "Psycle's normal 12-hour cancellation policy applies to it from now on.",
+      confirmText: 'View my bookings',
+      cancelText: 'OK',
+    }).then(go => { if (go && typeof switchTab === 'function') switchTab('bookings'); });
+  };
+  clearTimeout(_allocAnnounceTimer);
+  show();
+}
+
+const WAITLISTS_DEADLINE_MS = 5000; // don't let a slow /waitlists stall the bookings pipeline
+
 // Resolves to true when THIS call's response was applied to _myBookings
 // (false = superseded by a newer call or failed) so callers that need
 // fresh state can detect a no-op and retry.
 async function fetchMyBookings() {
   const mySeq = ++_bookingsSeq;
+  const startedAt = Date.now();
   if (!getBearerToken()) {
     _myBookings = {};
     renderMyBookings(); // still render — the signed-out empty state lives there
     return true;
   }
   try {
+    // Waitlist places are a separate resource; fetch them alongside bookings.
+    const waitlistsPromise = fetchMyWaitlists().catch(() => null);
     const res = await apiFetch('/bookings?limit=200');
     if (mySeq !== _bookingsSeq) return false; // a newer fetch superseded this one
     if (!res.ok) return false;
@@ -286,87 +414,106 @@ async function fetchMyBookings() {
     if (mySeq !== _bookingsSeq) return false;
     const list = Array.isArray(data) ? data : (data.data || []);
 
+    // Build the new map locally and swap it in ONCE (right before emit) so no
+    // consumer ever observes a half-built, places-free state.
     // The API returns one record per seat. Multiple seats for the same
     // event_id appear as separate booking records, each with its own
     // id (bookingId) and slot number.  We accumulate them.
-    _myBookings = {};
+    const next = {};
     list.forEach(b => {
       const evtId = String(b.event_id);
       const slotNum = Number(b.slot) || 0; // API field is "slot" (singular)
-
-      if (!_myBookings[evtId]) {
-        _myBookings[evtId] = {
-          bookingId: b.id,
-          slots: [],
-          slotBookings: {},
-        };
-      }
+      if (!next[evtId]) next[evtId] = { bookingId: b.id, slots: [], slotBookings: {}, waitlisted: false };
       if (slotNum) {
-        _myBookings[evtId].slots.push(slotNum);
-        _myBookings[evtId].slotBookings[slotNum] = b.id;
+        next[evtId].slots.push(slotNum);
+        next[evtId].slotBookings[slotNum] = b.id;
       }
     });
 
-    // Re-apply locally-tracked waitlist status (cleared once the class passes).
-    // Admission heuristic: if the server now reports an assigned seat for a
-    // tracked-waitlisted event, the user was admitted — clear the marker so
-    // the badge drops and calendar export resumes. (Waitlist places are
-    // joined without slots, so a slot appearing means a real seat.)
-    const waitlisted = _cleanWaitlisted();
-    Object.keys(waitlisted).forEach(id => {
-      if (!_myBookings[id]) return;
-      if (_myBookings[id].slots && _myBookings[id].slots.length > 0) {
-        _unmarkWaitlisted(id);
-      } else {
-        _myBookings[id].waitlisted = true;
-      }
+    // Merge waitlist places in so My Bookings, the badges and Leave/Claim all
+    // see them. A real booking for the same event wins (an auto-allocated
+    // place shows up in /bookings and drops out of /waitlists). A slow list
+    // must not stall bookings: after a deadline we go with the last good one
+    // and re-merge when the late answer lands.
+    let late = false;
+    let waitlistEntries = await Promise.race([
+      waitlistsPromise,
+      new Promise(r => setTimeout(() => r('late'), WAITLISTS_DEADLINE_MS)),
+    ]);
+    if (waitlistEntries === 'late') { late = true; waitlistEntries = null; }
+    if (mySeq !== _bookingsSeq) return false;
+    // Authoritative = actually read this pass, every page. Only then may
+    // absences drive the allocation diff / memory.
+    const waitlistsRead = waitlistEntries !== null;
+    const waitlistsComplete = waitlistsRead && !waitlistEntries.incomplete;
+    if (!waitlistsRead) waitlistEntries = _lastWaitlistEntries || [];
+    _mergeWaitlistsIntoBookings(next, waitlistEntries, Date.now());
+    // Carry a recent offer probe result across the swap (probes are throttled,
+    // so the new map would otherwise lose "Spot available" for ~90s).
+    Object.keys(next).forEach(id => {
+      const prev = _myBookings[id]?.waitlist, cur = next[id].waitlist;
+      if (cur && prev && prev.id === cur.id && prev.offer && Date.now() - (prev.offer.checkedAt || 0) < 120000) cur.offer = prev.offer;
     });
+
+    // A place we held last time that is now a real seat was ALLOCATED by
+    // Psycle (chargeable, 12h policy). Compute now (for the badge); persist +
+    // announce only once this pass is definitely the one being applied.
+    let diff = null;
+    if (waitlistsComplete) {
+      diff = _diffWaitlistPlaces(_readWaitlistPlaces(), next, Date.now());
+      Object.keys(diff.allocated).forEach(id => { if (next[id]) next[id].fromWaitlist = true; });
+    }
 
     // Fetch event details for any bookings not yet in _eventCache.
     // This makes "My Bookings" self-sufficient — no search required.
-    const uncached = Object.keys(_myBookings).filter(id => !_eventCache[id]);
+    const uncached = Object.keys(next).filter(id => !_eventCache[id]);
     if (uncached.length > 0) {
       showBookingSkeleton(uncached.length);
-      await Promise.all(uncached.map(async evtId => {
-        try {
-          const r = await apiFetch(`/events/${evtId}`);
-          if (!r.ok) return;
-          const d = await r.json();
-          const evt = d.data || d;
-          const rels = d.relations || {};
-          const instrMap = Object.fromEntries((rels.instructors || []).map(i => [i.id, i]));
-          const studioMap = Object.fromEntries((rels.studios || []).map(s => [s.id, s]));
-          const locationMap = Object.fromEntries((rels.locations || []).map(l => [l.id, l]));
-          const typeMap = Object.fromEntries((rels.event_types || []).map(t => [t.id, t]));
-          Object.assign(_studioMap, studioMap);
-          const type = typeMap[evt.event_type_id];
-          const instr = instrMap[evt.instructor_id];
-          const studio = studioMap[evt.studio_id];
-          const loc = studio ? locationMap[studio.location_id] : null;
-          _eventCache[evtId] = {
-            ...evt,
-            _typeName: type?.name || 'Class',
-            _instrName: instr?.full_name || '',
-            _locName: loc ? loc.name.replace('Psycle ', '') : '',
-            _locFullName: loc ? loc.name : '',
-            _locAddress: loc ? (loc.address || '') : '',
-            _studioName: studio ? studio.name : '',
-          };
-        } catch (e) { console.warn('[psycle] event detail failed:', evtId, e); }
-      }));
+      await _hydrateEventDetails(uncached);
     }
+    _seedEventCacheFromEntries(next, waitlistEntries);
 
     if (mySeq !== _bookingsSeq) return false; // superseded while fetching details
+    const racedLocalWrite = _bookingsLocalWriteAt > startedAt;
+    _myBookings = next;
+    if (diff) {
+      if (diff.newlyAllocated.length) _announceAllocations(diff.newlyAllocated, diff);
+      else _persistPlacesNow(diff.allocated);
+    }
     PsycleEvents.emit('bookings:loaded', _myBookings);
     renderMyBookings();
-    // Refresh any already-rendered search result booking buttons
-    Object.entries(_myBookings).forEach(([evtId, booking]) => {
-      const card = document.querySelector(`.class-card[data-id="${evtId}"]:not(.my-booking-card)`);
-      if (!card) return;
-      const btn = card.querySelector('.book-btn');
-      if (!btn || btn.classList.contains('booked')) return;
-      applyBookedState(btn, Number(evtId), booking);
-    });
+    _resyncDiscoverButtons(!racedLocalWrite);
+    // This snapshot predates a local book/cancel/join/leave — heal with a re-run.
+    if (racedLocalWrite) setTimeout(() => { if (mySeq === _bookingsSeq) fetchMyBookings(); }, 250);
+
+    // Close to class time Psycle offers spots by email instead of allocating —
+    // ask about places in that window so "Claim spot" shows straight away.
+    // Runs after the render so a slow probe never stalls My Bookings.
+    if (waitlistsRead) {
+      _probeWaitlistOffers(_myBookings).then(result => {
+        if (mySeq !== _bookingsSeq || !result || !result.probed) return;
+        if (result.changed) renderMyBookings();
+        if (result.allocated) fetchMyBookings(); // a probed place is a seat now — reload the truth
+      }).catch(() => {});
+    }
+
+    // The waitlist list missed the deadline: merge it in when it arrives.
+    if (late) {
+      waitlistsPromise.then(entries => {
+        if (!entries || mySeq !== _bookingsSeq) return;
+        // A join/leave/cancel since this pass started makes the late snapshot
+        // untrustworthy (it could resurrect a place just left) — re-run instead.
+        if (_bookingsLocalWriteAt > startedAt) { fetchMyBookings(); return; }
+        _mergeWaitlistsIntoBookings(_myBookings, entries, Date.now());
+        _seedEventCacheFromEntries(_myBookings, entries);
+        const missing = entries.map(e => String(e.eventId)).filter(id => _myBookings[id] && !_eventCache[id]);
+        (missing.length ? _hydrateEventDetails(missing) : Promise.resolve()).then(() => {
+          if (mySeq !== _bookingsSeq) return;
+          renderMyBookings();
+          entries.forEach(e => _syncCardButtonsForEvent(e.eventId));
+        });
+      }).catch(() => {});
+    }
     return true;
   } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); return false; }
 }
@@ -558,11 +705,15 @@ function clearToken() {
   if (window._secureTokenStore) window._secureTokenStore.clear();
   else localStorage.removeItem('psycle_bearer_token');
   currentUser = null;
+  // Never carry one account's waitlist memory into the next.
+  _lastWaitlistEntries = null;
+  try { localStorage.removeItem(WAITLIST_PLACES_KEY); } catch (e) {}
   checkAuth();
 }
 
 function showSessionExpired() {
   currentUser = null;
+  _lastWaitlistEntries = null; // whoever signs in next starts from the server's list
   if (typeof cancelTokenExpiryCheck === 'function') cancelTokenExpiryCheck();
   if (window._secureTokenStore) window._secureTokenStore.clear();
   else localStorage.removeItem('psycle_bearer_token');
@@ -1336,6 +1487,15 @@ async function bookClass(eventId, btn, studioId) {
   // would run the whole flow (and potentially the booking) twice.
   if (btn.dataset.busy === '1') return;
   btn.dataset.busy = '1';
+
+  // Already holding a waitlist place (no seat): the only sensible action is
+  // managing that place — never the bike picker or a second join (Psycle
+  // allows one place per person per class).
+  if (_myBookings[String(eventId)]?.waitlisted) {
+    try { await leaveWaitlist(eventId, btn); } finally { delete btn.dataset.busy; }
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = '…';
 
@@ -1356,8 +1516,9 @@ async function bookClass(eventId, btn, studioId) {
     const layout = studio?.layout;
     const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
 
-    // Full class and we're not in it → waitlist path. There's no seat to
-    // pick, so never open the bike picker here.
+    // Full class and we're not in it → waitlist path (a separate resource:
+    // PUT /waitlists/{eventId}). There's no seat to pick, so never open the
+    // bike picker here.
     const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
     if (noSeatsLeft && !myBooking) {
       btn.disabled = false;
@@ -1367,14 +1528,7 @@ async function bookClass(eventId, btn, studioId) {
         return;
       }
       btn.textContent = 'Join Waitlist';
-      const ok = await confirmModal({
-        title: 'Join the waitlist?',
-        body: `${cached._typeName || 'This class'} is full. You'll be added to the waitlist and notified if a spot opens up.`,
-        confirmText: 'Join waitlist',
-        cancelText: 'Not now',
-      });
-      if (!ok) return;
-      await submitBooking(eventId, null, btn, { waitlist: true });
+      await confirmJoinWaitlist(eventId, btn);
       return;
     }
 
@@ -1426,7 +1580,9 @@ async function bookClass(eventId, btn, studioId) {
       }
       showBikePicker(eventId, btn, layout, availableSlotIds, mySlots, studio.name);
     } else {
-      await submitBooking(eventId, null, btn);
+      // No layout: book one space. Only send the count when the studio is
+      // positively known to be layout-less (never guess for an unknown studio).
+      await submitBooking(eventId, null, btn, studio && studio.has_layout === false ? { spaces: 1 } : {});
     }
   } catch (e) {
     btn.disabled = false;
@@ -1596,61 +1752,841 @@ async function confirmBikeBooking() {
   await submitBooking(eventId, slotsToBook, btn);
 }
 
-// ── Waitlist tracking ────────────────────────────────────────────
-// The bookings list API has no reliable waitlist status field, so we
-// remember which events we joined as waitlist locally and clear entries
-// once the class date passes.
-const WAITLIST_KEY = 'psycle_waitlisted_events';
-function _getWaitlisted() {
-  try { return JSON.parse(localStorage.getItem(WAITLIST_KEY) || '{}'); } catch { return {}; }
+// ── Waitlists ────────────────────────────────────────────────────
+// Waitlist places are a SEPARATE server resource from bookings (verified
+// against Psycle's own CodexFit widget + live probes, 2026-08):
+//   GET    /waitlists?page=N      my active entries (paginated, 10/page)
+//   GET    /waitlists/{eventId}   my entries for one event ([] if none)
+//   PUT    /waitlists/{eventId}   join → {success, waitlist:{id,…}}; a 2nd PUT
+//                                 → 422 "You are already on this waitlist"
+//                                 (ONE place per person per class)
+//   DELETE /waitlists/{entryId}   leave (re-delete → 500 "already been cancelled")
+//   GET    /waitlist/{entryId}    entry + event availability (the emailed-offer page)
+//   POST   /waitlist/{entryId}    {confirmed:true} → accept an offered spot (books a seat)
+// They never appear in GET /bookings and POST /bookings without slots is
+// rejected ("Booking slot required"), so nothing here touches /bookings.
+// In app state a place lives on the event's _myBookings entry:
+//   { bookingId:null, slots:[], slotBookings:{}, waitlisted:true, waitlist:{id,status,…} }
+// `waitlisted` keeps its long-standing meaning — "no real seat for this
+// event" — which calendar/widget/reminders/history already key off. A real
+// booking that also carries a place keeps waitlisted:false with `.waitlist`
+// attached.
+const WAITLIST_MAX_PAGES = 10;
+// Retired: places used to be guessed client-side and remembered here. The
+// server list is the truth now; drop the stale marker so it can't linger.
+try { localStorage.removeItem('psycle_waitlisted_events'); } catch (e) {}
+
+// ── waitlist:pure:start ── (DOM-free helpers; tests/unit.js evaluates this block)
+// Normalise one API waitlist entry (GET /waitlists item, GET /waitlist/{id}
+// data, or the minimal PUT response object) into the shape the app uses.
+// Returns null when no entry id can be found.
+function _normaliseWaitlistEntry(raw, fallbackEventId) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = Number(raw.id);
+  if (!id) return null;
+  const ev = (raw.event && typeof raw.event === 'object') ? raw.event : null;
+  const eventId = Number(raw.event_id ?? ev?.id ?? fallbackEventId) || null;
+  const status = typeof raw.status === 'string' ? raw.status.toLowerCase() : '';
+  return {
+    id,
+    eventId,
+    status: status || 'waiting',
+    addedAt: raw.added_at || raw.created_at || null,
+    expiresAt: raw.expires_at || null,
+    allocatedAt: raw.allocated_at || null,
+    cancelledAt: raw.cancelled_at || null,
+    event: ev,
+  };
 }
-function _markWaitlisted(eventId, startAt) {
-  const map = _getWaitlisted();
-  map[String(eventId)] = startAt || '';
-  localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
+
+// An entry still holds a place unless the server says it was cancelled,
+// allocated (it is then a real booking in GET /bookings) or expired.
+function _isActiveWaitlistEntry(entry) {
+  if (!entry) return false;
+  if (entry.cancelledAt || entry.allocatedAt) return false;
+  return !/^(cancelled|canceled|allocated|booked|expired|removed)$/.test(entry.status || '');
 }
-function _cleanWaitlisted() {
-  const map = _getWaitlisted();
-  const now = Date.now();
-  let changed = false;
-  Object.entries(map).forEach(([id, startAt]) => {
-    if (startAt && new Date(String(startAt).replace(' ', 'T')).getTime() < now) {
-      delete map[id];
-      changed = true;
+
+// Server timestamps on waitlist entries: ISO with Z/offset (added_at) parse
+// as-is; a naive 'YYYY-MM-DD HH:MM:SS' is gym (Europe/London) wall-clock —
+// resolve it through the native bridge's London resolver when present.
+function _waitlistTimeMs(value) {
+  if (value == null || value === '') return NaN;
+  const s = String(value).trim();
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return Date.parse(s.replace(' ', 'T'));
+  if (typeof window !== 'undefined' && typeof window._psycleClassStartMs === 'function') {
+    const ms = window._psycleClassStartMs(s);
+    if (!isNaN(ms)) return ms;
+  }
+  return new Date(s.replace(' ', 'T')).getTime();
+}
+
+// A spot is being OFFERED (Psycle emails close to class time instead of
+// auto-allocating) when the entry carries an unexpired accept-by deadline or
+// a status other than plain waiting.
+function _waitlistOfferPending(entry, nowMs) {
+  if (!_isActiveWaitlistEntry(entry)) return false;
+  if (entry.expiresAt) {
+    const t = _waitlistTimeMs(entry.expiresAt);
+    return isNaN(t) ? true : t > (nowMs == null ? Date.now() : nowMs);
+  }
+  return /offer|notif|invite|pending_confirm/.test(entry.status || '');
+}
+
+// Pull the created/affected entry out of any of the response envelopes the
+// waitlist endpoints use: {waitlist:{…}} | {data:[…]} | {data:{…}}.
+function _waitlistEntryFromResponse(data, eventId) {
+  if (!data || typeof data !== 'object') return null;
+  let raw = null;
+  if (data.waitlist && typeof data.waitlist === 'object') raw = data.waitlist;
+  else if (Array.isArray(data.data)) raw = data.data.find(e => e && !e.cancelled_at) || data.data[0] || null;
+  else if (data.data && typeof data.data === 'object') raw = data.data;
+  return _normaliseWaitlistEntry(raw, eventId);
+}
+
+function _isAlreadyOnWaitlistResponse(status, message) {
+  return (status === 422 || status === 409) && /already on th(is|e) waitlist/i.test(String(message || ''));
+}
+
+// DELETE /waitlists/{id}: gone is gone — a 404, or the server's 500
+// "Cannot cancel waitlist as has already been cancelled", both mean the
+// place no longer exists.
+function _waitlistLeaveSucceeded(ok, status, message) {
+  if (ok || status === 204 || status === 404 || status === 410) return true;
+  return /already been cancel|already cancel|not on th(is|e) waitlist/i.test(String(message || ''));
+}
+
+// Build an _eventCache-compatible record from the event object embedded in a
+// waitlist entry (used only when GET /events/{id} could not hydrate it).
+// start_at is normalised to the 'YYYY-MM-DDTHH:MM:SS' form the renderers
+// (and iOS WebKit's Date parser) expect.
+function _eventCacheEntryFromWaitlist(ev) {
+  if (!ev || typeof ev !== 'object' || !ev.id || !ev.start_at) return null;
+  const studio = (ev.studio && typeof ev.studio === 'object') ? ev.studio : {};
+  const loc = (studio.location && typeof studio.location === 'object') ? studio.location : {};
+  const instr = (ev.instructor && typeof ev.instructor === 'object') ? ev.instructor : {};
+  const type = (ev.event_type && typeof ev.event_type === 'object') ? ev.event_type : {};
+  const locName = typeof loc.name === 'string' ? loc.name : '';
+  const str = v => (typeof v === 'string' ? v : '');
+  const start = String(ev.start_at).trim().replace(' ', 'T');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(start)) return null;
+  // Everything numeric is coerced here: these values are interpolated into
+  // markup and inline handlers by the renderers.
+  return {
+    id: Number(ev.id) || null,
+    start_at: start,
+    duration: Number(ev.duration_in_minutes > 1 ? ev.duration_in_minutes : ev.duration) || 0,
+    studio_id: Number(ev.studio_id ?? studio.id) || null,
+    instructor_id: Number(ev.instructor_id ?? instr.id) || null,
+    event_type_id: Number(ev.event_type_id ?? type.id) || null,
+    is_fully_booked: (ev.is_fully_booked ?? ev.is_class_full ?? true) !== false,
+    is_waitlistable: (ev.is_waitlistable ?? true) !== false,
+    is_live_stream: !!ev.is_live_stream,
+    capacity_remaining: typeof ev.available_slot_count === 'number' ? ev.available_slot_count : undefined,
+    _typeName: str(type.name) || 'Class',
+    _instrName: str(instr.full_name) || [str(instr.first_name), str(instr.last_name)].filter(Boolean).join(' ') || '',
+    _locName: locName ? locName.replace('Psycle ', '') : '',
+    _locFullName: locName,
+    _locAddress: str(loc.address),
+    _studioName: str(studio.name),
+    _fromWaitlist: true, // provenance marker (diagnostics): seeded from a waitlist entry, not /events/{id}
+  };
+}
+
+// Merge normalised, active entries into a bookings map (mutates + returns it).
+// A real booking for the same event always wins: it keeps waitlisted:false
+// and just carries the place as `.waitlist`. Entries whose class started more
+// than an hour ago (when nowMs is given) are stale and skipped.
+function _mergeWaitlistsIntoBookings(bookings, entries, nowMs) {
+  (entries || []).forEach(entry => {
+    if (!entry || !entry.eventId || !_isActiveWaitlistEntry(entry)) return;
+    if (nowMs != null && entry.event && entry.event.start_at) {
+      const startMs = _waitlistTimeMs(entry.event.start_at);
+      if (!isNaN(startMs) && startMs < nowMs - 3600000) return;
+    }
+    const key = String(entry.eventId);
+    const place = { id: entry.id, status: entry.status, addedAt: entry.addedAt, expiresAt: entry.expiresAt };
+    const existing = bookings[key];
+    if (existing) {
+      if (existing.waitlist && existing.waitlist.id !== place.id) return; // one place per event; keep the first
+      existing.waitlist = place;
+      if (!existing.slots) existing.slots = [];
+      if (!existing.slotBookings) existing.slotBookings = {};
+      existing.waitlisted = !existing.bookingId && existing.slots.length === 0;
+    } else {
+      bookings[key] = { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: place };
     }
   });
-  if (changed) localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
-  return map;
+  return bookings;
 }
-// Leaving a waitlist (or any cancel) must drop the local marker, or a later
-// REAL booking of the same event would wrongly wear the Waitlisted badge.
-function _unmarkWaitlisted(eventId) {
-  const map = _getWaitlisted();
-  if (map[String(eventId)] !== undefined) {
-    delete map[String(eventId)];
-    localStorage.setItem(WAITLIST_KEY, JSON.stringify(map));
+
+// What GET /waitlist/{entryId} says about claiming right now.
+function _waitlistOfferFromDetail(data, nowMs) {
+  const d = (data && (data.data || data.waitlist)) || data || {};
+  const ev = (d && d.event && typeof d.event === 'object') ? d.event : {};
+  const free = Array.isArray(ev.available_slots) ? ev.available_slots.length
+    : (typeof ev.available_slot_count === 'number' ? ev.available_slot_count : null);
+  const isClassFull = ev.is_class_full === true || free === 0;
+  const credits = Number(ev.required_credits);
+  return {
+    // Conservative: only an explicit is_class_full:false (plus a non-zero
+    // free count when one is given) reads as "a spot can be claimed".
+    available: ev.is_class_full === false && (free == null || free > 0),
+    free,
+    isClassFull,
+    requiredCredits: credits > 0 ? credits : null,
+    checkedAt: nowMs == null ? Date.now() : nowMs,
+  };
+}
+
+// Compare the places we held last time (persisted {eventId: entryId}) with
+// the freshly merged bookings map: a place that vanished while the same event
+// is now a REAL booking was allocated by Psycle (chargeable, 12h policy) — the
+// user must be told. Returns the new places map, the still-relevant allocated
+// set, and the event ids allocated since last time.
+function _diffWaitlistPlaces(prev, bookings, nowMs) {
+  const prevPlaces = (prev && prev.places && typeof prev.places === 'object') ? prev.places : {};
+  const prevAllocated = (prev && prev.allocated && typeof prev.allocated === 'object') ? prev.allocated : {};
+  const places = {};
+  Object.keys(bookings || {}).forEach(id => {
+    const b = bookings[id];
+    if (b && b.waitlist && b.waitlist.id) places[id] = b.waitlist.id;
+  });
+  const isSeat = id => !!(bookings[id] && !bookings[id].waitlisted && (bookings[id].bookingId || (bookings[id].slots || []).length));
+  const newlyAllocated = Object.keys(prevPlaces).filter(id => !places[id] && isSeat(id));
+  const allocated = {};
+  Object.keys(prevAllocated).forEach(id => { if (isSeat(id)) allocated[id] = prevAllocated[id]; });
+  newlyAllocated.forEach(id => { allocated[id] = new Date(nowMs == null ? Date.now() : nowMs).toISOString(); });
+  return { places, allocated, newlyAllocated };
+}
+// ── waitlist:pure:end ──
+
+// Persisted between launches so an allocation that happened while the app was
+// closed is still announced: { places: {eventId: entryId}, allocated: {eventId: iso} }.
+const WAITLIST_PLACES_KEY = 'psycle_waitlist_places';
+// Owner-stamped: a memory written for another Psycle account (session expiry
+// → someone else signs in) must never drive that user's announcements.
+function _readWaitlistPlaces() {
+  const empty = { places: {}, allocated: {} };
+  try {
+    const v = JSON.parse(localStorage.getItem(WAITLIST_PLACES_KEY) || 'null');
+    if (!v || typeof v !== 'object') return empty;
+    const me = currentUser && currentUser.id != null ? String(currentUser.id) : null;
+    if (v.owner != null && me != null && String(v.owner) !== me) return empty;
+    return { places: (v.places && typeof v.places === 'object') ? v.places : {}, allocated: (v.allocated && typeof v.allocated === 'object') ? v.allocated : {} };
+  } catch (e) { return empty; }
+}
+function _writeWaitlistPlaces(v) {
+  try {
+    const me = currentUser && currentUser.id != null ? currentUser.id : null;
+    localStorage.setItem(WAITLIST_PLACES_KEY, JSON.stringify({ owner: me, places: v.places || {}, allocated: v.allocated || {} }));
+  } catch (e) {}
+}
+function _rememberPlace(eventId, entryId) {
+  const v = _readWaitlistPlaces();
+  if (entryId) v.places[String(eventId)] = entryId; else delete v.places[String(eventId)];
+  _writeWaitlistPlaces(v);
+}
+// The user claimed the spot themselves: badge it "From waitlist" but don't
+// announce it as a surprise allocation on the next fetch.
+function _markPlaceClaimed(eventId) {
+  const v = _readWaitlistPlaces();
+  delete v.places[String(eventId)];
+  v.allocated[String(eventId)] = new Date().toISOString();
+  _writeWaitlistPlaces(v);
+}
+
+// Near class time Psycle stops auto-allocating and OFFERS spots instead (an
+// email with a confirm link). Probe GET /waitlist/{id} for places whose class
+// is within that window so the card can say "Spot available — Claim" the
+// moment the app is opened. Throttled per entry; a handful per pass at most.
+const WAITLIST_OFFER_WINDOW_MS = 150 * 60000; // generous: FAQ says ≤2h (or after 10pm for 6–9am classes)
+const _offerProbeAt = {};
+// Resolves to { probed, changed, allocated } — `changed` when a card should
+// re-render, `allocated` when a probed place turned out to be a seat already
+// (caller reloads bookings). Dead (cancelled/expired) places are dropped.
+async function _probeWaitlistOffers(bookings) {
+  const now = Date.now();
+  const result = { probed: 0, changed: false, allocated: false };
+  const candidates = Object.keys(bookings).filter(id => {
+    const b = bookings[id];
+    if (!b || !b.waitlisted || !b.waitlist || !b.waitlist.id) return false;
+    if (now - (_offerProbeAt[b.waitlist.id] || 0) < 90000) return false;
+    if (_waitlistOfferPending(b.waitlist, now)) return true;
+    const evt = _eventCache[id];
+    const startMs = evt ? _waitlistTimeMs(evt.start_at) : NaN;
+    if (isNaN(startMs) || startMs <= now) return false;
+    if (startMs - now <= WAITLIST_OFFER_WINDOW_MS) return true;
+    // Early classes (6–9am): offers go out from 10pm the night before.
+    const h = new Date(startMs).getHours();
+    return h >= 6 && h <= 9 && startMs - now <= 11 * 3600000 && new Date(now).getHours() >= 22;
+  }).slice(0, 3);
+  result.probed = candidates.length;
+  await Promise.all(candidates.map(async id => {
+    const b = bookings[id];
+    const entryId = b.waitlist.id;
+    _offerProbeAt[entryId] = now;
+    try {
+      const res = await apiFetch(`/waitlist/${Number(entryId)}`, { retries: 0 });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (!data) return;
+      const entry = _normaliseWaitlistEntry(data.data || data.waitlist || data, id);
+      if (entry && (entry.allocatedAt || /^(allocated|booked)$/.test(entry.status))) {
+        result.allocated = true; // it's a seat now — the reload will show it (and announce)
+        return;
+      }
+      if (entry && !_isActiveWaitlistEntry(entry)) {
+        // Cancelled/expired since the list was read: drop the place.
+        if (bookings[id] === b) {
+          if (b.bookingId || (b.slots || []).length) { delete b.waitlist; b.waitlisted = false; }
+          else delete bookings[id];
+        }
+        result.changed = true;
+        return;
+      }
+      if (entry) { b.waitlist.status = entry.status; b.waitlist.expiresAt = entry.expiresAt; }
+      b.waitlist.offer = _waitlistOfferFromDetail(data, now);
+      result.changed = true;
+    } catch (e) { /* a probe is best-effort */ }
+  }));
+  return result;
+}
+
+// After a real booking is cancelled locally: keep any waitlist place the
+// entry also carried (it still exists server-side), otherwise drop the entry.
+function _dropBookingKeepPlace(eventId) {
+  const key = String(eventId);
+  const place = _myBookings[key]?.waitlist;
+  if (place) _myBookings[key] = { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: place };
+  else delete _myBookings[key];
+  _noteLocalBookingWrite();
+}
+
+// After a Discover-card cancel: resync every card button for the event from
+// state (a kept place → "Waitlisted ✓", full → "Join Waitlist"/"Full", else
+// "Book"), and put a non-card button (detail sheet proxy, headless) back to Book.
+function _afterCardCancel(btn, eventId) {
+  if (btn && !btn.closest('.class-card')) {
+    btn.textContent = 'Book';
+    btn.className = 'book-btn';
+    btn.disabled = false;
+    btn.removeAttribute('data-booking-id');
+    const studioId = btn.dataset.studioId || _eventCache[String(eventId)]?.studio_id || 0;
+    btn.onclick = (e) => { if (e) e.stopPropagation(); bookClass(eventId, btn, studioId); };
+  }
+  _syncCardButtonsForEvent(eventId);
+}
+
+// Booking ids to DELETE for an event's real seats: per-slot ids when known,
+// else the entry/explicit booking id. (slotBookings is {} — truthy — for
+// seatless entries, so it can't be used as the sole discriminator.)
+function _bookingIdsFor(booking, explicitId) {
+  const perSlot = booking?.slotBookings ? Object.values(booking.slotBookings).filter(Boolean) : [];
+  if (perSlot.length) return perSlot;
+  if (explicitId) return [explicitId];
+  return booking?.bookingId ? [booking.bookingId] : [];
+}
+
+// Field NAMES of the first entry go to diagnostics (never values) so a shape
+// change in this unofficial resource shows up in bug reports.
+function _recordWaitlistShape(kind, sample) {
+  try {
+    if (sample && window.PsycleDiag && typeof window.PsycleDiag.record === 'function') {
+      window.PsycleDiag.record(kind, sample);
+    }
+  } catch (e) { /* diagnostics must never break the flow */ }
+}
+
+let _lastWaitlistEntries = null; // last good GET /waitlists result (survives a transient failure)
+
+// Page through GET /waitlists. Resolves to normalised ACTIVE entries, or
+// null when the list could not be read at all (callers keep prior state).
+// If a later page fails the array carries `incomplete: true` — callers may
+// show what was read but must not treat absences as authoritative.
+async function fetchMyWaitlists() {
+  const all = [];
+  let readAny = false;
+  let complete = false;
+  for (let page = 1; page <= WAITLIST_MAX_PAGES; page++) {
+    let res;
+    try {
+      res = await apiFetch(`/waitlists?page=${page}`, { retries: 1 });
+    } catch (e) {
+      console.warn('[psycle] waitlists fetch failed:', e);
+      break;
+    }
+    if (!res.ok) { console.warn('[psycle] waitlists HTTP', res.status); break; }
+    const data = await res.json().catch(() => null);
+    if (!data) break;
+    readAny = true;
+    const list = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    if (page === 1 && list.length) _recordWaitlistShape('waitlist', list[0]);
+    list.forEach(raw => { const e = _normaliseWaitlistEntry(raw); if (e) all.push(e); });
+    const meta = data.meta || {};
+    const lastPage = Number(meta.last_page) || 1;
+    if (!list.length || page >= lastPage) { complete = true; break; }
+    if (page === WAITLIST_MAX_PAGES) console.warn('[psycle] waitlists truncated at', WAITLIST_MAX_PAGES, 'pages');
+  }
+  if (!readAny) return null;
+  let active = all.filter(_isActiveWaitlistEntry);
+  if (!complete) {
+    // Keep previously-known entries we couldn't re-read this pass.
+    const seen = new Set(active.map(e => e.id));
+    (_lastWaitlistEntries || []).forEach(e => { if (!seen.has(e.id)) active.push(e); });
+    active.incomplete = true;
+  }
+  _lastWaitlistEntries = active;
+  return active;
+}
+
+// Keep the offline/outage fallback in step with what the user just did.
+function _rememberLastEntry(entry) {
+  if (!entry || !entry.id) return;
+  const list = (_lastWaitlistEntries || []).filter(e => e.id !== entry.id && e.eventId !== entry.eventId);
+  list.push(entry);
+  _lastWaitlistEntries = list;
+}
+function _forgetLastEntry(eventId, entryId) {
+  if (!_lastWaitlistEntries) return;
+  _lastWaitlistEntries = _lastWaitlistEntries.filter(e => e.id !== entryId && String(e.eventId) !== String(eventId));
+}
+
+// My entry for one event straight from the server. `known:false` means the
+// server couldn't be asked (non-2xx / timeout) — that is NOT "not on it".
+async function _fetchWaitlistEntryForEvent(eventId) {
+  try {
+    const res = await apiFetch(`/waitlists/${Number(eventId)}`, { retries: 1 });
+    if (!res.ok) return { known: false, entry: null, status: res.status };
+    const data = await res.json().catch(() => null);
+    if (!data) return { known: false, entry: null, status: res.status };
+    const list = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    const entries = list.map(raw => _normaliseWaitlistEntry(raw, eventId)).filter(_isActiveWaitlistEntry);
+    return { known: true, entry: entries[0] || null, status: res.status };
+  } catch (e) {
+    return { known: false, entry: null, status: 0 };
   }
 }
 
-// Verify-first instrumentation. The waitlist payload (POST {event_id} with no
-// slots) is an UNVERIFIED assumption — the API may reject it, or silently
-// create a normal billable booking. Capture the real server response (field
-// NAMES + status only, no PII) so the next live waitlist attempt reveals the
-// true contract before we trust the badge or build multi-spot support.
-function _captureWaitlistResponse(eventId, res, data) {
-  try {
-    const body = (data && (data.data || data)) || {};
-    const fields = (body && typeof body === 'object') ? Object.keys(body) : [];
-    const info = 'event=' + eventId + ' status=' + res.status + ' ok=' + res.ok +
-      ' fields=[' + fields.join(',') + ']' +
-      ' hasBookingId=' + !!(data?.data?.id || data?.id) +
-      ' hasSeat=' + !!(body.slot || body.slots || body.seat || body.seats);
-    if (typeof pushError === 'function') pushError('[waitlist] ' + info);
-    if (window.PsycleDiag && typeof window.PsycleDiag.record === 'function') {
-      try { window.PsycleDiag.record('waitlist-response', body); } catch (e) {}
+// Re-sync every rendered Discover card button for an event with _myBookings.
+function _syncCardButtonsForEvent(eventId) {
+  const key = String(eventId);
+  document.querySelectorAll(`.class-card[data-id="${Number(eventId)}"]:not(.my-booking-card) .book-btn`).forEach(btn => {
+    const card = btn.closest('.class-card');
+    const booking = _myBookings[key];
+    if (booking) { applyBookedState(btn, Number(eventId), booking); return; }
+    const evt = _eventCache[key] || {};
+    const studioId = card?.dataset?.studioId || evt.studio_id || 0;
+    card?.classList.remove('is-booked', 'is-waitlisted');
+    btn.disabled = false;
+    btn.removeAttribute('data-booking-id');
+    if (evt.is_fully_booked && evt.is_waitlistable) {
+      btn.textContent = 'Join Waitlist';
+      btn.className = 'book-btn waitlist';
+    } else if (evt.is_fully_booked) {
+      // Full and the waitlist is closed (e.g. inside the last 30 min): as eventCard.
+      btn.textContent = 'Full';
+      btn.className = 'book-btn';
+      btn.disabled = true;
+      btn.onclick = (e) => { if (e) e.stopPropagation(); };
+      return;
+    } else {
+      btn.textContent = 'Book';
+      btn.className = 'book-btn';
     }
-    console.warn('[waitlist-diag]', info);
-  } catch (e) { /* diagnostics must never break booking */ }
+    btn.onclick = (e) => { if (e) e.stopPropagation(); bookClass(Number(eventId), btn, studioId); };
+  });
+}
+
+function _waitlistClassLine(eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (!evt) return '';
+  let when = '';
+  const d = new Date(String(evt.start_at).replace(' ', 'T'));
+  if (!isNaN(d.getTime())) {
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const h = d.getHours(), m = d.getMinutes();
+    when = `${days[d.getDay()]} ${d.getDate()}, ${h % 12 || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`;
+  }
+  return [evt._typeName, evt._instrName, when].filter(Boolean).join(' · ');
+}
+
+// Ask first, then join. Used by bookClass (Discover card, class detail sheet,
+// rebook flows) — the one consent dialog before PUT /waitlists.
+async function confirmJoinWaitlist(eventId, btn) {
+  const line = _waitlistClassLine(eventId);
+  const ok = await confirmModal({
+    title: 'Join the waitlist?',
+    body: (line ? line + ' is full. ' : 'This class is full. ') +
+      'Psycle fills freed-up spots from the waitlist automatically, first come first served — keep a credit free so you can be booked in. Close to class time they email an offer instead, which you can also accept here in My Bookings.',
+    warn: 'One waitlist place per person. Once you’re given a spot the normal 12-hour cancellation policy applies; the waitlist closes 30 minutes before class.',
+    confirmText: 'Join waitlist',
+    cancelText: 'Not now',
+  });
+  if (!ok) return false;
+  return joinWaitlist(eventId, btn);
+}
+
+// PUT /waitlists/{eventId}. Resolves true when the user holds a place afterwards.
+async function joinWaitlist(eventId, btn, opts = {}) {
+  eventId = Number(eventId);
+  const key = String(eventId);
+  btn = btn || document.createElement('button');
+  if (!navigator.onLine) {
+    btn.disabled = false;
+    btn.textContent = 'Join Waitlist';
+    toast("You're offline — join the waitlist once you're back online", 'info');
+    return false;
+  }
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '…';
+  const fail = (label, msg, type) => {
+    btn.disabled = false;
+    btn.textContent = label;
+    if (msg) toast(msg, type || 'error');
+    return false;
+  };
+  let entry = null;
+  let already = false;
+  try {
+    // retries:0 — the retry layer re-sends non-POST verbs on timeout, and a
+    // PUT that landed would come back as a confusing 422 on the re-send.
+    const res = await apiFetch(`/waitlists/${eventId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      retries: 0,
+    });
+    const data = await res.json().catch(() => ({}));
+    const message = (data && (data.message || data.error)) || '';
+    if (res.ok) {
+      entry = _waitlistEntryFromResponse(data, eventId);
+      if (data && data.waitlist) _recordWaitlistShape('waitlist-join', data.waitlist);
+    } else if (_isAlreadyOnWaitlistResponse(res.status, message)) {
+      already = true;
+    } else if (res.status === 401) {
+      return fail(origText); // session banner is shown globally
+    } else if (res.status >= 500) {
+      // The server may still have taken it — ask before calling it a failure.
+      const chk = await _fetchWaitlistEntryForEvent(eventId);
+      if (!(chk.known && chk.entry)) return fail('Failed — retry', message || "Couldn't join the waitlist");
+      entry = chk.entry;
+    } else {
+      return fail('Failed — retry', message || "Couldn't join the waitlist");
+    }
+  } catch (e) {
+    // Timeout / dropped connection: the PUT may have LANDED. Disambiguate with
+    // a lookup rather than telling the user it failed while a place (that
+    // Psycle can turn into a chargeable seat) actually exists.
+    const chk = await _fetchWaitlistEntryForEvent(eventId);
+    if (chk.known && chk.entry) {
+      entry = chk.entry;
+    } else if (chk.known) {
+      return fail('Failed — retry', e.message || "Couldn't join the waitlist");
+    } else {
+      fail('Join Waitlist', "Couldn't confirm with Psycle whether you joined — check My Bookings in a moment", 'info');
+      setTimeout(() => { try { fetchMyBookings(); } catch (err) {} }, 3000);
+      return false;
+    }
+  }
+  try {
+    // Resolve the entry id from the server when the response didn't carry it.
+    if (!entry || !entry.id) {
+      const chk = await _fetchWaitlistEntryForEvent(eventId);
+      if (chk.entry) entry = chk.entry;
+    }
+    const place = entry
+      ? { id: entry.id, status: entry.status || 'waiting', addedAt: entry.addedAt, expiresAt: entry.expiresAt }
+      : { id: null, status: 'waiting', addedAt: new Date().toISOString(), expiresAt: null };
+    const existing = _myBookings[key];
+    if (existing && (existing.bookingId || (existing.slots || []).length)) {
+      existing.waitlist = place;
+      existing.waitlisted = false;
+    } else {
+      _myBookings[key] = { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: place };
+    }
+    _noteLocalBookingWrite();
+    if (place.id) {
+      _rememberPlace(eventId, place.id);
+      _rememberLastEntry({ id: place.id, eventId, status: place.status, addedAt: place.addedAt, expiresAt: place.expiresAt, allocatedAt: null, cancelledAt: null, event: null });
+    }
+    applyBookedState(btn, eventId, _myBookings[key]);
+    _syncCardButtonsForEvent(eventId);
+    if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
+    if (!opts.quiet) showBookingConfirmation(eventId, [], { waitlist: true, already });
+    else if (already) toast("You're already on this waitlist", 'info');
+    refreshUpcomingPanel();
+    PsycleEvents.emit('waitlist:joined', eventId);
+    return true;
+  } catch (e) {
+    return fail('Failed — retry', e.message || "Couldn't join the waitlist");
+  }
+}
+
+// DELETE /waitlists/{entryId}. Resolves true when the place is gone afterwards.
+async function leaveWaitlist(eventId, btn, opts = {}) {
+  eventId = Number(eventId);
+  const key = String(eventId);
+  btn = btn || document.createElement('button');
+  const booking = _myBookings[key];
+  const hasSeat = !!(booking && (booking.bookingId || (booking.slots || []).length));
+  if (!opts.confirmed) {
+    const line = _waitlistClassLine(eventId);
+    const ok = await confirmModal({
+      title: 'Leave the waitlist?',
+      body: line ? `${line}. You'll lose your place in the queue.` : "You'll lose your place in the queue.",
+      warn: hasSeat ? '' : 'If Psycle has only just given you a spot, that booking stays — it will show in My Bookings.',
+      confirmText: 'Leave waitlist',
+      cancelText: 'Stay on it',
+      danger: true,
+    });
+    if (!ok) return false;
+  }
+  if (!navigator.onLine) {
+    toast("You're offline — leave the waitlist once you're back online", 'info');
+    return false;
+  }
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    let entryId = booking?.waitlist?.id || null;
+    if (!entryId) {
+      const chk = await _fetchWaitlistEntryForEvent(eventId);
+      if (!chk.known) {
+        // Unknown ≠ gone: keep the place, let the user retry.
+        btn.disabled = false;
+        btn.textContent = origText;
+        toast("Couldn't reach Psycle to find your waitlist place — try again in a moment", 'error');
+        return false;
+      }
+      entryId = chk.entry?.id || null;
+    }
+    // alreadyGone: the server no longer had the place (404 / "already been
+    // cancelled") — it may have been ALLOCATED into a real seat moments ago,
+    // so we resync below rather than just trusting the local delete.
+    let alreadyGone = !entryId;
+    if (entryId) {
+      const res = await apiFetch(`/waitlists/${Number(entryId)}`, { method: 'DELETE', headers: { 'Accept': 'application/json' }, retries: 1 });
+      const data = await res.json().catch(() => ({}));
+      const serverMsg = (data && (data.message || data.error)) || '';
+      // The place may have been ALLOCATED seconds ago (now a chargeable seat):
+      // say so and reload rather than reporting an error or a "left".
+      if (/allocat|already (been )?booked|is now a booking/i.test(serverMsg)) {
+        btn.disabled = false;
+        btn.textContent = origText;
+        toast('Psycle already booked you into this class from the waitlist — loading your bookings…', 'info');
+        fetchMyBookings();
+        return false;
+      }
+      const gone = res.ok ? data.success !== false : _waitlistLeaveSucceeded(false, res.status, serverMsg);
+      if (!gone) {
+        btn.disabled = false;
+        btn.textContent = origText;
+        if (res.status !== 401) {
+          toast(serverMsg || (res.status === 403
+            ? "Psycle wouldn't change this waitlist right now (it closes 30 minutes before class)"
+            : `Couldn't leave the waitlist (${res.status})`), 'error');
+        }
+        return false;
+      }
+      alreadyGone = !res.ok;
+    }
+    // Re-read: a fetch may have rebuilt the entry (even into a real seat)
+    // while the dialog / requests were in flight — never delete a seat here.
+    const cur = _myBookings[key];
+    if (cur && (cur.bookingId || (cur.slots || []).length)) {
+      delete cur.waitlist;
+      cur.waitlisted = false;
+    } else if (cur) {
+      delete _myBookings[key];
+    }
+    _noteLocalBookingWrite();
+    _forgetLastEntry(eventId, entryId);
+    // The place MEMORY is deliberately kept: the resync below rewrites it from
+    // the truth, and if Psycle allocated the place just before our DELETE the
+    // diff can still announce the seat.
+    // Discover card buttons fall back to the class's joinable state; any other
+    // button (My Bookings re-renders below, detail sheet, headless) is restored.
+    if (!btn.closest('.class-card:not(.my-booking-card)')) {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+    _syncCardButtonsForEvent(eventId);
+    refreshUpcomingPanel();
+    if (typeof haptic === 'function') { try { haptic('tap'); } catch {} }
+    toast(alreadyGone
+      ? 'That place was already gone — checking whether Psycle booked you in…'
+      : 'Left the waitlist', 'info');
+    PsycleEvents.emit('waitlist:left', eventId);
+    // Always re-read the truth: leaving is "state unknown until confirmed"
+    // (an allocation may have landed either side of the DELETE).
+    fetchMyBookings();
+    return true;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = origText;
+    // Nothing queues or retries a waitlist leave — say so plainly, and re-read
+    // in case the DELETE actually landed before the connection dropped.
+    const net = !navigator.onLine || /network|failed to fetch|load failed|timed out/i.test((e && e.message) || '');
+    toast(net
+      ? "Couldn't reach Psycle — you may still be on the waitlist. Check My Bookings and try again when you're back online."
+      : ((e && e.message) || "Couldn't leave the waitlist"), 'error');
+    setTimeout(() => { try { fetchMyBookings(); } catch (err) {} }, 1500);
+    return false;
+  }
+}
+
+// The emailed-offer flow, in-app: GET /waitlist/{id} tells us whether a spot
+// is free right now; only after an explicit confirm do we POST to take it.
+async function claimWaitlistSpot(eventId, btn) {
+  eventId = Number(eventId);
+  const key = String(eventId);
+  btn = btn || document.createElement('button');
+  const booking = _myBookings[key];
+  let entryId = booking?.waitlist?.id || null;
+  if (!navigator.onLine) { toast("You're offline — try again once you're back online", 'info'); return false; }
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '…';
+  const restore = () => { btn.disabled = false; btn.textContent = origText; };
+  try {
+    if (!entryId) {
+      const chk = await _fetchWaitlistEntryForEvent(eventId);
+      if (!chk.known) { restore(); toast("Couldn't reach Psycle — try again in a moment", 'error'); return false; }
+      entryId = chk.entry?.id || null;
+    }
+    if (!entryId) {
+      restore();
+      toast("You're no longer on this waitlist — refreshing your bookings", 'info');
+      fetchMyBookings();
+      return false;
+    }
+    const res = await apiFetch(`/waitlist/${Number(entryId)}`, { retries: 1 });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      restore();
+      if (res.status !== 401) toast(data.message || data.error || `Couldn't check the waitlist (${res.status})`, 'error');
+      return false;
+    }
+    const entry = _normaliseWaitlistEntry(data.data || data.waitlist || data, eventId);
+    _recordWaitlistShape('waitlist-offer', data.data || null);
+    if (entry && (entry.allocatedAt || /^(allocated|booked)$/.test(entry.status))) {
+      restore();
+      toast("Good news — Psycle already booked you into this class", 'success');
+      await fetchMyBookings();
+      return true;
+    }
+    if (!entry || !_isActiveWaitlistEntry(entry)) {
+      restore();
+      toast('This waitlist place is no longer active', 'info');
+      await fetchMyBookings();
+      return false;
+    }
+    // Keep the freshest status/deadline/availability for the card.
+    const offer = _waitlistOfferFromDetail(data);
+    if (booking && booking.waitlist) {
+      booking.waitlist.status = entry.status;
+      booking.waitlist.expiresAt = entry.expiresAt;
+      booking.waitlist.offer = offer;
+    }
+    const ev = entry.event || {};
+    const free = offer.free;
+    if (!offer.available) {
+      restore();
+      refreshUpcomingPanel();
+      toast(_waitlistOfferPending(entry)
+        ? 'Sorry — someone else took that spot. You’re still on the waitlist.'
+        : "No spot free yet — you're still on the waitlist", 'info');
+      return false;
+    }
+    const credits = Number(ev.required_credits);
+    const have = Number(currentUser?.stats?.credits_remaining);
+    const line = _waitlistClassLine(eventId);
+    const ok = await confirmModal({
+      title: 'Claim this spot?',
+      body: (line ? line + '. ' : '') +
+        (free ? `${free} space${free === 1 ? '' : 's'} free right now — it isn't held for you. ` : 'A space is free right now — it isn’t held for you. ') +
+        'This books you into the class' +
+        (credits > 0 ? ` and uses ${credits} credit${credits === 1 ? '' : 's'}` + (have > 0 ? ` (you have ${have})` : '') + '.' : '.'),
+      warn: "Psycle's normal 12-hour cancellation policy applies once you're booked.",
+      confirmText: 'Claim spot',
+      cancelText: 'Not now',
+    });
+    if (!ok) { restore(); return false; }
+    btn.textContent = '…';
+    let post;
+    try {
+      post = await apiFetch(`/waitlist/${Number(entryId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ confirmed: true }),
+      });
+    } catch (e) {
+      // Timeout / dropped connection AFTER the POST was sent: it may have
+      // booked a chargeable seat. Never report a plain failure — re-read
+      // (pre-marked as our own claim so the reload doesn't also announce it
+      // as a surprise allocation; undone if no seat shows up).
+      const memBefore0 = _readWaitlistPlaces();
+      _markPlaceClaimed(eventId);
+      const applied = await fetchMyBookings();
+      _syncCardButtonsForEvent(eventId);
+      const now = _myBookings[key];
+      if (now && !now.waitlisted && (now.bookingId || (now.slots || []).length)) {
+        if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
+        toast("Spot claimed — you're booked in!", 'success');
+        PsycleEvents.emit('booking:complete', eventId, now.slots || [], btn);
+        showBookingConfirmation(eventId, now.slots || []);
+        return true;
+      }
+      _writeWaitlistPlaces(memBefore0);
+      restore();
+      toast(applied === false
+        ? "Couldn't confirm with Psycle whether the spot was claimed — pull to refresh My Bookings before trying again"
+        : "Couldn't confirm with Psycle whether the spot was claimed — it isn't showing as booked; try again", 'error');
+      return false;
+    }
+    const pdata = await post.json().catch(() => ({}));
+    const pmsg = (pdata && (pdata.message || pdata.error)) || '';
+    // A 2xx can still say no (vendor page: "someone else took this space").
+    const declined = post.ok && (pdata.success === false || /someone else took|no longer available|already (been )?taken|class is full/i.test(pmsg));
+    if (!post.ok || declined) {
+      restore();
+      if (post.status !== 401) toast(pmsg || "Couldn't claim the spot", declined ? 'info' : 'error');
+      fetchMyBookings();
+      return false;
+    }
+    PsycleEvents.emit('waitlist:claimed', eventId);
+    // Pre-mark so the refetch below doesn't announce our own claim as a
+    // surprise allocation; undone if no seat materialises.
+    const memBefore = _readWaitlistPlaces();
+    _markPlaceClaimed(eventId);
+    // The seat now lives in GET /bookings; a full refresh drives calendar,
+    // widget, reminders and history off the real booking — and is the only
+    // thing we trust before telling the user they're booked.
+    const applied = await fetchMyBookings();
+    _syncCardButtonsForEvent(eventId);
+    const nowBooked = _myBookings[key];
+    if (nowBooked && !nowBooked.waitlisted) {
+      if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
+      toast("Spot claimed — you're booked in!", 'success');
+      if ((nowBooked.slots || []).length) _recordBikeHistory(eventId, nowBooked.slots);
+      PsycleEvents.emit('booking:complete', eventId, nowBooked.slots || [], btn);
+      showBookingConfirmation(eventId, nowBooked.slots || []);
+    } else {
+      // No seat yet: restore the memory so a later real allocation IS announced.
+      _writeWaitlistPlaces(memBefore);
+      restore();
+      toast(applied === false
+        ? "Psycle responded OK but the booking isn't showing yet — pull to refresh My Bookings"
+        : "Psycle responded OK but no booking is showing yet — check My Bookings shortly", 'info');
+    }
+    return true;
+  } catch (e) {
+    restore();
+    toast(e.message || "Couldn't claim the spot", 'error');
+    return false;
+  }
 }
 
 // ── Bike-preference memory ───────────────────────────────────────
@@ -1699,25 +2635,30 @@ function _usualSlotForEvent(eventId) {
   return bestCount > 0 ? bestSlot : null;
 }
 
+// Real seats only (POST /bookings). Waitlist places are a different resource —
+// see joinWaitlist(). `opts` stays in the signature because every wrapper in
+// the monkey-patch chain forwards four arguments; a legacy {waitlist:true}
+// caller is redirected rather than POSTing a body the server rejects.
 async function submitBooking(eventId, slots, btn, opts = {}) {
-  // slots: array of slot IDs, or null for no-layout booking
+  // slots: array of slot IDs (layout studios), or null for no-layout booking.
+  // opts.spaces: for studios POSITIVELY known to have no layout, the number of
+  // spaces to book — Psycle's own client sends `slots: <count>` there and the
+  // server rejects a body without slots ("Booking slot required").
+  if (opts && opts.waitlist) return joinWaitlist(eventId, btn);
   btn.disabled = true;
   btn.textContent = '…';
   try {
     const body = { event_id: eventId };
     if (slots && slots.length) body.slots = slots.map(Number);
+    else if (opts && Number(opts.spaces) > 0) body.slots = Number(opts.spaces);
     const res = await apiFetch('/bookings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    if (opts.waitlist) _captureWaitlistResponse(eventId, res, data);
     if (res.ok) {
-      const isWaitlist = !!opts.waitlist;
-      const label = isWaitlist
-        ? 'Waitlisted ✓'
-        : (slots?.length ? `${formatSlots(slotLabelForEvent(eventId), slots)} ✓` : 'Booked ✓');
+      const label = slots?.length ? `${formatSlots(slotLabelForEvent(eventId), slots)} ✓` : 'Booked ✓';
       btn.textContent = label;
       btn.className = 'book-btn booked';
       const bookingId = data?.data?.id || data?.id;
@@ -1729,21 +2670,17 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       // The API creates one booking per slot; after a fresh book we only know the
       // returned bookingId — map all slots to it (fetchMyBookings will correct later)
       slotsArr.forEach(s => { slotBookings[s] = bookingId; });
-      _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings, waitlisted: isWaitlist };
+      // A place we held on the waitlist for this class is superseded by the seat
+      // (kept attached; forgotten as a "held place" so it can't later be
+      // mistaken for a Psycle allocation).
+      const prevPlace = _myBookings[String(eventId)]?.waitlist;
+      _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings, waitlisted: false };
+      if (prevPlace) { _myBookings[String(eventId)].waitlist = prevPlace; _rememberPlace(eventId, null); }
+      _noteLocalBookingWrite();
       // Remember the booked slot(s) per studio+instructor for next time.
-      if (!isWaitlist && slotsArr.length) _recordBikeHistory(eventId, slotsArr);
-      if (isWaitlist) {
-        _markWaitlisted(eventId, _eventCache[String(eventId)]?.start_at);
-        // Safety net (payload unverified): if the server assigned an actual
-        // seat, this was a real booking, not a waitlist place — warn so the
-        // user can check (and cancel) rather than be silently committed/billed.
-        const _wb = data?.data || data || {};
-        if (_wb.slot || _wb.slots || _wb.seat || _wb.seats) {
-          toast('Heads up: this may have booked a spot, not a waitlist place — check My Bookings', 'info');
-        }
-      }
+      if (slotsArr.length) _recordBikeHistory(eventId, slotsArr);
       btn.onclick = () => confirmUnbook(bookingId || null, eventId, btn);
-      showBookingConfirmation(eventId, slotsArr, { waitlist: isWaitlist });
+      showBookingConfirmation(eventId, slotsArr);
       refreshUpcomingPanel();
       PsycleEvents.emit('booking:complete', eventId, slotsArr, btn);
     } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
@@ -1757,8 +2694,7 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       // cover the class, no credits left) — surfaces the server's reason.
       btn.textContent = 'Failed — retry';
       btn.disabled = false;
-      const _fb = opts.waitlist ? "Couldn't join the waitlist" : `Error ${res.status}`;
-      toast(data.message || data.error || _fb, 'error');
+      toast(data.message || data.error || `Error ${res.status}`, 'error');
     } else {
       btn.textContent = 'Book';
       btn.disabled = false;
@@ -1806,10 +2742,10 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
     <div class="bc-content">
       <div class="bc-check">&#10003;</div>
       <div class="bc-text">
-        <div class="bc-title">${opts.waitlist ? 'On the waitlist!' : 'Booked!'}</div>
+        <div class="bc-title">${opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist!') : 'Booked!'}</div>
         <div class="bc-detail">${escapeHTML(classLine)}</div>
         ${dateTimeStr ? `<div class="bc-detail bc-dim">${escapeHTML(dateTimeStr)}</div>` : ''}
-        ${opts.waitlist ? `<div class="bc-detail bc-dim">You'll be notified if a spot opens up</div>` : ''}
+        ${opts.waitlist ? `<div class="bc-detail bc-dim">Psycle books you in automatically if a spot frees up — keep a credit free</div>` : ''}
         ${slotStr ? `<div class="bc-slot">${slotStr}</div>` : ''}
       </div>
     </div>
@@ -1857,7 +2793,13 @@ function scrollToUpcoming() {
 function confirmModal(opts) {
   opts = opts || {};
   return new Promise(resolve => {
-    document.getElementById('psycleConfirmOverlay')?.remove();
+    // Single-instance: a dialog we replace must SETTLE (as cancelled), or the
+    // flow awaiting it hangs forever (stuck buttons, busy flags never cleared).
+    const stale = document.getElementById('psycleConfirmOverlay');
+    if (stale) {
+      if (typeof stale._psycleClose === 'function') { try { stale._psycleClose(false); } catch (e) {} }
+      stale.remove();
+    }
 
     const previouslyFocused = document.activeElement;
 
@@ -1881,7 +2823,10 @@ function confirmModal(opts) {
     // Light haptic when the dialog appears (native bridge on iOS, noop on web)
     if (typeof haptic === 'function') { try { haptic('tap'); } catch {} }
 
+    let settled = false;
     const close = result => {
+      if (settled) return;
+      settled = true;
       overlay.classList.remove('show');
       setTimeout(() => overlay.remove(), 180);
       document.removeEventListener('keydown', onKey);
@@ -1926,6 +2871,7 @@ function confirmModal(opts) {
     overlay.querySelector('.confirm-btn-cancel').onclick = () => close(false);
     overlay.querySelector('.confirm-btn-primary, .confirm-btn-danger').onclick = () => close(true);
     overlay.onclick = e => { if (e.target === overlay) close(false); };
+    overlay._psycleClose = close; // lets a replacing dialog cancel this one cleanly
     document.addEventListener('keydown', onKey);
 
     // Focus the primary action so Enter confirms and screen readers land on it
@@ -1967,15 +2913,8 @@ function describeCancelError(failedResponse, data, err) {
  * likely charges. Returns Promise<boolean>.
  */
 function confirmCancelWithPolicy(eventId, base) {
-  // Leaving a waitlist isn't a late cancel — no fee warning needed.
-  if (_myBookings[String(eventId)]?.waitlisted) {
-    return confirmModal({
-      title: 'Leave the waitlist?',
-      confirmText: 'Leave waitlist',
-      cancelText: 'Stay on it',
-      danger: true,
-    });
-  }
+  // (Waitlist places never reach this gate: confirmUnbook/upcomingCancel hand
+  // them to leaveWaitlist, which owns its own dialog.)
   const evt = _eventCache[String(eventId)];
   const msUntil = evt ? (new Date(evt.start_at).getTime() - Date.now()) : Infinity;
   const hoursUntil = msUntil / 3600000;
@@ -2015,7 +2954,7 @@ async function cancelBikeSlot(slotId, eventId) {
       if (booking) {
         booking.slots = booking.slots.filter(s => s !== Number(slotId));
         if (booking.slotBookings) delete booking.slotBookings[slotId];
-        if (booking.slots.length === 0) delete _myBookings[String(eventId)];
+        if (booking.slots.length === 0) _dropBookingKeepPlace(eventId);
       }
       // Update the slot visually: mine → available
       const g = document.querySelector(`#bikeSvg .bike-slot[data-slot="${slotId}"]`);
@@ -2023,19 +2962,9 @@ async function cancelBikeSlot(slotId, eventId) {
         g.classList.replace('mine', 'available');
         g.setAttribute('onclick', `selectBike(${slotId})`);
       }
-      // Update card button
-      const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
-      if (card) {
-        const btn = card.querySelector('.book-btn');
-        if (btn) {
-          const studioId = card.dataset.studioId || 0;
-          btn.textContent = 'Book';
-          btn.className = 'book-btn';
-          btn.disabled = false;
-          btn.onclick = () => bookClass(eventId, btn, studioId);
-        }
-        card.classList.remove('is-booked');
-      }
+      // Update card button(s) from state (remaining seats / kept place / none)
+      _noteLocalBookingWrite();
+      _syncCardButtonsForEvent(eventId);
       const remaining = booking?.slots?.length || 0;
       document.getElementById('modalHint').textContent = remaining
         ? `${_sl3} ${slotId} cancelled. Select another or close.`
@@ -2054,27 +2983,22 @@ async function cancelBikeSlot(slotId, eventId) {
 }
 
 async function confirmUnbook(bookingId, eventId, btn) {
+  // A waitlist place is not a booking: it lives at /waitlists/{entryId} and
+  // must never reach the DELETE /bookings paths below (a 404 there reads as
+  // "cancelled" while the place survives server-side).
+  if (_myBookings[String(eventId)]?.waitlisted) return leaveWaitlist(eventId, btn);
   if (!(await confirmCancelWithPolicy(eventId, 'Cancel this booking?'))) return;
   btn.disabled = true;
   btn.textContent = '…';
   const booking = _myBookings[String(eventId)];
 
-  const bookingIds = booking?.slotBookings
-    ? Object.values(booking.slotBookings)
-    : (bookingId ? [bookingId] : (booking?.bookingId ? [booking.bookingId] : []));
+  const bookingIds = _bookingIdsFor(booking, bookingId);
 
   // Offline: queue the cancel and optimistically clear local state.
   if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
     queueOfflineCancel(eventId, bookingIds);
-    delete _myBookings[String(eventId)];
-    _unmarkWaitlisted(eventId);
-    btn.textContent = 'Book';
-    btn.className = 'book-btn';
-    btn.disabled = false;
-    btn.removeAttribute('data-booking-id');
-    const studioId = btn.dataset.studioId || btn.closest('.class-card')?.dataset?.studioId || 0;
-    btn.onclick = () => bookClass(eventId, btn, studioId);
-    btn.closest('.class-card')?.classList.remove('is-booked');
+    _dropBookingKeepPlace(eventId);
+    _afterCardCancel(btn, eventId);
     refreshUpcomingPanel();
     toast("You're offline — cancel queued", 'info');
     PsycleEvents.emit('booking:cancelled', eventId);
@@ -2091,16 +3015,8 @@ async function confirmUnbook(bookingId, eventId, btn) {
     const isOk = r => r.ok || r.status === 204 || r.status === 200 || r.status === 404;
     const allOk = results.every(isOk);
     if (allOk) {
-      delete _myBookings[String(eventId)];
-      _unmarkWaitlisted(eventId);
-      btn.textContent = 'Book';
-      btn.className = 'book-btn';
-      btn.disabled = false;
-      btn.removeAttribute('data-booking-id');
-      // Restore book onclick
-      const studioId = btn.dataset.studioId || btn.closest('.class-card')?.dataset?.studioId || 0;
-      btn.onclick = () => bookClass(eventId, btn, studioId);
-      btn.closest('.class-card')?.classList.remove('is-booked');
+      _dropBookingKeepPlace(eventId);
+      _afterCardCancel(btn, eventId);
       refreshUpcomingPanel();
       toast('Booking cancelled', 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
@@ -2121,13 +3037,8 @@ async function confirmUnbook(bookingId, eventId, btn) {
     // Network failure after the confirm — queue instead of losing the intent.
     if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
       queueOfflineCancel(eventId, bookingIds);
-      delete _myBookings[String(eventId)];
-      btn.textContent = 'Book';
-      btn.className = 'book-btn';
-      btn.disabled = false;
-      const studioId = btn.dataset.studioId || btn.closest('.class-card')?.dataset?.studioId || 0;
-      btn.onclick = () => bookClass(eventId, btn, studioId);
-      btn.closest('.class-card')?.classList.remove('is-booked');
+      _dropBookingKeepPlace(eventId);
+      _afterCardCancel(btn, eventId);
       refreshUpcomingPanel();
       toast("You're offline — cancel queued", 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
@@ -2141,18 +3052,35 @@ async function confirmUnbook(bookingId, eventId, btn) {
 // ─────────────────────────────────────────────────────────────────
 
 function applyBookedState(btn, eventId, booking) {
+  const slots = booking.slots || [];
   const slotLabel = booking.waitlisted
     ? 'Waitlisted ✓'
-    : (booking.slots.length ? `${formatSlots(slotLabelForEvent(eventId), booking.slots)} ✓` : 'Booked ✓');
+    : (slots.length ? `${formatSlots(slotLabelForEvent(eventId), slots)} ✓` : 'Booked ✓');
   btn.textContent = slotLabel;
   btn.className = 'book-btn booked';
   btn.disabled = false;
-  btn.dataset.bookingId = booking.bookingId;
+  if (booking.bookingId) btn.dataset.bookingId = booking.bookingId;
+  else btn.removeAttribute('data-booking-id');
   btn.dataset.eventId = eventId;
-  btn.onclick = () => confirmUnbook(booking.bookingId, eventId, btn);
-  // Apply green card highlight
+  // Same routing as eventCard: a place is managed at /waitlists; a seat at a
+  // layout studio re-opens the picker (view/cancel one seat, add a spot);
+  // a seatless (no-layout) booking cancels directly.
+  const card0 = btn.closest('.class-card');
+  const studioId = card0?.dataset?.studioId || _eventCache[String(eventId)]?.studio_id || 0;
+  const hasLayout = !!(_studioMap[studioId]?.has_layout);
+  btn.onclick = (e) => {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    const cur = _myBookings[String(eventId)] || booking;
+    if (cur.waitlisted) return leaveWaitlist(eventId, btn);
+    if (hasLayout) return bookClass(eventId, btn, studioId);
+    return confirmUnbook(cur.bookingId, eventId, btn);
+  };
+  // Card highlight: green for a seat, waitlist tint for a place.
   const card = btn.closest('.class-card');
-  if (card) card.classList.add('is-booked');
+  if (card) {
+    card.classList.toggle('is-booked', !booking.waitlisted);
+    card.classList.toggle('is-waitlisted', !!booking.waitlisted);
+  }
 }
 
 function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
@@ -2191,17 +3119,19 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   }
 
   let bookLabel, bookCls, bookDisabled, bookOnclick;
-  if (myBooking) {
-    bookLabel = myBooking.waitlisted
-      ? 'Waitlisted ✓'
-      : (myBooking.slots.length ? `${formatSlots(slotLabel(type?.name), myBooking.slots)} ✓` : 'Booked ✓');
+  if (myBooking && myBooking.waitlisted) {
+    // A waitlist place (no seat): tapping manages the place, never the picker.
+    bookLabel = 'Waitlisted ✓'; bookCls = 'book-btn booked'; bookDisabled = '';
+    bookOnclick = `leaveWaitlist(${Number(evt.id)}, this)`;
+  } else if (myBooking) {
+    bookLabel = (myBooking.slots || []).length ? `${formatSlots(slotLabel(type?.name), myBooking.slots)} ✓` : 'Booked ✓';
     bookCls = 'book-btn booked';
     bookDisabled = '';
     // Open picker to show/cancel seats; fall back to direct cancel if no layout
     const hasLayout = !!(_studioMap[evt.studio_id]?.has_layout);
     bookOnclick = hasLayout
       ? `bookClass(${evt.id}, this, ${evt.studio_id})`
-      : `confirmUnbook(${myBooking.bookingId}, ${evt.id}, this)`;
+      : `confirmUnbook(${Number(myBooking.bookingId) || 'null'}, ${evt.id}, this)`;
   } else if (isFull) {
     bookLabel = 'Full'; bookCls = 'book-btn'; bookDisabled = 'disabled'; bookOnclick = '';
   } else if (isWaitlist) {
@@ -2224,7 +3154,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   }
   const onlineMeta = evt.is_live_stream ? '<div class="cc-meta"><span class="badge highlight">Online</span></div>' : '';
 
-  return `<div class="class-card${myBooking ? ' is-booked' : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
+  return `<div class="class-card${myBooking ? (myBooking.waitlisted ? ' is-waitlisted' : ' is-booked') : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
     onclick="openClassDetail(${evt.id})" style="cursor:pointer">
     <div class="cc-time">
       <span class="cc-time-h">${h12}:${mins}<span class="cc-ampm">${ampm}</span></span>
@@ -2239,7 +3169,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     </div>
     <div class="cc-action">
       <button class="${bookCls}" ${bookDisabled} data-event-id="${evt.id}" data-studio-id="${evt.studio_id}"
-        ${myBooking ? `data-booking-id="${myBooking.bookingId}"` : ''}
+        ${myBooking && myBooking.bookingId ? `data-booking-id="${Number(myBooking.bookingId) || ''}"` : ''}
         onclick="event.stopPropagation();${bookOnclick}">${bookLabel}</button>
     </div>
   </div>`;
@@ -2798,9 +3728,13 @@ function renderMyBookings() {
     .sort((a, b) => a.evt.start_at.localeCompare(b.evt.start_at));
 
   const upcoming = all.filter(({ evt }) => new Date(evt.start_at) > now);
-  const past = all.filter(({ evt }) => new Date(evt.start_at) <= now);
+  // A waitlist place that never became a seat is not an attended class.
+  const past = all.filter(({ evt, booking }) => new Date(evt.start_at) <= now && !booking.waitlisted);
 
-  countEl.textContent = upcoming.length;
+  // Header count = classes you're actually in; places are called out separately.
+  const upcomingSeats = upcoming.filter(({ booking }) => !booking.waitlisted).length;
+  const upcomingPlaces = upcoming.length - upcomingSeats;
+  countEl.textContent = upcomingPlaces ? `${upcomingSeats} + ${upcomingPlaces} waitlist` : String(upcomingSeats);
 
   // Empty tab: a real destination, not a blank page. Signed out → the
   // one action that matters (sign in); signed in → go find a class.
@@ -2809,7 +3743,7 @@ function renderMyBookings() {
   let histCount = 0;
   try { histCount = JSON.parse(localStorage.getItem('psycle_class_history') || '[]').length; } catch {}
 
-  if (all.length === 0) {
+  if (upcoming.length === 0 && past.length === 0) {
     panel.style.display = 'none';
     if (histBtn) histBtn.style.display = (currentUser && histCount > 0) ? '' : 'none';
     if (emptyEl) {
@@ -2975,11 +3909,12 @@ function renderMyBookings() {
       html += `<div class="mb-period-section">`;
       html += `<div class="mb-period-bar mb-period-bar-next" onclick="this.parentElement.classList.toggle('collapsed')">`;
       html += `<div class="mb-period-bar-text">`;
+      const nextBooked = nextPeriodItems.filter(item => !item.booking.waitlisted).length;
       html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
-      html += `<span class="sub-bar-count">${nextPeriodItems.length}/${nextMax > 0 ? nextMax : '∞'} classes · ${nextLabel}</span>`;
+      html += `<span class="sub-bar-count">${nextBooked}/${nextMax > 0 ? nextMax : '∞'} classes · ${nextLabel}</span>`;
       html += `</div>`;
       if (nextMax > 0) {
-        const nextPct = Math.round((nextPeriodItems.length / nextMax) * 100);
+        const nextPct = Math.round((nextBooked / nextMax) * 100);
         html += `<div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(nextPct, 100)}%"></div></div>`;
       }
       html += `<span class="mb-period-chevron">▼</span>`;
@@ -3003,13 +3938,20 @@ function renderMyBookings() {
       const studioName = evt._studioName || '';
       const eventPast = dt <= now;
 
-      let badges = `<span class="badge">${evt.duration}min</span>`;
-      if (booking.waitlisted) badges += `<span class="badge waitlist">Waitlisted</span>`;
-      if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
-      if (eventPast) badges += `<span class="badge" style="background:#1a1a1a;color:#555">Attended</span>`;
+      const slots = booking.slots || [];
+      const isPlace = !!booking.waitlisted;              // waitlist place, no seat
+      const place = booking.waitlist || null;            // {id,status,expiresAt,offer?} when on the waitlist
+      const spotFree = !!(place && place.offer && place.offer.available);   // a probe saw a claimable spot
+      const offerOpen = !!place && (spotFree || _waitlistOfferPending(place, now.getTime()));
 
-      // Countdown badge for the next 2 upcoming classes
-      if (!eventPast && _countdownShown < 2) {
+      let badges = `<span class="badge">${evt.duration}min</span>`;
+      if (isPlace) badges += `<span class="badge waitlist">${offerOpen ? (spotFree ? 'Spot available' : 'Spot offered') : 'Waitlisted'}</span>`;
+      if (booking.fromWaitlist && !isPlace) badges += `<span class="badge waitlist">From waitlist</span>`;
+      if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
+      if (eventPast && !isPlace) badges += `<span class="badge attended">Attended</span>`;
+
+      // Countdown badge for the next 2 upcoming classes you hold a seat in
+      if (!eventPast && !isPlace && _countdownShown < 2) {
         const cdText = getCountdownText(dt, now);
         if (cdText) {
           badges += `<span class="mb-countdown">${cdText}</span>`;
@@ -3019,23 +3961,53 @@ function renderMyBookings() {
 
       // Seat chips + cancel
       let seatHtml = '';
-      if (booking.slots.length > 0) {
+      if (slots.length > 0) {
         const _slUp = slotLabelForEvent(evtId);
-        const chips = booking.slots.map(slot => {
+        const chips = slots.map(slot => {
           if (eventPast) return `<span class="up-seat-chip" style="opacity:0.5">${_slUp} ${slot}</span>`;
           return `<span class="up-seat-chip">${_slUp} ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel ${_slUp} ${slot}">&times;</button></span>`;
         }).join('');
         seatHtml = `<div class="up-seats" style="margin-top:8px">${chips}`;
-        if (!eventPast && booking.slots.length > 1) {
+        if (!eventPast && slots.length > 1) {
           seatHtml += `<button class="up-cancel-all" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">Cancel All</button>`;
         }
         seatHtml += `</div>`;
       }
 
-      // Cancel button for no-slot bookings
+      // Waitlist status line (place only, or a place held on top of a seat)
+      let placeHtml = '';
+      if (place && !eventPast) {
+        let statusText;
+        if (offerOpen) {
+          let by = '';
+          if (place.expiresAt) {
+            const ex = new Date(_waitlistTimeMs(place.expiresAt));
+            if (!isNaN(ex.getTime())) by = ` — accept by ${ex.getHours() % 12 || 12}:${String(ex.getMinutes()).padStart(2, '0')}${ex.getHours() >= 12 ? 'pm' : 'am'}`;
+          }
+          statusText = spotFree
+            ? `A spot is free right now${by} — it isn't held for you, claim it before someone else does`
+            : `A spot has opened up${by}`;
+        } else if (isPlace) {
+          statusText = 'On the waitlist · Psycle books you in automatically if a spot frees up (keep a credit free)';
+        } else {
+          statusText = 'You also hold a waitlist place for this class';
+        }
+        placeHtml = `<div class="mb-waitlist-status${offerOpen ? ' is-offer' : ''}">${escapeHTML(statusText)}</div>`;
+        if (!isPlace) {
+          placeHtml += `<div class="booking-actions"><button class="booking-action-btn" onclick="event.stopPropagation();leaveWaitlist(${evtId}, this)" title="Give up the extra waitlist place">Leave waitlist</button></div>`;
+        }
+      }
+
+      // Primary button for seatless entries: Cancel (no-layout seat) / Leave or Claim (place)
       let cancelBtn = '';
-      if (!eventPast && booking.slots.length === 0) {
-        cancelBtn = `<button class="book-btn booked" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)" style="margin-top:10px;width:100%">${booking.waitlisted ? 'Leave waitlist' : 'Cancel booking'}</button>`;
+      if (!eventPast && slots.length === 0) {
+        if (isPlace && offerOpen) {
+          cancelBtn = `<button class="book-btn mb-primary-btn" onclick="event.stopPropagation();claimWaitlistSpot(${evtId}, this)">Claim spot</button>`;
+        } else if (isPlace) {
+          cancelBtn = `<button class="book-btn booked mb-primary-btn" onclick="event.stopPropagation();leaveWaitlist(${evtId}, this)">Leave waitlist</button>`;
+        } else {
+          cancelBtn = `<button class="book-btn booked mb-primary-btn" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">Cancel booking</button>`;
+        }
       }
 
       // Action buttons (upcoming only)
@@ -3046,14 +4018,23 @@ function renderMyBookings() {
 
         rebookBtn = `<div class="booking-actions">`;
 
-        // Add a spot — opens bike picker to book an additional slot
-        if (booking.slots.length < 2) {
-          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();bookClass(${evtId}, this, ${evt.studio_id})" title="Add another spot">+ Add spot</button>`;
-        }
+        if (isPlace) {
+          // A place has no seat to add/change. Offer the other waitlist action:
+          // check whether a spot can be claimed right now, or leave when an
+          // offer is showing (Claim is then the primary button).
+          rebookBtn += offerOpen
+            ? `<button class="booking-action-btn" onclick="event.stopPropagation();leaveWaitlist(${evtId}, this)" title="Give up your waitlist place">Leave waitlist</button>`
+            : `<button class="booking-action-btn" onclick="event.stopPropagation();claimWaitlistSpot(${evtId}, this)" title="Ask Psycle whether a spot is free to claim right now">Check for a spot</button>`;
+        } else {
+          // Add a spot — opens bike picker to book an additional slot
+          if (slots.length < 2) {
+            rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();bookClass(${evtId}, this, ${evt.studio_id})" title="Add another spot">+ Add spot</button>`;
+          }
 
-        // Change spot — only if >12h away and class not full
-        if (canChange && booking.slots.length > 0) {
-          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();changeSpot(${evtId})" title="Change to a different spot">Change spot</button>`;
+          // Change spot — only if >12h away and class not full
+          if (canChange && slots.length > 0) {
+            rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();changeSpot(${evtId})" title="Change to a different spot">Change spot</button>`;
+          }
         }
 
         rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
@@ -3063,7 +4044,7 @@ function renderMyBookings() {
         rebookBtn += `</div>`;
       }
 
-      html += `<div class="class-card is-booked my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
+      html += `<div class="class-card ${isPlace ? 'is-waitlisted' : 'is-booked'} my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
         onclick="scrollToClass(${evtId}, event)" style="cursor:pointer" title="Jump to class in search results">
         <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
         <div class="class-info">
@@ -3072,6 +4053,7 @@ function renderMyBookings() {
           <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
           <div class="class-meta">${badges}</div>
           ${seatHtml}
+          ${placeHtml}
           ${cancelBtn}
           ${rebookBtn}
         </div>
@@ -3085,8 +4067,8 @@ function renderMyBookings() {
     html += `</div></div>`; // close mb-period-body + mb-period-section
   }
 
-  // Calendar sync actions (only when bookings exist)
-  if (upcoming.length > 0 && typeof renderCalendarActions === 'function') {
+  // Calendar sync actions (only when real seats exist — places aren't exported)
+  if (upcomingSeats > 0 && typeof renderCalendarActions === 'function') {
     html += renderCalendarActions();
   }
 
@@ -3602,31 +4584,20 @@ window.shareClass = function(eventId) {
 async function upcomingCancel(eventId, btn) {
   const booking = _myBookings[String(eventId)];
   if (!booking) return;
+  // Waitlist places are left via /waitlists — never DELETE /bookings (a 404
+  // there would read as "cancelled" while the place survives server-side).
+  if (booking.waitlisted) return leaveWaitlist(eventId, btn);
   if (!(await confirmCancelWithPolicy(eventId, 'Cancel this booking?'))) return;
   btn.disabled = true;
   btn.textContent = '…';
 
-  const bookingIds = booking.slotBookings
-    ? Object.values(booking.slotBookings)
-    : (booking.bookingId ? [booking.bookingId] : []);
+  const bookingIds = _bookingIdsFor(booking);
 
   // Offline: queue + optimistic.
   if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
     queueOfflineCancel(eventId, bookingIds);
-    delete _myBookings[String(eventId)];
-    _unmarkWaitlisted(eventId);
-    const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
-    if (card) {
-      card.classList.remove('is-booked');
-      const cardBtn = card.querySelector('.book-btn');
-      if (cardBtn) {
-        cardBtn.textContent = 'Book';
-        cardBtn.className = 'book-btn';
-        cardBtn.disabled = false;
-        const studioId = card.dataset.studioId || 0;
-        cardBtn.onclick = () => bookClass(eventId, cardBtn, studioId);
-      }
-    }
+    _dropBookingKeepPlace(eventId);
+    _syncCardButtonsForEvent(eventId);
     refreshUpcomingPanel();
     toast("You're offline — cancel queued", 'info');
     PsycleEvents.emit('booking:cancelled', eventId);
@@ -3644,21 +4615,9 @@ async function upcomingCancel(eventId, btn) {
     const isOk = r => r.ok || r.status === 204 || r.status === 200 || r.status === 404;
     const allOk = results.every(isOk);
     if (allOk) {
-      delete _myBookings[String(eventId)];
-      _unmarkWaitlisted(eventId);
-      // Also update any rendered card
-      const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
-      if (card) {
-        card.classList.remove('is-booked');
-        const cardBtn = card.querySelector('.book-btn');
-        if (cardBtn) {
-          cardBtn.textContent = 'Book';
-          cardBtn.className = 'book-btn';
-          cardBtn.disabled = false;
-          const studioId = card.dataset.studioId || 0;
-          cardBtn.onclick = () => bookClass(eventId, cardBtn, studioId);
-        }
-      }
+      _dropBookingKeepPlace(eventId);
+      // Also update any rendered search card
+      _syncCardButtonsForEvent(eventId);
       refreshUpcomingPanel();
       toast('Booking cancelled', 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
@@ -3675,8 +4634,8 @@ async function upcomingCancel(eventId, btn) {
   } catch (e) {
     if (!navigator.onLine && typeof queueOfflineCancel === 'function') {
       queueOfflineCancel(eventId, bookingIds);
-      delete _myBookings[String(eventId)];
-      _unmarkWaitlisted(eventId);
+      _dropBookingKeepPlace(eventId);
+      _syncCardButtonsForEvent(eventId);
       refreshUpcomingPanel();
       toast("You're offline — cancel queued", 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
@@ -3705,28 +4664,10 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
       // Remove this slot from local state
       booking.slots = booking.slots.filter(s => s !== Number(slotId));
       if (booking.slotBookings) delete booking.slotBookings[slotId];
-      if (booking.slots.length === 0) {
-        delete _myBookings[String(eventId)];
-      }
+      if (booking.slots.length === 0) _dropBookingKeepPlace(eventId);
+      _noteLocalBookingWrite();
       // Update the corresponding class card in results if rendered
-      const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
-      if (card) {
-        const cardBtn = card.querySelector('.book-btn');
-        if (_myBookings[String(eventId)] && _myBookings[String(eventId)].slots.length > 0) {
-          // Still has remaining seats — update the label
-          if (cardBtn) applyBookedState(cardBtn, Number(eventId), _myBookings[String(eventId)]);
-        } else {
-          // No seats left — revert card to unbooked state
-          card.classList.remove('is-booked');
-          if (cardBtn) {
-            cardBtn.textContent = 'Book';
-            cardBtn.className = 'book-btn';
-            cardBtn.disabled = false;
-            const studioId = card.dataset.studioId || 0;
-            cardBtn.onclick = () => bookClass(eventId, cardBtn, studioId);
-          }
-        }
-      }
+      _syncCardButtonsForEvent(eventId);
       refreshUpcomingPanel();
       toast(`${_sl4} ${slotId} cancelled`, 'info');
       PsycleEvents.emit('seat:cancelled', eventId, slotId);
@@ -3793,14 +4734,21 @@ window.openClassDetail = function (eventId) {
 
   // Booking state
   const myBooking = _myBookings[String(eventId)];
+  const safeEventId = Number(eventId) || 0;
+  const safeStudioId = Number(evt.studio_id) || 0;
   let bookBtnHtml;
-  if (myBooking) {
-    const bookedLabel = myBooking.slots.length ? formatSlots(slotLabelForEvent(eventId), myBooking.slots) + ' ✓' : 'Booked ✓';
+  if (myBooking && myBooking.waitlisted) {
+    // A waitlist place: manage it directly (no Discover card needed in the DOM).
+    bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();leaveWaitlist(' + safeEventId + ', null);">Waitlisted ✓</button>';
+  } else if (myBooking) {
+    const bookedLabel = (myBooking.slots || []).length ? formatSlots(slotLabelForEvent(eventId), myBooking.slots) + ' ✓' : 'Booked ✓';
     bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">' + escapeHTML(bookedLabel) + '</button>';
   } else if (evt.is_fully_booked && !evt.is_waitlistable) {
     bookBtnHtml = '<button class="cds-book-btn" disabled>Full</button>';
   } else if (evt.is_fully_booked && evt.is_waitlistable) {
-    bookBtnHtml = '<button class="cds-book-btn waitlist" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">Join Waitlist</button>';
+    // Prefer the rendered card button (keeps its label in sync); otherwise
+    // join directly with a detached button.
+    bookBtnHtml = '<button class="cds-book-btn waitlist" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.class-card:not(.my-booking-card) .book-btn[data-event-id=\\x22' + safeEventId + '\\x22]\');if(b){b.click();}else{bookClass(' + safeEventId + ', document.createElement(\'button\'), ' + safeStudioId + ');}">Join Waitlist</button>';
   } else {
     bookBtnHtml = '<button class="cds-book-btn" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">Book</button>';
   }
@@ -3937,9 +4885,10 @@ async function _bookEventHeadless(eventId, studioId) {
 
     const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
     if (noSeatsLeft) {
+      if (_myBookings[String(eventId)]?.waitlisted) return 'skipped'; // already hold a place
       if (!isWaitlistable) return 'failed';
-      await submitBooking(eventId, null, btn, { waitlist: true });
-      return btn.classList.contains('booked') ? 'waitlisted' : 'failed';
+      const joined = await joinWaitlist(eventId, btn, { quiet: true });
+      return joined ? 'waitlisted' : 'failed';
     }
 
     if (hasLayout) {
@@ -3950,7 +4899,7 @@ async function _bookEventHeadless(eventId, studioId) {
       if (pick == null) return 'failed';
       await submitBooking(eventId, [pick], btn);
     } else {
-      await submitBooking(eventId, null, btn);
+      await submitBooking(eventId, null, btn, studio && studio.has_layout === false ? { spaces: 1 } : {});
     }
     return btn.classList.contains('booked') ? 'booked' : 'failed';
   } catch (e) {

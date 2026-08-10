@@ -163,6 +163,13 @@ declare global {
   function shareClass(...args: any[]): any;
   function showBikePicker(...args: any[]): any;
 
+  // Waitlists (app.js — separate /waitlists resource; places live on _myBookings entries)
+  function fetchMyWaitlists(): Promise<any[] | null>;
+  function confirmJoinWaitlist(eventId: any, btn?: any): Promise<boolean>;
+  function joinWaitlist(eventId: any, btn?: any, opts?: any): Promise<boolean>;
+  function leaveWaitlist(eventId: any, btn?: any, opts?: any): Promise<boolean>;
+  function claimWaitlistSpot(eventId: any, btn?: any): Promise<boolean>;
+
   // Modals / detail sheets (app.js, features.js, settings.js, diagnostic.js)
   function openClassDetail(...args: any[]): any;
   function openMapForBooking(...args: any[]): any;

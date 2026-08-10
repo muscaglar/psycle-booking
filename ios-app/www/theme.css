@@ -1082,10 +1082,7 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: #f5b3bf;
 }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .book-btn.waitlist {
-  background: #fef9e7;
-  color: #9a7a0a;
-}
+/* .book-btn.waitlist is fully tokenised (--badge-waitlist-*), no per-theme override needed. */
 
 .fav-btn {
   color: #f5a623;

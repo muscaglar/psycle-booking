@@ -74,11 +74,12 @@
     var cache = _eventCache || {};
     var now = new Date();
 
-    // Find next upcoming class
+    // Find next upcoming class you hold a seat in (waitlist places don't count)
     var next = null;
     var nextEvtId = null;
     Object.entries(bookings).forEach(function (entry) {
       var evtId = entry[0];
+      if (entry[1] && entry[1].waitlisted) return;
       var evt = cache[evtId];
       if (!evt) return;
       var dt = new Date(evt.start_at);

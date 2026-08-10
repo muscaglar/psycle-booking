@@ -17,9 +17,12 @@
  * (window._psycleClassStartMs) — the DST math is asserted here with the
  * process pinned to a NON-UK zone.
  *
- * We deliberately do NOT load app.js / tabs.js / etc — those need a full DOM.
- * Only these modules export pure-ish, testable logic that we can drive
- * with a thin shim.
+ * We deliberately do NOT load app.js / tabs.js / etc wholesale — those need a
+ * full DOM. The one exception: js/app.js's DOM-free waitlist helpers, which
+ * live between the `// ── waitlist:pure:start` / `// ── waitlist:pure:end`
+ * markers; that block alone is sliced out and vm-evaluated below (once bare,
+ * once with a `window` carrying the bridge's London resolver). Keep it free
+ * of document/window state and app globals or this runner crashes.
  *
  * Exit code is 1 if any assertion fails, 0 otherwise.
  */
@@ -489,6 +492,150 @@ async function run() {
     'on a non-UK device (TZ=America/New_York) the result differs from a device-local parse — the bug this guards');
   ok(Number.isNaN(classStartMs('not a date')), 'unparseable input → NaN');
   ok(Number.isNaN(classStartMs('')) && Number.isNaN(classStartMs(null)), 'empty/null → NaN');
+
+  // ── Waitlist pure helpers (js/app.js) ────────────────────────────────────
+  // app.js needs a full DOM, so only its DOM-free waitlist block (delimited by
+  // the waitlist:pure:start/end markers) is evaluated here. These helpers
+  // encode the live-verified /waitlists contract: entry normalisation, the
+  // "one place per class / real booking wins" merge, and the response
+  // predicates for join (422 already-on) and leave (500 already-cancelled).
+  section('Waitlist pure helpers (js/app.js waitlist:pure block)');
+  const appSrc = fs.readFileSync(path.join(JS_DIR, 'app.js'), 'utf8');
+  const startMark = appSrc.indexOf('// ── waitlist:pure:start');
+  const endMark = appSrc.indexOf('// ── waitlist:pure:end');
+  ok(startMark !== -1 && endMark > startMark, 'app.js carries the waitlist:pure:start/end markers');
+  const wl = {};
+  vm.createContext(wl);
+  vm.runInContext(appSrc.slice(startMark, endMark), wl, { filename: 'app.js[waitlist:pure]' });
+  ok(typeof wl._normaliseWaitlistEntry === 'function' && typeof wl._mergeWaitlistsIntoBookings === 'function',
+    'the pure block defines _normaliseWaitlistEntry and _mergeWaitlistsIntoBookings');
+
+  // Shapes captured live from GET /waitlists (2026-08): nested event, no flat event_id.
+  const liveEntry = {
+    id: 295302, customer: { id: 1 }, status: 'waiting',
+    added_at: '2026-08-08T21:51:55.000000Z', expires_at: null, cancelled_at: null, allocated_at: null,
+    event: {
+      id: 212203, start_at: '2026-08-12 07:30:00', duration: 45, duration_in_minutes: 1, required_credits: 1,
+      is_class_full: true, is_waitlistable: true, available_slot_count: 0, available_slots: [],
+      event_type: { id: 2240, name: 'RIDE: 45' }, instructor: { id: 141, full_name: 'Aaron' },
+      studio: { id: 160, name: 'Ride Studio', has_layout: true, location: { id: 1, name: 'Psycle Oxford Circus', address: '76 Mortimer St' } },
+    },
+  };
+  const n = wl._normaliseWaitlistEntry(liveEntry);
+  eq([n.id, n.eventId, n.status, n.expiresAt, n.allocatedAt, n.cancelledAt], [295302, 212203, 'waiting', null, null, null],
+    'normalise: id / event.id / status / null timestamps from the live GET shape');
+  eq(wl._normaliseWaitlistEntry({ id: '77', event_id: '9001', status: 'WAITING' }).eventId, 9001, 'normalise: flat event_id (string) is accepted and numbered');
+  eq(wl._normaliseWaitlistEntry({ id: 295434, added_at: 'x' }, 212225).eventId, 212225,
+    'normalise: the minimal PUT response object takes the fallback event id');
+  eq(wl._normaliseWaitlistEntry({ event: { id: 5 } }), null, 'normalise: no entry id → null');
+  eq(wl._normaliseWaitlistEntry(null), null, 'normalise: null → null');
+
+  ok(wl._isActiveWaitlistEntry(n), 'active: a plain waiting entry holds a place');
+  ok(!wl._isActiveWaitlistEntry(Object.assign({}, n, { cancelledAt: '2026-08-10 12:44:36' })), 'active: cancelled_at set → not a place');
+  ok(!wl._isActiveWaitlistEntry(Object.assign({}, n, { allocatedAt: '2026-08-11 09:00:00' })), 'active: allocated_at set → it is a booking now, not a place');
+  ok(!wl._isActiveWaitlistEntry(Object.assign({}, n, { status: 'expired' })), 'active: status expired → not a place');
+
+  const nowMs = Date.UTC(2026, 7, 12, 5, 0);
+  ok(!wl._waitlistOfferPending(n, nowMs), 'offer: plain waiting entry has no offer pending');
+  ok(wl._waitlistOfferPending(Object.assign({}, n, { expiresAt: '2026-08-12 07:05:00' }), nowMs), 'offer: a future expires_at means a spot is being offered');
+  ok(!wl._waitlistOfferPending(Object.assign({}, n, { expiresAt: '2026-08-11 07:05:00' }), nowMs), 'offer: a past expires_at is no longer an offer');
+  ok(wl._waitlistOfferPending(Object.assign({}, n, { status: 'notified' }), nowMs), 'offer: an offered/notified status counts as an offer');
+
+  eq(wl._waitlistEntryFromResponse({ success: true, waitlist: { id: 295434, added_at: 'x' } }, 212225).id, 295434,
+    'response: PUT {success, waitlist:{…}} → the created entry');
+  eq(wl._waitlistEntryFromResponse({ data: [liveEntry] }).eventId, 212203, 'response: {data:[…]} (GET / vendor PUT variant) → first entry');
+  eq(wl._waitlistEntryFromResponse({ data: liveEntry }).id, 295302, 'response: {data:{…}} (GET /waitlist/{id}) → the entry');
+  eq(wl._waitlistEntryFromResponse({ message: 'nope' }, 1), null, 'response: an error body → null');
+
+  ok(wl._isAlreadyOnWaitlistResponse(422, 'You are already on this waitlist'), 'join: 422 "already on this waitlist" is recognised (live message)');
+  ok(!wl._isAlreadyOnWaitlistResponse(422, 'Booking slot required'), 'join: other 422s are real failures');
+  ok(!wl._isAlreadyOnWaitlistResponse(500, 'You are already on this waitlist'), 'join: only 409/422 qualify');
+
+  ok(wl._waitlistLeaveSucceeded(true, 200, ''), 'leave: 2xx → left');
+  ok(wl._waitlistLeaveSucceeded(false, 404, ''), 'leave: 404 → already gone counts as left');
+  ok(wl._waitlistLeaveSucceeded(false, 500, 'Cannot cancel waitlist as has already been cancelled.  Waitlist #295434 previously cancelled 2026-08-10 12:44:36'),
+    'leave: the server\'s 500 "already been cancelled" (live message) counts as left');
+  ok(!wl._waitlistLeaveSucceeded(false, 500, 'Server exploded'), 'leave: any other 500 is a failure');
+  ok(!wl._waitlistLeaveSucceeded(false, 403, 'Waitlist closed'), 'leave: 403 is a failure the user must see');
+
+  const seeded = wl._eventCacheEntryFromWaitlist(liveEntry.event);
+  eq([seeded.id, seeded.start_at, seeded.duration, seeded.studio_id, seeded.instructor_id, seeded.event_type_id],
+    [212203, '2026-08-12T07:30:00', 45, 160, 141, 2240],
+    'seed: event ids/duration lifted from the nested objects; start_at normalised to the T form');
+  eq([seeded._typeName, seeded._instrName, seeded._locName, seeded._locFullName, seeded._studioName, seeded.is_fully_booked],
+    ['RIDE: 45', 'Aaron', 'Oxford Circus', 'Psycle Oxford Circus', 'Ride Studio', true],
+    'seed: display names + full flag derived like fetchMyBookings does');
+  eq(wl._eventCacheEntryFromWaitlist({ id: 1 }), null, 'seed: no start_at → null (never render an undated card)');
+
+  // Merge: real booking wins; place-only event becomes a waitlisted entry; inactive entries ignored.
+  const bookings = { '500': { bookingId: 9, slots: [12], slotBookings: { 12: 9 } } };
+  const e1 = wl._normaliseWaitlistEntry(liveEntry);                                   // event 212203, place only
+  const e2 = wl._normaliseWaitlistEntry({ id: 2, status: 'waiting', event: { id: 500 } }); // event 500, already booked
+  const e3 = wl._normaliseWaitlistEntry({ id: 3, status: 'waiting', cancelled_at: '2026-08-10 12:00:00', event: { id: 600 } });
+  const e4 = wl._normaliseWaitlistEntry({ id: 4, status: 'waiting', event: { id: 212203 } }); // duplicate for 212203
+  wl._mergeWaitlistsIntoBookings(bookings, [e1, e2, e3, e4, null]);
+  eq(Object.keys(bookings).sort(), ['212203', '500'], 'merge: place-only event added; cancelled entry (600) ignored');
+  eq([bookings['212203'].waitlisted, bookings['212203'].bookingId, bookings['212203'].slots.length, bookings['212203'].waitlist.id],
+    [true, null, 0, 295302], 'merge: place-only entry is {waitlisted:true, bookingId:null, slots:[], waitlist:{id}} and keeps the FIRST place');
+  eq([bookings['500'].waitlisted, bookings['500'].slots, bookings['500'].waitlist.id], [false, [12], 2],
+    'merge: a real booking keeps its seat and waitlisted:false, with the place attached as .waitlist');
+  ok(JSON.stringify(bookings).indexOf('customer') === -1, 'merge: no customer PII is copied into app state');
+
+  // Stale places (class started > 1h ago) are skipped when a clock is supplied.
+  const stale = {};
+  const longAgo = wl._normaliseWaitlistEntry({ id: 9, status: 'waiting', event: { id: 700, start_at: '2020-01-01 07:00:00' } });
+  wl._mergeWaitlistsIntoBookings(stale, [longAgo], Date.UTC(2026, 7, 10));
+  eq(Object.keys(stale), [], 'merge: an entry whose class is long past is not merged when nowMs is given');
+  wl._mergeWaitlistsIntoBookings(stale, [longAgo]);
+  eq(Object.keys(stale), ['700'], 'merge: without a clock (legacy callers) every active entry is merged');
+
+  // Offer detail (GET /waitlist/{id}) → claimable or not; conservative on missing fields.
+  const full = wl._waitlistOfferFromDetail({ data: { id: 1, event: { is_class_full: true, available_slot_count: 0, available_slots: [], required_credits: 1 } } }, 5);
+  eq([full.available, full.free, full.isClassFull, full.requiredCredits, full.checkedAt], [false, 0, true, 1, 5], 'offer: a full class is not claimable (live GET shape)');
+  const open = wl._waitlistOfferFromDetail({ data: { id: 1, event: { is_class_full: false, available_slots: [13], required_credits: 1 } } }, 5);
+  eq([open.available, open.free], [true, 1], 'offer: is_class_full:false with a free slot is claimable');
+  eq(wl._waitlistOfferFromDetail({ data: { id: 1, event: {} } }, 5).available, false, 'offer: missing is_class_full → not claimable (never guess a billable action is possible)');
+  eq(wl._waitlistOfferFromDetail(null, 5).available, false, 'offer: null body → not claimable');
+
+  // Allocation diff: a place we held that is now a real seat was allocated by Psycle.
+  const prevMem = { places: { '212203': 295302, '212210': 295347, '9': 1 }, allocated: { '500': '2026-08-01T00:00:00.000Z', '404': 'x' } };
+  const nowBookings = {
+    '212203': { bookingId: 8001, slots: [7], slotBookings: { 7: 8001 }, waitlisted: false },                       // was a place → now a seat  ⇒ allocated
+    '212210': { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: { id: 295347 } },         // still a place
+    '500':    { bookingId: 9, slots: [12], slotBookings: { 12: 9 }, waitlisted: false },                            // allocated earlier, still booked ⇒ kept
+    // '9' vanished with no seat ⇒ simply left/expired, NOT allocated; '404' no longer booked ⇒ dropped
+  };
+  const diff = wl._diffWaitlistPlaces(prevMem, nowBookings, Date.UTC(2026, 7, 10, 12));
+  eq(diff.newlyAllocated, ['212203'], 'diff: only place→seat transitions are announced');
+  eq(diff.places, { '212210': 295347 }, 'diff: the new memory holds exactly the places still held');
+  eq(Object.keys(diff.allocated).sort(), ['212203', '500'], 'diff: allocated set keeps still-booked earlier allocations and adds the new one');
+  eq(wl._diffWaitlistPlaces(null, nowBookings, 0).newlyAllocated, [], 'diff: no memory (first run / after sign-out) → nothing announced');
+  eq(wl._diffWaitlistPlaces({ places: 'garbage' }, {}, 0).places, {}, 'diff: malformed memory is tolerated');
+
+  // Time resolution. In the bare vm context (no window) naive strings parse
+  // device-locally; ON DEVICE the native bridge exports the Europe/London
+  // resolver on window and _waitlistTimeMs must prefer it for naive gym
+  // wall-clock strings while leaving Z/offset stamps alone. This suite runs
+  // pinned to America/New_York, so London vs device-local visibly disagree.
+  eq(wl._waitlistTimeMs('2026-08-08T21:51:55.000000Z'), Date.UTC(2026, 7, 8, 21, 51, 55), 'time: an ISO Z stamp (added_at) is absolute in any context');
+  ok(Number.isNaN(wl._waitlistTimeMs(null)) && Number.isNaN(wl._waitlistTimeMs('')), 'time: null/empty → NaN');
+  const wlDev = { window: { _psycleClassStartMs: classStartMs } };
+  vm.createContext(wlDev);
+  vm.runInContext(appSrc.slice(startMark, endMark), wlDev, { filename: 'app.js[waitlist:pure+bridge]' });
+  eq(wlDev._waitlistTimeMs('2026-08-12 07:05:00'), utc(2026, 8, 12, 6, 5), 'time (device): a naive expires_at is LONDON wall-clock (BST → 06:05Z), not the device zone');
+  eq(wlDev._waitlistTimeMs('2026-01-15 07:05:00'), utc(2026, 1, 15, 7, 5), 'time (device): winter naive stamp is GMT (07:05Z)');
+  ok(wlDev._waitlistTimeMs('2026-08-12 07:05:00') !== wl._waitlistTimeMs('2026-08-12 07:05:00'),
+    'time: with the bridge present the result differs from the device-local parse on a non-UK device — the branch is really exercised');
+  eq(wlDev._waitlistTimeMs('2026-08-08T21:51:55.000000Z'), Date.UTC(2026, 7, 8, 21, 51, 55), 'time (device): Z stamps still bypass the London resolver');
+  // Offer deadline right at the boundary: 06:00Z now, offer expires 07:05 London (= 06:05Z) → still pending; at 06:10Z → lapsed.
+  const offerEntry = Object.assign({}, wlDev._normaliseWaitlistEntry(liveEntry), { expiresAt: '2026-08-12 07:05:00' });
+  ok(wlDev._waitlistOfferPending(offerEntry, utc(2026, 8, 12, 6, 0)), 'offer (device): 5 min before the London deadline → pending');
+  ok(!wlDev._waitlistOfferPending(offerEntry, utc(2026, 8, 12, 6, 10)), 'offer (device): 5 min after the London deadline → lapsed (a device-local parse in New York would wrongly say pending)');
+  // Stale-place cutoff also honours London time on device: class at 07:30 London (06:30Z); 90 min later it is stale, 30 min later it is not.
+  const m1 = {}; wlDev._mergeWaitlistsIntoBookings(m1, [wlDev._normaliseWaitlistEntry(liveEntry)], utc(2026, 8, 12, 8, 5));
+  eq(Object.keys(m1), [], 'merge (device): 95 min after a London start the place is stale');
+  const m2 = {}; wlDev._mergeWaitlistsIntoBookings(m2, [wlDev._normaliseWaitlistEntry(liveEntry)], utc(2026, 8, 12, 7, 0));
+  eq(Object.keys(m2), ['212203'], 'merge (device): 30 min after a London start the place still shows');
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(50));

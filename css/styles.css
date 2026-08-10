@@ -745,7 +745,7 @@ select:focus, input:focus {
 .book-btn:hover:not(:disabled) { background: var(--accent-hover, #c73650); }
 .book-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .book-btn.booked { background: #1a1020; color: #e94560; border: 1px solid #3a1a2a; }
-.book-btn.waitlist { background: #2a2a00; color: #c8a800; }
+.book-btn.waitlist { background: var(--badge-waitlist-bg, #2a2a00); color: var(--badge-waitlist-text, #c8a800); border: 1px solid var(--badge-waitlist-border, #3a3a10); }
 
 .toast {
   position: fixed;
@@ -1973,7 +1973,7 @@ select:focus, input:focus {
 
 .cds-avail { color: #4ade80; }
 .cds-avail-full { color: #f87171; }
-.cds-avail-waitlist { color: #facc15; }
+.cds-avail-waitlist { color: var(--badge-waitlist-text, #facc15); }
 
 .cds-bio {
   font-size: var(--text-md);
@@ -2021,7 +2021,7 @@ select:focus, input:focus {
 .cds-book-btn:hover { background: #d63a54; }
 .cds-book-btn:disabled { background: var(--border-light, #333); color: var(--text-faint, #666); cursor: not-allowed; }
 .cds-book-btn.booked { background: #1a2e1a; color: #4ade80; border: 1px solid #2e4a2e; }
-.cds-book-btn.waitlist { background: #2e2a1a; color: #facc15; }
+.cds-book-btn.waitlist { background: var(--badge-waitlist-bg, #2e2a1a); color: var(--badge-waitlist-text, #facc15); border: 1px solid var(--badge-waitlist-border, #574a12); }
 
 .cds-view-instr {
   width: 100%;

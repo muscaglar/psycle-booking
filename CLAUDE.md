@@ -70,7 +70,8 @@ load last (everything they wrap exists); diagnostic reads PsycleAPI.SCHEMAS.
   `npm run sync`; pinned to the exact plugin version and FAILS LOUD on upstream drift. `npm run patch:check` verifies.
 - `npm run sync:check` (or root `npm run drift`) — fails if www/ drifted from source (CI + pre-commit; see ios-app/PRECOMMIT.md).
 - Root: `npm run check` (node --check all JS), `npm test` (tests/unit.js — resilience layer + native-bridge
-  Europe/London date resolution), `npm run typecheck` (advisory tsc --checkJs), `npm run ci` (check+test+drift). CI in .github/workflows/ci.yml.
+  Europe/London date resolution + app.js's DOM-free waitlist helpers, sliced out between the `waitlist:pure:start/end`
+  markers — keep that block free of DOM/app globals), `npm run typecheck` (advisory tsc --checkJs), `npm run ci` (check+test+drift). CI in .github/workflows/ci.yml.
 - tests/smoke.html — load in a browser/sim to assert all critical globals exist (title → "SMOKE: PASS").
 
 ## Native iOS (WIRED — widget / Live Activity / Siri live in real targets)
@@ -89,7 +90,7 @@ the App Group + widget bundle id must be registered via a first signed build).
 | Tab | Name | Contents |
 |-----|------|----------|
 | 1 | **Discover** | Weekly planner → filters (live/debounced; collapsed by default on mobile; studio multi-select chips) → search results → instructor discovery (New to you / You might like) |
-| 2 | **My Bookings** | Upcoming bookings (billing period bucketed, waitlist badges, Map buttons), subscription bar, history button |
+| 2 | **My Bookings** | Upcoming bookings (billing period bucketed, Map buttons) + waitlist places (Waitlisted/Spot-offered badge, Leave · Check for a spot · Claim spot), subscription bar, history button |
 | 3 | **Stats** | Insights (stats, heatmap, class types, variety, lapsed) + instructor map + share card |
 | 4 | **Membership** | Plan info, cost tracker, instructor rankings & favourites, Settings entry, about/affiliation. (Settings panel = app-focused: theme picker, reminder, bike prefs, calendar sync, export/import/bug report) |
 
@@ -141,7 +142,9 @@ Window accessors mean you can read/write `instructors`, `_myBookings`, `_eventCa
 
 **Live filters**: every filter change calls `triggerAutoSearch()` (600ms debounce). Overlapping searches are superseded via `_searchSeq` — stale loops stop fetching/rendering.
 
-**Waitlist**: full+waitlistable classes skip the bike picker — `bookClass` shows a confirm dialog and POSTs `{event_id}` with no slots. Joined waitlists are tracked in `psycle_waitlisted_events` and badged in My Bookings.
+**Waitlist**: waitlist places are a SEPARATE server resource from bookings (verified against Psycle's own CodexFit widget + live probes; `POST /bookings` without slots is rejected with "Booking slot required"). Full+waitlistable classes skip the bike picker — `bookClass` → `confirmJoinWaitlist` → `joinWaitlist` does `PUT /waitlists/{eventId}` (retries:0; `422 "already on this waitlist"` = already joined — Psycle allows ONE place per person per class, so there is no multi-spot waitlist). `fetchMyBookings` also pages `GET /waitlists` (`fetchMyWaitlists`) and merges places into `_myBookings` as `{bookingId:null, slots:[], slotBookings:{}, waitlisted:true, waitlist:{id,status,addedAt,expiresAt,offer?}}` — a real booking for the same event wins (keeps `waitlisted:false`, place attached as `.waitlist`; may also carry `fromWaitlist:true`). The map is built locally and swapped in once per fetch; a `/waitlists` slower than 5s falls back to the last good list and re-merges when it lands; local writes (`_noteLocalBookingWrite`) make a fetch that started earlier skip its button "release" pass and re-run. `waitlisted` means "no real seat": calendar/widget/Live Activity/reminders/history/pill/badge all skip such entries. Leaving = `leaveWaitlist` → `DELETE /waitlists/{entryId}` (404 or the server's 500 "already been cancelled" = gone); `confirmUnbook`/`upcomingCancel` route waitlisted entries there and never to `DELETE /bookings`. Claiming an emailed offer = `claimWaitlistSpot` → `GET /waitlist/{entryId}` then, only after an explicit confirm showing credits, `POST /waitlist/{entryId} {confirmed:true}` → `fetchMyBookings()` (success is only announced once /bookings shows the seat). Near class time (≤2.5h, or after 10pm for 6–9am classes) `fetchMyBookings` probes `GET /waitlist/{id}` for held places (`_probeWaitlistOffers`, ≤3, throttled) so the card can show "Spot available → Claim spot". `psycle_waitlist_places` remembers `{places:{eventId:entryId}, allocated:{eventId:iso}}` between launches; `_diffWaitlistPlaces` spots a place that became a real seat (Psycle auto-allocated it → chargeable) and fetchMyBookings announces it with a modal + "From waitlist" badge (`waitlist:allocated` → history). Pure helpers live between the `waitlist:pure:start/end` markers in app.js (unit-tested). Events: `waitlist:joined|left|claimed|allocated`.
+
+**No-layout studios**: 8 of Psycle's 19 studios have `has_layout:false`. Psycle's own client books those with `slots: <count>` (a number, not an array) and the server rejects a slot-less body ("Booking slot required"), so `bookClass`/`_bookEventHeadless` pass `{spaces: 1}` to `submitBooking` ONLY when `_studioMap[studioId].has_layout === false` is positively known (an unknown studio never gets a guessed count); the offline queue carries `spaces` for replay. Not yet exercised live — watch the error log for `POST /bookings` on a first no-layout booking.
 
 **Slot labels**: `slotLabel(typeName)` returns Bike/Bed/Machine (Lagree)/Bench/Spot based on class type. `slotLabelForEvent(eventId)` resolves via event cache.
 
@@ -182,8 +185,10 @@ Discover tab → tap class card → class detail sheet (photo, bio, availability
   → select slot(s) → confirm → post-booking confirmation (slide-up)
   → "View my bookings" (switches tab) or "Done" (stays put — no auto tab switch)
 
-Full class → "Join Waitlist" → confirm dialog (no bike picker, no slots)
-  → "On the waitlist!" confirmation → Waitlisted badge in My Bookings
+Full class → "Join Waitlist" → confirm dialog (policy copy; no bike picker) → PUT /waitlists/{eventId}
+  → "On the waitlist!" confirmation → Waitlisted card in My Bookings (Leave waitlist · Check for a spot)
+  → Psycle auto-allocates (place becomes a booking on next fetch) OR emails an offer close to class
+  → card shows "Spot offered" → Claim spot → confirm (credits, 12h policy) → POST /waitlist/{entryId}
 ```
 
 ### History Sync Flow
@@ -214,8 +219,14 @@ Auth: Bearer token via `Authorization` header.
 | GET /events/{id} | Event detail + available slots + layout |
 | GET /bookings | Current/upcoming bookings |
 | GET /bookings?type=previous&limit=100 | Past booking history (paginated) |
-| POST /bookings | Create booking |
+| POST /bookings | Create booking — body `{event_id, slots}`; slots REQUIRED (array of slot ids; "Booking slot required" otherwise) |
 | DELETE /bookings/{id} | Cancel booking |
+| GET /waitlists?page=N | My active waitlist places (paginated, 10/page; entries carry a nested `event`, no flat event_id) |
+| GET /waitlists/{eventId} | My place(s) for one event (`[]` if none; unknown event → 500) |
+| PUT /waitlists/{eventId} | Join waitlist → `{success, waitlist:{id}}`; 2nd PUT → 422 "You are already on this waitlist" |
+| DELETE /waitlists/{entryId} | Leave waitlist (re-delete → 500 "already been cancelled") |
+| GET /waitlist/{entryId} | Entry + event availability (`is_class_full`, `available_slot_count`, `required_credits`) — the emailed-offer page |
+| POST /waitlist/{entryId} | `{confirmed:true}` → accept an offered spot (creates a real booking) |
 
 ## localStorage Keys
 | Key | Contents |
@@ -230,7 +241,8 @@ Auth: Bearer token via `Authorization` header.
 | psycle_fav_instructors | [instrId, ...] |
 | psycle_saved_filters | Last search filter state (locationIds array since multi-select) |
 | psycle_theme | Theme id: "dark", "light", "terminal", "synthwave", "gameboy", "blueprint" (absent/invalid = follow OS) |
-| psycle_waitlisted_events | {eventId: start_at} for waitlist joins (auto-cleared after class) |
+| ~~psycle_waitlisted_events~~ | RETIRED — waitlist places come from GET /waitlists; app.js deletes the old key on load and it is no longer in native SYNC_KEYS |
+| psycle_waitlist_places | {owner:customerId, places:{eventId:entryId}, allocated:{eventId:iso}} — last-seen waitlist places, so a place Psycle turned into a booking between launches is announced ("You're in") and badged "From waitlist"; ignored for a different owner, cleared on sign-out, Preferences-mirrored on iOS (the previous places can't be re-derived from the server) |
 | psycle_notify_watchlist | [eventId, ...] for availability alerts |
 | psycle_error_log | Error entries (max 100) |
 | psycle_action_log | User action entries (max 100) |
