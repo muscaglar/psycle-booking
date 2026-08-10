@@ -486,8 +486,9 @@
 
   var _origSubmitBookingNative = window.submitBooking;
   if (_origSubmitBookingNative) {
-    // Forward ALL args — the 4th (opts, { waitlist: true }) drives the
-    // waitlist flow and must survive the wrapper chain.
+    // Forward ALL args — the 4th (opts, e.g. { spaces } for no-layout
+    // studios) must survive the wrapper chain. Waitlist joins no longer come
+    // through submitBooking (joinWaitlist → PUT /waitlists/{eventId}).
     window.submitBooking = async function () {
       await _origSubmitBookingNative.apply(this, arguments);
       _scheduleCalReconcile();

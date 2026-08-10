@@ -611,6 +611,21 @@ async function run() {
   eq(Object.keys(diff.allocated).sort(), ['212203', '500'], 'diff: allocated set keeps still-booked earlier allocations and adds the new one');
   eq(wl._diffWaitlistPlaces(null, nowBookings, 0).newlyAllocated, [], 'diff: no memory (first run / after sign-out) → nothing announced');
   eq(wl._diffWaitlistPlaces({ places: 'garbage' }, {}, 0).places, {}, 'diff: malformed memory is tolerated');
+  // A place merely ATTACHED to a seat the user booked themselves is never remembered,
+  // so detaching it later (Leave / server drops it) cannot read as "Psycle allocated it".
+  const seatWithPlace = { '77': { bookingId: 5, slots: [3], slotBookings: { 3: 5 }, waitlisted: false, waitlist: { id: 900 } } };
+  const d1 = wl._diffWaitlistPlaces({ places: {}, allocated: {} }, seatWithPlace, 0);
+  eq(d1.places, {}, 'diff: a place attached to a self-booked seat is not remembered as a held place');
+  const d2 = wl._diffWaitlistPlaces({ places: d1.places, allocated: d1.allocated }, { '77': { bookingId: 5, slots: [3], slotBookings: { 3: 5 }, waitlisted: false } }, 0);
+  eq(d2.newlyAllocated, [], 'diff: detaching that place later announces nothing (no false "You\'re in")');
+  eq(wl._heldPlacesOf({ a: { waitlisted: true, waitlist: { id: 1 } }, b: { waitlisted: false, bookingId: 2, waitlist: { id: 3 } }, c: { waitlisted: true } }), { a: 1 }, 'heldPlacesOf: seatless places with an id only');
+  // Already-announced allocations are not announced twice; a very recent mark
+  // (e.g. the user's own claim seconds ago) survives a snapshot without the seat.
+  const tNow = Date.UTC(2026, 7, 10, 12);
+  const again = wl._diffWaitlistPlaces({ places: { '212203': 295302 }, allocated: { '212203': new Date(tNow - 5000).toISOString() } }, nowBookings, tNow);
+  eq(again.newlyAllocated, [], 'diff: an allocation already recorded is not re-announced');
+  const pre = wl._diffWaitlistPlaces({ places: {}, allocated: { '31': new Date(tNow - 30000).toISOString(), '32': new Date(tNow - 3600000).toISOString() } }, {}, tNow);
+  eq(Object.keys(pre.allocated), ['31'], 'diff: a mark under 2 minutes old survives without a seat; an hour-old one without a seat is dropped');
 
   // Time resolution. In the bare vm context (no window) naive strings parse
   // device-locally; ON DEVICE the native bridge exports the Europe/London

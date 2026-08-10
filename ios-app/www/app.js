@@ -344,51 +344,79 @@ function _dialogOpen() {
   return !!(bike && bike.style.display && bike.style.display !== 'none');
 }
 
+let _allocAnnounceTimer = null;
+let _announceShowing = false;
+const _pendingAnnounce = { allocated: {}, emitted: {} }; // allocations found but not yet acknowledged
+
 // Persist the place memory from the LIVE state at write time (never from an
-// older snapshot — a join/leave/claim may have updated it in between): places
-// come from _myBookings; `allocated` is the union of what's remembered (still
-// a seat) and what this pass found.
+// older snapshot — a join/leave/claim may have updated it in between): held
+// (seatless) places come from _myBookings; `allocated` keeps what's remembered
+// while it is still a seat (or was marked moments ago), plus this pass's finds
+// — minus anything still waiting to be announced.
 function _persistPlacesNow(diffAllocated) {
   const cur = _readWaitlistPlaces();
-  const places = {};
+  const now = Date.now();
+  const places = _heldPlacesOf(_myBookings);
   const allocated = {};
-  Object.keys(_myBookings).forEach(id => {
-    const b = _myBookings[id];
-    if (b && b.waitlist && b.waitlist.id) places[id] = b.waitlist.id;
-  });
   const isSeat = id => !!(_myBookings[id] && !_myBookings[id].waitlisted && (_myBookings[id].bookingId || (_myBookings[id].slots || []).length));
-  Object.keys(cur.allocated || {}).forEach(id => { if (isSeat(id)) allocated[id] = cur.allocated[id]; });
+  const recent = iso => { const t = Date.parse(iso); return !isNaN(t) && now - t < 120000; };
+  Object.keys(cur.allocated || {}).forEach(id => { if (isSeat(id) || recent(cur.allocated[id])) allocated[id] = cur.allocated[id]; });
   Object.keys(diffAllocated || {}).forEach(id => { allocated[id] = diffAllocated[id]; });
-  // A place the memory knows about that is neither held nor a seat right now
-  // simply lapsed — but keep places recorded since this pass started (join).
-  Object.keys(cur.places || {}).forEach(id => { if (!places[id] && _myBookings[id]?.waitlist?.id === cur.places[id]) places[id] = cur.places[id]; });
+  // Not yet acknowledged by the user: keep it looking like a held place so a
+  // relaunch before the dialog is dismissed announces it again.
+  Object.keys(_pendingAnnounce.allocated).forEach(id => {
+    delete allocated[id];
+    if (cur.places && cur.places[id]) places[id] = cur.places[id];
+  });
   _writeWaitlistPlaces({ places, allocated });
 }
 
 // Announce waitlist places Psycle turned into real (chargeable) seats. Waits
-// for any open dialog to close first, then persists that they were announced.
-let _allocAnnounceTimer = null;
+// for any open dialog to close first; the allocation is only recorded as
+// announced once the user has actually dismissed the dialog (a dialog that
+// gets displaced by another one re-arms itself).
 function _announceAllocations(eventIds, diffToPersist) {
-  const ids = (eventIds || []).map(String);
-  if (!ids.length) return;
+  (eventIds || []).map(String).forEach(id => {
+    _pendingAnnounce.allocated[id] = (diffToPersist && diffToPersist.allocated && diffToPersist.allocated[id]) || new Date().toISOString();
+  });
+  if (!Object.keys(_pendingAnnounce.allocated).length) return;
   const show = () => {
     if (_dialogOpen()) { _allocAnnounceTimer = setTimeout(show, 700); return; }
     _allocAnnounceTimer = null;
-    if (diffToPersist) _persistPlacesNow(diffToPersist.allocated);
-    PsycleEvents.emit('waitlist:allocated', ids.map(Number));
-    if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
+    const ids = Object.keys(_pendingAnnounce.allocated);
+    if (!ids.length) return;
+    const fresh = ids.filter(id => !_pendingAnnounce.emitted[id]);
+    if (fresh.length) {
+      fresh.forEach(id => { _pendingAnnounce.emitted[id] = true; });
+      PsycleEvents.emit('waitlist:allocated', fresh.map(Number));
+      if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
+    }
     const line = _waitlistClassLine(ids[0]) || 'a class';
     const more = ids.length > 1 ? ` (+${ids.length - 1} more)` : '';
+    let replaced = false;
+    _announceShowing = true;
     confirmModal({
       title: "You're in — Psycle gave you a spot",
       body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings (and your calendar/widget if you sync).`,
       warn: "Psycle's normal 12-hour cancellation policy applies to it from now on.",
       confirmText: 'View my bookings',
       cancelText: 'OK',
-    }).then(go => { if (go && typeof switchTab === 'function') switchTab('bookings'); });
+      onReplaced: () => { replaced = true; },
+    }).then(go => {
+      _announceShowing = false;
+      clearTimeout(_allocAnnounceTimer);
+      if (replaced) { _allocAnnounceTimer = setTimeout(show, 700); return; }
+      // Acknowledged: record as announced and stop treating them as pending.
+      const acked = {};
+      ids.forEach(id => { acked[id] = _pendingAnnounce.allocated[id]; delete _pendingAnnounce.allocated[id]; delete _pendingAnnounce.emitted[id]; });
+      _persistPlacesNow(acked);
+      // Allocations that arrived while this dialog was up get their own turn.
+      if (Object.keys(_pendingAnnounce.allocated).length) _allocAnnounceTimer = setTimeout(show, 400);
+      if (go && typeof switchTab === 'function') switchTab('bookings');
+    });
   };
   clearTimeout(_allocAnnounceTimer);
-  show();
+  if (!_announceShowing) show();
 }
 
 const WAITLISTS_DEADLINE_MS = 5000; // don't let a slow /waitlists stall the bookings pipeline
@@ -406,7 +434,7 @@ async function fetchMyBookings() {
   }
   try {
     // Waitlist places are a separate resource; fetch them alongside bookings.
-    const waitlistsPromise = fetchMyWaitlists().catch(() => null);
+    const waitlistsPromise = fetchMyWaitlists(startedAt).catch(() => null);
     const res = await apiFetch('/bookings?limit=200');
     if (mySeq !== _bookingsSeq) return false; // a newer fetch superseded this one
     if (!res.ok) return false;
@@ -418,12 +446,15 @@ async function fetchMyBookings() {
     // consumer ever observes a half-built, places-free state.
     // The API returns one record per seat. Multiple seats for the same
     // event_id appear as separate booking records, each with its own
-    // id (bookingId) and slot number.  We accumulate them.
+    // id (bookingId) and slot number.  We accumulate them — including
+    // slot-less records (no-layout studios book by count), so a whole-booking
+    // cancel can remove every space and the card can say how many are held.
     const next = {};
     list.forEach(b => {
       const evtId = String(b.event_id);
       const slotNum = Number(b.slot) || 0; // API field is "slot" (singular)
-      if (!next[evtId]) next[evtId] = { bookingId: b.id, slots: [], slotBookings: {}, waitlisted: false };
+      if (!next[evtId]) next[evtId] = { bookingId: b.id, bookingIds: [], slots: [], slotBookings: {}, waitlisted: false };
+      if (b.id != null && !next[evtId].bookingIds.includes(b.id)) next[evtId].bookingIds.push(b.id);
       if (slotNum) {
         next[evtId].slots.push(slotNum);
         next[evtId].slotBookings[slotNum] = b.id;
@@ -448,6 +479,16 @@ async function fetchMyBookings() {
     const waitlistsComplete = waitlistsRead && !waitlistEntries.incomplete;
     if (!waitlistsRead) waitlistEntries = _lastWaitlistEntries || [];
     _mergeWaitlistsIntoBookings(next, waitlistEntries, Date.now());
+    // Couldn't read the list and have nothing from earlier this session: keep
+    // remembered places visible (as "Waitlisted", unverified) rather than
+    // silently showing none, and tell the user in My Bookings.
+    _waitlistsUnavailable = !waitlistsRead && !_lastWaitlistEntries;
+    if (_waitlistsUnavailable) {
+      const mem = _readWaitlistPlaces();
+      Object.keys(mem.places || {}).forEach(id => {
+        if (!next[id] && _eventCache[id]) next[id] = { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: { id: mem.places[id], status: 'waiting', addedAt: null, expiresAt: null, unverified: true } };
+      });
+    }
     // Carry a recent offer probe result across the swap (probes are throttled,
     // so the new map would otherwise lose "Spot available" for ~90s).
     Object.keys(next).forEach(id => {
@@ -466,32 +507,34 @@ async function fetchMyBookings() {
 
     // Fetch event details for any bookings not yet in _eventCache.
     // This makes "My Bookings" self-sufficient — no search required.
-    const uncached = Object.keys(next).filter(id => !_eventCache[id]);
+    const uncached = Object.keys(next).filter(id => !_eventCache[id] || _eventCache[id]._fromWaitlist);
     if (uncached.length > 0) {
-      showBookingSkeleton(uncached.length);
+      if (uncached.some(id => !_eventCache[id])) showBookingSkeleton(uncached.length);
       await _hydrateEventDetails(uncached);
     }
     _seedEventCacheFromEntries(next, waitlistEntries);
 
     if (mySeq !== _bookingsSeq) return false; // superseded while fetching details
+    // This snapshot predates a local book/cancel/join/leave: show it, but leave
+    // the durable side (memory, announcements, releasing buttons) to the heal
+    // re-run below, which reads fresh data.
     const racedLocalWrite = _bookingsLocalWriteAt > startedAt;
     _myBookings = next;
-    if (diff) {
+    if (diff && !racedLocalWrite) {
       if (diff.newlyAllocated.length) _announceAllocations(diff.newlyAllocated, diff);
       else _persistPlacesNow(diff.allocated);
     }
     PsycleEvents.emit('bookings:loaded', _myBookings);
     renderMyBookings();
-    _resyncDiscoverButtons(!racedLocalWrite);
-    // This snapshot predates a local book/cancel/join/leave — heal with a re-run.
-    if (racedLocalWrite) setTimeout(() => { if (mySeq === _bookingsSeq) fetchMyBookings(); }, 250);
+    _resyncDiscoverButtons(!racedLocalWrite && waitlistsRead);
+    if (racedLocalWrite) setTimeout(() => { if (_myBookings === next) fetchMyBookings(); }, 250);
 
     // Close to class time Psycle offers spots by email instead of allocating —
     // ask about places in that window so "Claim spot" shows straight away.
     // Runs after the render so a slow probe never stalls My Bookings.
     if (waitlistsRead) {
-      _probeWaitlistOffers(_myBookings).then(result => {
-        if (mySeq !== _bookingsSeq || !result || !result.probed) return;
+      _probeWaitlistOffers(next).then(result => {
+        if (_myBookings !== next || !result || !result.probed) return; // map replaced since
         if (result.changed) renderMyBookings();
         if (result.allocated) fetchMyBookings(); // a probed place is a seat now — reload the truth
       }).catch(() => {});
@@ -499,24 +542,33 @@ async function fetchMyBookings() {
 
     // The waitlist list missed the deadline: merge it in when it arrives.
     if (late) {
-      waitlistsPromise.then(entries => {
-        if (!entries || mySeq !== _bookingsSeq) return;
+      waitlistsPromise.then(async entries => {
+        if (!entries || _myBookings !== next) return;
         // A join/leave/cancel since this pass started makes the late snapshot
         // untrustworthy (it could resurrect a place just left) — re-run instead.
         if (_bookingsLocalWriteAt > startedAt) { fetchMyBookings(); return; }
-        _mergeWaitlistsIntoBookings(_myBookings, entries, Date.now());
-        _seedEventCacheFromEntries(_myBookings, entries);
-        const missing = entries.map(e => String(e.eventId)).filter(id => _myBookings[id] && !_eventCache[id]);
-        (missing.length ? _hydrateEventDetails(missing) : Promise.resolve()).then(() => {
-          if (mySeq !== _bookingsSeq) return;
-          renderMyBookings();
-          entries.forEach(e => _syncCardButtonsForEvent(e.eventId));
-        });
+        _waitlistsUnavailable = false;
+        _mergeWaitlistsIntoBookings(next, entries, Date.now());
+        const missing = entries.map(e => String(e.eventId)).filter(id => next[id] && (!_eventCache[id] || _eventCache[id]._fromWaitlist));
+        if (missing.length) await _hydrateEventDetails(missing);
+        _seedEventCacheFromEntries(next, entries);
+        if (_myBookings !== next || _bookingsLocalWriteAt > startedAt) return;
+        // A complete late list is as authoritative as a timely one: run the
+        // allocation diff now rather than leaving it to some later fetch.
+        if (!entries.incomplete) {
+          const lateDiff = _diffWaitlistPlaces(_readWaitlistPlaces(), next, Date.now());
+          Object.keys(lateDiff.allocated).forEach(id => { if (next[id]) next[id].fromWaitlist = true; });
+          if (lateDiff.newlyAllocated.length) _announceAllocations(lateDiff.newlyAllocated, lateDiff);
+          else _persistPlacesNow(lateDiff.allocated);
+        }
+        renderMyBookings();
+        _resyncDiscoverButtons(true);
       }).catch(() => {});
     }
     return true;
   } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); return false; }
 }
+let _waitlistsUnavailable = false; // last pass couldn't read /waitlists at all (My Bookings shows a note)
 
 // Refresh bookings when the page becomes visible after being hidden
 document.addEventListener('visibilitychange', function () {
@@ -1580,8 +1632,25 @@ async function bookClass(eventId, btn, studioId) {
       }
       showBikePicker(eventId, btn, layout, availableSlotIds, mySlots, studio.name);
     } else {
-      // No layout: book one space. Only send the count when the studio is
-      // positively known to be layout-less (never guess for an unknown studio).
+      // No layout: book one space — after the same explicit confirm every
+      // other credit-spending path has (there's no picker step here). Only
+      // send the count when the studio is positively known to be layout-less.
+      const heldAlready = !!(myBooking && (myBooking.bookingId || (myBooking.slots || []).length));
+      const line = _waitlistClassLine(eventId);
+      const ok = await confirmModal({
+        title: heldAlready ? 'Book another space?' : 'Book this class?',
+        body: heldAlready
+          ? `${line ? line + '. ' : ''}You already hold a space in this class — this books (and pays for) one more.`
+          : (line ? `${line}. This uses one class credit.` : 'This uses one class credit.'),
+        warn: "Psycle's normal 12-hour cancellation policy applies.",
+        confirmText: heldAlready ? 'Book one more' : 'Book it',
+        cancelText: 'Not now',
+      });
+      if (!ok) {
+        btn.disabled = false;
+        if (heldAlready) applyBookedState(btn, eventId, myBooking); else btn.textContent = 'Book';
+        return;
+      }
       await submitBooking(eventId, null, btn, studio && studio.has_layout === false ? { spaces: 1 } : {});
     }
   } catch (e) {
@@ -1944,19 +2013,29 @@ function _waitlistOfferFromDetail(data, nowMs) {
 // is now a REAL booking was allocated by Psycle (chargeable, 12h policy) — the
 // user must be told. Returns the new places map, the still-relevant allocated
 // set, and the event ids allocated since last time.
-function _diffWaitlistPlaces(prev, bookings, nowMs) {
-  const prevPlaces = (prev && prev.places && typeof prev.places === 'object') ? prev.places : {};
-  const prevAllocated = (prev && prev.allocated && typeof prev.allocated === 'object') ? prev.allocated : {};
+// Only SEATLESS places are remembered: a place merely attached to a seat the
+// user booked themselves must never later read as "Psycle allocated it".
+function _heldPlacesOf(bookings) {
   const places = {};
   Object.keys(bookings || {}).forEach(id => {
     const b = bookings[id];
-    if (b && b.waitlist && b.waitlist.id) places[id] = b.waitlist.id;
+    if (b && b.waitlisted && b.waitlist && b.waitlist.id) places[id] = b.waitlist.id;
   });
+  return places;
+}
+function _diffWaitlistPlaces(prev, bookings, nowMs) {
+  const now = nowMs == null ? Date.now() : nowMs;
+  const prevPlaces = (prev && prev.places && typeof prev.places === 'object') ? prev.places : {};
+  const prevAllocated = (prev && prev.allocated && typeof prev.allocated === 'object') ? prev.allocated : {};
+  const places = _heldPlacesOf(bookings);
   const isSeat = id => !!(bookings[id] && !bookings[id].waitlisted && (bookings[id].bookingId || (bookings[id].slots || []).length));
-  const newlyAllocated = Object.keys(prevPlaces).filter(id => !places[id] && isSeat(id));
+  // Recent marks (e.g. a claim pre-marked seconds ago) survive even if the
+  // seat hasn't shown up in this snapshot yet.
+  const recent = iso => { const t = Date.parse(iso); return !isNaN(t) && now - t < 120000; };
+  const newlyAllocated = Object.keys(prevPlaces).filter(id => !places[id] && isSeat(id) && !prevAllocated[id]);
   const allocated = {};
-  Object.keys(prevAllocated).forEach(id => { if (isSeat(id)) allocated[id] = prevAllocated[id]; });
-  newlyAllocated.forEach(id => { allocated[id] = new Date(nowMs == null ? Date.now() : nowMs).toISOString(); });
+  Object.keys(prevAllocated).forEach(id => { if (isSeat(id) || recent(prevAllocated[id])) allocated[id] = prevAllocated[id]; });
+  newlyAllocated.forEach(id => { allocated[id] = new Date(now).toISOString(); });
   return { places, allocated, newlyAllocated };
 }
 // ── waitlist:pure:end ──
@@ -1972,13 +2051,21 @@ function _readWaitlistPlaces() {
     const v = JSON.parse(localStorage.getItem(WAITLIST_PLACES_KEY) || 'null');
     if (!v || typeof v !== 'object') return empty;
     const me = currentUser && currentUser.id != null ? String(currentUser.id) : null;
-    if (v.owner != null && me != null && String(v.owner) !== me) return empty;
+    // A memory stamped for someone must only be honoured for that someone —
+    // an unknown reader (profile not loaded yet) gets nothing rather than a
+    // possibly foreign account's places.
+    if (v.owner != null && (me == null || String(v.owner) !== me)) return empty;
     return { places: (v.places && typeof v.places === 'object') ? v.places : {}, allocated: (v.allocated && typeof v.allocated === 'object') ? v.allocated : {} };
   } catch (e) { return empty; }
 }
 function _writeWaitlistPlaces(v) {
   try {
     const me = currentUser && currentUser.id != null ? currentUser.id : null;
+    if (me == null) {
+      // Don't (re)stamp a memory we can't attribute; leave a stamped one alone.
+      const existing = JSON.parse(localStorage.getItem(WAITLIST_PLACES_KEY) || 'null');
+      if (existing && existing.owner != null) return;
+    }
     localStorage.setItem(WAITLIST_PLACES_KEY, JSON.stringify({ owner: me, places: v.places || {}, allocated: v.allocated || {} }));
   } catch (e) {}
 }
@@ -2061,6 +2148,13 @@ function _dropBookingKeepPlace(eventId) {
   if (place) _myBookings[key] = { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: place };
   else delete _myBookings[key];
   _noteLocalBookingWrite();
+  _markSeatFreed(eventId);
+}
+// The user just gave a seat back, so the search-time "full" flag is stale —
+// let the Discover card offer Book again instead of Join Waitlist / Full.
+function _markSeatFreed(eventId) {
+  const evt = _eventCache[String(eventId)];
+  if (evt) evt.is_fully_booked = false;
 }
 
 // After a Discover-card cancel: resync every card button for the event from
@@ -2084,6 +2178,9 @@ function _afterCardCancel(btn, eventId) {
 function _bookingIdsFor(booking, explicitId) {
   const perSlot = booking?.slotBookings ? Object.values(booking.slotBookings).filter(Boolean) : [];
   if (perSlot.length) return perSlot;
+  // Slot-less (no-layout) bookings: every record id we read for the event.
+  const all = Array.isArray(booking?.bookingIds) ? booking.bookingIds.filter(Boolean) : [];
+  if (all.length) return all;
   if (explicitId) return [explicitId];
   return booking?.bookingId ? [booking.bookingId] : [];
 }
@@ -2104,7 +2201,8 @@ let _lastWaitlistEntries = null; // last good GET /waitlists result (survives a 
 // null when the list could not be read at all (callers keep prior state).
 // If a later page fails the array carries `incomplete: true` — callers may
 // show what was read but must not treat absences as authoritative.
-async function fetchMyWaitlists() {
+async function fetchMyWaitlists(startedAt) {
+  startedAt = startedAt || Date.now();
   const all = [];
   let readAny = false;
   let complete = false;
@@ -2136,9 +2234,15 @@ async function fetchMyWaitlists() {
     (_lastWaitlistEntries || []).forEach(e => { if (!seen.has(e.id)) active.push(e); });
     active.incomplete = true;
   }
-  _lastWaitlistEntries = active;
+  // Only a NEWER read may replace the fallback (a slow, older list must not
+  // undo what a later read — or a local join/leave — established).
+  if (startedAt >= _lastWaitlistEntriesAt) {
+    _lastWaitlistEntries = active;
+    _lastWaitlistEntriesAt = startedAt;
+  }
   return active;
 }
+let _lastWaitlistEntriesAt = 0;
 
 // Keep the offline/outage fallback in step with what the user just did.
 function _rememberLastEntry(entry) {
@@ -2146,8 +2250,10 @@ function _rememberLastEntry(entry) {
   const list = (_lastWaitlistEntries || []).filter(e => e.id !== entry.id && e.eventId !== entry.eventId);
   list.push(entry);
   _lastWaitlistEntries = list;
+  _lastWaitlistEntriesAt = Date.now(); // an older in-flight read must not overwrite this
 }
 function _forgetLastEntry(eventId, entryId) {
+  _lastWaitlistEntriesAt = Date.now();
   if (!_lastWaitlistEntries) return;
   _lastWaitlistEntries = _lastWaitlistEntries.filter(e => e.id !== entryId && String(e.eventId) !== String(eventId));
 }
@@ -2259,7 +2365,16 @@ async function joinWaitlist(eventId, btn, opts = {}) {
     });
     const data = await res.json().catch(() => ({}));
     const message = (data && (data.message || data.error)) || '';
-    if (res.ok) {
+    // "Couldn't tell": the PUT may have LANDED (a place Psycle can turn into a
+    // chargeable seat) — never report that as a plain failure.
+    const unsure = () => {
+      fail('Join Waitlist', "Couldn't confirm with Psycle whether you joined — check My Bookings in a moment", 'info');
+      setTimeout(() => { try { fetchMyBookings(); } catch (err) {} }, 3000);
+      return false;
+    };
+    if (res.ok && data && data.success === false) {
+      return fail('Failed — retry', message || "Psycle didn't add you to the waitlist");
+    } else if (res.ok) {
       entry = _waitlistEntryFromResponse(data, eventId);
       if (data && data.waitlist) _recordWaitlistShape('waitlist-join', data.waitlist);
     } else if (_isAlreadyOnWaitlistResponse(res.status, message)) {
@@ -2269,15 +2384,14 @@ async function joinWaitlist(eventId, btn, opts = {}) {
     } else if (res.status >= 500) {
       // The server may still have taken it — ask before calling it a failure.
       const chk = await _fetchWaitlistEntryForEvent(eventId);
-      if (!(chk.known && chk.entry)) return fail('Failed — retry', message || "Couldn't join the waitlist");
-      entry = chk.entry;
+      if (chk.known && chk.entry) entry = chk.entry;
+      else if (chk.known) return fail('Failed — retry', message || "Couldn't join the waitlist");
+      else return unsure();
     } else {
       return fail('Failed — retry', message || "Couldn't join the waitlist");
     }
   } catch (e) {
-    // Timeout / dropped connection: the PUT may have LANDED. Disambiguate with
-    // a lookup rather than telling the user it failed while a place (that
-    // Psycle can turn into a chargeable seat) actually exists.
+    // Timeout / dropped connection: disambiguate with a lookup.
     const chk = await _fetchWaitlistEntryForEvent(eventId);
     if (chk.known && chk.entry) {
       entry = chk.entry;
@@ -2294,6 +2408,10 @@ async function joinWaitlist(eventId, btn, opts = {}) {
     if (!entry || !entry.id) {
       const chk = await _fetchWaitlistEntryForEvent(eventId);
       if (chk.entry) entry = chk.entry;
+      // A 2xx, yet the server positively lists no place: say so rather than
+      // fabricating one the next refresh would silently remove.
+      else if (chk.known && !already) return fail('Failed — retry', "Psycle didn't record a waitlist place — try again");
+      else if (chk.known && already) return fail('Join Waitlist', "Psycle says you were on this waitlist, but no active place is listed — try joining again", 'info');
     }
     const place = entry
       ? { id: entry.id, status: entry.status || 'waiting', addedAt: entry.addedAt, expiresAt: entry.expiresAt }
@@ -2398,14 +2516,15 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
     if (cur && (cur.bookingId || (cur.slots || []).length)) {
       delete cur.waitlist;
       cur.waitlisted = false;
+      _rememberPlace(eventId, null); // a place next to a seat the user booked is never an "allocation"
     } else if (cur) {
       delete _myBookings[key];
     }
     _noteLocalBookingWrite();
     _forgetLastEntry(eventId, entryId);
-    // The place MEMORY is deliberately kept: the resync below rewrites it from
-    // the truth, and if Psycle allocated the place just before our DELETE the
-    // diff can still announce the seat.
+    // For a seatless place the MEMORY is deliberately kept: the resync below
+    // rewrites it from the truth, and if Psycle allocated the place just
+    // before our DELETE the diff can still announce the seat.
     // Discover card buttons fall back to the class's joinable state; any other
     // button (My Bookings re-renders below, detail sheet, headless) is restored.
     if (!btn.closest('.class-card:not(.my-booking-card)')) {
@@ -2673,8 +2792,13 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       // A place we held on the waitlist for this class is superseded by the seat
       // (kept attached; forgotten as a "held place" so it can't later be
       // mistaken for a Psycle allocation).
-      const prevPlace = _myBookings[String(eventId)]?.waitlist;
-      _myBookings[String(eventId)] = { bookingId, slots: slotsArr, slotBookings, waitlisted: false };
+      const prevEntry = _myBookings[String(eventId)];
+      const prevPlace = prevEntry?.waitlist;
+      // Keep every record id we know of (a no-layout "one more space" adds a
+      // record next to the existing one) so a whole cancel removes them all.
+      const prevIds = (!slotsArr.length && prevEntry && !prevEntry.waitlisted && !(prevEntry.slots || []).length) ? _bookingIdsFor(prevEntry) : [];
+      const bookingIds = [...prevIds, ...(bookingId != null && !prevIds.includes(bookingId) ? [bookingId] : [])];
+      _myBookings[String(eventId)] = { bookingId: bookingId || prevEntry?.bookingId || null, bookingIds, slots: slotsArr, slotBookings, waitlisted: false };
       if (prevPlace) { _myBookings[String(eventId)].waitlist = prevPlace; _rememberPlace(eventId, null); }
       _noteLocalBookingWrite();
       // Remember the booked slot(s) per studio+instructor for next time.
@@ -2797,6 +2921,8 @@ function confirmModal(opts) {
     // flow awaiting it hangs forever (stuck buttons, busy flags never cleared).
     const stale = document.getElementById('psycleConfirmOverlay');
     if (stale) {
+      // Tell an opted-in owner it was displaced (not dismissed) so it can re-show.
+      if (typeof stale._psycleReplaced === 'function') { try { stale._psycleReplaced(); } catch (e) {} }
       if (typeof stale._psycleClose === 'function') { try { stale._psycleClose(false); } catch (e) {} }
       stale.remove();
     }
@@ -2872,6 +2998,7 @@ function confirmModal(opts) {
     overlay.querySelector('.confirm-btn-primary, .confirm-btn-danger').onclick = () => close(true);
     overlay.onclick = e => { if (e.target === overlay) close(false); };
     overlay._psycleClose = close; // lets a replacing dialog cancel this one cleanly
+    if (typeof opts.onReplaced === 'function') overlay._psycleReplaced = opts.onReplaced;
     document.addEventListener('keydown', onKey);
 
     // Focus the primary action so Enter confirms and screen readers land on it
@@ -2964,6 +3091,7 @@ async function cancelBikeSlot(slotId, eventId) {
       }
       // Update card button(s) from state (remaining seats / kept place / none)
       _noteLocalBookingWrite();
+      _markSeatFreed(eventId);
       _syncCardButtonsForEvent(eventId);
       const remaining = booking?.slots?.length || 0;
       document.getElementById('modalHint').textContent = remaining
@@ -3775,6 +3903,9 @@ function renderMyBookings() {
   });
 
   let html = '';
+  if (_waitlistsUnavailable && currentUser) {
+    html += `<div class="mb-waitlist-status" style="margin:0 0 8px">Couldn't load your waitlist places from Psycle just now — pull to refresh. Anything shown as Waitlisted below is from earlier.</div>`;
+  }
 
   // Membership / credits info bar + billing period
   var periodStart = null, periodEnd = null, nextPeriodStart = null;
@@ -3972,13 +4103,18 @@ function renderMyBookings() {
           seatHtml += `<button class="up-cancel-all" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">Cancel All</button>`;
         }
         seatHtml += `</div>`;
+      } else if (!isPlace && (booking.bookingIds || []).length > 1) {
+        // No-layout studio with more than one space held (each is a record).
+        seatHtml = `<div class="up-seats" style="margin-top:8px"><span class="up-seat-chip">${(booking.bookingIds || []).length} spaces</span></div>`;
       }
 
       // Waitlist status line (place only, or a place held on top of a seat)
       let placeHtml = '';
       if (place && !eventPast) {
         let statusText;
-        if (offerOpen) {
+        if (place.unverified) {
+          statusText = "On the waitlist (couldn't re-check with Psycle just now — pull to refresh)";
+        } else if (offerOpen) {
           let by = '';
           if (place.expiresAt) {
             const ex = new Date(_waitlistTimeMs(place.expiresAt));
@@ -4666,6 +4802,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
       if (booking.slotBookings) delete booking.slotBookings[slotId];
       if (booking.slots.length === 0) _dropBookingKeepPlace(eventId);
       _noteLocalBookingWrite();
+      _markSeatFreed(eventId);
       // Update the corresponding class card in results if rendered
       _syncCardButtonsForEvent(eventId);
       refreshUpcomingPanel();
