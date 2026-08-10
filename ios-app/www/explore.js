@@ -152,6 +152,7 @@
     var bIds = Object.keys(bookings);
     for (var b = 0; b < bIds.length; b++) {
       if (histIds.has(String(bIds[b]))) continue;
+      if (bookings[bIds[b]] && bookings[bIds[b]].waitlisted) continue; // a waitlist place isn't a booking
       var bevt = cache[bIds[b]];
       if (!bevt || !bevt.instructor_id) continue;
       var bid = String(bevt.instructor_id);
@@ -217,9 +218,10 @@
       if (hid) booked.add(hid);
     }
 
-    // From current bookings
+    // From current bookings (seats only — a waitlist place isn't a booking)
     var bIds = Object.keys(bookings);
     for (var b = 0; b < bIds.length; b++) {
+      if (bookings[bIds[b]] && bookings[bIds[b]].waitlisted) continue;
       var evt = cache[bIds[b]];
       if (evt && evt.instructor_id) booked.add(String(evt.instructor_id));
     }
@@ -566,6 +568,7 @@
     var bIds = Object.keys(bookings);
     for (var b = 0; b < bIds.length; b++) {
       if (histEventIds.has(String(bIds[b]))) continue;
+      if (bookings[bIds[b]] && bookings[bIds[b]].waitlisted) continue; // waitlist place ≠ booked
       var evt = cache[bIds[b]];
       if (!evt || !evt.instructor_id) continue;
       var bid = String(evt.instructor_id);

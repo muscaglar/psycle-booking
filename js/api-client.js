@@ -77,6 +77,15 @@
       required: ['id', 'event_id'],
       optional: ['slot', 'slots', 'slot_ids', 'slot_id'],
     },
+    // GET /waitlists?page=N → data[] (fetchMyWaitlists in app.js reads id,
+    // event.id, status, expires_at/allocated_at/cancelled_at). Waitlist places
+    // are a separate resource from bookings; `event` is a nested object (no
+    // flat event_id). Only `id` is required so a shape wobble in this
+    // unofficial resource can't trip safe mode.
+    waitlist: {
+      required: ['id'],
+      optional: ['event', 'event_id', 'status', 'added_at', 'expires_at', 'cancelled_at', 'allocated_at'],
+    },
   };
 
   // Map of schema-kind → which response shape it validates (object vs first
@@ -88,6 +97,7 @@
     eventType: true,
     event: true,
     booking: true,
+    waitlist: true,
   };
 
   // ═══════════════════════════════════════════════════════════════════
@@ -558,8 +568,26 @@
   }
 
   /**
+   * GET /waitlists?page=N → { entries: data[], meta } (one page of the
+   * customer's active waitlist places; meta.last_page drives pagination).
+   * @param {number} [page=1]
+   */
+  function getWaitlists(page) {
+    var p = Math.max(1, parseInt(page, 10) || 1);
+    return request('/waitlists?page=' + p).then(function (env) {
+      var entries = process('waitlist', env, function (e) {
+        if (Array.isArray(e)) return e;
+        return (e && Array.isArray(e.data)) ? e.data : [];
+      });
+      return { entries: entries, meta: (env && env.meta) || null };
+    });
+  }
+
+  /**
    * POST /bookings → created booking envelope (callers read data.data.id || data.id).
-   * @param {object} bodyObj e.g. { event_id, slots? }
+   * The server rejects a body without slots ("Booking slot required"); full
+   * classes are joined via PUT /waitlists/{eventId}, never here.
+   * @param {object} bodyObj e.g. { event_id, slots }
    */
   function createBooking(bodyObj) {
     var body = bodyObj || {};
@@ -611,6 +639,7 @@
     getBookings: getBookings,
     getEvents: getEvents,
     getEventDetail: getEventDetail,
+    getWaitlists: getWaitlists,
     createBooking: createBooking,
     deleteBooking: deleteBooking,
 

@@ -505,3 +505,30 @@ header .theme-toggle {
 #tab-membership .about-block { text-align: center; padding: 20px 0 4px; }
 #tab-membership .about-mark { letter-spacing: 0.32em; color: var(--ink-3, #9a9c9f); }
 #tab-membership .about-text { color: var(--ink-3, #9a9c9f); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Waitlist places (a separate server resource from bookings)
+   Discover pill, card tint, My Bookings status line + actions, planner cell.
+   All colours come from the --badge-waitlist-* tokens per theme.
+   ═══════════════════════════════════════════════════════════════════ */
+.cc-action .book-btn.waitlist {
+  background: var(--badge-waitlist-bg);
+  color: var(--badge-waitlist-text);
+  border-color: var(--badge-waitlist-border);
+}
+.class-card.is-waitlisted { border-left: 3px solid var(--badge-waitlist-text); }
+.class-card.is-waitlisted:hover { border-color: var(--badge-waitlist-border); border-left-color: var(--badge-waitlist-text); }
+.my-booking-card.is-waitlisted { background: var(--bg-panel); border-color: var(--border); border-left: 3px solid var(--badge-waitlist-text); }
+
+.mb-waitlist-status {
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--badge-waitlist-text);
+}
+.mb-waitlist-status.is-offer { color: var(--accent); font-weight: var(--weight-bold); font-size: var(--text-sm); }
+.mb-primary-btn { margin-top: var(--space-4); width: 100%; }
+.badge.attended { background: var(--bg-input); color: var(--text-ghost); border-color: var(--border); }
+
+.week-event.is-waitlisted { border-left-color: var(--badge-waitlist-text); border-style: dashed; border-left-style: solid; }
+.week-event-social.week-event-wl { background: var(--badge-waitlist-bg); color: var(--badge-waitlist-text); border: 1px solid var(--badge-waitlist-border); }

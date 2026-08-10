@@ -161,12 +161,11 @@
   function patchSubmitBooking() {
     const orig = window.submitBooking;
     if (!orig) return;
-    // Forward ALL arguments — the 4th (opts, { waitlist: true }) drives the
-    // waitlist flow and must survive the whole wrapper chain.
+    // Forward ALL four arguments so opts survives the whole wrapper chain.
     window.submitBooking = async function (eventId, slots, btn, opts) {
       const result = await orig.call(this, eventId, slots, btn, opts);
       // After successful booking, the button will have class 'booked'
-      // We check _myBookings to confirm success. Waitlist joins are not
+      // We check _myBookings to confirm success. Waitlist places are not
       // attended classes — keep them out of the class history.
       const entry = window._myBookings?.[String(eventId)];
       if (entry && !entry.waitlisted) {
@@ -174,19 +173,41 @@
       }
       return result;
     };
+    // A claimed waitlist spot becomes a real seat outside submitBooking —
+    // app.js emits booking:complete for it once /bookings confirms the seat.
+    // (addHistoryEntry de-dups, so the normal booking path is unaffected.)
+    if (window.PsycleEvents && typeof window.PsycleEvents.on === 'function') {
+      window.PsycleEvents.on('booking:complete', function (eventId, slots) {
+        const entry = window._myBookings?.[String(eventId)];
+        if (entry && !entry.waitlisted) addHistoryEntry(eventId, slots);
+      });
+      // Seats Psycle allocated from the waitlist while the app was closed.
+      window.PsycleEvents.on('waitlist:allocated', function (eventIds) {
+        (eventIds || []).forEach(function (eventId) {
+          const entry = window._myBookings?.[String(eventId)];
+          if (entry && !entry.waitlisted) addHistoryEntry(eventId, entry.slots || []);
+        });
+      });
+    }
   }
 
   // ── Monkey-patch cancel functions ──────────────────────────────
+  // History tracks SEATS. A cancelled seat can leave the entry behind as a
+  // waitlist place (waitlisted:true), so "cancelled" = had a seat before and
+  // has none after — not "the entry disappeared".
+  function hasSeat(eventId) {
+    const e = window._myBookings?.[String(eventId)];
+    return !!(e && !e.waitlisted);
+  }
+
   function patchCancelFunctions() {
     // confirmUnbook
     const origUnbook = window.confirmUnbook;
     if (origUnbook) {
       window.confirmUnbook = async function (bookingId, eventId, btn) {
-        const hadBooking = !!window._myBookings?.[String(eventId)];
+        const had = hasSeat(eventId);
         const result = await origUnbook.call(this, bookingId, eventId, btn);
-        if (hadBooking && !window._myBookings?.[String(eventId)]) {
-          markHistoryCancelled(eventId);
-        }
+        if (had && !hasSeat(eventId)) markHistoryCancelled(eventId);
         return result;
       };
     }
@@ -195,11 +216,9 @@
     const origUpCancel = window.upcomingCancel;
     if (origUpCancel) {
       window.upcomingCancel = async function (eventId, btn) {
-        const hadBooking = !!window._myBookings?.[String(eventId)];
+        const had = hasSeat(eventId);
         const result = await origUpCancel.call(this, eventId, btn);
-        if (hadBooking && !window._myBookings?.[String(eventId)]) {
-          markHistoryCancelled(eventId);
-        }
+        if (had && !hasSeat(eventId)) markHistoryCancelled(eventId);
         return result;
       };
     }
@@ -208,12 +227,10 @@
     const origBikeCancel = window.cancelBikeSlot;
     if (origBikeCancel) {
       window.cancelBikeSlot = async function (slotId, eventId) {
-        const hadBooking = !!window._myBookings?.[String(eventId)];
+        const had = hasSeat(eventId);
         const result = await origBikeCancel.call(this, slotId, eventId);
-        // If all slots were removed, booking is gone
-        if (hadBooking && !window._myBookings?.[String(eventId)]) {
-          markHistoryCancelled(eventId);
-        }
+        // If all slots were removed, the seat is gone
+        if (had && !hasSeat(eventId)) markHistoryCancelled(eventId);
         return result;
       };
     }
@@ -222,11 +239,9 @@
     const origSeatCancel = window.upcomingSeatCancel;
     if (origSeatCancel) {
       window.upcomingSeatCancel = async function (eventId, slotId, btn) {
-        const hadBooking = !!window._myBookings?.[String(eventId)];
+        const had = hasSeat(eventId);
         const result = await origSeatCancel.call(this, eventId, slotId, btn);
-        if (hadBooking && !window._myBookings?.[String(eventId)]) {
-          markHistoryCancelled(eventId);
-        }
+        if (had && !hasSeat(eventId)) markHistoryCancelled(eventId);
         return result;
       };
     }

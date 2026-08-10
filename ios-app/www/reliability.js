@@ -111,6 +111,18 @@
     PsycleEvents.on('history:synced', function () {
       pushAction('history:synced');
     });
+    PsycleEvents.on('waitlist:joined', function (eventId) {
+      pushAction('waitlist:joined eventId=' + eventId);
+    });
+    PsycleEvents.on('waitlist:left', function (eventId) {
+      pushAction('waitlist:left eventId=' + eventId);
+    });
+    PsycleEvents.on('waitlist:claimed', function (eventId) {
+      pushAction('waitlist:claimed eventId=' + eventId);
+    });
+    PsycleEvents.on('waitlist:allocated', function (eventIds) {
+      pushAction('waitlist:allocated eventIds=' + (eventIds || []).join(','));
+    });
   }
 
   // Hook into switchTab to log tab switches
@@ -266,11 +278,13 @@
   if (typeof submitBooking === 'function') {
     const _originalSubmitBooking = submitBooking;
 
-    // NOTE: every submitBooking wrapper must forward ALL arguments \u2014 the 4th
-    // (opts, e.g. { waitlist: true }) drives the entire waitlist flow, and
-    // dropping it silently turned waitlist joins into normal bookings.
+    // NOTE: every submitBooking wrapper must forward ALL four arguments (opts
+    // included) so options survive the whole chain. Waitlist joins no longer
+    // come through here at all (joinWaitlist \u2192 PUT /waitlists); a legacy
+    // {waitlist:true} caller is passed straight to the original, which
+    // redirects it, so no optimistic *booking* entry is ever written for it.
     window.submitBooking = async function optimisticSubmitBooking(eventId, slots, btn, opts) {
-      const isWaitlist = !!(opts && opts.waitlist);
+      if (opts && opts.waitlist) return _originalSubmitBooking(eventId, slots, btn, opts);
       // 1. Capture original state so we can revert on failure
       const origText = btn.textContent;
       const origClass = btn.className;
@@ -298,21 +312,28 @@
       }
 
       // 2. Optimistically update UI immediately
-      const optimisticLabel = isWaitlist
-        ? 'Waitlisted \u2713'
-        : (slots && slots.length)
-          ? formatSlots(slotLabelForEvent(eventId), slots) + ' \u2713'
-          : 'Booked \u2713';
+      const optimisticLabel = (slots && slots.length)
+        ? formatSlots(slotLabelForEvent(eventId), slots) + ' \u2713'
+        : 'Booked \u2713';
       btn.textContent = optimisticLabel;
       btn.className = 'book-btn booked';
       btn.disabled = true;
 
-      // Optimistically add to _myBookings
+      // Optimistically add to _myBookings (a waitlist place already held for
+      // this class rides along so a revert can restore it).
       _myBookings[String(eventId)] = {
         bookingId: null, // unknown until server responds
         slots: slots ? slots.map(Number) : [],
-        waitlisted: isWaitlist,
+        slotBookings: {},
+        waitlisted: false,
       };
+      if (prevBooking && prevBooking.waitlist) _myBookings[String(eventId)].waitlist = prevBooking.waitlist;
+      // A no-layout "one more space": keep the record ids already held so the
+      // original can merge the new id in (a whole cancel must remove them all).
+      if (prevBooking && !prevBooking.waitlisted && !(slots && slots.length) && !(prevBooking.slots || []).length) {
+        _myBookings[String(eventId)].bookingId = prevBooking.bookingId || null;
+        _myBookings[String(eventId)].bookingIds = Array.isArray(prevBooking.bookingIds) ? prevBooking.bookingIds.slice() : (prevBooking.bookingId ? [prevBooking.bookingId] : []);
+      }
 
       // 3. Call the real submitBooking
       try {
@@ -407,6 +428,7 @@
     var cancelOk = 0;
     var skipped = 0;
     var failed = 0;
+    var unsure = 0;
     var remaining = [];
 
     for (var i = 0; i < queue.length; i++) {
@@ -423,11 +445,6 @@
           var isOk = function (r) { return r.ok || r.status === 204 || r.status === 200 || r.status === 404; };
           if (results.every(isOk)) {
             cancelOk++;
-            // A replayed cancel must also drop the local waitlist marker,
-            // like every in-app cancel path does.
-            if (typeof _unmarkWaitlisted === 'function') {
-              try { _unmarkWaitlisted(item.eventId); } catch (e) {}
-            }
           } else if (results.some(function (r) { return r.status >= 500; })) {
             // Transient server error — retry later
             remaining.push(item);
@@ -459,17 +476,42 @@
 
         var body = { event_id: item.eventId };
         if (item.slots && item.slots.length) body.slots = item.slots.map(Number);
+        else if (Number(item.spaces) > 0) body.slots = Number(item.spaces); // known no-layout studio: a count
+        var bySlot = Array.isArray(body.slots);
 
-        // retries:3 — replay fires on the 'online' event, exactly when the
-        // radio is flakiest. Retrying POST is safe HERE because a duplicate
-        // lands as 409/"already booked", which the handler below counts as
-        // success.
-        var res = await apiFetch('/bookings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(body),
-          retries: 3,
-        });
+        // Slot bodies: retries:3 — replay fires on the 'online' event, exactly
+        // when the radio is flakiest, and a duplicate lands as 409/"already
+        // booked" (same seat), which the handler below counts as success.
+        // COUNT bodies are never auto-retried: a re-send after a lost response
+        // would book (and charge) another space.
+        var res;
+        try {
+          res = await apiFetch('/bookings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body),
+            retries: bySlot ? 3 : 0,
+          });
+        } catch (postErr) {
+          if (bySlot) throw postErr; // outer catch keeps it queued
+          res = null;
+        }
+        if (!bySlot && (!res || res.status >= 500)) {
+          // Did it land? Ask before deciding — never blindly re-send a count.
+          var landed = null;
+          try {
+            var chk = await apiFetch('/bookings?limit=200');
+            if (chk.ok) {
+              var cd = await chk.json().catch(function () { return null; });
+              var cl = cd ? (Array.isArray(cd) ? cd : (cd.data || [])) : null;
+              if (cl) landed = cl.some(function (b) { return String(b.event_id) === String(item.eventId); });
+            }
+          } catch (chkErr) { /* unknown */ }
+          if (landed === true) { bookedOk++; continue; }
+          if (landed === false) { remaining.push(item); failed++; continue; }
+          unsure++; // can't tell — drop it rather than risk a double booking, and say so
+          continue;
+        }
 
         var data = await res.json().catch(function () { return {}; });
         if (res.ok) {
@@ -478,6 +520,8 @@
           _myBookings[String(item.eventId)] = {
             bookingId: bookingId,
             slots: item.slots ? item.slots.map(Number) : [],
+            slotBookings: {},
+            waitlisted: false,
           };
         } else if (res.status === 409 || (data.message || '').toLowerCase().indexOf('already') !== -1) {
           // Already booked server-side — the booking exists, so this replay
@@ -508,6 +552,9 @@
     if (cancelOk > 0) {
       toast(cancelOk + ' queued cancel' + (cancelOk !== 1 ? 's' : '') + ' sent', 'success');
     }
+    if (unsure > 0) {
+      toast("Couldn't confirm whether a queued booking went through — check My Bookings before booking it again", 'info');
+    }
     if (skipped > 0) {
       toast(skipped === 1
         ? 'Skipped a queued booking — the class already started or was cancelled.'
@@ -531,20 +578,16 @@
     var _submitAfterOptimistic = window.submitBooking;
 
     window.submitBooking = async function offlineAwareSubmitBooking(eventId, slots, btn, opts) {
+      // Waitlist joins are a different resource and are never queued \u2014 the
+      // original redirects them to joinWaitlist, which refuses while offline.
+      if (opts && opts.waitlist) return _submitAfterOptimistic(eventId, slots, btn, opts);
       if (!navigator.onLine) {
-        // A waitlist join is time-sensitive and its replay payload would be
-        // indistinguishable from a real booking \u2014 don't queue it.
-        if (opts && opts.waitlist) {
-          btn.textContent = 'Join Waitlist';
-          btn.disabled = false;
-          toast("You're offline \u2014 try joining the waitlist once you're back online", 'info');
-          return;
-        }
         // Queue booking for later
         var queue = getOfflineQueue();
         queue.push({
           eventId: eventId,
           slots: slots ? slots.map(Number) : [],
+          spaces: (opts && Number(opts.spaces) > 0) ? Number(opts.spaces) : 0,
           timestamp: new Date().toISOString(),
         });
         saveOfflineQueue(queue);

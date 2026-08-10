@@ -271,7 +271,10 @@
     var badge = document.getElementById('tabBadge');
     if (!badge) return;
     var now = new Date();
-    var count = Object.keys(_myBookings || {}).filter(function (evtId) {
+    var all = _myBookings || {};
+    // Classes you actually hold a seat in — waitlist places aren't counted.
+    var count = Object.keys(all).filter(function (evtId) {
+      if (all[evtId] && all[evtId].waitlisted) return false;
       var evt = (_eventCache || {})[evtId];
       return evt && new Date(evt.start_at) > now;
     }).length;
@@ -297,6 +300,10 @@
     PsycleEvents.on('seat:cancelled', function () {
       updateTabBadge();
       if (_currentTab === 'stats') renderInsights();
+    });
+    // Waitlist places show on the planner (as "WL") but not in the badge.
+    ['waitlist:joined', 'waitlist:left'].forEach(function (evt) {
+      PsycleEvents.on(evt, function () { updateTabBadge(); renderWeekView(); });
     });
   }
 
@@ -369,9 +376,10 @@
     var cache = _eventCache || {};
     var history = getFullHistory();
 
-    // Upcoming from current bookings
+    // Upcoming from current bookings (seats only — not waitlist places)
     var upcoming = 0;
     Object.entries(bookings).forEach(function (entry) {
+      if (entry[1] && entry[1].waitlisted) return;
       var evt = cache[entry[0]];
       if (evt && new Date(evt.start_at) > now) upcoming++;
     });
@@ -399,8 +407,10 @@
       if (instr) instrCount[instr] = (instrCount[instr] || 0) + 1;
     });
 
-    // Also count current bookings not yet in history
+    // Also count current bookings not yet in history (seats only — a waitlist
+    // place is not a class the user is in)
     Object.entries(bookings).forEach(function (entry) {
+      if (entry[1] && entry[1].waitlisted) return;
       var evt = cache[entry[0]];
       if (!evt) return;
       var inHistory = history.some(function (h) { return h.eventId === entry[0]; });
@@ -579,9 +589,12 @@
         var timeStr = (h % 12 || 12) + ':' + m + ampm;
         var slotsCount = booking && booking.slots ? booking.slots.length : 0;
         var socialBadge = slotsCount > 1 ? '<span class="week-event-social" title="' + slotsCount + ' spots booked">+1</span>' : '';
+        // A waitlist place is shown, but clearly not as a seat.
+        var isPlace = !!(booking && booking.waitlisted);
+        if (isPlace) socialBadge = '<span class="week-event-social week-event-wl" title="Waitlist place — not booked yet">WL</span>';
 
-        html += '<div class="week-event" onclick="switchTab(\'bookings\')" title="' +
-          escapeHTML(evt._typeName || '') + ' · ' + escapeHTML(evt._instrName || '') + '">' +
+        html += '<div class="week-event' + (isPlace ? ' is-waitlisted' : '') + '" onclick="switchTab(\'bookings\')" title="' +
+          escapeHTML(evt._typeName || '') + ' · ' + escapeHTML(evt._instrName || '') + (isPlace ? ' · waitlist' : '') + '">' +
           '<div class="week-event-time">' + timeStr + socialBadge + '</div>' +
           '<div class="week-event-name">' + escapeHTML(evt._typeName || 'Class') + '</div>' +
           '<div class="week-event-loc">' + escapeHTML(evt._locName || '') + '</div>' +
@@ -990,12 +1003,14 @@
     // counting both would double-weight every upcoming class).
     var allEvents = [];
     Object.entries(bookings).forEach(function (entry) {
+      if (entry[1] && entry[1].waitlisted) return; // a waitlist place isn't a class you're in
       var evt = cache[entry[0]];
       if (evt) allEvents.push(evt);
     });
     history.forEach(function (h) {
       if (h.cancelledAt || !h.date) return;
-      if (bookings[String(h.eventId)]) return;
+      var cur = bookings[String(h.eventId)];
+      if (cur && !cur.waitlisted) return;
       allEvents.push({ start_at: h.date });
     });
 

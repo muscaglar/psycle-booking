@@ -156,7 +156,12 @@
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
     'psycle_notify_watchlist', 'psycle_calendar_data',
     'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
-    'psycle_waitlisted_events', 'psycle_weekly_template',
+    // (psycle_waitlisted_events retired: waitlist places come from GET
+    // /waitlists now; app.js deletes the old marker and it must not be
+    // resurrected from Preferences.) psycle_waitlist_places IS mirrored: it
+    // holds the previous launch's places, without which a place Psycle turned
+    // into a chargeable booking while the app was closed can't be announced.
+    'psycle_waitlist_places', 'psycle_weekly_template',
     'psycle_bike_history', 'psycle_recent_searches', 'psycle_onboarded_v1',
     'psycle_weekly_reminder', 'psycle_class_reminders',
     // Calendar integration state — must survive iOS storage purges
@@ -481,8 +486,9 @@
 
   var _origSubmitBookingNative = window.submitBooking;
   if (_origSubmitBookingNative) {
-    // Forward ALL args — the 4th (opts, { waitlist: true }) drives the
-    // waitlist flow and must survive the wrapper chain.
+    // Forward ALL args — the 4th (opts, e.g. { spaces } for no-layout
+    // studios) must survive the wrapper chain. Waitlist joins no longer come
+    // through submitBooking (joinWaitlist → PUT /waitlists/{eventId}).
     window.submitBooking = async function () {
       await _origSubmitBookingNative.apply(this, arguments);
       _scheduleCalReconcile();

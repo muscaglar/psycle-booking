@@ -129,6 +129,12 @@
   checkType('checkAuth', 'function');
   checkType('fetchMyBookings', 'function');
 
+  // ── Waitlists (app.js — separate /waitlists resource) ──
+  checkType('fetchMyWaitlists', 'function');
+  checkType('joinWaitlist', 'function');
+  checkType('leaveWaitlist', 'function');
+  checkType('claimWaitlistSpot', 'function');
+
   // ── Weekly template + recent searches + insights (tabs/app/explore) ──
   checkType('bookWeeklyTemplate', 'function');
   checkType('getRecentSearches', 'function');
@@ -146,6 +152,7 @@
   checkMember('PsycleAPI', 'validate', 'function');
   checkMember('PsycleAPI', 'field', 'function');
   checkMember('PsycleAPI', 'parseJson', 'function');
+  checkMember('PsycleAPI', 'getWaitlists', 'function');
   checkMember('PsycleAPI', 'SCHEMAS', 'object');
 
   // ── PsycleDiag surface ──
