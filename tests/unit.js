@@ -73,6 +73,36 @@ function section(name) {
   console.log('\n' + name);
 }
 
+// Source text of a repo file, e.g. readSource('js/app.js').
+function readSource(relFile) {
+  return fs.readFileSync(path.join(REPO_ROOT, relFile), 'utf8');
+}
+
+// Evaluate a module's DOM-free helpers without loading the module. The source
+// marks them with `// ── pure:<name>:start` … `// ── pure:<name>:end` (the pair
+// may repeat; regions are concatenated in file order) and they run in a fresh
+// vm context seeded with `globals`. Returns the context: top-level `function`
+// and `var` declarations are reachable on it, `const`/`let` are not.
+function loadPure(relFile, name, globals) {
+  const src = readSource(relFile);
+  const startTag = '// ── pure:' + name + ':start';
+  const endTag = '// ── pure:' + name + ':end';
+  const regions = [];
+  let from = 0;
+  for (;;) {
+    const s = src.indexOf(startTag, from);
+    if (s === -1) break;
+    const e = src.indexOf(endTag, s);
+    if (e === -1) throw new Error(relFile + ': ' + startTag + ' has no matching end marker');
+    regions.push(src.slice(s, e));
+    from = e + endTag.length;
+  }
+  if (!regions.length) throw new Error(relFile + ': no pure:' + name + ' markers found');
+  const ctx = vm.createContext(Object.assign({ console, Date, Math, JSON, Intl, Set, Map, Number, String, Array, Object, isNaN, parseInt, parseFloat }, globals || {}));
+  vm.runInContext(regions.join('\n'), ctx, { filename: relFile + '[pure:' + name + ']' });
+  return ctx;
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // Minimal browser shim
 // ════════════════════════════════════════════════════════════════════════
@@ -651,6 +681,22 @@ async function run() {
   eq(Object.keys(m1), [], 'merge (device): 95 min after a London start the place is stale');
   const m2 = {}; wlDev._mergeWaitlistsIntoBookings(m2, [wlDev._normaliseWaitlistEntry(liveEntry)], utc(2026, 8, 12, 7, 0));
   eq(Object.keys(m2), ['212203'], 'merge (device): 30 min after a London start the place still shows');
+
+  // ── Suites ───────────────────────────────────────────────────────────────
+  // Every tests/suites/*.js exports `function (t) {}` (sync or async) and runs
+  // here in filename order with the shared counters. One file per feature
+  // area keeps this file from becoming the merge point for every change.
+  const SUITES_DIR = path.join(__dirname, 'suites');
+  if (fs.existsSync(SUITES_DIR)) {
+    const t = { ok, eq, section, vm, fs, path, REPO_ROOT, JS_DIR, makeFakeLocalStorage, readSource, loadPure };
+    for (const file of fs.readdirSync(SUITES_DIR).filter((f) => f.endsWith('.js')).sort()) {
+      try {
+        await require(path.join(SUITES_DIR, file))(t);
+      } catch (e) {
+        ok(false, 'suite ' + file + ' crashed: ' + (e && e.stack ? e.stack : e));
+      }
+    }
+  }
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(50));
