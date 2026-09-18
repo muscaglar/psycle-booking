@@ -29,6 +29,21 @@ target 'PsycleBookingBuddy' do
   # Add your Pods here
 end
 
+# The Capacitor pods' podspecs still declare iOS 13.0. Xcode 27 (what Xcode
+# Cloud archives with) accepts 15.0 and up only and FAILS the archive on an
+# older value, once per pod target. Lift anything below the floor here so a
+# fresh `pod install` (Xcode Cloud runs one via `npm run sync`) is buildable.
+# Keep in step with IPHONEOS_DEPLOYMENT_TARGET in PsycleBookingBuddy.xcodeproj.
+MIN_IOS_DEPLOYMENT_TARGET = '15.0'
+
 post_install do |installer|
   assertDeploymentTarget(installer)
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if current.nil? || Gem::Version.new(current) < Gem::Version.new(MIN_IOS_DEPLOYMENT_TARGET)
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = MIN_IOS_DEPLOYMENT_TARGET
+      end
+    end
+  end
 end
