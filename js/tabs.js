@@ -40,8 +40,13 @@
     };
     var tabBar = document.createElement('div');
     tabBar.className = 'tab-bar';
+    // Which section is showing was a CSS class only. aria-current starts on
+    // Discover here as well as in switchTab: a launch with no #hash never
+    // calls switchTab.
+    tabBar.setAttribute('role', 'navigation');
+    tabBar.setAttribute('aria-label', 'Sections');
     tabBar.innerHTML =
-      '<button class="tab-btn active" data-tab="discover" onclick="switchTab(\'discover\')">' + TAB_ICONS.discover + '<span class="tab-label">Discover</span></button>' +
+      '<button class="tab-btn active" aria-current="page" data-tab="discover" onclick="switchTab(\'discover\')">' + TAB_ICONS.discover + '<span class="tab-label">Discover</span></button>' +
       '<button class="tab-btn" data-tab="bookings" onclick="switchTab(\'bookings\')">' + TAB_ICONS.bookings +
         '<span class="tab-label">Bookings</span> <span class="tab-badge" id="tabBadge"></span>' +
       '</button>' +
@@ -92,6 +97,11 @@
       '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>';
 
     discoverPanel.appendChild(controls);
+    // app.js's travel notice sits right above #results and can be up before
+    // this runs (reference data answered from the cache): it moves with it —
+    // left behind it ended up outside the panels, under the docked tab bar.
+    var travelNotice = document.getElementById('travelNotice');
+    if (travelNotice) discoverPanel.appendChild(travelNotice);
     discoverPanel.appendChild(results);
     // Discovery lives UNDER the class finder — at the top it competed with
     // the planner and filters for attention (user feedback).
@@ -193,6 +203,7 @@
     // Wrap all panels in tab-content
     var tabContent = document.createElement('div');
     tabContent.className = 'tab-content';
+    tabContent.setAttribute('role', 'main'); // the page has no <main>: a landmark to jump to past the header and tab bar
     tabBar.parentNode.insertBefore(tabContent, discoverPanel);
     tabContent.appendChild(discoverPanel);
     tabContent.appendChild(bookingsPanel);
@@ -223,6 +234,8 @@
     var btns = document.querySelectorAll('.tab-btn');
     btns.forEach(function (b) {
       b.classList.toggle('active', b.dataset.tab === tab);
+      if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
       if (b.dataset.tab === tab) {
         // Centre the active tab by scrolling ONLY the tab bar.
         // scrollIntoView also scrolls ancestors (the page itself on iOS),
@@ -275,6 +288,18 @@
     if (TABS.indexOf(hash) !== -1 && hash !== _currentTab) switchTab(hash, true);
   });
 
+  // Is this held class still to come? The My Bookings list's own test (app.js:
+  // start_at is London wall clock, and a time nothing can place has NOT
+  // started). The badge and the Stats count parsed it device-locally and, once
+  // the list stopped doing so, contradicted it on the same screen: abroad, a
+  // blank badge over a list of one — or a class counted for hours after the
+  // list had filed it under past.
+  function _stillToCome(startAt, now) {
+    return (typeof _classHasStarted === 'function' && typeof _gymClassStartMs === 'function')
+      ? !_classHasStarted(startAt, now.getTime(), _gymClassStartMs)
+      : new Date(startAt) > now;
+  }
+
   function updateTabBadge() {
     var badge = document.getElementById('tabBadge');
     if (!badge) return;
@@ -284,7 +309,7 @@
     var count = Object.keys(all).filter(function (evtId) {
       if (all[evtId] && all[evtId].waitlisted) return false;
       var evt = (_eventCache || {})[evtId];
-      return evt && new Date(evt.start_at) > now;
+      return evt && _stillToCome(evt.start_at, now);
     }).length;
     badge.textContent = count > 0 ? count : '';
   }
@@ -413,7 +438,7 @@
     Object.entries(bookings).forEach(function (entry) {
       if (entry[1] && entry[1].waitlisted) return;
       var evt = cache[entry[0]];
-      if (evt && new Date(evt.start_at) > now) upcoming++;
+      if (evt && _stillToCome(evt.start_at, now)) upcoming++;
     });
 
     // Use full history for aggregate stats
@@ -1298,7 +1323,8 @@
     var max = Number(sub.max_bookings) || 0;
     // Without a price every card read £0.00. An unlimited plan has only
     // bookings_made to go on, so it waits for the first class of the period.
-    if (price <= 0 || (max === 0 && made < 1)) { container.style.display = 'none'; return; }
+    // (!(price > 0): a price that is not a number at all read "£NaN".)
+    if (!(price > 0) || !isFinite(price) || (max === 0 && made < 1)) { container.style.display = 'none'; return; }
     container.style.display = '';
     var priceGbp = price / 100;
     var costPerClass = made > 0 ? priceGbp / made : priceGbp;
@@ -1309,7 +1335,11 @@
     // Savings message — capped plans only ("maxed out your 0 classes" otherwise)
     var savingsMsg = '';
     if (max > 0 && made > 0 && made < max) {
-      savingsMsg = 'Book ' + remaining + ' more to hit ' + _formatGbp(costAtMax) + '/class';
+      // Only while the rest of the plan still fits in the days left: "Book 10
+      // more" with a day to go is not advice (the pace card says what is left).
+      if (remaining <= _bookableMore(made, max, daysLeft)) {
+        savingsMsg = 'Book ' + remaining + ' more to hit ' + _formatGbp(costAtMax) + '/class';
+      }
     } else if (max > 0 && made >= max) {
       savingsMsg = 'You\'ve maxed out your ' + max + ' classes — incredible!';
     }
@@ -1374,9 +1404,47 @@
     container.innerHTML = html;
   }
 
+  // ── pure:cost-forecast:start ── (DOM-free; tests/suites/3d-leftovers.js evaluates this block)
+  var FORECAST_TARGET_GBP = 10; // "good value" threshold, £/class
+  var FORECAST_MAX_PER_DAY = 2; // a double is a stretch already; more is not advice
+
+  // The most classes a "Book N more" line may ask for: what the plan still
+  // holds (max 0 = unlimited) and what fits in the days left, today included.
+  function _bookableMore(made, max, daysLeft) {
+    var byDays = (Math.max(0, Math.floor(Number(daysLeft) || 0)) + 1) * FORECAST_MAX_PER_DAY;
+    if (!(max > 0)) return byDays;
+    return Math.max(0, Math.min(max - made, byDays));
+  }
+
+  // The forecast's one-line verdict. It sits under the cards, so it may never
+  // ask for more than they show is left: capped at 12 with 10 made it read
+  // "Book 2 more to beat £10.00/class" on a plan whose best is £11.67, and
+  // with a day to go it asked for a week's worth of classes.
+  function _forecastVerdict(made, max, priceGbp, costAtMax, projected, projectedCost, daysLeft) {
+    if (max > 0 && projected >= max) {
+      return 'On pace to use all ' + max + ' classes — top value at ' + _formatGbp(costAtMax) + '/class';
+    }
+    if (projectedCost <= FORECAST_TARGET_GBP) {
+      return 'On pace for ' + _formatGbp(projectedCost) + '/class — great value';
+    }
+    var onPace = 'On pace for ' + _formatGbp(projectedCost) + '/class';
+    // How many more to drop under the target?
+    var needed = Math.ceil(priceGbp / FORECAST_TARGET_GBP) - made;
+    if (!(needed > 0) || !isFinite(needed)) return onPace;
+    // More than the plan holds: every class used still lands above the target.
+    if (max > 0 && needed > max - made) {
+      return onPace + ' — this plan\'s best is ' + _formatGbp(costAtMax) + '/class';
+    }
+    if (needed > _bookableMore(made, max, daysLeft)) {
+      return onPace + ' — too few days left to beat ' + _formatGbp(FORECAST_TARGET_GBP) + '/class';
+    }
+    return 'Book ' + needed + ' more to beat ' + _formatGbp(FORECAST_TARGET_GBP) + '/class';
+  }
+  // ── pure:cost-forecast:end
+
   // Returns the forecast block HTML (or '' if there isn't enough to forecast).
   function _forecastHtml(sub, made, max, priceGbp, costAtMax) {
-    if (priceGbp <= 0) return '';
+    if (!(priceGbp > 0) || !isFinite(priceGbp)) return '';
 
     // Period window from real dates if available. Note: the API's
     // period_end is the START of the next period, so it's the right
@@ -1410,31 +1478,14 @@
     var projectedCost = projected > 0 ? priceGbp / projected : priceGbp;
 
     // One-line verdict.
-    var verdict;
-    if (max > 0 && projected >= max) {
-      verdict = 'On pace to use all ' + max + ' classes — top value at ' + _formatGbp(costAtMax) + '/class';
-    } else {
-      var TARGET = 10; // "good value" threshold, £/class
-      if (projectedCost <= TARGET) {
-        verdict = 'On pace for ' + _formatGbp(projectedCost) + '/class — great value';
-      } else {
-        // How many more to drop under the target?
-        var needed = Math.ceil(priceGbp / TARGET) - made;
-        if (max > 0) needed = Math.min(needed, max - made);
-        if (needed > 0) {
-          verdict = 'Book ' + needed + ' more to beat ' + _formatGbp(TARGET) + '/class';
-        } else {
-          verdict = 'On pace for ' + _formatGbp(projectedCost) + '/class';
-        }
-      }
-    }
+    var verdict = _forecastVerdict(made, max, priceGbp, costAtMax, projected, projectedCost, daysLeft);
 
     var html = '<div class="forecast-block">';
     html += '<div class="forecast-head">';
     html += '<div class="forecast-stat"><span class="forecast-num">' + projected + '</span><span class="forecast-cap">projected classes</span></div>';
     html += '<div class="forecast-stat"><span class="forecast-num">' + _formatGbp(projectedCost) + '</span><span class="forecast-cap">projected per class</span></div>';
     html += '</div>';
-    html += '<div class="forecast-meta">' + made + ' booked · day ' + daysElapsed + ' of ' + totalDays + ' · ' + daysLeft + ' days left</div>';
+    html += '<div class="forecast-meta">' + made + ' booked · day ' + daysElapsed + ' of ' + totalDays + ' · ' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' left</div>';
     html += '<div class="forecast-verdict">' + escapeHTML(verdict) + '</div>';
     html += '</div>';
     return html;
@@ -1449,7 +1500,9 @@
     box.innerHTML =
       '<div class="theme-chips">' +
       window.APP_THEMES.map(function (t) {
-        return '<button class="theme-chip' + (t.id === current ? ' active' : '') + '" onclick="window._pickTheme(\'' + t.id + '\')">' +
+        // aria-pressed: the chosen theme was a border colour only. _pickTheme
+        // re-renders the whole picker, so it can't go stale.
+        return '<button class="theme-chip' + (t.id === current ? ' active' : '') + '" aria-pressed="' + (t.id === current) + '" onclick="window._pickTheme(\'' + t.id + '\')">' +
           '<span class="theme-swatch"><i style="background:' + t.accent + '"></i><i style="background:' + t.bg + '"></i></span>' +
           '<span class="theme-chip-name">' + t.name + '</span>' +
         '</button>';
@@ -1515,8 +1568,11 @@
 
   function _paintReminderRow(row) {
     var on = window._nativeReminder.isOn();
+    // role="switch" + aria-checked on the row itself: the drawn switch is
+    // aria-hidden, so on / off was invisible to a screen reader. Both toggles
+    // repaint this row, so the state is always the one just painted.
     var html =
-      '<button class="app-row" onclick="window._toggleReminder()">' +
+      '<button class="app-row" role="switch" aria-checked="' + !!on + '" onclick="window._toggleReminder()">' +
         '<span class="app-row-text"><span class="app-row-label">Monday booking reminder</span>' +
         '<span class="app-row-detail">11:59 UK — when the new booking week opens</span></span>' +
         '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
@@ -1524,7 +1580,7 @@
     if (window._nativeClassReminders) {
       var cls = _classReminderSwitch(window._nativeClassReminders.isOn(), _classReminderGranted);
       html +=
-        '<button class="app-row" onclick="window._toggleClassReminders()">' +
+        '<button class="app-row" role="switch" aria-checked="' + !!cls.on + '" onclick="window._toggleClassReminders()">' +
           '<span class="app-row-text"><span class="app-row-label">Class reminders</span>' +
           '<span class="app-row-detail">' + cls.detail + '</span></span>' +
           '<span class="app-row-switch' + (cls.on ? ' on' : '') + '" aria-hidden="true"></span>' +
@@ -1863,14 +1919,16 @@
       '</div>';
     }).join('');
 
+    // role / label / tabindex: app.js's overlay handling moves focus onto the
+    // panel, keeps Tab inside it and closes it on Escape.
     overlay.innerHTML =
-      '<div class="modal">' +
+      '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="yearReviewTitle" tabindex="-1">' +
         '<div class="modal-header">' +
           '<div>' +
-            '<div class="modal-title">' + year + ' in review</div>' +
+            '<div class="modal-title" id="yearReviewTitle">' + year + ' in review</div>' +
             '<div class="modal-subtitle">Your year on the bike</div>' +
           '</div>' +
-          '<button class="modal-close" onclick="document.getElementById(\'yearReviewOverlay\').remove()">&times;</button>' +
+          '<button class="modal-close" onclick="document.getElementById(\'yearReviewOverlay\').remove()" aria-label="Close">&times;</button>' +
         '</div>' +
         '<div class="yr-rows">' + rowsHtml + '</div>' +
         '<div class="modal-actions" style="margin-top:16px">' +

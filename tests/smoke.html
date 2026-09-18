@@ -43,12 +43,52 @@
   NOTE: these scripts are NOT deferred here (unlike psycle-finder.html, which
   uses `defer`). Loaded synchronously in order, each finishes before the next
   starts, so by the time the final smoke-runner script runs every module is
-  fully evaluated. We do not call checkAuth()/init paths — we only assert that
-  the symbols are present and the right type, plus two pure-logic checks.
+  fully evaluated. We only assert that the symbols are present and the right
+  type, plus a few pure-logic checks.
+
+  The script list must stay identical to psycle-finder.html's, in the same
+  order — tests/suites/shell.js fails `npm test` when the two drift apart.
 -->
+<script>
+// A module that throws while LOADING leaves nothing the checks below can see:
+// function declarations are hoisted, so `typeof search` is "function" for an
+// app.js that died on its first line (every const in its TDZ, no listeners, no
+// init). Collected from here — ahead of every app script, and of the
+// window.onerror reliability.js installs later — and reported by the runner.
+// In a script of its own: tests/suites/shell.js evaluates the fetch stub below
+// in a bare sandbox. Only a throw (target: window) or a script that failed to
+// load counts; a stray image or font error must not turn the page red.
+(function () {
+  var errors = window.__smokeLoadErrors = [];
+  window.addEventListener('error', function (e) {
+    var target = e && e.target;
+    if (target === window) {
+      errors.push((e.message || 'error') + (e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : ''));
+    } else if (target && target.tagName === 'SCRIPT') {
+      errors.push('could not load ' + (target.getAttribute('src') || 'a script'));
+    }
+  }, true); // capture: a failed load does not bubble
+})();
+</script>
+<script>
+// Hermetic. app.js starts itself the moment it loads: /instructors, /locations
+// and /event-types, plus /profile when this origin holds a token. Psycle's API
+// is a live booking system and this page must never reach it, so every request
+// is answered here. The answer is a 200 with an empty list on purpose: a 200
+// that is not a profile leaves a stored session "unverified", which keeps the
+// token — a 401 would sign the developer out of the app on this origin.
+(function () {
+  function smokeFetchStub() {
+    return Promise.resolve(new Response('{"data":[]}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  }
+  window.__smokeFetchStub = smokeFetchStub;
+  window.fetch = smokeFetchStub;
+})();
+</script>
 <script src="../js/state.js"></script>
 <script src="../js/security.js"></script>
 <script src="../js/theme.js"></script>
+<script src="../js/facets.js"></script>
 <script src="../js/app.js"></script>
 <script src="../js/reliability.js"></script>
 <script src="../js/interactions.js"></script>
@@ -129,11 +169,21 @@
   checkType('checkAuth', 'function');
   checkType('fetchMyBookings', 'function');
 
+  // ── Filter core (facets.js — loads before app.js, which calls it) ──
+  checkType('PsycleFacets', 'object');
+  checkMember('PsycleFacets', 'run', 'function');
+
   // ── Waitlists (app.js — separate /waitlists resource) ──
   checkType('fetchMyWaitlists', 'function');
   checkType('joinWaitlist', 'function');
   checkType('leaveWaitlist', 'function');
   checkType('claimWaitlistSpot', 'function');
+
+  // ── Discover Time row (app.js — reached BY NAME from inline onclicks and interactions.js) ──
+  checkType('toggleTimeBand', 'function');
+  checkType('toggleAvailableOnly', 'function');
+  checkType('clearTimeFilters', 'function');
+  checkType('setTimeFilters', 'function');
 
   // ── Weekly template + recent searches + insights (tabs/app/explore) ──
   checkType('bookWeeklyTemplate', 'function');
@@ -175,6 +225,21 @@
     var vBad = window.PsycleAPI && window.PsycleAPI.validate('event', { id: 1 });
     checkEqual('validate("event",{id:1}).ok === false', vBad && vBad.ok, false);
   } catch (e) { line(false, 'validate pure check threw: ' + (e && e.message)); }
+
+  try {
+    var faceted = window.PsycleFacets && window.PsycleFacets.run(
+      [{ _instrName: 'A', start_at: '2026-01-01 07:00:00' }, { _instrName: 'B', start_at: '2026-01-01 08:00:00' }], { instructor: ['A'] });
+    checkEqual('PsycleFacets.run(two classes, instructor A).total === 1', faceted && faceted.total, 1);
+  } catch (e) { line(false, 'PsycleFacets pure check threw: ' + (e && e.message)); }
+
+  // ── Every module ran to its end (the typeof checks above cannot tell) ──
+  var loadErrors = window.__smokeLoadErrors;
+  if (!Array.isArray(loadErrors)) line(false, 'the load-error listener is missing (it must come before the first app script)');
+  else if (loadErrors.length === 0) line(true, 'no script threw or failed to load');
+  else loadErrors.forEach(function (m) { line(false, 'threw while loading: ' + m); });
+
+  // ── Hermetic: no module may have swapped the real fetch back in ──
+  checkEqual('window.fetch is still the local stub (nothing here can reach the live API)', window.fetch === window.__smokeFetchStub, true);
 
   // ── Banner + title ──
   var banner = document.getElementById('banner');

@@ -137,18 +137,24 @@ catch (e) { document.documentElement.style.display = 'none'; }
 <div id="sessionBanner" class="app-banner" style="display:none">
   <span>⚠️ Your session has expired.</span>
   <a href="#" onclick="event.preventDefault();openLoginPopup()" class="app-banner-action">Sign in again →</a>
-  <button onclick="document.getElementById('sessionBanner').style.display='none'" class="app-banner-close">×</button>
+  <button onclick="document.getElementById('sessionBanner').style.display='none'" class="app-banner-close" aria-label="Dismiss">×</button>
 </div>
 
 <div id="toast" class="toast"></div>
+<!-- Screen-reader announcements (announce() in js/app.js writes here). Two
+     fixed regions, in the page from the start: a live region added or re-roled
+     at the moment of the message is often never read. #toast itself stays
+     un-roled so a message is not spoken twice. -->
+<div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="srAlert" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <div id="tokenDialog" class="token-dialog" style="display:none">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tokenDialogTitle" tabindex="-1">
     <div class="modal-header">
       <div>
-        <div class="modal-title">Connect your Psycle account</div>
+        <div class="modal-title" id="tokenDialogTitle">Connect your Psycle account</div>
         <div class="modal-subtitle">One-time setup — saves automatically</div>
       </div>
-      <button class="modal-close" onclick="closeTokenDialog()">×</button>
+      <button class="modal-close" onclick="closeTokenDialog()" aria-label="Close">×</button>
     </div>
 
     <div class="token-steps">
@@ -179,13 +185,13 @@ catch (e) { document.documentElement.style.display = 'none'; }
 </div>
 
 <div id="bikeModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBikePicker()">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="modal-header">
       <div>
         <div class="modal-title" id="modalTitle">Select your bike</div>
         <div class="modal-subtitle" id="modalSubtitle"></div>
       </div>
-      <button class="modal-close" onclick="closeBikePicker()">×</button>
+      <button class="modal-close" onclick="closeBikePicker()" aria-label="Close">×</button>
     </div>
     <div class="bike-legend">
       <span><i style="background:var(--bg-input,#1a1a1a);border:1px solid var(--border-light,#444)"></i> Available</span>
@@ -193,9 +199,9 @@ catch (e) { document.documentElement.style.display = 'none'; }
       <span><i style="background:var(--accent)"></i> Your pick</span>
     </div>
     <div class="bike-map-wrap">
-      <svg id="bikeSvg" width="600" height="300"></svg>
+      <svg id="bikeSvg" width="600" height="300" role="group" aria-label="Studio layout"></svg>
     </div>
-    <div class="modal-hint" id="modalHint">Click a bike to select it</div>
+    <div class="modal-hint" id="modalHint" aria-live="polite">Click a bike to select it</div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeBikePicker()">Cancel</button>
       <button class="btn" id="confirmBookBtn" disabled onclick="confirmBikeBooking()">Confirm booking</button>
@@ -218,17 +224,25 @@ catch (e) { document.documentElement.style.display = 'none'; }
   <div class="control-group">
     <label>Date</label>
     <div class="date-presets">
-      <button class="date-quick-btn date-pick" id="pickDateBtn" onclick="toggleDatePicker()" aria-label="Pick a date" title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg></button>
-      <button class="date-quick-btn" onclick="setDateQuick('today')">Today</button>
-      <button class="date-quick-btn" onclick="setDateQuick('tomorrow')">Tomorrow</button>
-      <button class="date-quick-btn" onclick="setDateQuick('week')">7 days</button>
-      <button class="date-quick-btn" onclick="setDateQuick('2week')">14 days</button>
+      <button class="date-quick-btn date-pick" id="pickDateBtn" onclick="toggleDatePicker()" aria-label="Pick a date" aria-expanded="false" aria-controls="datePicker" title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg></button>
+      <button class="date-quick-btn" aria-pressed="false" onclick="setDateQuick('today')">Today</button>
+      <button class="date-quick-btn" aria-pressed="false" onclick="setDateQuick('tomorrow')">Tomorrow</button>
+      <button class="date-quick-btn" aria-pressed="false" onclick="setDateQuick('week')">7 days</button>
+      <button class="date-quick-btn" aria-pressed="false" onclick="setDateQuick('2week')">14 days</button>
     </div>
     <div id="datePicker" class="date-picker" style="display:none"></div>
     <div style="display:none">
       <input type="date" id="startDate" onchange="onDateInputChange()" style="min-width:140px">
     </div>
     <input type="hidden" id="daysAhead" value="7">
+  </div>
+
+  <!-- Time of day + "Available only". The pills are painted by renderTimePills()
+       (js/app.js). class="location-chips": pill rows are styled by that class /
+       by id in css/redesign.css, so this row needs no rules of its own. -->
+  <div class="control-group">
+    <label>Time</label>
+    <div id="timePills" class="location-chips"></div>
   </div>
 
   <div class="control-group">

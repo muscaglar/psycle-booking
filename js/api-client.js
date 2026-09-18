@@ -70,7 +70,7 @@
         'duration',
         'is_fully_booked',
       ],
-      optional: ['is_waitlistable', 'capacity_remaining', 'slots', 'is_live_stream'],
+      optional: ['is_waitlistable', 'capacity', 'occupancy', 'capacity_remaining', 'slots', 'is_live_stream'],
     },
     // GET /bookings → data[] (fetchMyBookings app.js:206-207 event_id + slot)
     booking: {

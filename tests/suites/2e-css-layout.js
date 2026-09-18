@@ -225,8 +225,8 @@ module.exports = function (t) {
   // pointer mid-click, and the click landed on the card (detail sheet).
   const press = (live.match(/\/?\s*([^{}]*\.theme-swatch:active) \{ transform: scale\(0\.985\); \}/) || [])[1] || '';
   t.ok(press !== '' && !/\.class-card/.test(press), 'the shared press rule no longer lists .class-card');
-  t.ok(live.indexOf('.class-card:active:not(:has(:is(button, a, [role="button"], [onclick]):active)) { transform: scale(0.985); }') !== -1,
-    'the card presses only when the press is on the card itself — not on a button, link or instructor name inside it — in a rule of its own (no :has() → only this rule is dropped)');
+  t.ok(live.indexOf('.class-card:active:not(:has(:is(button, a, [role="button"]:not(.cc-name), [onclick]):active)) { transform: scale(0.985); }') !== -1,
+    'the card presses only when the press is on the card itself — not on a button, link or instructor name inside it — in a rule of its own (no :has() → only this rule is dropped); the class name, a role=button with the card\'s own action, still presses it');
   const reduced = live.slice(live.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
   t.ok(/\.class-grid \.class-card,/.test(reduced), 'reduced-motion still switches the entrance off entirely');
 

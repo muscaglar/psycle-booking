@@ -64,10 +64,33 @@
     if (_pillEl) return;
     _pillEl = document.createElement('div');
     _pillEl.className = 'next-class-pill hidden';
+    _pillA11y(null); // born hidden
     _pillEl.onclick = function () {
       if (typeof switchTab === 'function') switchTab('bookings');
     };
     document.body.appendChild(_pillEl);
+  }
+
+  // The pill is a div that acts as a button (it holds div children, so it
+  // stays a div). `.hidden` only fades it out — it is still in the page — so
+  // it is a button ONLY while showing: hidden, it must be neither a tab stop
+  // nor something VoiceOver can swipe onto. `label` = what it says, or null
+  // when hidden. Set as attributes, never markup: the label carries API text.
+  function _pillA11y(label) {
+    if (!_pillEl) return;
+    if (label == null) {
+      // aria-hidden on the element that holds focus is invalid: let go first.
+      if (document.activeElement === _pillEl) _pillEl.blur();
+      _pillEl.removeAttribute('role');
+      _pillEl.removeAttribute('tabindex');
+      _pillEl.removeAttribute('aria-label');
+      _pillEl.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    _pillEl.removeAttribute('aria-hidden');
+    _pillEl.setAttribute('role', 'button'); // Enter / Space: app.js's one keydown
+    _pillEl.setAttribute('tabindex', '0');
+    _pillEl.setAttribute('aria-label', label);
   }
 
   function updatePill() {
@@ -76,30 +99,39 @@
     var cache = _eventCache || {};
     var now = new Date();
 
-    // Find next upcoming class you hold a seat in (waitlist places don't count)
+    // Find next upcoming class you hold a seat in (waitlist places don't count).
+    // The REAL start (app.js: start_at is London wall clock) — read
+    // device-locally, a member abroad saw no pill for a class My Bookings
+    // listed as "In 2h", or a countdown to one it had filed under past. A
+    // time nothing can place is skipped: there is nothing to count down to.
+    var startMs = function (evt) {
+      return typeof _gymClassStartMs === 'function' ? _gymClassStartMs(evt.start_at) : new Date(evt.start_at).getTime();
+    };
     var next = null;
+    var nextMs = 0;
     var nextEvtId = null;
     Object.entries(bookings).forEach(function (entry) {
       var evtId = entry[0];
       if (entry[1] && entry[1].waitlisted) return;
       var evt = cache[evtId];
       if (!evt) return;
-      var dt = new Date(evt.start_at);
-      if (dt <= now) return;
-      if (!next || dt < new Date(next.start_at)) {
+      var ms = startMs(evt);
+      if (isNaN(ms) || ms <= now.getTime()) return;
+      if (!next || ms < nextMs) {
         next = evt;
+        nextMs = ms;
         nextEvtId = evtId;
       }
     });
 
     if (!next) {
       _pillEl.classList.add('hidden');
+      _pillA11y(null);
       return;
     }
 
     var booking = bookings[nextEvtId];
-    var dt = new Date(next.start_at);
-    var diff = dt.getTime() - now.getTime();
+    var diff = nextMs - now.getTime();
     var hours = Math.floor(diff / 3600000);
     var mins = Math.floor((diff % 3600000) / 60000);
 
@@ -129,6 +161,8 @@
       (slots ? '<div class="ncp-seat">' + slots + '</div>' : '');
 
     _pillEl.classList.remove('hidden');
+    _pillA11y('Next class in ' + countdown + ': ' + (next._typeName || 'Class') +
+      (next._instrName ? ' with ' + next._instrName : '') + (slots ? ', ' + slots : '') + '. View my bookings');
   }
 
   function startPillTimer() {
@@ -199,10 +233,12 @@
     overlay.className = 'settings-overlay';
     overlay.onclick = function (e) { if (e.target === overlay) closeSettings(); };
 
+    // role / label / tabindex: app.js's overlay handling moves focus onto the
+    // panel, keeps Tab inside it and closes it on Escape (via closeSettings).
     overlay.innerHTML =
-      '<div class="settings-panel">' +
+      '<div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">' +
         '<div class="settings-header">' +
-          '<span class="settings-title">Settings</span>' +
+          '<span class="settings-title" id="settingsTitle">Settings</span>' +
           '<button class="settings-close" onclick="closeSettings()" aria-label="Close">×</button>' +
         '</div>' +
         '<div class="settings-body">' +
@@ -288,9 +324,13 @@
     var sid = String(instr.id);
     var currentTier = tiers[sid] || '';
     var isFav = favs.has(sid);
+    // Which rank is set was a colour only. Same attributes as the instructor
+    // modal's copy of these buttons (features.js); the list is rebuilt from the
+    // store on every change, so they can't go stale. (The star needs nothing:
+    // its name already flips between "Add to…" and "Remove from favourites".)
     var btns = TIERS.map(function (t) {
       var cls = currentTier === t ? ' active-' + t : '';
-      return '<button class="tier-btn' + cls + '" onclick="setInstructorTier(' + instr.id + ',\'' + t + '\')">' + t + '</button>';
+      return '<button class="tier-btn' + cls + '" aria-pressed="' + (currentTier === t) + '" aria-label="Rank ' + t + '" onclick="setInstructorTier(' + instr.id + ',\'' + t + '\')">' + t + '</button>';
     }).join('');
     return '<div class="tier-row">' +
       '<button class="tier-fav' + (isFav ? ' is-fav' : '') + '" onclick="toggleFavFromSettings(' + instr.id + ')" title="' + (isFav ? 'Remove from favourites' : 'Add to favourites') + '"></button>' +
@@ -647,7 +687,7 @@
         '<rect x="' + sx(slot.x) + '" y="' + sy(slot.y) + '" width="' + SLOT + '" height="' + SLOT + '"' +
         ' rx="6" stroke-width="1.5"/>' +
         '<text x="' + (sx(slot.x) + SLOT / 2) + '" y="' + (sy(slot.y) + SLOT / 2 + 4) + '"' +
-        ' text-anchor="middle" font-family="sans-serif" font-size="11">' + label + '</text>' +
+        ' text-anchor="middle" font-family="sans-serif" font-size="11">' + escapeHTML(label) + '</text>' +
       '</g>';
     }).join('');
 
@@ -736,6 +776,9 @@
             g.appendChild(dot);
           }
         });
+        // The marks above are colour only: have app.js re-read the seats so
+        // each one's spoken name says "one you prefer" / "one you avoid" too.
+        if (typeof _syncBikeSlotsA11y === 'function') _syncBikeSlotsA11y();
 
         // Update legend if prefs exist
         if (prefs.avoid.length || prefs.prefer.length) {
@@ -1248,9 +1291,9 @@
     overlay.onclick = function (e) { if (e.target === overlay) closeDiagnostics(); };
 
     overlay.innerHTML =
-      '<div class="settings-panel diag-panel">' +
+      '<div class="settings-panel diag-panel" role="dialog" aria-modal="true" aria-labelledby="diagTitle" tabindex="-1">' +
         '<div class="settings-header">' +
-          '<span class="settings-title">Diagnostics</span>' +
+          '<span class="settings-title" id="diagTitle">Diagnostics</span>' +
           '<button class="settings-close diag-close" onclick="closeDiagnostics()" aria-label="Close">×</button>' +
         '</div>' +
         '<div class="settings-body">' +

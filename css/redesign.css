@@ -76,26 +76,36 @@ header .theme-toggle {
   flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
   padding-top: 6px; text-align: right;
 }
+/* 14px line-height here and on .disc-clear-btn, not 1.3 (= 14.3px): the hit
+   areas below are counted in whole pixels — see the note there. */
 .disc-actions .last-updated {
-  font: 500 11px/1.3 var(--font-body); color: var(--ink-3, #9a9c9f); white-space: nowrap;
+  font: 500 11px/14px var(--font-body); color: var(--ink-3, #9a9c9f); white-space: nowrap;
 }
 .disc-actions .refresh-link { color: var(--accent, #1f6f5c); font: inherit; }
 .disc-clear-btn {
   background: none; border: none; padding: 0; width: auto;
-  color: var(--ink-3, #9a9c9f); font: 500 11px/1.3 var(--font-body);
+  color: var(--ink-3, #9a9c9f); font: 500 11px/14px var(--font-body);
   cursor: pointer; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
 }
 /* Both are 14px-tall text links stacked 5px apart. Each gets an invisible hit
-   area that grows AWAY from the other (2px towards it, so the two never
-   overlap): a near miss on Refresh must not land on Clear filters, which
-   wipes the filters without asking. */
+   area that grows AWAY from the other, and the 5px between them is split
+   unevenly on purpose: Refresh takes the 4px nearest to it, Clear filters
+   takes nothing above its own box, and the last 1px belongs to neither. They
+   used to reach 2px each: the middle of the gap was equally close to both, and
+   in a browser a tap there went to Clear filters — which wipes the filters
+   without asking. Now the middle is Refresh's, and only a tap on (or a hair
+   above) Clear filters itself can clear.
+   The row nobody owns is Refresh's bottom + 4 (probe it there: a browser tests
+   a point as the 1px square below it, so anything past + 4 already touches
+   Clear filters' first row). It is a whole pixel only because both links are
+   whole pixels tall — at 14.3px every edge sat on .3 and it was a fifth of one. */
 .disc-actions .refresh-link, .disc-clear-btn { position: relative; }
 .disc-actions .refresh-link::after, .disc-clear-btn::after { content: ''; position: absolute; }
 .disc-actions .refresh-link::after {
-  inset: calc(var(--space-6) * -1) calc(var(--space-3) * -1) -2px calc(var(--space-6) * -1);
+  inset: calc(var(--space-6) * -1) calc(var(--space-3) * -1) calc(var(--space-1) * -1) calc(var(--space-6) * -1);
 }
 .disc-clear-btn::after {
-  inset: -2px calc(var(--space-3) * -1) calc(var(--space-6) * -1) calc(var(--space-6) * -1);
+  inset: 0 calc(var(--space-3) * -1) calc(var(--space-6) * -1) calc(var(--space-6) * -1);
 }
 
 /* ── Discover: unified search ───────────────────────────────────────────── */
@@ -312,6 +322,29 @@ header .theme-toggle {
   border-bottom: 1px solid var(--line, #e7e5df);
   padding: 4px 0 11px; margin: 6px 0 16px;
 }
+/* "112 classes" beside the day name (render() refreshes it each pass). Quiet
+   and in sentence case, so the day still reads first; never wraps or shrinks
+   — the name gives way instead. */
+.day-count {
+  flex: none; margin-left: var(--space-5);
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  letter-spacing: 0; text-transform: none; white-space: nowrap;
+  color: var(--ink-3);
+}
+/* Phones: the day header stays on screen while its classes scroll under it —
+   a week of every studio is ~100 cards a day, and the date was gone after the
+   first swipe. Only where .tab-content is the scroller (<=640px, css/tabs.css):
+   on wider screens the document scrolls and the tab bar is what sticks to the
+   top. Solid page background so cards do not show through; above the cards'
+   own stacking contexts (:hover / :active transforms), below every overlay.
+   The 6px top margin moves into the padding so the stuck text clears the edge. */
+@media (max-width: 640px) {
+  .day-header {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bg);
+    margin-top: 0; padding-top: var(--space-4);
+  }
+}
 .type-section-header { border-bottom: none; margin: 14px 0 8px; }
 .class-grid { display: flex; flex-direction: column; gap: 10px; }
 
@@ -349,6 +382,10 @@ header .theme-toggle {
 .cc-sub .instructor-link { color: inherit; border: none; }
 .cc-spots { font: 600 12px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
 .cc-spots.low { color: var(--accent, #1f6f5c); }
+/* A card booked in place keeps its markup (applyBookedState flips the classes,
+   it does not re-run the template): "Only 2 left" / "Waitlist open" under
+   "Bike 12 ✓" is about a class the member is already in. */
+.class-card.is-booked .cc-spots, .class-card.is-waitlisted .cc-spots { display: none; }
 .cc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1px; }
 
 /* The action wraps by WIDTH, not by breakpoint: when a long label ("Join

@@ -51,10 +51,34 @@ jobs:
         working-directory: ios-app
         run: npm run patch:check
 
+      # Whole-app load check: every module, in production order, in a real
+      # engine (tests/smoke.html). The page answers every fetch itself, so
+      # nothing reaches Psycle's live API; the resolver rule makes that a hard
+      # guarantee — no host but this runner resolves at all.
+      # The grep is for the PASS banner's MARKUP: the bare words "SMOKE: PASS"
+      # also sit in the page's own comments, which --dump-dom prints, so a grep
+      # for them alone could never fail (tests/suites/shell.js holds this).
+      # Advisory until it has been seen green on a runner once — then delete
+      # continue-on-error to make a module that fails to load block the merge.
+      - name: Smoke test (headless Chrome, advisory)
+        continue-on-error: true
+        run: |
+          python3 -m http.server 8080 --bind 127.0.0.1 >/dev/null 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          curl --silent --fail --retry 10 --retry-delay 1 --retry-connrefused --output /dev/null http://127.0.0.1:8080/tests/smoke.html
+          timeout 60 google-chrome --headless=new --no-sandbox --disable-gpu \
+            --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1" \
+            --dump-dom http://127.0.0.1:8080/tests/smoke.html > "$RUNNER_TEMP/smoke-dom.html"
+          grep -o 'class="line fail-line">[^<]*' "$RUNNER_TEMP/smoke-dom.html" || true
+          grep -o 'id="summary">[^<]*' "$RUNNER_TEMP/smoke-dom.html" || true
+          grep -q 'class="pass">SMOKE: PASS' "$RUNNER_TEMP/smoke-dom.html"
+
       # Advisory only: surfaces type/typo issues without failing the build.
       # The vanilla-JS global pattern means strict tsc would be noisy, so this
       # is informational. `continue-on-error` keeps a red typecheck from
-      # blocking merges.
+      # blocking merges. (The script itself no longer swallows tsc's exit code:
+      # a missing or crashing tsc now shows as a failed step, not a green one.)
       - name: Type check (advisory)
         run: npm run typecheck
         continue-on-error: true

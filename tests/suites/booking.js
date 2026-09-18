@@ -198,6 +198,32 @@ module.exports = async function (t) {
     eq(w.log.reads, 0, 'a definitive 4xx needs no verification');
   }
 
+  t.section('Booking: a confirmed seat marks its card at once, not when the refetch lands');
+  {
+    // css/redesign.css hides .cc-spots on .is-booked. Painted on the button
+    // alone, "Only 1 left" stayed under "Bike 7 ✓" until the 400ms refetch came
+    // back through applyBookedState — and for good when that refetch failed.
+    const onCard = classes => {
+      const set = new Set(classes);
+      const b = btn();
+      b.closest = sel => (sel === '.class-card' ? { classList: { add: c => set.add(c), remove: c => set.delete(c) } } : null);
+      return { b, has: c => set.has(c) };
+    };
+    let w = world({}, [{ status: 200, body: { data: { id: 'A' } } }], []);
+    let c = onCard(['class-card']);
+    await w.submit([7], c.b);
+    eq([c.b.textContent, c.has('is-booked'), w.log.reads], ['Bike 7 ✓', true, 0], 'a 200 → the card is .is-booked with the tick, before any /bookings read');
+    const place = { 77: { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: { id: 'W1' } } };
+    w = world(place, [{ status: 201, body: { data: { id: 'A' } } }], []);
+    c = onCard(['class-card', 'is-waitlisted']);
+    await w.submit([7], c.b);
+    eq([c.has('is-booked'), c.has('is-waitlisted')], [true, false], 'a seat booked over a held waitlist place swaps the waitlist tint for the booked one');
+    w = world({}, [{ status: 403, body: { message: 'No credits left' } }], []);
+    c = onCard(['class-card']);
+    await w.submit([7], c.b);
+    ok(!c.has('is-booked'), 'a refused POST leaves the card alone');
+  }
+
   t.section('Booking: a refused POST never leaves the button reading as booked');
   {
     // .booked is what theme.js's success haptic, the booked pill style and
@@ -590,7 +616,7 @@ module.exports = async function (t) {
   }
 
   // ── Wiring: Change spot (DELETE old seat, then POST the new one) ─────────
-  const swapFns = [grab(appSrc, 'function _cancelDeadline(', '}'), grab(appSrc, 'window.changeSpot = async function(eventId) {', '};'), grab(appSrc, 'function renderChangeSpotHint(', '}'),
+  const swapFns = [grab(appSrc, 'function _cancelDeadline(', '}'), grab(appSrc, 'window.changeSpot = async function(eventId) {', '};'), grab(appSrc, 'function _repaintKeepingFocus(', '}'), grab(appSrc, 'function renderChangeSpotHint(', '}'),
     grab(appSrc, 'window.setChangeSpotTarget = function (slot) {', '};'), grab(appSrc, 'async function executeSpotSwap(', '}')].join('\n');
   // `script`: call → a status, an Error to throw (the request never answered),
   // or { status, body }. Unscripted: DELETE 204, POST 201.

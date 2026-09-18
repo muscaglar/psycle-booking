@@ -411,7 +411,7 @@ module.exports = async function (t) {
     const ctx = t.loadPure('js/app.js', 'bookings-card', {
       URLSearchParams,
       window: {},
-      _eventCache: { 77: { start_at: '2026-09-22 07:00:00', instructor_id: 31, event_type_id: 7, studio_id: 4, _instrName: 'Alex', _typeName: o.typeName || 'Ride 45' } },
+      _eventCache: { 77: { start_at: o.startAt || '2026-09-22 07:00:00', instructor_id: 31, event_type_id: 7, studio_id: 4, _instrName: 'Alex', _typeName: o.typeName || 'Ride 45' } },
       _myBookings: { 77: { bookingId: 'A', slots: [7], slotBookings: { 7: 'A' }, waitlisted: false } },
       _studioMap: { 4: { location_id: 2 } },
       selectedInstructors: new Set(o.instructors || []),
@@ -419,6 +419,9 @@ module.exports = async function (t) {
       selectedCategories: new Set(o.categories || []),
       selectedStrengthSubs: new Set(o.strengthSubs || ['UPPER', 'LOWER', 'FULL']),
       selectedReformerSubs: new Set(o.reformerSubs || ['SIGNATURE', 'STRENGTH']),
+      selectedTimeBands: new Set(o.timeBands || []),
+      renderTimePills: () => log.calls.push('timePills'),
+      refreshFacetCounts: () => log.calls.push('facets'),
       escapeHTML: (s) => String(s),
       localDateStr: (d) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'),
       toast: (msg) => log.toasts.push(msg),
@@ -441,6 +444,8 @@ module.exports = async function (t) {
     // The REAL category map / sub-type list: what render() filters the alternatives by.
     t.vm.runInContext("var _dateQuickMode = 'today';\n" + sliceFn(src, 'const CATEGORY_MAP = [', '];') + '\n' + sliceFn(src, 'function getCategory(', '}') + '\n' +
       sliceFn(src, 'const REFORMER_SUBS = [', '];') + '\n' + sliceFn(src, 'async function rebookNextWeek(', '}') + '\n' +
+      // The REAL Time-row bands, and the helper that lets a time-targeted flow through them.
+      sliceFn(src, 'const TIME_BANDS = [', '];') + '\n' + sliceFn(src, 'function _timeBandOf(', '}') + '\n' + sliceFn(src, 'function _admitTimeBands(', '}') + '\n' +
       sliceFn(src, 'window.findSimilar = function(eventId) {', '};'), ctx);
     return {
       ctx, log, inputs, trigger,
@@ -506,6 +511,39 @@ module.exports = async function (t) {
     c = similarWorld({ categories: ['STRENGTH'], typeName: 'Class', events: alt });
     await c.ctx.rebookNextWeek(77);
     t.eq([...c.ctx.selectedCategories], ['STRENGTH'], 'type unknown (placeholder only) → no category is guessed');
+
+    // The Time row is a filter like the others: "After 5" saved, rebooking an
+    // 08:00 Ride. Its alternatives sit at 07:00 and 09:30 — two bands, neither
+    // the one that is on — and the list is not empty (evening classes show), so
+    // the "Show all times" rescue never appears.
+    const straddle = [
+      { id: 9005, event_type_id: 7, instructor_id: 99, studio_id: 4, start_at: '2026-09-29 07:00:00' },
+      { id: 9006, event_type_id: 7, instructor_id: 98, studio_id: 4, start_at: '2026-09-29T09:30:00' },
+    ];
+    let b = similarWorld({ startAt: '2026-09-22 08:00:00', timeBands: ['evening'], events: straddle });
+    await b.ctx.rebookNextWeek(77);
+    t.eq([...b.ctx.selectedTimeBands].sort(), ['day', 'early', 'evening'], "an active Time row gains each alternative's OWN band (the ±2h window straddles them; the class's hour alone showed one of two)");
+    t.ok(straddle.every((e) => b.ctx.selectedTimeBands.has(b.ctx._timeBandOf(e.start_at))), 'so every alternative the toast announces passes the Time row');
+    t.ok(b.log.calls.includes('timePills') && b.log.calls.includes('facets') && b.log.calls.indexOf('facets') < b.log.calls.indexOf('search'),
+      'the pills and the chip counts follow, before the search');
+    b = similarWorld({ startAt: '2026-09-22 08:00:00', events: straddle });
+    await b.ctx.rebookNextWeek(77);
+    t.eq([[...b.ctx.selectedTimeBands], b.log.calls.includes('timePills')], [[], false], 'no time band on → none is invented, nothing is repainted');
+    b = similarWorld({ timeBands: ['early'], events: alt });
+    await b.ctx.rebookNextWeek(77);
+    t.eq([[...b.ctx.selectedTimeBands], b.log.calls.includes('facets')], [['early'], false], 'a band that already admits them is left alone');
+
+    // "Same time, any instructor" says "around 7:00am": the same row hid exactly those.
+    b = similarWorld({ timeBands: ['evening'] });
+    b.open();
+    b.pick('same-time');
+    t.eq([...b.ctx.selectedTimeBands].sort(), ['early', 'evening'], '"Same time": the class\'s own band comes on beside the saved one');
+    t.ok(b.log.calls.indexOf('timePills') !== -1 && b.log.calls.indexOf('timePills') < b.log.calls.indexOf('summary'), 'before the filters summary is rewritten');
+    b = similarWorld();
+    b.open();
+    b.pick('same-time');
+    t.eq([...b.ctx.selectedTimeBands], [], '"Same time" with any-time on stays any-time');
+    t.ok(/typeof _admitTimeBands === 'function'/.test(src), 'both callers guard the helper (this world can be built without it)');
   }
 
   t.section('Find similar: the tap that dismisses the popup does nothing else');

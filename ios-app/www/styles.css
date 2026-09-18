@@ -442,6 +442,15 @@ select:focus, input:focus {
 /* "Your usual" spot — thin gold ring overlay, layered over any selected/available fill */
 .bike-slot.usual rect { stroke: #d4af37; stroke-width: 2; }
 
+/* Keyboard focus on a seat. The ring is drawn on the seat's own rect: an
+   outline would box the <g>'s bounds, number and marks included. --text-heading
+   and not --accent — the accent IS the selected seat's fill. The #bikeSvg id is
+   there for weight: the light themes' seat rules in theme.css are (0,3,1) and
+   load later. :focus-visible only, so a tap or click shows nothing new, and a
+   browser without it drops both rules and keeps its default ring. */
+#bikeSvg .bike-slot:focus-visible { outline: none; }
+#bikeSvg .bike-slot:focus-visible rect { stroke: var(--text-heading); stroke-width: 3; }
+
 .bike-legend {
   display: flex; gap: var(--space-7); font-size: var(--text-sm); color: var(--text-faint, #666);
   margin-bottom: var(--space-7); flex-wrap: wrap;
@@ -887,6 +896,22 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 }
 
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* For assistive tech only: the #srStatus / #srAlert live regions that
+   announce() (js/app.js) writes toasts and the Booked! line into. Clipped, not
+   display:none — a region that is not rendered is never read. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .date-quick-btn {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
@@ -2239,6 +2264,19 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   outline: 2px solid var(--accent, #e94560);
   outline-offset: 2px;
 }
+
+/* Divs and spans that act as buttons (instructor names, class titles, period
+   bars, explore names, the next-class pill): now in the tab order, so they
+   need a focus ring. Same ring as above; keyboard only. Picker seats draw
+   their own (#bikeSvg, above). */
+[role="button"]:not(button):focus-visible {
+  outline: 2px solid var(--accent, #e94560);
+  outline-offset: 2px;
+}
+
+/* A sheet's panel takes focus when it opens (tabindex="-1", so its name is
+   read) — that is a position, not a control: no ring round the whole sheet. */
+[role="dialog"]:focus { outline: none; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Tap targets

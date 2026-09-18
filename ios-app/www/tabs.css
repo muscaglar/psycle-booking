@@ -1532,8 +1532,11 @@
    instructor link) ~6px from under the pointer mid-click — the click then
    landed on the card and opened the detail sheet instead. Press the card only
    when the press is on the card itself. A rule of its own: a browser without
-   :has() drops just this one. */
-.class-card:active:not(:has(:is(button, a, [role="button"], [onclick]):active)) { transform: scale(0.985); }
+   :has() drops just this one. The class name is role="button" for the
+   keyboard only — it has no action of its own, a press on it IS a press on
+   the card (the full-width first line, where most taps land), so a slide
+   mid-click changes nothing: it stays out of the list. */
+.class-card:active:not(:has(:is(button, a, [role="button"]:not(.cc-name), [onclick]):active)) { transform: scale(0.985); }
 
 @media (prefers-reduced-motion: reduce) {
   .tab-empty > *,

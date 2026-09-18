@@ -764,7 +764,9 @@
     return '<div class="explore-card">' +
       (whyLabel ? '<div class="explore-why">' + escapeHtml(whyLabel) + '</div>' : '') +
       '<div class="explore-card-header">' +
-        '<span class="explore-card-name" onclick="event.stopPropagation();' +
+        // Stays a span (the header's ellipsis layout depends on it); role +
+        // tabindex make it reachable, app.js's one keydown does Enter / Space.
+        '<span class="explore-card-name" role="button" tabindex="0" onclick="event.stopPropagation();' +
           'window._features_openInstructorModal(\'' + nameEscaped + '\',\'' + idEscaped + '\')">' +
           escapeHtml(profile.name) + '</span>' +
         tierBadge +

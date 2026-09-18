@@ -152,14 +152,16 @@
       }
     }
 
+    // role / label / tabindex: app.js's overlay handling moves focus onto the
+    // panel, keeps Tab inside it and closes it on Escape.
     overlay.innerHTML = `
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle" tabindex="-1">
         <div class="modal-header">
           <div>
-            <div class="modal-title">Class History</div>
+            <div class="modal-title" id="historyModalTitle">Class History</div>
             <div class="modal-subtitle">${history.length} booking${history.length !== 1 ? 's' : ''} recorded</div>
           </div>
-          <button class="modal-close" onclick="document.getElementById('historyModalOverlay').remove()">&times;</button>
+          <button class="modal-close" onclick="document.getElementById('historyModalOverlay').remove()" aria-label="Close">&times;</button>
         </div>
         <div>${bodyHtml}</div>
       </div>`;
@@ -267,8 +269,11 @@
     const held = window._myBookings?.[String(evt.id)];
     if (held) return held.waitlisted ? ['Waitlisted', 'waitlist'] : ['Booked', 'highlight'];
     if (evt.is_fully_booked) return evt.is_waitlistable ? ['Waitlist', 'waitlist'] : ['Full', 'full'];
-    const left = Number(evt.capacity_remaining);
-    if (evt.capacity != null && evt.capacity_remaining != null && left > 0) return [left + ' left', ''];
+    // Same count, same freshness gate as the detail sheet: this list is built
+    // from _eventCache, which can be hours old — no number beats a stale one.
+    const fresh = typeof window._countsFresh === 'function' && window._countsFresh(evt._countsAt, Date.now());
+    const left = fresh && typeof window._spotsLeft === 'function' ? window._spotsLeft(evt) : null;
+    if (left > 0) return [left + ' left', ''];
     return null;
   }
 
@@ -325,7 +330,8 @@
       profileHtml += `<img class="instructor-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(instrName)}" loading="eager">`;
     }
     profileHtml += '<div class="instructor-profile-info">';
-    profileHtml += `<div class="instructor-name-title">${escapeHtml(instrName)} <span class="instructor-tier-slot">${tierBadge}</span></div>`;
+    // The id names the dialog below (this modal has no .modal-title).
+    profileHtml += `<div class="instructor-name-title" id="instructorModalName">${escapeHtml(instrName)} <span class="instructor-tier-slot">${tierBadge}</span></div>`;
     // Only for a real instructor record: a name with no id has nothing to rank.
     const rankHtml = instr ? instructorRankHtml(instr.id) : '';
     if (rankHtml) profileHtml += `<div class="instructor-rank">${rankHtml}</div>`;
@@ -380,9 +386,9 @@
     const psycleUrl = `https://psyclelondon.com/pages/timetable-instructor-page/${encodeURIComponent(handle)}`;
 
     overlay.innerHTML = `
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="instructorModalName" tabindex="-1">
         <div class="modal-header" style="justify-content:flex-end">
-          <button class="modal-close" onclick="document.getElementById('instructorModalOverlay').remove()">&times;</button>
+          <button class="modal-close" onclick="document.getElementById('instructorModalOverlay').remove()" aria-label="Close">&times;</button>
         </div>
         ${profileHtml}
         ${bioHtml}

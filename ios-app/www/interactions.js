@@ -363,6 +363,9 @@
         categories: typeof selectedCategories !== 'undefined' ? [...selectedCategories] : [],
         strengthSubs: typeof selectedStrengthSubs !== 'undefined' ? [...selectedStrengthSubs] : [],
         reformerSubs: typeof selectedReformerSubs !== 'undefined' ? [...selectedReformerSubs] : [],
+        // The Time row (app.js): band keys + the "Available only" pill.
+        timeBands: typeof selectedTimeBands !== 'undefined' ? [...selectedTimeBands] : [],
+        availableOnly: typeof _availableOnly !== 'undefined' ? _availableOnly === true : false,
         startDate: document.getElementById('startDate')?.value || '',
         daysAhead: document.getElementById('daysAhead')?.value || '7',
         dateQuickMode: typeof _dateQuickMode !== 'undefined' ? _dateQuickMode : null,
@@ -433,6 +436,10 @@
         }
       }
 
+      // Restore the Time row. A save from before it existed has neither field
+      // and comes back as "any time" (setTimeFilters validates the keys).
+      if (typeof setTimeFilters === 'function') setTimeFilters(filters.timeBands, filters.availableOnly);
+
       // Restore the date range. app.js's _restoredDateState() decides what
       // comes back: presets (now incl. '14 days') are re-derived from today,
       // a picked date is kept only while it is still ahead, and anything else
@@ -487,6 +494,9 @@
   wrapGlobal('toggleCategory', saveFilters);
   wrapGlobal('toggleStrengthSub', saveFilters);
   wrapGlobal('toggleReformerSub', saveFilters);
+  wrapGlobal('toggleTimeBand', saveFilters);
+  wrapGlobal('toggleAvailableOnly', saveFilters);
+  wrapGlobal('clearTimeFilters', saveFilters);
   wrapGlobal('setDateQuick', saveFilters);
   wrapGlobal('onDateInputChange', saveFilters);
 

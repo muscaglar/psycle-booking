@@ -28,6 +28,7 @@ const DIRECT_API = 'https://psycle.codexfit.com/api/v1/customer';
 const PROXY = 'https://corsproxy.io/?';
 const IS_FILE = location.protocol === 'file:';
 
+// ── pure:core:start ── (DOM-free; tests/suites/facets-core.js evaluates these blocks)
 // Format a Date as YYYY-MM-DD in LOCAL time. toISOString() converts to UTC,
 // which makes "today" wrong in the evening for timezones west of UTC.
 function localDateStr(d = new Date()) {
@@ -40,6 +41,7 @@ const today = localDateStr();
 function parsePsycleDate(v) {
   return v ? new Date(String(v).replace(' ', 'T')) : null;
 }
+// ── pure:core:end ──
 
 // ── pure:gym-time:start ── (DOM-free; tests/suites/bookings-card.js evaluates this block)
 // Psycle is a UK gym: a naive 'YYYY-MM-DD HH:MM[:SS]' from the API is London
@@ -146,6 +148,7 @@ function apiFetch(path, opts = {}) {
 // window accessors, so instructors, locations, eventTypes, currentUser,
 // _studioMap, _myBookings etc. are available as bare globals.
 
+// ── pure:core:start ──
 // ── Category mapping for smart filters ──────────────────────────
 const CATEGORY_MAP = [
   { key: 'RIDE',     label: 'Ride',     color: '#e94560', prefixes: ['RIDE'] },
@@ -191,6 +194,7 @@ function slotLabel(typeName) {
   if (cat.key === 'STRENGTH') return 'Bench';
   return 'Spot';
 }
+// ── pure:core:end ──
 
 /** Get slot label from an event ID via the cache */
 function slotLabelForEvent(eventId) {
@@ -198,6 +202,7 @@ function slotLabelForEvent(eventId) {
   return evt ? slotLabel(evt._typeName) : 'Spot';
 }
 
+// ── pure:core:start ──
 /**
  * Pluralize a slot noun, preserving case: Bench -> Benches; Bike -> Bikes,
  * Bed -> Beds, Spot -> Spots (and the lowercase variants used in the picker).
@@ -216,6 +221,7 @@ function formatSlots(label, slots) {
   const noun = slots.length === 1 ? label : pluralizeSlotLabel(label);
   return noun + ' ' + slots.join(' & ');
 }
+// ── pure:core:end ──
 
 /**
  * Wrap an instructor name in a clickable link that opens their profile modal.
@@ -229,7 +235,9 @@ function instrLink(name, instrId) {
     if (match) sid = String(match.id);
   }
   if (!sid) return escapeHTML(name);
-  return '<span class="instructor-link" onclick="event.stopPropagation();window._features_openInstructorModal(\'' +
+  // role + tabindex: a span is otherwise unreachable by keyboard and unnamed as
+  // a control (Enter/Space arrive through the one delegated [role="button"] handler).
+  return '<span class="instructor-link" role="button" tabindex="0" onclick="event.stopPropagation();window._features_openInstructorModal(\'' +
     safeName + '\',\'' + sid + '\')">' + escapeHTML(name) + '</span>';
 }
 
@@ -253,19 +261,34 @@ const REFORMER_SUBS = [
 ];
 // selectedReformerSubs is managed by state.js (default: all selected)
 
+// Every pill row is rebuilt from state on each press, which destroys the very
+// button that was pressed: focus fell to <body>, so the new aria-pressed was
+// never spoken, the next Tab left the row and a second Space scrolled the
+// page. A row keeps its order across a repaint, so the button at the same
+// index is the pressed one's successor. `selector`: the row's buttons, where
+// they are not the box's direct children (the picker's change-chips).
+function _repaintKeepingFocus(box, html, selector) {
+  const items = () => Array.from((selector && typeof box.querySelectorAll === 'function' ? box.querySelectorAll(selector) : box.children) || []);
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  const at = active ? items().indexOf(active) : -1;
+  box.innerHTML = html;
+  const next = at > -1 ? items()[at] : null;
+  if (next && typeof next.focus === 'function') { try { next.focus({ preventScroll: true }); } catch (e) {} }
+}
+
 function renderReformerSubPills() {
   const container = document.getElementById('reformerSubPills');
   if (!container) return;
   const pilatesActive = selectedCategories.has('PILATES');
   container.style.display = pilatesActive ? 'flex' : 'none';
   if (!pilatesActive) return;
-  container.innerHTML = REFORMER_SUBS.map(s => {
+  _repaintKeepingFocus(container, REFORMER_SUBS.map(s => {
     const active = selectedReformerSubs.has(s.key);
     // No inline colours (here or on the strength pills): an inline style beats
     // the stylesheet, and .sub-pill in redesign.css is themed per token.
-    return `<button class="sub-pill${active ? ' active' : ''}"
+    return `<button class="sub-pill${active ? ' active' : ''}" aria-pressed="${active}"
       onclick="toggleReformerSub('${s.key}')">${s.label}</button>`;
-  }).join('');
+  }).join(''));
 }
 
 function toggleReformerSub(key) {
@@ -286,11 +309,11 @@ function renderStrengthSubPills() {
   const strengthActive = selectedCategories.has('STRENGTH');
   container.style.display = strengthActive ? 'flex' : 'none';
   if (!strengthActive) return;
-  container.innerHTML = STRENGTH_SUBS.map(s => {
+  _repaintKeepingFocus(container, STRENGTH_SUBS.map(s => {
     const active = selectedStrengthSubs.has(s.key);
-    return `<button class="sub-pill${active ? ' active' : ''}"
+    return `<button class="sub-pill${active ? ' active' : ''}" aria-pressed="${active}"
       onclick="toggleStrengthSub('${s.key}')">${s.label}</button>`;
-  }).join('');
+  }).join(''));
 }
 
 function toggleStrengthSub(key) {
@@ -305,6 +328,7 @@ function toggleStrengthSub(key) {
   triggerAutoSearch();
 }
 
+// ── pure:core:start ──
 // Extract slot numbers from any API format:
 //   [7, 15]                          → [7, 15]
 //   [{id:7, label:"12"}, ...]        → [12, ...]  (prefer label for display)
@@ -321,6 +345,7 @@ function _parseSlots(raw) {
     return Number(s.label ?? s.number ?? s.slot_number ?? s.id ?? s.slot_id ?? 0);
   }).filter(Boolean);
 }
+// ── pure:core:end ──
 
 // Supersede guard: fetchMyBookings is fired concurrently from many places
 // (visibility, pull-to-refresh, post-booking, offline replay). Only the
@@ -641,6 +666,8 @@ async function fetchMyBookings() {
         }
         renderMyBookings();
         _resyncDiscoverButtons(true);
+        // Places that arrived late are full classes too ("Available only").
+        if (typeof _showOwnFullClasses === 'function') _showOwnFullClasses();
       }).catch(() => {});
     }
     return true;
@@ -683,13 +710,74 @@ document.addEventListener('visibilitychange', function () {
   if (currentUser) refreshProfile();
 });
 
+// ── pure:a11y:start ── (DOM-free; tests/suites/a11y.js evaluates this block)
+// How long a toast stays up. A fixed 3.5s was too short for the two-line
+// errors about a chargeable booking: reading time scales with length, between
+// the old 3.5s floor and a 10s cap. Takes anything — toast(e.message) can be
+// handed undefined, and a NaN delay would hide the toast at once.
+function _toastDuration(text) {
+  const len = String(text == null ? '' : text).length;
+  return Math.min(10000, Math.max(3500, 1500 + len * 60));
+}
+
+// Messages that reach announce() within one tick are spoken together, in
+// order: "Spot claimed" is followed at once by the Booked! sheet's line, and
+// replacing the first with the second would lose whichever came first — which
+// can be an error. An exact repeat is said once.
+function _joinAnnouncements(queue) {
+  const out = [];
+  (queue || []).forEach(m => {
+    const s = String(m == null ? '' : m).trim();
+    if (s && out[out.length - 1] !== s) out.push(s);
+  });
+  return out.join(' ');
+}
+// ── pure:a11y:end ──
+
+// Say something to screen-reader users. The ~130 toasts, the session banner
+// and the Booked! sheet were all silent. Two fixed regions (polite / assertive)
+// rather than a role on #toast: a role swapped at the moment of the message is
+// unreliable in VoiceOver. Cleared first and written a beat later so the same
+// text twice running ("Booking cancelled") is announced both times.
+const _srQueue = { srStatus: [], srAlert: [] };
+const _srTimers = {};
+function announce(text, assertive) {
+  const id = assertive ? 'srAlert' : 'srStatus';
+  let el = document.getElementById(id);
+  if (!el) {
+    // A page shell that predates the regions (or a test page): make one.
+    if (!document.body) return;
+    el = document.createElement('div');
+    el.id = id;
+    el.className = 'sr-only';
+    el.setAttribute('role', assertive ? 'alert' : 'status');
+    el.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+    el.setAttribute('aria-atomic', 'true');
+    document.body.appendChild(el);
+  }
+  _srQueue[id].push(text);
+  el.textContent = '';
+  clearTimeout(_srTimers[id]);
+  _srTimers[id] = setTimeout(() => {
+    const line = _joinAnnouncements(_srQueue[id]);
+    _srQueue[id] = [];
+    el.textContent = line;
+    // Not left behind for someone swiping through the page a minute later.
+    _srTimers[id] = setTimeout(() => { el.textContent = ''; }, _toastDuration(line));
+  }, 50);
+}
+
 // Toast (toastTimer managed by state.js)
 function toast(msg, type = 'info') {
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  const text = String(msg ?? '');
+  // The visible write stays synchronous — callers and the verify recipe read
+  // #toast straight after the call.
+  el.textContent = text;
   el.className = `toast show ${type}`;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  toastTimer = setTimeout(() => el.classList.remove('show'), _toastDuration(text));
+  announce(text, type === 'error');
 }
 
 // ── Discover empty state: signed-out users get one clear action ───
@@ -1050,9 +1138,15 @@ function showHistorySyncPrompt() {
   // Never stack on another dialog, the class sheet, the "Booked!" sheet or the
   // first-run tour (not finished until its key is set) — come back when it's
   // gone. Bounded, so a stuck overlay can't keep this polling all session.
+  // Nor UNDER a panel: Settings, Diagnostics, an instructor profile, history
+  // and the year review all sit above .modal-overlay, and the focus stack
+  // takes the last overlay to open for the top one — focus was pulled into a
+  // prompt nobody could see, and the Escape meant for the panel dismissed the
+  // offer for good. Every overlay the stack knows, bar this one.
   var busy = _dialogOpen() || document.getElementById('classDetailOverlay') ||
     document.getElementById('bookingConfirmation') ||
-    document.getElementById('onboardOverlay') || !localStorage.getItem(ONBOARDING_KEY);
+    document.getElementById('onboardOverlay') || !localStorage.getItem(ONBOARDING_KEY) ||
+    _OVERLAYS.some(([id]) => id !== 'syncPromptOverlay' && _overlayIsOpen(document.getElementById(id)));
   clearTimeout(_syncPromptTimer);
   if (busy) {
     if (_syncPromptDefers++ < 40) _syncPromptTimer = setTimeout(showHistorySyncPrompt, 3000);
@@ -1074,13 +1168,13 @@ function showHistorySyncPrompt() {
   var userName = (currentUser && currentUser.first_name) ? currentUser.first_name : '';
 
   overlay.innerHTML =
-    '<div class="modal" style="max-width:400px">' +
+    '<div class="modal" style="max-width:400px" role="dialog" aria-modal="true" aria-labelledby="syncPromptTitle" tabindex="-1">' +
       '<div class="modal-header">' +
         '<div>' +
-          '<div class="modal-title">Welcome' + (userName ? ', ' + escapeHTML(userName) : '') + '!</div>' +
+          '<div class="modal-title" id="syncPromptTitle">Welcome' + (userName ? ', ' + escapeHTML(userName) : '') + '!</div>' +
           '<div class="modal-subtitle">One more step to get the most out of your experience</div>' +
         '</div>' +
-        '<button class="modal-close" onclick="_dismissSyncPrompt()">&times;</button>' +
+        '<button class="modal-close" onclick="_dismissSyncPrompt()" aria-label="Close">&times;</button>' +
       '</div>' +
       '<div style="padding:0 20px 8px;font-size:13px;color:var(--text-muted,#aaa);line-height:1.6">' +
         'Import your full booking history from Psycle to unlock personalised insights, instructor discovery, and class analytics.' +
@@ -1205,7 +1299,12 @@ function showSessionExpired() {
   if (typeof cancelTokenExpiryCheck === 'function') cancelTokenExpiryCheck();
   if (window._secureTokenStore) window._secureTokenStore.clear();
   else localStorage.removeItem('psycle_bearer_token');
-  document.getElementById('sessionBanner').style.display = 'flex';
+  const banner = document.getElementById('sessionBanner');
+  // Spoken once, when the banner appears: every 401 still in flight lands here.
+  if (banner.style.display !== 'flex' && typeof announce === 'function') {
+    announce('Your session has expired. Sign in again to carry on.', true);
+  }
+  banner.style.display = 'flex';
   const pill = document.getElementById('authPill');
   pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
   const gear = document.getElementById('settingsGear');
@@ -1308,8 +1407,32 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   if (typeof scheduleTokenExpiryCheck === 'function') scheduleTokenExpiryCheck();
 });
 
+// ── pure:init-gate:start ── (DOM-free; tests/suites/3d-leftovers.js evaluates this block)
+// Resolves once every module after this one has run. They are all deferred
+// scripts, so that is DOMContentLoaded; 'load' backs it up for a copy injected
+// after DOMContentLoaded has already fired, and a finished document never waits.
+function _laterModulesLoaded(doc, win) {
+  if (!doc || doc.readyState === 'complete') return Promise.resolve();
+  return new Promise(resolve => {
+    doc.addEventListener('DOMContentLoaded', resolve, { once: true });
+    win.addEventListener('load', resolve, { once: true });
+  });
+}
+// ── pure:init-gate:end ──
+// Armed NOW, while this script runs and DOMContentLoaded cannot have fired yet.
+// Armed only after securityReady it could miss the event — in the iOS app
+// securityReady waits for the native bridge, the LAST script — and init would
+// sit waiting for 'load' (every font and image).
+const _modulesLoaded = _laterModulesLoaded(document, window);
+
 (async () => {
   await (window.securityReady || Promise.resolve());
+  // securityReady has usually settled before this script even runs (IndexedDB
+  // answers while the scripts are still arriving), and this function then
+  // carried on in the microtask right after app.js — BEFORE reliability.js and
+  // performance.js had wrapped apiFetch. The three lists below went out bare on
+  // most warm launches: no retries, and the 24h reference cache never consulted.
+  await _modulesLoaded;
   const fetchJson = path => apiFetch(path).then(r => {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
@@ -1423,6 +1546,7 @@ function triggerAutoSearch() {
 // One-line digest of the active filters, shown in the collapsed
 // Filters bar so its state is readable without expanding.
 function updateFiltersSummary() {
+  _mirrorDatePillAria(); // every date-row change ends up here (triggerAutoSearch, restoreFilters, the presets)
   const el = document.getElementById('controlsSummary');
   if (!el) return;
   const parts = [];
@@ -1454,6 +1578,10 @@ function updateFiltersSummary() {
       return c ? c.label : k;
     }).join(' · '));
   }
+  if (selectedTimeBands.size > 0) {
+    parts.push(TIME_BANDS.filter(b => selectedTimeBands.has(b.key)).map(b => b.label).join(' · '));
+  }
+  if (_availableOnly) parts.push('Available only');
   el.textContent = parts.join(' · ');
 }
 
@@ -1519,6 +1647,19 @@ function _restoredDateState(saved, todayStr) {
 }
 // ── pure:filters:end ──
 
+// The date pills' selected state was a CSS class only — a screen reader heard
+// "Today, button" lit or not. .active is written from many places (here, the
+// presets, onDateInputChange), so it is mirrored rather than set beside each
+// one. The calendar button's .active means "open, or carrying a date": it
+// says whether its calendar is expanded instead.
+function _mirrorDatePillAria() {
+  const picker = document.getElementById('datePicker');
+  document.querySelectorAll('.date-quick-btn').forEach(b => {
+    if (b.id === 'pickDateBtn') b.setAttribute('aria-expanded', String(!!picker && picker.style.display !== 'none'));
+    else b.setAttribute('aria-pressed', String(b.classList.contains('active')));
+  });
+}
+
 // Paint the date row from state (mode + the two inputs), never from whichever
 // element was tapped: the empty-state shortcuts, presets, saved searches and
 // the planner all change the range without a pill click.
@@ -1551,6 +1692,7 @@ function _syncDatePills() {
   // Lit while it carries a date, and while its calendar is open.
   const picker = document.getElementById('datePicker');
   btn.classList.toggle('active', !!st.picked || (!!picker && picker.style.display !== 'none'));
+  _mirrorDatePillAria(); // search() repaints this row without going through updateFiltersSummary
 }
 
 function setDateQuick(mode) {
@@ -1603,9 +1745,12 @@ function clearFilters() {
   selectedStrengthSubs.add('UPPER'); selectedStrengthSubs.add('LOWER'); selectedStrengthSubs.add('FULL');
   selectedReformerSubs.clear();
   REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
+  selectedTimeBands.clear();
+  _availableOnly = false;
   renderInstrChips();
   renderStrengthSubPills();
   renderReformerSubPills();
+  renderTimePills();
   // The date goes back to the default week as a whole — mode, inputs and
   // pills together. Resetting only the inputs left "Tomorrow" lit over
   // today's classes, and that mismatch is what saveFilters then persisted.
@@ -1795,6 +1940,8 @@ function currentFilters() {
     startDate, endDateStr,
     strengthSubs: new Set(selectedStrengthSubs),
     reformerSubs: new Set(selectedReformerSubs),
+    timeBands: new Set(selectedTimeBands),
+    availableOnly: _availableOnly,
   };
 }
 
@@ -1812,6 +1959,7 @@ function _buildFacetClasses(events, relations) {
       loc: String((studioMap[e.studio_id] || {}).location_id || ''),
       cat: getCategory((typeMap[e.event_type_id] || {}).name || '').key,
       start_at: e.start_at,
+      id: String(e.id), full: !!e.is_fully_booked, // the "Available only" pill narrows the counts too
     }));
   refreshFacetCounts();
 }
@@ -1884,6 +2032,24 @@ function onDiscoverSearch(v) {
   else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
 }
 
+// "Available only" never hides the member's own class — but the launch render
+// runs before /bookings has answered (search() does not wait for it), so a
+// held class that is full, or any waitlisted one, was filtered out as somebody
+// else's. The bookings landing only relabels cards that EXIST, and a window
+// under 15 minutes old is not revalidated: the class stayed missing, and the
+// chip counts short, until the next filter tap. Once per set of such classes —
+// one that another filter hides must not cost a render on every fetch.
+let _ownFullSeen = '';
+function _showOwnFullClasses() {
+  if (!_availableOnly) return;
+  const ids = (window._windowEvents || []).filter(e => e && e.is_fully_booked && _myBookings[String(e.id)]).map(e => String(e.id));
+  const key = ids.join();
+  if (key === _ownFullSeen) return;
+  _ownFullSeen = key;
+  if (ids.some(id => !document.querySelector(`#results .class-card[data-id="${Number(id)}"]`))) _renderWindowInPlace();
+}
+PsycleEvents.on('bookings:loaded', _showOwnFullClasses);
+
 // ── Pick-a-date calendar (redesign) ─────────────────────────────────
 let _calMonth = null; // { y, m }
 function toggleDatePicker() {
@@ -1899,6 +2065,7 @@ function toggleDatePicker() {
     renderCalendar();
     el.style.display = '';
     if (btn) btn.classList.add('active');
+    _mirrorDatePillAria(); // aria-expanded (the close branch gets there through _syncDatePills)
   } else {
     el.style.display = 'none';
     _syncDatePills(); // stays lit if it is carrying a picked date
@@ -1947,8 +2114,12 @@ function renderCalendar() {
     let cls = 'cal-cell';
     if (ds === sel) cls += ' sel'; else if (past) cls += ' past'; else if (ds === today) cls += ' today';
     const dot = classDays.has(ds) ? '<span class="cal-dot"></span>' : '';
-    const click = past ? '' : ` onclick="pickCalDate('${ds}')"`;
-    cells += `<button class="${cls}"${click}>${d}${dot}</button>`;
+    // A gone day is disabled, not just unwired: it still took keyboard focus.
+    const click = past ? ' disabled' : ` onclick="pickCalDate('${ds}')"`;
+    // "17" alone says nothing to a screen reader: the full date, whether it is
+    // the chosen one, and what the dot means.
+    const name = new Date(y, m, d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) + (dot ? ', has classes' : '');
+    cells += `<button class="${cls}" aria-label="${escapeHTML(name)}" aria-pressed="${ds === sel}"${click}>${d}${dot}</button>`;
   }
   el.innerHTML =
     `<div class="cal-head"><button class="cal-nav" onclick="calStep(-1)" aria-label="Previous month">‹</button>` +
@@ -2695,6 +2866,50 @@ function _clashFor(eventId, fresh) {
   return _findClash(evt, _myBookings, _eventCache);
 }
 
+// ── pure:book-fresh:start ── (DOM-free; tests/suites/3d-leftovers.js evaluates this block)
+// bookClass has just read GET /events/{id}: keep what it says about
+// availability. Written to the cache entry AND to the loaded window's copy of
+// the event — render() spreads the window event over the cache on every
+// background re-render, so a cache-only write was undone by the next one and a
+// class just learned to be full read "Book" again. A flag this payload does
+// not carry is left as it was. True when something changed.
+// "Full" has a third copy: the lite facet view the chip counts read under
+// "Available only" (`full`, see _buildFacetClasses) — left behind, the list
+// and the counts beside it disagree about this class.
+function _noteFreshAvailability(eventId, evtData) {
+  if (!evtData || typeof evtData !== 'object') return false;
+  const win = (typeof window !== 'undefined' && Array.isArray(window._windowEvents)) ? window._windowEvents : [];
+  const targets = [_eventCache[String(eventId)], win.find(e => e && String(e.id) === String(eventId))];
+  let changed = false;
+  ['is_fully_booked', 'is_waitlistable'].forEach(flag => {
+    if (typeof evtData[flag] !== 'boolean') return;
+    targets.forEach(target => {
+      if (target && target[flag] !== evtData[flag]) { target[flag] = evtData[flag]; changed = true; }
+    });
+  });
+  const facets = (typeof window !== 'undefined' && Array.isArray(window._facetClasses)) ? window._facetClasses : [];
+  const facet = facets.find(c => c && c.id === String(eventId));
+  if (facet && typeof evtData.is_fully_booked === 'boolean' && facet.full !== evtData.is_fully_booked) {
+    facet.full = evtData.is_fully_booked;
+    changed = true;
+  }
+  return changed;
+}
+
+// The studio's seat map out of a GET /events/{id} answer. It rides on the
+// studio record in `relations` (what _hydrateEventDetails copies into
+// _studioMap); the other places are tolerated in case the envelope differs.
+// Only a map with seats in it counts.
+function _layoutFromEventDetail(detail, studioId) {
+  if (!detail || typeof detail !== 'object') return null;
+  const data = (detail.data && typeof detail.data === 'object') ? detail.data : {};
+  const studios = (detail.relations && Array.isArray(detail.relations.studios)) ? detail.relations.studios : [];
+  const rel = studios.find(s => s && String(s.id) === String(studioId));
+  return [rel && rel.layout, data.studio && data.studio.layout, data.layout, detail.layout]
+    .find(l => !!l && Array.isArray(l.slots) && l.slots.length > 0) || null;
+}
+// ── pure:book-fresh:end ──
+
 async function bookClass(eventId, btn, studioId) {
   // Not only an unverified session: until a /bookings snapshot has been applied
   // ('pending' at launch, 'failed' after it) every card reads "Book", held
@@ -2793,6 +3008,10 @@ async function bookClass(eventId, btn, studioId) {
     const isFullyBooked = evtData.is_fully_booked ?? cached.is_fully_booked;
     const isWaitlistable = evtData.is_waitlistable ?? cached.is_waitlistable;
     const myBooking = _myBookings[String(eventId)];
+    // The list keeps what was just learned, and every card of this class says
+    // so now. (typeof: the suites run bookClass on its own.)
+    if (typeof _noteFreshAvailability === 'function' && _noteFreshAvailability(eventId, evtData) &&
+        typeof _syncCardButtonsForEvent === 'function') _syncCardButtonsForEvent(eventId);
 
     // A seat already held at this time: said inside the confirms / picker below
     // rather than as one more gate — the member may well mean it. Advisory, so
@@ -2801,7 +3020,14 @@ async function bookClass(eventId, btn, studioId) {
     try { clashLine = _clashLabel(_clashFor(eventId, evtData)); } catch (e) {}
 
     const studio = _studioMap[studioId];
-    const layout = studio?.layout;
+    let layout = studio?.layout;
+    // The cached studio record can be without its seat map (a list response's
+    // relations don't always carry one, and render() replaces the record with
+    // theirs): take it from the detail just read, and keep it.
+    if (studio?.has_layout && !(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
+      layout = _layoutFromEventDetail(detail, studioId);
+      if (layout) studio.layout = layout;
+    }
     const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
 
     // Full class and we're not in it → waitlist path (a separate resource:
@@ -2810,6 +3036,7 @@ async function bookClass(eventId, btn, studioId) {
     const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
     if (noSeatsLeft && !myBooking) {
       btn.disabled = false;
+      if (typeof _dropCardCounts === 'function') _dropCardCounts(eventId);
       if (!isWaitlistable) {
         btn.textContent = 'Full';
         toast('This class is full', 'info');
@@ -2843,6 +3070,18 @@ async function bookClass(eventId, btn, studioId) {
         btn.disabled = false;
         btn.textContent = 'Book';
       }
+      return;
+    }
+
+    // A studio WITH a seat map, and no map to be had: there is no picker to
+    // open, and the confirm below books by COUNT — for has_layout === false
+    // only (Psycle turns a seat studio's slot-less body down: "Booking slot
+    // required"). Say so instead of offering a booking that cannot go through.
+    if (!hasLayout && studio?.has_layout) {
+      btn.disabled = false;
+      if (myBooking && (myBooking.bookingId || (myBooking.slots || []).length)) applyBookedState(btn, eventId, myBooking);
+      else btn.textContent = 'Book';
+      toast("Couldn't load the studio map — try again", 'error');
       return;
     }
 
@@ -3023,7 +3262,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     return `<g class="bike-slot ${cls}" data-slot="${slot.id}" ${click}>
       <rect x="${sx(slot.x)}" y="${sy(slot.y)}" width="${SLOT}" height="${SLOT}" rx="6" stroke-width="1.5"/>
       <text x="${sx(slot.x)+SLOT/2}" y="${sy(slot.y)+SLOT/2+4}"
-        text-anchor="middle" font-family="sans-serif" font-size="11">${label}</text>
+        text-anchor="middle" font-family="sans-serif" font-size="11">${escapeHTML(label)}</text>
     </g>`;
   }).join('');
 
@@ -3051,6 +3290,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
       `${_slU} ${usualSlot} is your usual — tap another to switch, or confirm.`;
     document.getElementById('confirmBookBtn').disabled = false;
   }
+  _syncBikeSlotsA11y();
 }
 
 // ── pure:booking:start ── (DOM-free; tests/suites/booking.js evaluates these blocks)
@@ -3062,6 +3302,49 @@ function _tapReplacesUsual(selected, usualPreselected, tappedId, swapMode) {
     selected.length === 1 && selected[0] === usualPreselected;
 }
 // ── pure:booking:end ──
+
+// ── pure:a11y:start ──
+// What one seat on the picker map tells assistive tech, read off the same
+// classes that colour it (so the two can't disagree). `classes` is the seat's
+// class list, `label` the number printed on it. A seat already held is an
+// action (cancel it / make it the swap target), not a toggle, so it carries no
+// pressed state; a taken seat stays in the map but out of the tab order.
+function _bikeSlotA11y(classes, slotWord, label) {
+  const has = c => (classes || []).indexOf(c) !== -1;
+  const mine = has('mine'), taken = !mine && has('taken'), selected = has('selected');
+  const parts = [`${slotWord} ${label}`, mine ? 'your booking' : taken ? 'taken' : selected ? 'selected' : 'available'];
+  if (has('usual')) parts.push('your usual');
+  if (has('pref-prefer')) parts.push('one you prefer');
+  if (has('pref-avoid')) parts.push('one you avoid');
+  return {
+    label: parts.join(', '),
+    pressed: (mine || taken) ? null : selected,
+    disabled: taken,
+    tabindex: taken ? -1 : 0,
+  };
+}
+// ── pure:a11y:end ──
+
+// The seats are SVG <g onclick> — no role, name, focus or keys, so a layout
+// class could not be booked by keyboard or VoiceOver at all. One pass over the
+// rendered map instead of attributes in the template: selectBike and
+// cancelBikeSlot flip classes on live nodes (and settings.js adds the
+// prefer / avoid marks later), and this re-reads whatever is there. The name
+// comes from the seat's own <text>, so no API label is built into markup.
+function _syncBikeSlotsA11y() {
+  const word = _bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot';
+  document.querySelectorAll('#bikeSvg .bike-slot').forEach(g => {
+    const text = g.querySelector('text');
+    const a = _bikeSlotA11y(Array.from(g.classList), word,
+      String((text && text.textContent) || g.getAttribute('data-slot') || '').trim());
+    g.setAttribute('role', 'button');
+    g.setAttribute('tabindex', String(a.tabindex));
+    g.setAttribute('aria-label', a.label);
+    g.setAttribute('aria-disabled', String(a.disabled));
+    if (a.pressed == null) g.removeAttribute('aria-pressed');
+    else g.setAttribute('aria-pressed', String(a.pressed));
+  });
+}
 
 function selectBike(slotId) {
   const id = Number(slotId);
@@ -3093,6 +3376,7 @@ function selectBike(slotId) {
   }
   // Any manual tap ends the auto-selection: from here the picks are the member's.
   _usualPreselected = null;
+  _syncBikeSlotsA11y(); // before the swap-mode return below — both paths moved classes
   if (swapMode) {
     // Keep the change-spot chips + swap hint instead of the generic booking hint.
     renderChangeSpotHint();
@@ -3463,9 +3747,12 @@ function _dropBookingKeepPlace(eventId) {
 }
 // The user just gave a seat back, so the search-time "full" flag is stale —
 // let the Discover card offer Book again instead of Join Waitlist / Full.
+// Every copy, not the cache alone: render() tests the WINDOW's event under
+// "Available only" (and spreads it back over the cache), and the class is no
+// longer the member's own — still "full" there, it left the list on the next
+// filter tap, with the seat just freed in it, until a revalidate.
 function _markSeatFreed(eventId) {
-  const evt = _eventCache[String(eventId)];
-  if (evt) evt.is_fully_booked = false;
+  _noteFreshAvailability(eventId, { is_fully_booked: false });
 }
 
 // After a Discover-card cancel: resync every card button for the event from
@@ -3601,6 +3888,17 @@ function _syncCardButtonsForEvent(eventId) {
     card?.classList.remove('is-booked', 'is-waitlisted');
     btn.disabled = false;
     btn.removeAttribute('data-booking-id');
+    // The availability line follows the button (before the 'Full' branch
+    // returns): a card built as "Only 2 left" kept saying so beside "Join
+    // Waitlist" / "Full", and "Waitlist open" stayed beside "Book". No number
+    // is written here — the counts were not re-read — and one already on a
+    // bookable card is left to the resume hook. (.cc-sub: Discover cards only.)
+    const spots = card?.querySelector('.cc-spots');
+    const line = _spotsHtml(evt, null, false);
+    if (line) {
+      if (spots) spots.outerHTML = line;
+      else card?.querySelector('.cc-sub')?.insertAdjacentHTML('afterend', line);
+    } else if (spots && !spots.hasAttribute('data-count')) spots.remove();
     if (evt.is_fully_booked && evt.is_waitlistable) {
       btn.textContent = 'Join Waitlist';
       btn.className = 'book-btn waitlist';
@@ -3617,6 +3915,13 @@ function _syncCardButtonsForEvent(eventId) {
     }
     btn.onclick = (e) => { if (e) e.stopPropagation(); bookClass(Number(eventId), btn, studioId); };
   });
+}
+
+// bookClass found no free seat in a class Psycle has not called full: no flag
+// changed, so nothing re-synced the card — and "Only 2 left" must not stay
+// beside the "Full" / "Join Waitlist" that tap is about to write.
+function _dropCardCounts(eventId) {
+  document.querySelectorAll(`.class-card[data-id="${Number(eventId)}"]:not(.my-booking-card) .cc-spots[data-count]`).forEach(el => el.remove());
 }
 
 function _waitlistClassLine(eventId) {
@@ -4370,6 +4675,14 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       const label = slots?.length ? `${formatSlots(slotLabelForEvent(eventId), slots)} ✓` : 'Booked ✓';
       btn.textContent = label;
       btn.className = 'book-btn booked';
+      // The card with it, as applyBookedState does: left to the refetch below,
+      // "Only 1 left" sat under "Bike 2 ✓" for a second — and for good when
+      // that refetch failed (CSS hides the line on .is-booked).
+      const card = typeof btn.closest === 'function' ? btn.closest('.class-card') : null;
+      if (card) {
+        card.classList.add('is-booked');
+        card.classList.remove('is-waitlisted');
+      }
       const bookingId = data?.data?.id || data?.id;
       if (bookingId) btn.dataset.bookingId = bookingId;
       btn.dataset.eventId = eventId;
@@ -4458,6 +4771,8 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
 
   // Class info line
   const classLine = [typeName, instrName].filter(Boolean).join(' \u00b7 ');
+  // Shown in the sheet and spoken below: one string, so they can't drift.
+  const title = opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist!') : 'Booked!';
 
   const el = document.createElement('div');
   el.id = 'bookingConfirmation';
@@ -4466,7 +4781,7 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
     <div class="bc-content">
       <div class="bc-check">&#10003;</div>
       <div class="bc-text">
-        <div class="bc-title">${opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist!') : 'Booked!'}</div>
+        <div class="bc-title">${title}</div>
         <div class="bc-detail">${escapeHTML(classLine)}</div>
         ${dateTimeStr ? `<div class="bc-detail bc-dim">${escapeHTML(dateTimeStr)}</div>` : ''}
         ${cancelLine ? `<div class="bc-detail bc-dim">${escapeHTML(cancelLine)}</div>` : ''}
@@ -4484,8 +4799,20 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   // Trigger animation on next frame
   requestAnimationFrame(() => { el.classList.add('show'); });
 
-  // Auto-dismiss after 5 seconds
-  _confirmationTimer = setTimeout(dismissBookingConfirmation, 5000);
+  // The sheet slides in silently for a screen reader: say what it shows — the
+  // same lines, as plain text. "& " reads as "and" in a list of seats.
+  announce([title, classLine, dateTimeStr, slotStr.replace(/ & /g, ' and '), cancelLine].filter(Boolean).join('. '));
+
+  // Auto-dismiss after 5 seconds — but never from under someone who has moved
+  // into the sheet (keyboard / VoiceOver focus on its buttons): check again later.
+  const autoDismiss = () => {
+    if (el.isConnected && el.contains(document.activeElement)) {
+      _confirmationTimer = setTimeout(autoDismiss, 5000);
+      return;
+    }
+    dismissBookingConfirmation();
+  };
+  _confirmationTimer = setTimeout(autoDismiss, 5000);
 }
 
 function dismissBookingConfirmation() {
@@ -4533,11 +4860,15 @@ function confirmModal(opts) {
     const overlay = document.createElement('div');
     overlay.id = 'psycleConfirmOverlay';
     overlay.className = 'confirm-overlay';
+    // Named and described, so a screen reader reads the credit / late-cancel
+    // copy on open instead of just "dialog". Fixed ids are safe: the dialog is
+    // single-instance and a stale one is removed above, before this is built.
+    const describedBy = [opts.body && 'psycleConfirmBody', opts.warn && 'psycleConfirmWarn'].filter(Boolean).join(' ');
     overlay.innerHTML = `
-      <div class="confirm-dialog" role="dialog" aria-modal="true" tabindex="-1">
-        ${opts.title ? `<div class="confirm-title">${escapeHTML(opts.title)}</div>` : ''}
-        ${opts.body ? `<div class="confirm-body">${escapeHTML(opts.body)}</div>` : ''}
-        ${opts.warn ? `<div class="confirm-warn">${escapeHTML(opts.warn)}</div>` : ''}
+      <div class="confirm-dialog" role="dialog" aria-modal="true" tabindex="-1"${opts.title ? ' aria-labelledby="psycleConfirmTitle"' : ''}${describedBy ? ` aria-describedby="${describedBy}"` : ''}>
+        ${opts.title ? `<div class="confirm-title" id="psycleConfirmTitle">${escapeHTML(opts.title)}</div>` : ''}
+        ${opts.body ? `<div class="confirm-body" id="psycleConfirmBody">${escapeHTML(opts.body)}</div>` : ''}
+        ${opts.warn ? `<div class="confirm-warn" id="psycleConfirmWarn">${escapeHTML(opts.warn)}</div>` : ''}
         <div class="confirm-actions">
           <button class="confirm-btn confirm-btn-cancel">${escapeHTML(opts.cancelText || 'Keep booking')}</button>
           <button class="confirm-btn ${opts.danger ? 'confirm-btn-danger' : 'confirm-btn-primary'}">${escapeHTML(opts.confirmText || 'Confirm')}</button>
@@ -4575,6 +4906,11 @@ function confirmModal(opts) {
     const onKey = e => {
       if (e.key === 'Escape') { e.preventDefault(); close(false); return; }
       if (e.key === 'Enter') {
+        // A key still held from whatever opened this dialog (Enter on a Cancel
+        // button, or on a seat in the picker) auto-repeats — and focus lands on
+        // the confirm button 50ms in. That must never confirm a chargeable
+        // action; preventDefault also stops the button's own click.
+        if (e.repeat) { e.preventDefault(); return; }
         // Only hijack Enter if focus is inside the dialog (not in a textarea etc.)
         if (overlay.contains(document.activeElement) && document.activeElement.tagName !== 'TEXTAREA') {
           e.preventDefault();
@@ -4607,6 +4943,194 @@ function confirmModal(opts) {
   });
 }
 window.confirmModal = confirmModal;
+
+// ── Sheets and panels: one focus stack, one key handler ──────────────────
+// Only confirmModal (above) and the first-run tour looked after the keyboard.
+// The other nine overlays are plain divs opened all over the app and closed —
+// mostly — by an inline `.remove()`: Escape did nothing, Tab wandered into the
+// page behind, and closing one dropped focus back at the top of the document.
+// Handled HERE, once, rather than per dialog: per-dialog document listeners
+// would close Diagnostics AND the Settings panel under it on one Escape.
+//
+// [element id, how Escape closes it]. The overlay's REAL closer where it has
+// one — closeBikePicker also drops the swap context, and the sync prompt must
+// not be dismissed mid-sync (same rule as its backdrop) — else remove(), which
+// is what that overlay's own × does. Called by name at key time, so a later
+// module's wrapper is the one that runs.
+const _OVERLAYS = [
+  ['tokenDialog', () => closeTokenDialog()],
+  ['bikeModal', () => closeBikePicker()],
+  ['syncPromptOverlay', () => {
+    const syncBtn = document.getElementById('syncPromptBtn');
+    if (!(syncBtn && syncBtn.disabled)) _dismissSyncPrompt();
+  }],
+  ['classDetailOverlay', null],
+  ['historyModalOverlay', null],
+  ['instructorModalOverlay', null],
+  ['yearReviewOverlay', null],
+  ['settingsOverlay', () => window.closeSettings()],
+  ['diagOverlay', () => window.closeDiagnostics()],
+];
+const _overlayStack = []; // { el, opener, close } in the order they opened — the last is on top
+
+// Seven are built on open and removed on close (present = showing); the token
+// dialog and the bike picker are static markup toggled by `display`.
+function _overlayIsOpen(el) {
+  return !!el && el.isConnected && el.style.display !== 'none';
+}
+
+// confirmModal and the tour keep their own focus and keys, above everything.
+function _ownKeysOverlayUp() {
+  return !!(document.getElementById('psycleConfirmOverlay') || document.querySelector('.onboard-overlay'));
+}
+
+// Same rule as confirmModal's trap. (SVG seats have no offsetParent at all —
+// undefined, not null — so the ones in the tab order count.)
+function _overlayFocusables(el) {
+  return Array.from(
+    el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+  ).filter(n => !n.disabled && n.offsetParent !== null);
+}
+
+function _focusIntoOverlay(el) {
+  let target = null;
+  if (el.id === 'bikeModal') {
+    // The map sits after the × in the sheet: start ON a seat — the one that
+    // matters first — so the picker is usable without hunting for it.
+    target = el.querySelector('.bike-slot.selected') || el.querySelector('.bike-slot.mine') ||
+      el.querySelector('.bike-slot.available');
+  }
+  // Otherwise the panel itself (tabindex="-1"), so the dialog's name is what
+  // gets read — not "Close, button" — and no input pops the iOS keyboard.
+  target = target || el.querySelector('[role="dialog"]') || _overlayFocusables(el)[0];
+  if (target && typeof target.focus === 'function') {
+    // preventScroll: showBikePicker has just centred the map on that seat.
+    try { target.focus({ preventScroll: true }); } catch (e) {}
+  }
+}
+
+// Bring the stack in line with what is actually open, and move focus to match.
+// Runs from the observer below (there is no close call to hook) and again
+// before each key is handled. A MutationObserver callback is a microtask: by
+// the time it runs, "remove the class sheet, open the instructor's profile"
+// has BOTH happened, so focus goes into the new overlay instead of being
+// pulled back to the card behind it.
+function _syncOverlayStack() {
+  const closed = [];
+  let opener = null; // of the bottom-most overlay that closed — it lies outside them all
+  for (let i = _overlayStack.length - 1; i >= 0; i--) {
+    if (_overlayIsOpen(_overlayStack[i].el)) continue;
+    closed.push(_overlayStack[i].el);
+    opener = _overlayStack[i].opener;
+    _overlayStack.splice(i, 1);
+  }
+  // Focus "fell" when it is nowhere useful. A static dialog hidden a moment ago
+  // still holds activeElement until the browser's next frame.
+  const fell = () => {
+    const a = document.activeElement;
+    return !a || a === document.body || !a.isConnected || closed.some(c => c.contains(a));
+  };
+
+  let opened = false;
+  _OVERLAYS.forEach(([id, close]) => {
+    const el = document.getElementById(id);
+    if (!_overlayIsOpen(el) || _overlayStack.some(o => o.el === el)) return;
+    // Where focus goes back to. Book disables its button while the class
+    // loads, which drops focus from it — so the picker asks its own context.
+    let from = fell() ? null : document.activeElement;
+    if (!from && id === 'bikeModal' && _bookingContext && _bookingContext.btn) from = _bookingContext.btn;
+    _overlayStack.push({ el, opener: from || opener, close });
+    opened = true;
+  });
+
+  if (_ownKeysOverlayUp()) return;
+  const top = _overlayStack[_overlayStack.length - 1];
+  if (opened) { _focusIntoOverlay(top.el); return; }
+  // Restore only if focus fell: a closer that put it somewhere on purpose wins.
+  if (!closed.length || !fell()) return;
+  if (opener && opener.isConnected && typeof opener.focus === 'function' && (!top || top.el.contains(opener))) {
+    try { opener.focus({ preventScroll: true }); } catch (e) {}
+    if (document.activeElement === opener) return;
+  }
+  if (top) _focusIntoOverlay(top.el); // e.g. Diagnostics closed over Settings
+}
+
+if (typeof MutationObserver === 'function' && document.body) {
+  const _overlayObserver = new MutationObserver(_syncOverlayStack);
+  // Every built overlay is appended to <body>: direct children are enough.
+  _overlayObserver.observe(document.body, { childList: true });
+  ['tokenDialog', 'bikeModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) _overlayObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
+  });
+}
+
+function _activateRoleButton(el) {
+  if (typeof el.click === 'function') el.click();
+  else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); // SVG has no click()
+}
+let _spaceDownOn = null; // the role="button" element a Space press started on
+
+// THE document keydown for overlays and for clickable non-buttons.
+document.addEventListener('keydown', function (e) {
+  if (_ownKeysOverlayUp()) return;
+
+  // Enter / Space on a div or span (or an SVG seat) that says role="button":
+  // instructor names, class titles, period bars, explore names, the next-class
+  // pill, picker seats. Only when the key landed on that element itself, and
+  // never when a handler nearer the target already dealt with it (features.js
+  // does its own class rows).
+  if (e.key === 'Enter' || e.key === ' ') {
+    const el = e.target;
+    if (e.defaultPrevented || !el || typeof el.matches !== 'function' || !el.matches('[role="button"]:not(button)')) return;
+    e.preventDefault(); // Space must not scroll the page
+    if (e.repeat || el.getAttribute('aria-disabled') === 'true') return;
+    // Enter acts now; Space on release — exactly as a real button does, and
+    // for a reason: Space on a seat you hold opens the (chargeable) cancel
+    // confirm, its danger button takes focus 50ms later, and Firefox clicks a
+    // button on ANY Space keyup. Acting on keyup means the key is already up.
+    if (e.key === ' ') { _spaceDownOn = el; return; }
+    _activateRoleButton(el);
+    return;
+  }
+
+  if (e.key !== 'Escape' && e.key !== 'Tab') return;
+  _syncOverlayStack();
+  const top = _overlayStack[_overlayStack.length - 1];
+  if (!top) return;
+
+  if (e.key === 'Escape') {
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    // Only the top-most one; focus is put back by the observer.
+    if (top.close) top.close(); else top.el.remove();
+    return;
+  }
+
+  // Tab: keep it inside the top overlay.
+  const items = _overlayFocusables(top.el);
+  if (!items.length) { e.preventDefault(); return; }
+  const first = items[0], last = items[items.length - 1];
+  const active = document.activeElement;
+  const outside = !top.el.contains(active);
+  // From the panel itself (where focus lands on open) Shift+Tab would
+  // otherwise walk out backwards.
+  const onPanel = active === top.el.querySelector('[role="dialog"]');
+  if (e.shiftKey && (active === first || outside || onPanel)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (active === last || outside)) { e.preventDefault(); first.focus(); }
+});
+
+// The other half of Space (see above): only a release on the very element the
+// press started on counts — focus that moved in between (an overlay opened)
+// must not turn the release into a click on whatever is focused now.
+document.addEventListener('keyup', function (e) {
+  if (e.key !== ' ') return;
+  const el = _spaceDownOn;
+  _spaceDownOn = null;
+  if (!el || e.target !== el || _ownKeysOverlayUp()) return;
+  e.preventDefault();
+  _activateRoleButton(el);
+});
 
 /**
  * Turn a failed cancel into a user-friendly message. Distinguishes session
@@ -4793,6 +5317,7 @@ async function cancelBikeSlot(slotId, eventId) {
       if (g) {
         g.classList.replace('mine', 'available');
         g.setAttribute('onclick', `selectBike(${slotId})`);
+        _syncBikeSlotsA11y(); // "your booking" → "available", and a toggle again
       }
       // Update card button(s) from state (remaining seats / kept place / none)
       _noteLocalBookingWrite();
@@ -4928,6 +5453,119 @@ function applyBookedState(btn, eventId, booking) {
   }
 }
 
+// ── pure:discover:start ── (DOM-free; tests/suites/discover.js evaluates this block)
+// Places still open in a class, or null when the API did not say. /events
+// sends `capacity` + `occupancy` — never the `capacity_remaining` the cards
+// used to wait for, so "Only 2 left" had never once rendered. A cache entry
+// seeded from a waitlist place carries capacity_remaining alone.
+function _spotsLeft(evt) {
+  if (!evt) return null;
+  if (Number.isFinite(evt.capacity) && Number.isFinite(evt.occupancy)) return Math.max(0, evt.capacity - evt.occupancy);
+  return Number.isFinite(evt.capacity_remaining) ? Math.max(0, evt.capacity_remaining) : null;
+}
+
+// A count is only printed while the data behind it is recent: the list is
+// re-filtered from memory all day (and from a day-old cache at launch), and
+// this morning's "Only 2 left" is worse than no number. Twice WINDOW_FRESH_MS:
+// the silent refresh that starts at 15 minutes has had its chance by then.
+// Same clock as the window (`_windowFetchedAt`); a stamp from the future (the
+// clock was moved back) is not fresh, as in _windowIsFresh.
+const SPOTS_MAX_AGE_MS = 30 * 60 * 1000;
+function _countsFresh(dataAt, now) {
+  const age = now - dataAt;
+  return !!dataAt && age >= 0 && age < SPOTS_MAX_AGE_MS;
+}
+
+// A card's availability line, in the redesign's wording ('' = no line). A
+// class that is full with no waitlist says so ("Waitlist only" sat beside a
+// disabled Full button). The count is a number only while it is recent
+// (`fresh`; data-count lets the resume hook take an aged one off a live
+// card), and 0 on a class Psycle still calls bookable says nothing at all.
+// One builder for eventCard and the in-place button sync: the line and the
+// button beside it must never be written from two readings of the class.
+function _spotsHtml(evt, held, fresh) {
+  if (held || !evt) return '';
+  if (evt.is_fully_booked) return `<span class="cc-spots">${evt.is_waitlistable ? 'Waitlist open' : 'Fully booked'}</span>`;
+  const left = fresh ? _spotsLeft(evt) : null;
+  if (left >= 1 && left <= 3) return `<span class="cc-spots low" data-count>Only ${left} left</span>`;
+  if (left > 3) return `<span class="cc-spots" data-count>${left} spots left</span>`;
+  return '';
+}
+
+// Time-of-day bands (the Time filter row). The hour is cut from the start_at
+// STRING — the gym's own wall clock, in the 'T' and the space form alike —
+// never read through Date, which moves it on a device that is not on UK time.
+const TIME_BANDS = [
+  { key: 'early', label: 'Before 9', from: 0, to: 9 },
+  { key: 'day', label: '9–5', from: 9, to: 17 },
+  { key: 'evening', label: 'After 5', from: 17, to: 24 },
+];
+function _timeBandOf(startAt) {
+  const h = parseInt(String(startAt).slice(11, 13), 10);
+  const band = isNaN(h) ? null : TIME_BANDS.find(b => h >= b.from && h < b.to);
+  return band ? band.key : null;
+}
+// No band chosen = any time. A class whose hour cannot be read is never
+// hidden by a time filter: it is still a class on that day.
+function _inTimeBands(startAt, bands) {
+  if (!bands || !bands.size) return true;
+  const key = _timeBandOf(startAt);
+  return key === null || bands.has(key);
+}
+
+// Where each new card goes among a day's cards already on screen.
+// `existingStarts`: start_at of every card in the grid, in DOM order
+// (undefined for a node that is none of this day's classes — never an
+// insertion point); `newStarts`: the classes to add, time-sorted. Returns,
+// per new class, the index of the existing card to insert BEFORE
+// (existingStarts.length = append). Both lists are time-sorted, so ONE
+// forward cursor does it — the old loop re-queried the grid and searched the
+// day's events again for every single card (n³ a day; ~260ms of a filter tap
+// on the all-studios week). Strictly later (>) keeps equal start times in
+// arrival order, as before.
+function _mergeInsertPoints(existingStarts, newStarts) {
+  const points = [];
+  let p = 0;
+  for (const start of newStarts) {
+    while (p < existingStarts.length && !(existingStarts[p] > start)) p++;
+    points.push(p);
+  }
+  return points;
+}
+// ── pure:discover:end ──
+
+// Are the counts in this render() pass recent enough to print? A flag, not an
+// argument: eventCard is wrapped by features.js and performance.js, and both
+// forward exactly five parameters.
+let _cardCountsFresh = true;
+
+// Cards outlive the data they were built from (a warm app, an evening
+// offline). Back in the foreground, an aged number comes off the card; the
+// silent refresh Discover's own resume hook starts rebuilds the list with
+// new ones when it lands.
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden || _countsFresh(window._windowFetchedAt, Date.now())) return;
+  document.querySelectorAll('#results .cc-spots[data-count]').forEach(el => el.remove());
+});
+
+// …and a page that simply STAYS visible (a desktop tab kept open for Monday's
+// release) fires none of that: no resume, no tap, no render. render() arms
+// this for the moment the counts it just printed turn SPOTS_MAX_AGE_MS old.
+// They come off, and the "Updated …" label beside them — it does not tick by
+// itself — is repainted. No refetch: nobody asked for one, and a visible tab
+// would then poll every half hour.
+let _countsExpireTimer = null;
+function _armCountsExpiry(dataAt) {
+  clearTimeout(_countsExpireTimer);
+  _countsExpireTimer = null;
+  if (!_cardCountsFresh) return;
+  _countsExpireTimer = setTimeout(() => {
+    _countsExpireTimer = null;
+    document.querySelectorAll('#results .cc-spots[data-count]').forEach(el => el.remove());
+    if (typeof renderLastUpdated === 'function') renderLastUpdated();
+  }, SPOTS_MAX_AGE_MS - (Date.now() - dataAt) + 1000);
+}
+
 function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   const instr = instrMap[evt.instructor_id];
   const studio = studioMap[evt.studio_id];
@@ -4943,25 +5581,10 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   const locName = loc ? loc.name.replace('Psycle ', '') : '';
   const studioName = studio ? studio.name : '';
 
-  let badges = `<span class="badge">${evt.duration}min</span>`;
   const isFull = evt.is_fully_booked && !evt.is_waitlistable;
   const isWaitlist = evt.is_fully_booked && evt.is_waitlistable;
-  if (isFull) badges += `<span class="badge full">Full</span>`;
-  else if (isWaitlist) badges += `<span class="badge waitlist">Waitlist</span>`;
-  if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
 
   const myBooking = _myBookings[String(evt.id)];
-
-  // Feature: capacity urgency chip — only with a real remaining count, and
-  // only when the class is bookable (not booked, full, or waitlist).
-  if (!myBooking && !isFull && !isWaitlist && typeof evt.capacity_remaining === 'number') {
-    const rem = evt.capacity_remaining;
-    if (rem >= 1 && rem <= 3) {
-      badges += `<span class="badge avail-urgent">Only ${rem} left</span>`;
-    } else if (rem >= 4 && rem <= 7) {
-      badges += `<span class="badge avail-soft">${rem} spots left</span>`;
-    }
-  }
 
   let bookLabel, bookCls, bookDisabled, bookOnclick;
   if (myBooking && myBooking.waitlisted) {
@@ -4985,18 +5608,9 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     bookLabel = 'Book'; bookCls = 'book-btn'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
   }
 
-  // Availability line, in the redesign's wording.
-  let spotsHtml = '';
-  if (!myBooking) {
-    if (isFull) spotsHtml = '<span class="cc-spots">Waitlist only</span>';
-    else if (isWaitlist) spotsHtml = '<span class="cc-spots">Waitlist open</span>';
-    else if (typeof evt.capacity_remaining === 'number') {
-      const r = evt.capacity_remaining;
-      if (r <= 0) spotsHtml = '<span class="cc-spots">Waitlist only</span>';
-      else if (r <= 3) spotsHtml = `<span class="cc-spots low">Only ${r} left</span>`;
-      else spotsHtml = `<span class="cc-spots">${r} spots left</span>`;
-    }
-  }
+  // Availability line (_spotsHtml). render() decides per pass whether the
+  // counts are recent enough to print.
+  const spotsHtml = _spotsHtml(evt, myBooking, _cardCountsFresh);
   const onlineMeta = evt.is_live_stream ? '<div class="cc-meta"><span class="badge highlight">Online</span></div>' : '';
 
   return `<div class="class-card${myBooking ? (myBooking.waitlisted ? ' is-waitlisted' : ' is-booked') : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
@@ -5007,7 +5621,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
     </div>
     <div class="cc-rule"></div>
     <div class="cc-info">
-      <span class="cc-name">${escapeHTML(type?.name || 'Class')}</span>
+      <span class="cc-name" role="button" tabindex="0">${escapeHTML(type?.name || 'Class')}</span>
       <span class="cc-sub">${instrLink(instr?.full_name, instr?.id)}${window.tierBadgeHTML ? window.tierBadgeHTML(instr?.id) : ''}${locName ? ' · ' + escapeHTML(locName) : ''}</span>
       ${spotsHtml}
       ${onlineMeta}
@@ -5020,6 +5634,31 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   </div>`;
 }
 
+// Feature 13's write, behind a trailing debounce: every filter tap re-renders,
+// and serialising the whole window (800+ classes) inside each one was part of
+// the freeze. Only the last view of a burst is worth restoring anyway. `at`
+// carries the data's age across the reload (see render()'s dataAt).
+let _lastResultsTimer = null;
+function _saveLastResultsSoon(events, relations, filters, dataAt) {
+  clearTimeout(_lastResultsTimer);
+  _lastResultsTimer = setTimeout(() => {
+    try {
+      sessionStorage.setItem('psycle_last_results', JSON.stringify({ events, relations, at: dataAt || 0, filters: {
+        instructorId: filters.instructorId,
+        locationIds: filters.locationIds || [],
+        categoryKeys: [...(filters.categoryKeys || [])],
+        startDate: filters.startDate,
+        endDateStr: filters.endDateStr,
+        strengthSubs: [...(filters.strengthSubs || [])],
+        reformerSubs: [...(filters.reformerSubs || [])],
+        timeBands: [...(filters.timeBands instanceof Set ? filters.timeBands : selectedTimeBands)],
+        availableOnly: filters.availableOnly != null ? !!filters.availableOnly : _availableOnly,
+        _isTodaySchedule: filters._isTodaySchedule || false,
+      }}));
+    } catch (e) { console.warn('[psycle] sessionStorage save failed:', e); }
+  }, 1000);
+}
+
 function render(events, relations, filters, done) {
   if (!relations) return; // nothing to map without relation data
   const instrMap = Object.fromEntries((relations.instructors || []).map(i => [i.id, i]));
@@ -5027,6 +5666,15 @@ function render(events, relations, filters, done) {
   const locationMap = Object.fromEntries((relations.locations || []).map(l => [l.id, l]));
   const typeMap = Object.fromEntries((relations.event_types || []).map(t => [t.id, t]));
   Object.assign(_studioMap, studioMap); // expose globally for bookClass
+
+  // How old are these events? The window's own stamp when they ARE the window
+  // (every filter tap, a hydrated cache); the stamp a restored session carried
+  // (restoreLastResults; none = unknown = old); otherwise search() is streaming
+  // them in right now, before it has committed a window to stamp.
+  const dataAt = filters.dataAt != null ? filters.dataAt
+    : (events === window._windowEvents ? window._windowFetchedAt : Date.now());
+  _cardCountsFresh = _countsFresh(dataAt, Date.now());
+  _armCountsExpiry(dataAt); // a page left visible: the numbers still come off when they age
 
   // Cache event metadata for the upcoming panel. Always REFRESH existing
   // entries — the class detail sheet reads availability (is_fully_booked,
@@ -5048,6 +5696,7 @@ function render(events, relations, filters, done) {
       _locFullName: loc ? loc.name : '',
       _locAddress: loc ? (loc.address || '') : '',
       _studioName: studio ? studio.name : '',
+      _countsAt: dataAt, // how old capacity/occupancy are — the detail sheet prints a count only while recent
     };
   });
 
@@ -5056,6 +5705,12 @@ function render(events, relations, filters, done) {
   // (Facet counts are rebuilt at the data source — _buildFacetClasses() on
   // fetch/hydrate/revalidate — not here, so they don't depend on render's
   // progressive `done` flag and stay correct on multi-location fetches.)
+
+  // The Time row. search() builds its own filters without these two (as does
+  // a session saved before they existed), so the live pills stand in.
+  const timeBands = filters.timeBands instanceof Set ? filters.timeBands : selectedTimeBands;
+  const availableOnly = filters.availableOnly != null ? !!filters.availableOnly : _availableOnly;
+  let hiddenByTimeRow = 0; // classes every OTHER filter kept
 
   const filtered = events.filter(e => {
     // Never show classes that have already started
@@ -5104,12 +5759,39 @@ function render(events, relations, filters, done) {
         (loc ? loc.name : '') + ' ' + (studio ? studio.name : '')).toLowerCase();
       if (hay.indexOf(window._discoverQuery) === -1) return false;
     }
+    // The Time row, LAST: what it hides is then exactly what every other
+    // filter kept, which is what the empty list below has to tell apart.
+    // "Available only" never hides the member's own class (booked or
+    // waitlisted) — it would vanish from Discover the moment it was booked
+    // full. is_fully_booked is the same flag the Book button goes by.
+    if (!_inTimeBands(e.start_at, timeBands) ||
+        (availableOnly && e.is_fully_booked && !_myBookings[String(e.id)])) {
+      hiddenByTimeRow++;
+      return false;
+    }
     return true;
   });
 
   const container = document.getElementById('results');
 
   if (filtered.length === 0 && done) {
+    // Classes DO match everything else — only the Time row hides them. Say so,
+    // with the one tap that lifts just that row: Find similar, Rebook and Book
+    // again search FOR the member (an instructor, a day) and must not dead-end
+    // on an "After 5" saved last week, and Clear filters would throw away what
+    // they just set. Not .no-results: theme.js flattens that block to its text,
+    // so a button cannot ride in it (same markup as its renderEmptyState).
+    if (hiddenByTimeRow > 0) {
+      const names = TIME_BANDS.filter(b => timeBands.has(b.key)).map(b => b.label);
+      const byTime = names.length > 0; // else "Available only" alone did it: every match is full
+      if (availableOnly) names.push('Available only');
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-title">${byTime ? 'Nothing at these times' : 'Every class here is full'}</div>
+        <div class="empty-subtitle">${hiddenByTimeRow} class${hiddenByTimeRow !== 1 ? 'es' : ''} on these dates ${hiddenByTimeRow !== 1 ? 'are' : 'is'} hidden by ${escapeHTML(names.join(' · '))}.</div>
+        <div class="empty-actions"><button type="button" class="empty-action primary" onclick="clearTimeFilters()">${byTime ? 'Show all times' : 'Show full classes'}</button></div>
+      </div>`;
+      return;
+    }
     container.innerHTML = '<div class="no-results">No classes found for these filters.</div>';
     return;
   }
@@ -5139,22 +5821,33 @@ function render(events, relations, filters, done) {
   if (done) refreshUpcomingPanel();
   // Incrementally update day groups
   const sortedDays = Object.keys(byDay).sort();
+  const todayStr = localDateStr(), tomorrowStr = _addDaysStr(todayStr, 1);
   for (const day of sortedDays) {
-    // Sort by time
-    const dayEvents = byDay[day].sort((a, b) => a.start_at.localeCompare(b.start_at));
-    const date = new Date(day + 'T12:00:00');
-    const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    // Sort by time. Plain string order, the one _mergeInsertPoints compares
+    // with (and localeCompare was the slow part of sorting a week).
+    const dayEvents = byDay[day].sort((a, b) => (a.start_at < b.start_at ? -1 : a.start_at > b.start_at ? 1 : 0));
 
     let group = container.querySelector(`[data-day="${day}"]`);
     if (!group) {
+      // "Today · 18 September": in a week of every studio the header is the only
+      // cue to which day is on screen (it sticks on a phone — css/redesign.css).
+      // No year: with the count beside it the line has to fit 390px.
+      const date = new Date(day + 'T12:00:00');
+      const rel = day === todayStr ? 'Today' : day === tomorrowStr ? 'Tomorrow' : '';
+      const dayLabel = rel
+        ? rel + ' · ' + date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
+        : date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
       group = document.createElement('div');
       group.className = 'day-group';
       group.dataset.day = day;
-      group.innerHTML = `<div class="day-header">${dayLabel}</div><div class="day-body"></div>`;
+      group.innerHTML = `<div class="day-header"><span>${dayLabel}</span><span class="day-count"></span></div><div class="day-body"></div>`;
       const existing = [...container.querySelectorAll('[data-day]')];
       const after = existing.find(el => el.dataset.day > day);
       after ? container.insertBefore(group, after) : container.appendChild(group);
     }
+    // Every pass: a day fills up studio by studio while a search streams in.
+    const countEl = group.querySelector('.day-count');
+    if (countEl) countEl.textContent = dayEvents.length + (dayEvents.length === 1 ? ' class' : ' classes');
 
     const body = group.querySelector('.day-body');
 
@@ -5166,36 +5859,31 @@ function render(events, relations, filters, done) {
       grid.className = 'class-grid';
       body.appendChild(grid);
     }
-    const existingIds = new Set([...grid.querySelectorAll('[data-id]')].map(el => el.dataset.id));
-    for (const evt of dayEvents) { // dayEvents is already time-sorted above
-      if (existingIds.has(String(evt.id))) continue;
-      const newCard = document.createElement('div');
-      newCard.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
-      const card = newCard.firstElementChild;
-      const existing = [...grid.querySelectorAll('[data-id]')];
-      const insertBefore = existing.find(el => {
-        const elEvt = dayEvents.find(e => String(e.id) === el.dataset.id);
-        return elEvt && elEvt.start_at > evt.start_at;
-      });
-      insertBefore ? grid.insertBefore(card, insertBefore) : grid.appendChild(card);
+    // The bare global eventCard both ways: features.js (notify bell) and
+    // performance.js wrap window.eventCard, and a captured reference skips them.
+    const kids = Array.from(grid.children);
+    if (!kids.length) {
+      // An empty grid — every filter tap, renderFromWindow wipes #results first
+      // — is built in one parse instead of a card at a time.
+      grid.innerHTML = dayEvents.map(e => eventCard(e, instrMap, studioMap, locationMap, typeMap)).join('');
+      continue;
     }
+    // Cards already up (a search streaming in studio by studio): merge the new
+    // ones between them in one forward walk.
+    const have = new Set(kids.map(el => el.dataset.id));
+    const fresh = dayEvents.filter(e => !have.has(String(e.id)));
+    if (!fresh.length) continue;
+    const startById = new Map(dayEvents.map(e => [String(e.id), e.start_at]));
+    const points = _mergeInsertPoints(kids.map(el => startById.get(el.dataset.id)), fresh.map(e => e.start_at));
+    const holder = document.createElement('div');
+    fresh.forEach((evt, i) => {
+      holder.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
+      grid.insertBefore(holder.firstElementChild, kids[points[i]] || null);
+    });
   }
 
   // Feature 13: Persist search results to sessionStorage for tab-switch restore
-  if (done) {
-    try {
-      sessionStorage.setItem('psycle_last_results', JSON.stringify({ events, relations, filters: {
-        instructorId: filters.instructorId,
-        locationIds: filters.locationIds || [],
-        categoryKeys: [...(filters.categoryKeys || [])],
-        startDate: filters.startDate,
-        endDateStr: filters.endDateStr,
-        strengthSubs: [...(filters.strengthSubs || [])],
-        reformerSubs: [...(filters.reformerSubs || [])],
-        _isTodaySchedule: filters._isTodaySchedule || false,
-      }}));
-    } catch (e) { console.warn('[psycle] sessionStorage save failed:', e); }
-  }
+  if (done) _saveLastResultsSoon(events, relations, filters, dataAt);
 }
 
 // ── Studio multi-select chips ────────────────────────────────────
@@ -5224,7 +5912,10 @@ function discoverFacets() {
       location: c => c.loc,
       category: c => c.cat,
     },
-    dateFilter: c => _dayInRange(c.start_at, startDate, endDateStr),
+    dateFilter: c => _dayInRange(c.start_at, startDate, endDateStr) &&
+      // …and only what the Time row lets through, by render()'s own two tests:
+      // a chip must not count classes the list will not show.
+      _inTimeBands(c.start_at, selectedTimeBands) && !(_availableOnly && c.full && !_myBookings[c.id]),
   });
 }
 
@@ -5252,15 +5943,16 @@ function renderLocationChips() {
   if (!box) return;
   const counts = _facetCounts('location');
   const allActive = selectedLocations.size === 0;
-  let html = `<button class="loc-chip${allActive ? ' active' : ''}" onclick="toggleLocation('')">All</button>`;
+  // aria-pressed beside every .active: the selection was a CSS class only.
+  let html = `<button class="loc-chip${allActive ? ' active' : ''}" aria-pressed="${allActive}" onclick="toggleLocation('')">All</button>`;
   html += locations.map(l => {
     const active = selectedLocations.has(String(l.id));
     const n = counts ? (counts[String(l.id)] || 0) : null;
     const dim = (counts && n === 0 && !active) ? ' dimmed' : '';
     const badge = n != null ? `<span class="chip-count">${n}</span>` : '';
-    return `<button class="loc-chip${active ? ' active' : ''}${dim}" onclick="toggleLocation('${l.id}')">${escapeHTML(l.name.replace('Psycle ', ''))}${badge}</button>`;
+    return `<button class="loc-chip${active ? ' active' : ''}${dim}" aria-pressed="${active}" onclick="toggleLocation('${l.id}')">${escapeHTML(l.name.replace('Psycle ', ''))}${badge}</button>`;
   }).join('');
-  box.innerHTML = html;
+  _repaintKeepingFocus(box, html);
   updateLocationHint();
 }
 
@@ -5302,6 +5994,12 @@ function restoreLastResults() {
       endDateStr: saved.filters.endDateStr || '',
       strengthSubs: new Set(saved.filters.strengthSubs || ['UPPER', 'LOWER', 'FULL']),
       reformerSubs: new Set(saved.filters.reformerSubs || REFORMER_SUBS.map(s => s.key)),
+      // A session saved before the Time row existed carries neither: any time.
+      timeBands: new Set(saved.filters.timeBands || []),
+      availableOnly: !!saved.filters.availableOnly,
+      // When these numbers were fetched. None = unknown, and an unknown age
+      // prints no "spots left" (render → _countsFresh).
+      dataAt: Number(saved.at) || 0,
     };
     render(saved.events, saved.relations, filters, true);
     return true;
@@ -5359,8 +6057,11 @@ function renderInstrChips() {
   chips.innerHTML = [...selectedInstructors].map(id => {
     const instr = instructors.find(i => String(i.id) === String(id));
     const name = instr?.full_name || id;
+    const safeId = escapeForJsString(id);
+    // mousedown (not click) keeps focus in the search box; a keyboard press
+    // arrives as a click with detail 0 — the only one the mousedown missed.
     return `<span class="instr-chip">${escapeHTML(name)}
-      <button type="button" onmousedown="event.preventDefault();removeInstructor('${id}')" title="Remove">×</button>
+      <button type="button" onmousedown="event.preventDefault();removeInstructor('${safeId}')" onclick="if(event.detail===0)removeInstructor('${safeId}')" aria-label="Remove ${escapeHTML(name)}" title="Remove">×</button>
     </span>`;
   }).join('');
 }
@@ -5477,14 +6178,14 @@ function renderCategoryPills() {
   }
   const catsToShow = CATEGORY_MAP.filter(c => presentCats.has(c.key) || eventTypes.length === 0);
   const counts = _facetCounts('category');
-  container.innerHTML = catsToShow.map(cat => {
+  _repaintKeepingFocus(container, catsToShow.map(cat => {
     const active = selectedCategories.has(cat.key);
     const n = counts ? (counts[cat.key] || 0) : null;
     const dim = (counts && n === 0 && !active) ? ' dimmed' : '';
     const badge = n != null ? `<span class="pill-count">${n}</span>` : '';
-    return `<button class="cat-pill${active ? ' active' : ''}${dim}"
+    return `<button class="cat-pill${active ? ' active' : ''}${dim}" aria-pressed="${active}"
       onclick="toggleCategory('${cat.key}')">${cat.label}${badge}</button>`;
-  }).join('');
+  }).join(''));
 }
 
 function toggleCategory(key) {
@@ -5494,6 +6195,84 @@ function toggleCategory(key) {
   renderStrengthSubPills();
   renderReformerSubPills();
   triggerAutoSearch();
+}
+
+// ── Time row: time-of-day bands + "Available only" ───────────────
+// Onboarding promised filtering "by time" and there was none: an after-work
+// class meant scrolling past every morning at every studio, full ones
+// included. Both narrow the loaded window client-side, like the other pills.
+// selectedTimeBands: TIME_BANDS keys. Empty = any time.
+const selectedTimeBands = new Set();
+let _availableOnly = false; // hide full classes (never the member's own — see render())
+
+// The row reuses .location-chips + .cat-pill (css/redesign.css styles pill
+// rows by those), so it needs no CSS of its own and follows every theme.
+function renderTimePills() {
+  const box = document.getElementById('timePills');
+  if (!box) return;
+  _repaintKeepingFocus(box, TIME_BANDS.map(b => {
+    const active = selectedTimeBands.has(b.key);
+    return `<button class="cat-pill${active ? ' active' : ''}" aria-pressed="${active}" onclick="toggleTimeBand('${b.key}')">${b.label}</button>`;
+  }).join('') +
+    `<button class="cat-pill${_availableOnly ? ' active' : ''}" aria-pressed="${_availableOnly}" onclick="toggleAvailableOnly()">Available only</button>`);
+}
+renderTimePills(); // static labels: nothing to wait for (the scripts are deferred, the row exists)
+
+function toggleTimeBand(key) {
+  if (selectedTimeBands.has(key)) selectedTimeBands.delete(key);
+  else selectedTimeBands.add(key);
+  renderTimePills();
+  refreshFacetCounts(); // the chip counts follow the Time row too (discoverFacets)
+  triggerAutoSearch();
+}
+
+// triggerAutoSearch re-filters at once and, when the window's numbers are old,
+// refreshes them silently — "full" from this morning is not worth hiding by.
+function toggleAvailableOnly() {
+  _availableOnly = !_availableOnly;
+  renderTimePills();
+  refreshFacetCounts();
+  triggerAutoSearch();
+}
+
+// Lift the Time row only (the empty list's button): the instructor, studio
+// and dates — often just set FOR the member by Find similar / Book again —
+// stay as they are.
+function clearTimeFilters() {
+  selectedTimeBands.clear();
+  _availableOnly = false;
+  renderTimePills();
+  refreshFacetCounts();
+  triggerAutoSearch();
+}
+
+// Saved Time row → state. interactions.js restoreFilters calls this instead of
+// writing the two bindings itself: it guards every app.js name with typeof,
+// and a bare assignment cannot be guarded. Only known band keys come back —
+// the list arrives from localStorage.
+function setTimeFilters(bands, availableOnly) {
+  selectedTimeBands.clear();
+  (Array.isArray(bands) ? bands : []).forEach(k => {
+    if (TIME_BANDS.some(b => b.key === k)) selectedTimeBands.add(k);
+  });
+  _availableOnly = availableOnly === true;
+  renderTimePills();
+}
+
+// A flow that searches FOR the member around one time of day ("Same class
+// next week", "Same time, any instructor") lands on a list the Time row still
+// filters: with "After 5" on, every 7am class the toast announced is hidden —
+// and the list is rarely EMPTY, so the "Show all times" rescue never shows.
+// Additive, like the studio and class-type filters there: a row with nothing
+// on gains nothing, and an hour that cannot be read adds no band.
+function _admitTimeBands(startAts) {
+  if (!selectedTimeBands.size) return;
+  let changed = false;
+  startAts.forEach(s => {
+    const key = _timeBandOf(s);
+    if (key && !selectedTimeBands.has(key)) { selectedTimeBands.add(key); changed = true; }
+  });
+  if (changed) { renderTimePills(); refreshFacetCounts(); }
 }
 // ────────────────────────────────────────────────────────────────
 
@@ -5837,12 +6616,26 @@ if (typeof PsycleEvents !== 'undefined') {
   });
 }
 
+// ── pure:bookings-started:start ── (DOM-free; tests/suites/3d-leftovers.js evaluates this block)
+// Has this held class started? start_at is a naive London wall clock: parsed
+// device-locally, a member EAST of London had a class still hours away filed
+// under "past" — off My Bookings, behind the "Show past" toggle. `startMsOf` =
+// _gymClassStartMs (it falls back to the device-local parse by itself where
+// the engine has no Europe/London data). A time nothing can place has NOT
+// started: a held class must never leave the list on a parsing accident.
+function _classHasStarted(startAt, nowMs, startMsOf) {
+  const ms = startMsOf(startAt);
+  return !isNaN(ms) && ms <= nowMs;
+}
+// ── pure:bookings-started:end ──
+
 function renderMyBookings() {
   const panel = document.getElementById('upcomingPanel');
   const list = document.getElementById('upcomingList');
   const countEl = document.getElementById('upcomingCount');
 
   const now = new Date();
+  const started = evt => _classHasStarted(evt.start_at, now.getTime(), _gymClassStartMs);
   const all = Object.entries(_myBookings)
     .map(([evtId, booking]) => {
       const evt = _eventCache[evtId];
@@ -5851,9 +6644,9 @@ function renderMyBookings() {
     .filter(Boolean)
     .sort((a, b) => a.evt.start_at.localeCompare(b.evt.start_at));
 
-  const upcoming = all.filter(({ evt }) => new Date(evt.start_at) > now);
+  const upcoming = all.filter(({ evt }) => !started(evt));
   // A waitlist place that never became a seat is not an attended class.
-  const past = all.filter(({ evt, booking }) => new Date(evt.start_at) <= now && !booking.waitlisted);
+  const past = all.filter(({ evt, booking }) => started(evt) && !booking.waitlisted);
 
   // Header count = classes you're actually in; places are called out separately.
   const upcomingSeats = upcoming.filter(({ booking }) => !booking.waitlisted).length;
@@ -6029,7 +6822,10 @@ function renderMyBookings() {
 
     // Current period sub-bar (open)
     html += `<div class="mb-period-section">`;
-    html += `<div class="mb-period-bar" onclick="this.parentElement.classList.toggle('collapsed')">`;
+    // A div that acts as a button: role + tabindex make it reachable (app.js's
+    // one keydown turns Enter / Space into the click), and aria-expanded follows
+    // the toggle. Every render starts open, so "true" here is never stale.
+    html += `<div class="mb-period-bar" role="button" tabindex="0" aria-expanded="true" onclick="this.setAttribute('aria-expanded', String(!this.parentElement.classList.toggle('collapsed')))">`;
     html += `<div class="mb-period-bar-text">`;
     html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
     html += `<span class="sub-bar-count">${max > 0 ? made + '/' + max + ' classes' : (made > 0 ? made + ' classes' : 'Unlimited')}${periodLabel ? ' · ' + periodLabel : ''}</span>`;
@@ -6047,7 +6843,9 @@ function renderMyBookings() {
   for (const day of sortedDays) {
     const dayItems = byDay[day];
     const date = new Date(day + 'T12:00:00');
-    const isPast = date < now && day !== localDateStr(now);
+    // `day` is a London date: a device ahead of London is already on the next
+    // one while tonight's class is still to come — never dim a day with a live class.
+    const isPast = date < now && day !== localDateStr(now) && dayItems.every(({ evt }) => started(evt));
     const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
     // Close current period section and open next period section
@@ -6065,7 +6863,7 @@ function renderMyBookings() {
       const nextMax = _activeSubscription?.max_bookings || 0;
 
       html += `<div class="mb-period-section">`;
-      html += `<div class="mb-period-bar mb-period-bar-next" onclick="this.parentElement.classList.toggle('collapsed')">`;
+      html += `<div class="mb-period-bar mb-period-bar-next" role="button" tabindex="0" aria-expanded="true" onclick="this.setAttribute('aria-expanded', String(!this.parentElement.classList.toggle('collapsed')))">`;
       html += `<div class="mb-period-bar-text">`;
       const nextBooked = nextPeriodItems.filter(item => !item.booking.waitlisted).length;
       html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
@@ -6094,7 +6892,7 @@ function renderMyBookings() {
       const instrName = evt._instrName || '';
       const locName = evt._locName || '';
       const studioName = evt._studioName || '';
-      const eventPast = dt <= now;
+      const eventPast = started(evt);
 
       const slots = booking.slots || [];
       const isPlace = !!booking.waitlisted;              // waitlist place, no seat
@@ -6404,6 +7202,10 @@ async function rebookNextWeek(eventId) {
     ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
     selectedReformerSubs.clear();
     REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
+    // And the Time row: "After 5" left on hides every alternative to a 7am
+    // class. Each alternative's OWN band — the ±2h window straddles them (a
+    // 07:00 class has 09:00 alternatives), so the target hour is not enough.
+    if (typeof _admitTimeBands === 'function') _admitTimeBands(similar.map(e => e.start_at));
     _dateQuickMode = null;
     document.getElementById('startDate').value = dayStr;
     document.getElementById('daysAhead').value = 1;
@@ -6463,7 +7265,14 @@ window.changeSpot = async function(eventId) {
     }
 
     const studio = _studioMap[evt.studio_id];
-    const layout = studio?.layout;
+    let layout = studio?.layout;
+    // Same recovery as bookClass: render() can swap the studio record for one
+    // without its seat map — take it from the detail just read, and keep it.
+    // (typeof: the suites run changeSpot on its own.)
+    if (studio?.has_layout && !(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
+      layout = _layoutFromEventDetail(detail, evt.studio_id);
+      if (layout) studio.layout = layout;
+    }
     if (!studio?.has_layout || !layout?.slots?.length) {
       toast('No layout available for this studio', 'error');
       return;
@@ -6515,10 +7324,14 @@ function renderChangeSpotHint() {
   if (ctx.booking.slots.length > 1) {
     const chips = ctx.booking.slots.map(function (s) {
       const cls = 'change-chip' + (s === ctx.slotToChange ? ' is-active' : '');
-      return '<button type="button" class="' + cls + '" onclick="setChangeSpotTarget(' + s + ')">' +
+      // Which seat is being swapped was a colour only; the hint re-renders on
+      // every retarget, so the pressed state here can't go stale.
+      return '<button type="button" class="' + cls + '" aria-pressed="' + (s === ctx.slotToChange) + '" onclick="setChangeSpotTarget(' + s + ')">' +
         label + ' ' + s + '</button>';
     }).join('');
-    hint.innerHTML = 'Changing: <span class="change-chip-row">' + chips + '</span>' + tail;
+    // Inside the picker's focus trap a lost focus is worse: the next Tab jumps
+    // to the × and the member walks every seat again to get back here.
+    _repaintKeepingFocus(hint, 'Changing: <span class="change-chip-row">' + chips + '</span>' + tail, '.change-chip');
   } else if (picked != null) {
     hint.textContent = label + ' ' + ctx.slotToChange + ' → ' + label + ' ' + picked + '. Tap Swap to confirm.';
   } else {
@@ -6841,6 +7654,8 @@ window.findSimilar = function(eventId) {
       document.getElementById('startDate').value = targetStr;
       document.getElementById('daysAhead').value = 8;
       _dateQuickMode = null; // a custom range — no preset describes it
+      // "Around 7:00am" with "After 5" still on lists evenings only.
+      if (typeof _admitTimeBands === 'function') _admitTimeBands([evt.start_at]);
       updateFiltersSummary();
       switchTab('discover');
       search();
@@ -7139,16 +7954,21 @@ window.openClassDetail = function (eventId) {
   const studioName = evt._studioName || '';
   const duration = evt.duration || '';
 
-  // Availability info
+  // Availability info. The count comes from _spotsLeft (the API sends
+  // capacity + occupancy; the capacity_remaining this row waited for never
+  // arrives, so it fell through to a second "45 min" — the header badge
+  // already says that) and only while the numbers are recent: _countsAt is
+  // stamped by render(), and an entry it never touched has no known age.
   let availHtml = '';
   if (evt.is_fully_booked && !evt.is_waitlistable) {
     availHtml = '<span class="cds-avail cds-avail-full">Full</span>';
   } else if (evt.is_fully_booked && evt.is_waitlistable) {
-    availHtml = '<span class="cds-avail cds-avail-waitlist">Waitlist available</span>';
-  } else if (evt.capacity != null && evt.capacity_remaining != null) {
-    availHtml = '<span class="cds-avail">' + escapeHTML(String(evt.capacity_remaining)) + ' spots available</span>';
-  } else if (duration) {
-    availHtml = '<span class="cds-avail">' + escapeHTML(String(duration)) + ' min</span>';
+    availHtml = '<span class="cds-avail cds-avail-waitlist">Full — waitlist open</span>';
+  } else {
+    const left = _countsFresh(evt._countsAt, Date.now()) ? _spotsLeft(evt) : null;
+    if (left >= 1) {
+      availHtml = '<span class="cds-avail' + (left <= 3 ? ' cds-avail-waitlist' : '') + '">' + left + (left === 1 ? ' spot left' : ' spots left') + '</span>';
+    }
   }
   // My Bookings can open the sheet for a class that has already run (past
   // bookings shown): "12 spots available" means nothing for a finished class.
@@ -7205,7 +8025,7 @@ window.openClassDetail = function (eventId) {
   // Instructor link
   const safeInstrName = escapeForJsString(instrName);
   const viewInstrHtml = instrId
-    ? '<button class="cds-view-instr" onclick="document.getElementById(\'classDetailOverlay\').remove();window._features_openInstructorModal(\'' + safeInstrName + '\',\'' + instrId + '\')">View instructor profile</button>'
+    ? '<button class="cds-view-instr" onclick="document.getElementById(\'classDetailOverlay\').remove();window._features_openInstructorModal(\'' + safeInstrName + '\',\'' + escapeForJsString(instrId) + '\')">View instructor profile</button>'
     : '';
 
   // Build overlay
@@ -7215,10 +8035,12 @@ window.openClassDetail = function (eventId) {
   overlay.style.display = 'flex';
   overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
 
+  // The sheet has no title element of its own; its name is what it is about.
   overlay.innerHTML =
-    '<div class="class-detail-sheet">' +
+    '<div class="class-detail-sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="' +
+      escapeHTML(instrName ? typeName + ' with ' + instrName : typeName) + '">' +
       '<div class="cds-handle"></div>' +
-      '<button class="modal-close cds-close" onclick="document.getElementById(\'classDetailOverlay\').remove()">&times;</button>' +
+      '<button class="modal-close cds-close" onclick="document.getElementById(\'classDetailOverlay\').remove()" aria-label="Close">&times;</button>' +
       '<div class="cds-header">' +
         (photo ? '<img class="cds-photo" src="' + escapeHTML(photo) + '" alt="' + escapeHTML(instrName) + '">' : '<div class="cds-photo-placeholder"></div>') +
         '<div class="cds-header-info">' +
@@ -7229,7 +8051,7 @@ window.openClassDetail = function (eventId) {
       '<div class="cds-details">' +
         '<div class="cds-detail-row"><span class="cds-icon">&#128197;</span><span>' + escapeHTML(dayStr) + ' at ' + escapeHTML(timeStr) + '</span></div>' +
         '<div class="cds-detail-row"><span class="cds-icon">&#128205;</span><span>' + escapeHTML(locName) + (studioName ? ' &middot; ' + escapeHTML(studioName) : '') + '</span></div>' +
-        (availHtml ? '<div class="cds-detail-row"><span class="cds-icon">&#9898;</span>' + availHtml + '</div>' : '') +
+        (availHtml ? '<div class="cds-detail-row"><span class="cds-icon">&#128101;</span>' + availHtml + '</div>' : '') +
         clashHtml +
       '</div>' +
       (bioExcerpt ? '<div class="cds-bio">' + escapeHTML(bioExcerpt) + '</div>' : '') +
@@ -7285,6 +8107,7 @@ function _resolveTemplateLocationId(id) {
   return sid; // best effort
 }
 
+// ── pure:core:start ── (needs localDateStr, from the first pure:core block)
 // Date of the given weekday (0=Sun..6=Sat) within the upcoming 7 days
 // (today counts as day 0). Returns a YYYY-MM-DD string.
 function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date(), timeMinutes = null) {
@@ -7301,6 +8124,7 @@ function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date(), timeMinutes = nu
   target.setDate(target.getDate() + diff);
   return localDateStr(target);
 }
+// ── pure:core:end ──
 
 // Headlessly book a single resolved event the way rebookNextWeek does —
 // a detached button drives bookClass(), but we never pop the bike picker:
@@ -7334,7 +8158,17 @@ async function _bookEventHeadless(eventId, studioId) {
     }
 
     const studio = _studioMap[studioId];
-    const layout = studio?.layout;
+    let layout = studio?.layout;
+    // As bookClass: "Book my week" gets here straight after fetchDay's render()
+    // replaced the studio record with a LIST response's — has_layout, no seat
+    // map — so this path always saw a seat studio as map-less and POSTed with
+    // no slots ("Booking slot required": every such entry counted as failed).
+    // The detail just read carries the map. (typeof: the suites slice this
+    // function on its own.)
+    if (studio?.has_layout && !(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
+      layout = _layoutFromEventDetail(detail, studioId);
+      if (layout) studio.layout = layout;
+    }
     const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
 
     const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
@@ -7344,6 +8178,11 @@ async function _bookEventHeadless(eventId, studioId) {
       const joined = await joinWaitlist(eventId, btn, { quiet: true });
       return joined ? 'waitlisted' : 'failed';
     }
+
+    // A seat studio and still no map: there is no seat to name, and Psycle
+    // turns a slot-less body down. After the block above — a FULL class needs
+    // no map to join its waitlist.
+    if (!hasLayout && studio?.has_layout) return 'failed';
 
     if (hasLayout) {
       // Auto-pick: the user's usual slot if it's free, else the first available.
@@ -7575,6 +8414,7 @@ function _currentSearchState() {
   };
 }
 
+// ── pure:core:start ──
 // Order-independent signature for dedup: sorted ids + sorted categories +
 // date mode (or explicit start date when no quick mode is active).
 function _searchSignature(s) {
@@ -7584,6 +8424,7 @@ function _searchSignature(s) {
   const date = s.dateMode || ('date:' + (s.startDate || '') + '+' + (s.daysAhead || ''));
   return ['i:' + instr, 'l:' + locs, 'c:' + cats, 'd:' + date].join('|');
 }
+// ── pure:core:end ──
 
 // Human label for a saved/recent search pill.
 function _searchLabel(s) {
@@ -7640,6 +8481,9 @@ function getSearchPresets() {
         ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
         selectedReformerSubs.clear();
         REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
+        // "Tonight" used to mean all of today, 6am classes included.
+        selectedTimeBands.clear();
+        selectedTimeBands.add('evening');
         _dateQuickMode = 'today';
         document.getElementById('startDate').value = localDateStr();
         document.getElementById('daysAhead').value = 1;
@@ -7683,6 +8527,7 @@ function _syncFilterUI() {
   if (typeof renderCategoryPills === 'function') renderCategoryPills();
   if (typeof renderStrengthSubPills === 'function') renderStrengthSubPills();
   if (typeof renderReformerSubPills === 'function') renderReformerSubPills();
+  renderTimePills();
   _syncDatePills();
   if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
 }
@@ -7953,9 +8798,16 @@ function renderTravelNotice() {
     document.getElementById('travelNotice')?.remove();
     return;
   }
-  if (document.getElementById('travelNotice')) return;
-
   const results = document.getElementById('results');
+  const shown = document.getElementById('travelNotice');
+  if (shown) {
+    // Its place is right above #results, wherever #results lives now. tabs.js
+    // takes it along when it builds the tab shell; this is for anything else
+    // that moves #results — left behind, the notice sat outside the tab panels,
+    // under the docked tab bar.
+    if (results && shown.parentNode !== results.parentNode) results.parentNode.insertBefore(shown, results);
+    return;
+  }
   if (!results) return;
   const el = document.createElement('div');
   el.id = 'travelNotice';

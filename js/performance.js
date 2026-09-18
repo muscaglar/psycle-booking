@@ -170,6 +170,16 @@ function _staticCacheIsFresh(cached, ttlMs, nowMs) {
   const age = nowMs - (Number(cached.timestamp) || 0);
   return age >= 0 && age < ttlMs;
 }
+// What the patched apiFetch does with the entry it found:
+//   'cache'      a usable list inside its TTL — the whole answer, no request;
+//   'revalidate' a usable list that is old, or whose age can't be trusted —
+//                served at once, refreshed behind the caller;
+//   'network'    nothing servable — the caller waits for the network, and its
+//                answer overwrites whatever was there.
+function _staticCacheDecision(cached, ttlMs, nowMs) {
+  if (!_staticCacheHasList(cached)) return 'network';
+  return _staticCacheIsFresh(cached, ttlMs, nowMs) ? 'cache' : 'revalidate';
+}
 // ── pure:static-cache:end ──
 
 /**
@@ -179,12 +189,16 @@ function _staticCacheIsFresh(cached, ttlMs, nowMs) {
  * refreshed in the background (stale-while-revalidate). A copy with no list in
  * it (an empty or malformed 200 that got cached) is never served.
  *
- * app.js's init IIFE awaits securityReady (IndexedDB, so a task or more)
- * before asking for /instructors, /locations and /event-types, so this patch
- * is normally in place by then: three requests saved per launch inside the
- * TTL. (Where crypto is unavailable securityReady settles in a microtask and
- * those calls go out unpatched, as they always did.) A background refresh only
- * lands in localStorage — the in-memory lists pick it up on the next launch.
+ * app.js's init IIFE asks for /instructors, /locations and /event-types only
+ * once every module has run (it waits for DOMContentLoaded — all of them are
+ * deferred scripts), so this patch, and reliability.js's retrying apiFetch
+ * underneath it, are in place: three requests saved per launch inside the TTL,
+ * and a refresh past it is retried like any other GET. Waiting for
+ * securityReady alone was not enough: IndexedDB has usually answered while the
+ * scripts were still arriving, so init carried on in the microtask right after
+ * app.js — before this file existed — and all three went out bare on most warm
+ * launches. A background refresh only lands in localStorage — the in-memory
+ * lists pick it up on the next launch.
  */
 (function patchApiFetchForCaching() {
   const CACHEABLE_PATHS = {
@@ -225,12 +239,14 @@ function _staticCacheIsFresh(cached, ttlMs, nowMs) {
     // An entry without a usable list is treated as no cache: the network is
     // awaited below (and its answer overwrites the bad entry), so a failure
     // reaches the caller's Reload error instead of an endless spinner.
-    if (_staticCacheHasList(cached)) {
+    const decision = _staticCacheDecision(cached, ttl, Date.now());
+    if (decision !== 'network') {
       // Return cached data as a fake Response. Inside the TTL that is all —
       // `ttl` used to be a truthiness test only, so all three lists were
       // re-downloaded on every launch. Past it (or for a copy that can't be
-      // trusted) revalidate in the background.
-      if (!_staticCacheIsFresh(cached, ttl, Date.now())) {
+      // trusted) revalidate in the background — through _origApiFetch, which
+      // is reliability.js's retrying wrapper.
+      if (decision === 'revalidate') {
         _origApiFetch(path, opts).then(async (res) => {
           if (res.ok) {
             try {
@@ -286,7 +302,8 @@ function _staticCacheIsFresh(cached, ttlMs, nowMs) {
       const raw = localStorage.getItem(CACHE_PREFIX + key);
       if (!raw) return null;
       const entry = JSON.parse(raw);
-      return entry && entry.data ? entry.data : null;
+      // A poisoned entry (no list in it) used to throw in the .filter below.
+      return _staticCacheHasList(entry) ? entry.data : null;
     } catch {
       return null;
     }
