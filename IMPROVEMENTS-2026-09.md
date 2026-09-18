@@ -34,6 +34,20 @@ Range: `3da5392..a9d4a9b` (base `3da5392` = "Waitlists: use Psycle's real /waitl
 (#9)"). 117 files changed; the unit-test assertion count went from 126 (at `3da5392`; 128 after the first commit)
 to 4,859.
 
+### Follow-up: none of it reached TestFlight until `8f8c62c`
+
+Every Xcode Cloud archive for the seven commits above **failed**, all with the same ten errors: "The iOS deployment
+target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.0, but the range of supported deployment target versions is 15.0
+to 27.0.x". It had nothing to do with the changes: Xcode Cloud had moved to Xcode 27, which rejects targets below
+15.0, and the project plus the nine Capacitor pods still declared 13.0 (the last green archive was `3da5392`, built
+with the previous Xcode). GitHub's unsigned iOS build check stayed green throughout because its runner has an older
+Xcode, so the failure was only visible as the Xcode Cloud check on each commit.
+
+`8f8c62c` raises the project and app target to 15.0 (the widget extension stays at 16.1) and has the Podfile's
+`post_install` lift any pod below 15.0 — Xcode Cloud runs a fresh `pod install`, so the floor has to live in the
+Podfile. The archive for `8f8c62c` succeeded. **The app now requires iOS 15 or later.** How to read the archive
+result for a commit is in `ios-app/CICD.md` under "Notes / gotchas".
+
 ## How it was done
 
 A multi-pass review: discovery, independent verification of each finding, implementation in small patches,

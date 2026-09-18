@@ -92,6 +92,23 @@ build's **What to Test** notes so testers know channel 3 exists.
   regenerated `ios/App/Podfile` + `Podfile.lock`**. CI regenerates them on the
   runner (so CI stays green either way), but someone building straight from
   the repo in Xcode would otherwise compile without the new plugin.
+- **A green GitHub Actions run does not mean the TestFlight build worked.** The
+  unsigned iOS check runs on GitHub's Xcode; Xcode Cloud archives with its own
+  ("Latest Release") Xcode and can fail on things the older one only warns
+  about. After pushing to `main`, read the Xcode Cloud check on the commit —
+  it is on the commit's checks list on github.com, or without signing in:
+  `curl -s https://api.github.com/repos/muscaglar/psycle-booking/commits/<sha>/check-runs`
+  and look for the `Xcode Cloud` app's "Archive - iOS" run (`conclusion`:
+  `success`, or `action_required` = failed; `output.text` lists the errors).
+- **Deployment target floor.** Xcode 27 accepts iOS 15.0 and up only and
+  fails the archive — once per target — on anything lower (September 2026:
+  eight archives in a row failed on "set to 13.0, but the range of supported
+  deployment target versions is 15.0 to 27.0.x"). The project and app target
+  are at 15.0, the widget extension at 16.1, and the Podfile's `post_install`
+  lifts any pod below `MIN_IOS_DEPLOYMENT_TARGET`, because the Capacitor pods
+  still declare 13.0 and Xcode Cloud regenerates the Pods project on every
+  build. When a future Xcode raises the floor again, change that constant and
+  the four `IPHONEOS_DEPLOYMENT_TARGET` settings in the project together.
 - `ci_post_clone.sh` must stay executable (`chmod +x`); git preserves the bit.
 - Free tier: 25 Xcode Cloud compute hours/month — a build is ~15–25 min, so
   dozens of TestFlight pushes/month fit comfortably.
