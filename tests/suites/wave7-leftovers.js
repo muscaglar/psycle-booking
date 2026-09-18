@@ -306,7 +306,7 @@ module.exports = async function (t) {
     h = heldWorld(null);
     h.c.reminder();
     h.tap();
-    eq([dateOf(h.saved()), h.c._restoredDateState(h.saved(), '2026-09-22').mode], [['week', '', '7'], 'week'], 'nothing stored yet (a first launch from the notification): the default week is what gets saved');
+    eq([dateOf(h.saved()), h.c._restoredDateState(h.saved(), '2026-09-22').mode], [['week', '', '6'], 'week'], 'nothing stored yet (a first launch from the notification): the default week is what gets saved');
     h = heldWorld({ locationIds: ['5'] }); // a save from before the date row was stored
     h.c.reminder();
     h.tap();

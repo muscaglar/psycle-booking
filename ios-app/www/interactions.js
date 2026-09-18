@@ -5,9 +5,10 @@
  *   A. Pull-to-refresh (calls window.search on threshold)
  *   B. Swipe-to-cancel on My Bookings cards (left swipe → the card's own Cancel / Leave button)
  *   C. Filter persistence (save/restore to localStorage)
+ *   D. Sideways swipe between pages — the shared gesture helper, wired to Discover's day pager
  *
- * Depends on: app.js (search, selectedInstructors, selectedCategories, etc.)
- * Exposes on window: saveFilters, restoreFilters
+ * Depends on: app.js (search, selectedInstructors, selectedCategories, _dayPagerSwipe, etc.)
+ * Exposes on window: saveFilters, restoreFilters, _psycleSwipe
  */
 
 (function () {
@@ -386,8 +387,8 @@
         let stored = null;
         try { stored = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null'); } catch (e) {}
         ownDate = (stored && typeof stored === 'object')
-          ? { startDate: stored.startDate || '', daysAhead: stored.daysAhead || '7', dateQuickMode: stored.dateQuickMode || null }
-          : { startDate: '', daysAhead: '7', dateQuickMode: 'week' };
+          ? { startDate: stored.startDate || '', daysAhead: stored.daysAhead || '6', dateQuickMode: stored.dateQuickMode || null }
+          : { startDate: '', daysAhead: '6', dateQuickMode: 'week' };
       }
       const filters = {
         instructorIds: typeof selectedInstructors !== 'undefined' ? [...selectedInstructors] : [],
@@ -400,7 +401,7 @@
         availableOnly: typeof held.availableOnly === 'boolean' ? held.availableOnly
           : (typeof _availableOnly !== 'undefined' ? _availableOnly === true : false),
         startDate: ownDate ? ownDate.startDate : (document.getElementById('startDate')?.value || ''),
-        daysAhead: ownDate ? ownDate.daysAhead : (document.getElementById('daysAhead')?.value || '7'),
+        daysAhead: ownDate ? ownDate.daysAhead : (document.getElementById('daysAhead')?.value || '6'),
         dateQuickMode: ownDate ? ownDate.dateQuickMode : (typeof _dateQuickMode !== 'undefined' ? _dateQuickMode : null),
       };
       localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
@@ -565,5 +566,157 @@
   } else {
     setTimeout(waitForDataAndRestore, 200);
   }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // D. Sideways swipe between pages (Discover's day pager)
+  // window._psycleSwipe(el, opts) is the ONE place the gesture rules live, so
+  // anything paged sideways — the days on Discover today; the welcome pages
+  // and the Stats sub-pages can take it up — turns on the same movement.
+  // It reports; the caller moves its own content. Every touch listener is
+  // passive and no touch is ever preventDefault-ed: the paged element carries
+  // `touch-action: pan-y pinch-zoom` (css/redesign.css), so the browser keeps
+  // vertical scrolling and the pinch for itself and simply does not act on a
+  // sideways drag.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // ── pure:swipe-nav:start ── (DOM-free; tests/suites/8b-day-pager.js evaluates this block)
+  const SWIPE_NAV_SLOP = 12;        // px of travel before a direction is called
+  const SWIPE_NAV_RATIO = 1.5;      // sideways must beat vertical by this much
+  const SWIPE_NAV_COMMIT = 0.25;    // released past this share of the width: the page turns
+  const SWIPE_NAV_FLICK_PX = 40;    // …or a flick: this far,
+  const SWIPE_NAV_FLICK_MS = 250;   //    this quickly
+  const SWIPE_NAV_EDGE = 16;        // px from the screen's left edge: the system's back gesture
+  const SWIPE_NAV_RESIST = 3;       // against the first / last page the content moves a third as far
+
+  // 'x' = a sideways swipe, ours; 'y' = a scroll, the browser's (this touch is
+  // then left alone for good); null = too early to say.
+  function swipeNavAxis(dx, dy) {
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    if (ax > SWIPE_NAV_SLOP && ax > SWIPE_NAV_RATIO * ay) return 'x';
+    return (ay > SWIPE_NAV_SLOP || ax > SWIPE_NAV_SLOP) ? 'y' : null;
+  }
+
+  // How far the content sits from rest: with the finger, or a third of the way
+  // against an edge that has no page beyond it.
+  function swipeNavOffset(dx, canPrev, canNext) {
+    const open = dx < 0 ? canNext : canPrev;
+    return open ? dx : dx / SWIPE_NAV_RESIST;
+  }
+
+  // On release: 1 = next page (swiped LEFT), -1 = previous (swiped right),
+  // 0 = spring back. Never past an edge; a zero width turns nothing.
+  function swipeNavDir(dx, width, ms, canPrev, canNext) {
+    const far = width > 0 && Math.abs(dx) >= width * SWIPE_NAV_COMMIT;
+    const flick = Math.abs(dx) >= SWIPE_NAV_FLICK_PX && ms >= 0 && ms < SWIPE_NAV_FLICK_MS;
+    if (!(width > 0) || !(far || flick)) return 0;
+    if (dx < 0) return canNext ? 1 : 0;
+    return canPrev ? -1 : 0;
+  }
+  // ── pure:swipe-nav:end ──
+
+  // Touches that belong to something else: a text field, or a row that itself
+  // scrolls sideways (the date presets, the pill rows, the day strip).
+  const SWIPE_NAV_IGNORE = 'input, textarea, select, [contenteditable], .date-presets, .location-chips, #categoryPills, #dayStrip';
+  function swipeNavForeign(target, root) {
+    if (!target || typeof target.closest !== 'function') return true;
+    if (target.closest(SWIPE_NAV_IGNORE)) return true;
+    for (let n = target; n && n !== root && n.nodeType === 1; n = n.parentNode) {
+      if (n.scrollWidth > n.clientWidth + 1) {
+        const ox = getComputedStyle(n).overflowX;
+        if (ox === 'auto' || ox === 'scroll') return true;
+      }
+    }
+    return false;
+  }
+
+  // opts (all optional):
+  //   shouldIgnore(target, event) → true: leave this touch alone
+  //   edges() → { prev, next }: is there a page that way? (default: both)
+  //   width() → px the 25% is a share of (default: el.clientWidth)
+  //   onStart()                    the touch has just become a sideways swipe
+  //   onMove(offset, dx)           offset = where to draw the content (see swipeNavOffset)
+  //   onEnd({ dir, dx, cancelled }) dir as swipeNavDir; cancelled = the system took the touch
+  // Returns a function that detaches it.
+  function psycleSwipe(el, opts) {
+    opts = opts || {};
+    let g = null;          // the touch being followed: { x, y, at, locked, dx }
+    let swallowUntil = 0;  // a swipe must not end as a tap on the card under the finger
+    const edges = function () {
+      const e = typeof opts.edges === 'function' ? opts.edges() : null;
+      return { prev: !e || !!e.prev, next: !e || !!e.next };
+    };
+    function finish(cancelled) {
+      const was = g;
+      g = null;
+      if (!was || !was.locked) return;
+      swallowUntil = Date.now() + 350;
+      const w = typeof opts.width === 'function' ? opts.width() : el.clientWidth;
+      const e = edges();
+      const dir = cancelled ? 0 : swipeNavDir(was.dx, w, Date.now() - was.at, e.prev, e.next);
+      if (typeof opts.onEnd === 'function') opts.onEnd({ dir: dir, dx: was.dx, cancelled: !!cancelled });
+    }
+    function onStart(e) {
+      if (g) finish(true); // a second finger mid-swipe: put the page back first
+      if (!e.touches || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (t.clientX < SWIPE_NAV_EDGE) return;
+      if (swipeNavForeign(e.target, el)) return;
+      if (typeof opts.shouldIgnore === 'function' && opts.shouldIgnore(e.target, e)) return;
+      g = { x: t.clientX, y: t.clientY, at: Date.now(), locked: false, dx: 0 };
+    }
+    function onMove(e) {
+      if (!g || !e.touches || !e.touches.length) return;
+      const dx = e.touches[0].clientX - g.x, dy = e.touches[0].clientY - g.y;
+      if (!g.locked) {
+        const axis = swipeNavAxis(dx, dy);
+        if (!axis) return;
+        if (axis === 'y') { g = null; return; } // a scroll: not ours, now or later in this touch
+        g.locked = true;
+        if (typeof opts.onStart === 'function') opts.onStart();
+      }
+      g.dx = dx;
+      // Pull-to-refresh (section A) listens on the document: a sideways drag
+      // that also drifts down must not read to it as a pull.
+      e.stopPropagation();
+      const ed = edges();
+      if (typeof opts.onMove === 'function') opts.onMove(swipeNavOffset(dx, ed.prev, ed.next), dx);
+    }
+    const onEnd = function () { finish(false); };
+    const onCancel = function () { finish(true); };
+    const onClick = function (e) {
+      if (Date.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); }
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: true });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onCancel, { passive: true });
+    el.addEventListener('click', onClick, true);
+    return function () {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onCancel);
+      el.removeEventListener('click', onClick, true);
+    };
+  }
+  window._psycleSwipe = psycleSwipe;
+
+  // Discover's days. Bound to #results — it outlives every re-render, where
+  // #dayPager inside it does not — and app.js's window._dayPagerSwipe says
+  // whether a touch may start (inside the pager, a range on screen, no dialog
+  // up, no Book button mid-request) and moves the list.
+  (function wireDayPagerSwipe() {
+    const results = document.getElementById('results');
+    const pager = window._dayPagerSwipe;
+    if (!results || !pager) return;
+    psycleSwipe(results, {
+      shouldIgnore: function (target) { return !pager.canStart(target); },
+      edges: function () { return pager.edges(); },
+      width: function () { const p = document.getElementById('dayPager'); return p ? p.clientWidth : 0; },
+      onMove: function (offset, dx) { pager.drag(offset, dx); },
+      onEnd: function (r) { pager.release(r); },
+    });
+  })();
 
 })();

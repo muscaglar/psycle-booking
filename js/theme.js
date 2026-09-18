@@ -270,7 +270,9 @@ function renderEmptyState(message) {
     return '<div class="status empty-loading"><span class="spinner"></span>Checking the latest timetable…</div>';
   }
   const msg = escapeHTML((ctx && ctx.title) || message || 'No classes found for these filters.');
-  const sub = escapeHTML((ctx && ctx.sub) || 'Try adjusting your filters, selecting a different date range, or choosing another studio.');
+  // A second line only when app.js has one that adds something (a cause, a
+  // time): the buttons below already are the ways on.
+  const sub = escapeHTML((ctx && ctx.sub) || '');
   const actions = ((ctx && ctx.actions) || []).map((id, i) => {
     const a = Object.prototype.hasOwnProperty.call(EMPTY_STATE_ACTIONS, id) ? EMPTY_STATE_ACTIONS[id] : null;
     return a ? `<button type="button" class="empty-action${i === 0 ? ' primary' : ''}" onclick="${a.onclick}">${a.label}</button>` : '';
@@ -295,7 +297,7 @@ function renderEmptyState(message) {
       <circle cx="34" cy="27" r="2.5" fill="var(--text-dim, #888)"/>
     </svg>
     <div class="empty-title">${msg}</div>
-    <div class="empty-subtitle">${sub}</div>
+    ${sub ? `<div class="empty-subtitle">${sub}</div>` : ''}
     ${actions ? `<div class="empty-actions">${actions}</div>` : ''}
   </div>`;
 }

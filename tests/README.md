@@ -130,12 +130,12 @@ Rules for a pure block:
 - If a block calls a helper from another block, the suite loads both (or passes the helper in).
 
 Blocks exist today in `js/app.js` (core, gym-time, copy, event-details, a11y, session, data-owner, init-gate,
-filters, window, clash, book-fresh, booking, bookings-card, discover, stored-data, tier-filter, offline,
-bookings-started, render-perf, template, predict), `js/reliability.js` (retry-auth, offline-queue),
-`js/settings.js` (calendar-sync, settings-export, import-validate, build-id), `js/tabs.js` (cost-forecast,
-reminder-row, year-review, share), `js/features.js` (history, history-chunks, notify), `js/explore.js`
-(history-topup), `js/performance.js` (static-cache), `js/calendar.js` (ics-share), `js/interactions.js`
-(swipe-cancel) and `ios-app/www/native-bridge.js` (widget-link, ios-polish).
+filters, filter-summary, window, clash, book-fresh, booking, bookings-card, discover, day-pager, stored-data,
+tier-filter, offline, bookings-started, render-perf, template, predict, welcome), `js/reliability.js` (retry-auth,
+offline-queue), `js/settings.js` (calendar-sync, settings-export, import-validate, build-id), `js/tabs.js`
+(cost-forecast, reminder-row, year-review, share, stats-pages), `js/features.js` (history, history-chunks, notify),
+`js/explore.js` (history-topup), `js/performance.js` (static-cache), `js/calendar.js` (ics-share),
+`js/interactions.js` (swipe-cancel, swipe-nav) and `ios-app/www/native-bridge.js` (widget-link, ios-polish).
 
 #### Suites that slice shipped source by anchor lines
 
@@ -217,6 +217,10 @@ checked in a real browser — with the API replaced inside the page. This is the
 python3 -m http.server 8080 --bind 127.0.0.1
 # http://127.0.0.1:8080/psycle-finder.html
 ```
+
+A fresh profile opens behind the full-screen first-run welcome (`#onboardOverlay`, z-index 9000). Unless the
+welcome is what you are checking, set `localStorage.psycle_onboarded_v1 = '1'` before the page loads (a stored
+token or a `#bookings` / `#stats` / `#membership` hash also keeps it away).
 
 Use an origin you never sign in on for real — a private window, a separate browser profile, or a different port.
 localStorage belongs to the origin, and a stubbed session writes to it: the fake token replaces a real one, and a

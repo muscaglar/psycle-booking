@@ -190,6 +190,17 @@
   checkType('getRecentSearches', 'function');
   checkType('renderInsights', 'function');
 
+  // ── Filters bar, day pager + the shared swipe helper, Stats sub-pages, welcome ──
+  //    Each is reached BY NAME: from an inline onclick, or from another module
+  //    (interactions.js → app.js's day pager; tabs.js → interactions.js's helper).
+  checkType('toggleFilters', 'function');
+  checkType('removeFilterChip', 'function');
+  checkType('showDiscoverDay', 'function');
+  checkType('_dayPagerSwipe', 'object');
+  checkType('_psycleSwipe', 'function');
+  checkType('showStatsPage', 'function');
+  checkType('replayOnboarding', 'function');
+
   // ── Diagnostics UI + resilience layer (settings/diagnostic/api-client) ──
   checkType('openDiagnostics', 'function');
   checkType('PsycleAPI', 'object');

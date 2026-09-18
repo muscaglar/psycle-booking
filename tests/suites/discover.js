@@ -155,8 +155,14 @@ module.exports = async function (t) {
   ok(/_cardCountsFresh = _countsFresh\(dataAt, Date\.now\(\)\);/.test(renderSrc), 'render() decides per pass whether counts are recent enough to print');
   ok(/events === window\._windowEvents \? window\._windowFetchedAt : Date\.now\(\)/.test(renderSrc),
     "the age is the window's own stamp — one clock — and a list search() is still streaming in is new");
-  ok(/\n    const countEl = group\.querySelector\('\.day-count'\);\n    if \(countEl\) countEl\.textContent = dayEvents\.length/.test(renderSrc),
-    'the day header count is refreshed on every pass, outside the new-group branch (a day fills up studio by studio)');
+  // (Wave 8: the per-day body of render() is _paintDayGroup — still inside this slice — so a change of day can
+  // repaint one day without a second pass over the window.)
+  {
+    const newGroupEnds = renderSrc.indexOf('    host.appendChild(group);\n  }\n');
+    const countLine = renderSrc.search(/\n  const countEl = group\.querySelector\('\.day-count'\);\n  if \(countEl\) countEl\.textContent = dayEvents\.length \? _pagerCountText\(dayEvents\.length\) : '';/);
+    ok(newGroupEnds !== -1 && countLine > newGroupEnds,
+      'the day header count is refreshed on every pass, outside the new-group branch (a day fills up studio by studio) — and an empty day has none: the line under the heading already says it');
+  }
 
   t.section('Discover: the last-results write is debounced');
   {
@@ -332,7 +338,7 @@ module.exports = async function (t) {
     api._repaintKeepingFocus({ innerHTML: '' }, 'x', '.change-chip');
     eq(focused.length, 3, 'a box with no children / no querySelectorAll (the suites\' stubs) is simply painted');
     const uses = (app.match(/_repaintKeepingFocus\(/g) || []).length;
-    eq(uses, 7, 'the helper + six rows: time, studios, class types, both sub-type rows, and the change-chips');
+    eq(uses, 8, 'the helper + seven rows: time, studios, class types, both sub-type rows, the change-chips, and the Filters bar\'s removable chips');
   }
   {
     const intSrc = t.readSource('js/interactions.js');
@@ -560,9 +566,12 @@ module.exports = async function (t) {
     const html = t.readSource('psycle-finder.html');
     const body = html.slice(html.indexOf('id="controlsBody"'), html.indexOf('id="upcomingPanel"'));
     ok(/<div id="timePills" class="location-chips"><\/div>/.test(body), '#timePills sits in #controlsBody with the pill-row class redesign.css / discover-layout-fix.css already style');
-    ok(body.indexOf('id="timePills"') > body.indexOf('id="daysAhead"') && body.indexOf('id="timePills"') < body.indexOf('id="locationChips"'), '…right after Date');
-    eq((body.match(/class="date-quick-btn" aria-pressed="false"/g) || []).length, 5, 'the five date presets (Today · Tomorrow · 7 days · Next week · 14 days) start un-pressed (JS mirrors .active from there)');
-    ok(/id="pickDateBtn"[^>]*aria-expanded="false"[^>]*aria-controls="datePicker"/.test(body), 'the calendar button says expanded/collapsed instead');
+    // The date row left #controlsBody (it is always on screen, above the Filters
+    // bar — tests/suites/8a-filters.js), so Time now leads the collapsible panel.
+    const panel = html.slice(html.indexOf('id="controlsPanel"'), html.indexOf('id="upcomingPanel"'));
+    ok(panel.indexOf('id="timePills"') > panel.indexOf('id="daysAhead"') && body.indexOf('id="timePills"') < body.indexOf('id="locationChips"'), '…after Date, ahead of the studios');
+    eq((panel.match(/class="date-quick-btn" aria-pressed="false"/g) || []).length, 5, 'the five date presets (Today · Tomorrow · 7 days · Next week · 14 days) start un-pressed (JS mirrors .active from there)');
+    ok(/id="pickDateBtn"[^>]*aria-expanded="false"[^>]*aria-controls="datePicker"/.test(panel), 'the calendar button says expanded/collapsed instead');
     const mirror = slice('function _mirrorDatePillAria() {', '// Paint the date row from state');
     ok(/b\.id === 'pickDateBtn'\) b\.setAttribute\('aria-expanded'/.test(mirror) && /b\.setAttribute\('aria-pressed', String\(b\.classList\.contains\('active'\)\)\)/.test(mirror),
       '_mirrorDatePillAria copies .active to aria-pressed, and the open calendar to aria-expanded');
@@ -578,13 +587,20 @@ module.exports = async function (t) {
     const css = t.readSource('css/redesign.css').replace(/\/\*[\s\S]*?\*\//g, '');
     const base = css.slice(css.indexOf('.day-header {'), css.indexOf('}', css.indexOf('.day-header {')));
     ok(!/position:\s*sticky/.test(base), 'the base .day-header is not sticky (desktop: the tab bar is what sticks to the top)');
-    const m = css.match(/@media \(max-width: 640px\) \{\s*\.day-header \{([^}]*)\}/);
-    ok(!!m && /position:\s*sticky/.test(m[1]) && /top:\s*0/.test(m[1]) && /z-index:\s*\d/.test(m[1]) && /background:\s*var\(--bg\)/.test(m[1]),
-      'at <=640px (where .tab-content scrolls) the day header sticks, above the cards, on the page background token');
+    // Wave 8: a range is paged one day at a time, and what stays on screen on a phone is the DAY STRIP — same
+    // rule the sticky header had (only where .tab-content scrolls; above the cards; solid page background).
+    ok(!/\.day-header \{[^}]*position:\s*sticky/.test(css), 'no .day-header rule sticks any more (two stuck bars would stack)');
+    const strip = css.slice(css.indexOf('.day-strip {'), css.indexOf('}', css.indexOf('.day-strip {')));
+    const m = css.match(/@media \(max-width: 640px\) \{\s*\.day-strip \{([^}]*)\}/);
+    ok(!/position:\s*sticky/.test(strip) && !!m && /position:\s*sticky/.test(m[1]) && /top:\s*0/.test(m[1]) && /z-index:\s*\d/.test(m[1]) && /background:\s*var\(--bg\)/.test(strip),
+      'at <=640px (where .tab-content scrolls) the day strip sticks, above the cards, on the page background token');
     const count = css.slice(css.indexOf('.day-count {'), css.indexOf('}', css.indexOf('.day-count {')));
     ok(/var\(--text-sm\)/.test(count) && /var\(--ink-3\)/.test(count) && !/#[0-9a-f]{3,6}\b/i.test(count) && !/\d+px/.test(count), '.day-count is tokens only');
     ok(/\.class-card\.is-booked \.cc-spots, \.class-card\.is-waitlisted \.cc-spots \{ display: none; \}/.test(css), 'a card booked in place drops its "spots left" line');
     ok(/<div class="day-header"><span>\$\{dayLabel\}<\/span><span class="day-count"><\/span><\/div>/.test(renderSrc), 'render() builds the header the CSS expects');
-    ok(/day === todayStr \? 'Today' : day === tomorrowStr \? 'Tomorrow' : ''/.test(renderSrc), 'Today / Tomorrow are named in the header');
+    // The wording moved to pure:day-pager (_pagerDayLabel — tests/suites/8b-day-pager.js holds it to the old
+    // strings); render() must still ask it for the single-day form, "Today · 18 September".
+    ok(/const label = _pagerDayLabel\(day, m\.todayStr\);\n    const dayLabel = escapeHTML\(m\.paged \? label\.long : label\.head\);/.test(renderSrc) &&
+      /const rel = day === todayStr \? 'Today' : day === tomorrowStr \? 'Tomorrow' : '';/.test(app), 'Today / Tomorrow are named in the header');
   }
 };

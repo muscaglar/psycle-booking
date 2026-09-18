@@ -53,14 +53,19 @@ module.exports = async function (t) {
 
   // ── Vocabulary ─────────────────────────────────────────────────────────
   t.section('Copy: one vocabulary');
-  ok(!/You usually ride|on the bike|CLASSES RIDDEN|London riders/.test(tabs), 'tabs.js: no ride-only wording over every class type');
-  ok(/You usually book </.test(tabs) && /Your year at Psycle/.test(tabs), 'habit card says "You usually book", the year wrap "Your year at Psycle"');
-  ok(/Tap to see that day\\'s classes/.test(tabs), "habit subtitle says what the button does (that day's classes)");
+  ok(!/You usually ride|Ride the same classes|no longer ride|on the bike|CLASSES RIDDEN|London riders/.test(tabs) && /remove any you no longer take'/.test(tabs),
+    'tabs.js: no ride-only wording over every class type (the usual-week save toast included: a Reformer-only member rides nothing)');
+  // Wave 8 (declutter): the card leads with the slot itself — its heading already
+  // says "Your usual slots" — and the button says what it does, so the subtitle
+  // that used to explain it is gone (tests/suites/8e-declutter.js renders it).
+  ok(/<div class="habit-line"><strong>' \+ escapeHTML\(dayName\)/.test(tabs) && !/You usually (ride|book) </.test(tabs) && /Your year at Psycle/.test(tabs),
+    'habit card names the slot with no ride-only verb in front of it; the year wrap says "Your year at Psycle"');
+  ok(!/habit-subtitle/.test(tabs) && />Find this week<\/button>/.test(tabs), 'no habit subtitle: the button itself says what it does ("Find this week")');
   ok(!/booking's seats/.test(app) && (app.match(/this booking's spots from Psycle — nothing was (cancelled|changed)/g) || []).length === 2,
     'app.js: "this booking\'s spots" (not seats) — and still says nothing was cancelled / changed');
   ok(/title: 'Claim this spot\?'/.test(app) && /_plural\(free, 'spot'\)\} free right now/.test(app) && /'A spot is free right now/.test(app),
     'the claim dialog uses one noun: spot');
-  ok(!/so Explore can/.test(explore) && /so your Stats and suggestions are accurate/.test(explore), 'sync banner no longer names an "Explore" tab that does not exist');
+  ok(!/so Explore can/.test(explore) && /Makes your Stats and suggestions accurate\./.test(explore), 'sync banner no longer names an "Explore" tab that does not exist (it names Stats)');
   // (comments may still name them — that is where the reason is written down)
   const tabsCode = tabs.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
   ok(!/Psycle Companion|Psycle Class Finder|CLASS FINDER|P S Y C L E/.test(tabsCode), 'tabs.js: the retired product names are gone from the share images');

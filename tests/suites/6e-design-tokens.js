@@ -201,7 +201,9 @@ module.exports = function (t) {
   t.ok(/background:var\(--booked-bg\);border:2px solid var\(--booked-border\)[^>]*><\/i> Your booking/.test(legend), 'legend has a swatch for a seat you already hold');
   t.ok(!/#[0-9a-f]{6}\b/i.test(legend.replace(/var\(--bg-input,#1a1a1a\)|var\(--border-light,#444\)/g, '')), 'no maroon fallback literals left in the legend');
 
-  ['.rebook-hint', '.onboard-icon'].forEach((sel) => {
+  // (.onboard-icon went with the old tour's icon circle. The welcome that
+  // replaced it is held to "no colour literal anywhere" in 8d-welcome.js.)
+  ['.rebook-hint'].forEach((sel) => {
     t.eq(tokenOf(decls(styleRules, sel, 'background')[0]), '--accent-soft', sel + ' tint follows the accent (it was old-brand pink)');
   });
   t.ok(/^color-mix\(in srgb, var\(--accent\) 16%, var\(--bg\)\)$/.test(root['--accent-soft']), 'the :root --accent-soft recipe is the one mixed below');

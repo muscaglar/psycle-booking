@@ -90,8 +90,8 @@ module.exports = async function (t) {
   t.eq(roll('today', TODAY, '1', TODAY), null, 'same day: nothing to do');
   t.eq(roll('today', YDAY, '1'), 'today', '"Today" left warm overnight follows the calendar');
   t.eq(roll('tomorrow', TODAY, '1'), 'tomorrow', '"Tomorrow" (it now IS today) becomes the new tomorrow');
-  t.eq(roll('week', YDAY, '7'), 'week', '7 days re-derives from today');
-  t.eq(roll('2week', YDAY, 14), '2week', '14 days re-derives from today');
+  t.eq(roll('week', YDAY, '6'), 'week', '7 days re-derives from today');
+  t.eq(roll('2week', YDAY, 13), '2week', '14 days re-derives from today');
   t.eq(roll('today', '2026-09-14', '1', '2026-09-14'), 'today', 'suspended for three days: still "Today"');
   t.eq(roll(null, YDAY, '1'), 'week', 'a picked day that has gone falls back to the week');
   t.eq(roll(null, '2026-09-20', '1'), null, 'a picked day still ahead is left alone');
@@ -515,7 +515,9 @@ module.exports = async function (t) {
     hctx._dateRowHeld = false;
     h.today = '2026-09-18';
     t.eq([hctx._rollDiscoverForward(), h.applied], [true, ['unsaved:nextweek', 'saved:nextweek']], '…and once the row is the member\'s own again, it is setDateQuick as before');
-    const trig = appSrc.slice(appSrc.indexOf('function triggerAutoSearch() {'), appSrc.indexOf('// One-line digest of the active filters'));
+    const trigEnd = appSrc.indexOf('// ── pure:filter-summary:start');
+    t.ok(trigEnd > appSrc.indexOf('function triggerAutoSearch() {'), 'triggerAutoSearch can be sliced (it ends where the filter summary begins — anchor moved? update tests/suites/window.js)');
+    const trig = appSrc.slice(appSrc.indexOf('function triggerAutoSearch() {'), trigEnd);
     t.ok(trig.indexOf('if (_rollDiscoverForward()) return;') !== -1 && trig.indexOf('_rollDiscoverForward()') < trig.indexOf('_windowCovers('), 'triggerAutoSearch rolls the day before it trusts the loaded window');
     const vis = appSrc.slice(rfEnd, appSrc.indexOf('// ── "Last updated"'));
     t.ok(/addEventListener\('visibilitychange'/.test(vis) && vis.indexOf('_rollDiscoverForward()') < vis.indexOf('_revalidateIfStale()'), 'Discover has its own resume hook: roll first, then refresh old numbers');

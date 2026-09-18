@@ -296,7 +296,7 @@
           '</div>' +
           (typeof window.psycleListCalendars === 'function' ?
             '<div class="settings-section" id="settingsSecCalendar">' +
-              '<div class="settings-section-title">Calendar Sync (iOS)</div>' +
+              '<div class="settings-section-title">Calendar Sync</div>' +
               '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
             '</div>' : '') +
           '<div class="settings-section" id="settingsSecData">' +
@@ -310,9 +310,16 @@
           '</div>' +
           '<div class="settings-section">' +
             '<div class="settings-section-title">Diagnostics</div>' +
-            '<div class="diag-section-hint">See what the app and the Psycle API are doing — useful when something looks broken.</div>' +
             '<div class="app-advanced">' +
               '<button class="app-advanced-btn" onclick="openDiagnostics()">Open diagnostics</button>' +
+            '</div>' +
+          '</div>' +
+          // The first-run welcome again (app.js replayOnboarding). It opens
+          // over this panel and clears nothing; closing it lands back here.
+          '<div class="settings-section">' +
+            '<div class="settings-section-title">Help</div>' +
+            '<div class="app-advanced">' +
+              '<button class="app-advanced-btn" onclick="if(typeof replayOnboarding===\'function\')replayOnboarding()">Show the welcome again</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -1474,7 +1481,7 @@
         if (status) {
           status.style.display = '';
           status.style.color = '#5dba5d';
-          status.textContent = 'Copied to clipboard!';
+          status.textContent = 'Copied to clipboard';
           setTimeout(function () { status.style.display = 'none'; }, 3000);
         }
         toast('Bug report copied to clipboard', 'success');
@@ -1503,7 +1510,7 @@
       if (status) {
         status.style.display = '';
         status.style.color = '#5dba5d';
-        status.textContent = 'Copied to clipboard!';
+        status.textContent = 'Copied to clipboard';
         setTimeout(function () { status.style.display = 'none'; }, 3000);
       }
       toast((what || 'Bug report') + ' copied to clipboard', 'success');

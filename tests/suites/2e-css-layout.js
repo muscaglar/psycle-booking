@@ -174,9 +174,14 @@ module.exports = function (t) {
     '#discoverExploreWrap is gone from tabs.js and from every stylesheet (no rule left pointing at nothing)');
   const statsHtml = tabsJs.slice(tabsJs.indexOf("statsPanel.id = 'tab-stats';"), tabsJs.indexOf('// ── Membership tab'));
   const sectionAt = (id) => statsHtml.indexOf('<div id="' + id + '" class="explore-section"');
-  t.ok(sectionAt('exploreLikeSection') > statsHtml.indexOf('id="recoSection"') && sectionAt('exploreNewSection') > sectionAt('exploreLikeSection') &&
-    sectionAt('exploreNewSection') < statsHtml.indexOf('id="classTypeSection"'),
-    'both instructor-suggestion sections are created in the Stats panel, right after "Your routine"');
+  // Wave 8c: Stats is three sub-pages, and WHERE a section sits is no longer
+  // the order of these strings — it is pure:stats-pages' table (the strings
+  // are a map keyed by id). Still created here, in the Stats panel; they now
+  // sit with the other "who" sections, "You might like" before "New to you".
+  const who = (JSON.parse(JSON.stringify(t.loadPure('js/tabs.js', 'stats-pages').STATS_PAGES)).find((p) => p.id === 'instructors') || { sections: [] }).sections;
+  t.ok(sectionAt('exploreLikeSection') !== -1 && sectionAt('exploreNewSection') !== -1 &&
+    who.indexOf('exploreLikeSection') !== -1 && who.indexOf('exploreNewSection') > who.indexOf('exploreLikeSection'),
+    'both instructor-suggestion sections are created in the Stats panel, on its Instructors page');
   t.eq((tabsJs.match(/id="explore(New|Like)Section"/g) || []).length, 2, '…once each (renderExplore finds them by id)');
   t.ok(/padding:\s*0 var\(--space-9\) var\(--space-7\)/.test(ruleBody(t.readSource('css/explore.css'), '.explore-section') || ''),
     '.explore-section still brings its own side padding for them');

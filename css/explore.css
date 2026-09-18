@@ -9,6 +9,10 @@
 .explore-section:first-child {
   padding-top: var(--space-5);
 }
+/* The history-sync banner's section is never the first child (#statsEmpty is),
+   so it had no top padding: the banner sat flush under the app header, its top
+   edge and corners cut off. */
+#exploreSyncSection { padding-top: var(--space-5); }
 
 .explore-title {
   font-size: var(--text-base);
@@ -16,13 +20,6 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim, #888);
-  margin-bottom: var(--space-5);
-}
-
-.explore-subtitle {
-  font-size: var(--text-base);
-  color: var(--text-ghost, #555);
-  margin-top: -8px;
   margin-bottom: var(--space-5);
 }
 

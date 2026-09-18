@@ -81,9 +81,10 @@ module.exports = async function (t) {
     t.eq(F._datePillState('nextweek', '2026-09-21', '1', '2026-09-17'), { label: null, picked: '2026-09-21' }, 'a stale mode over one picked day lights nothing');
     t.eq(W._rollForwardMode({ mode: 'nextweek', startDate: '2026-09-21', daysAhead: '6', lastDay: '2026-09-20', today: '2026-09-21' }), 'nextweek',
       'left open from Sunday into Monday it follows the calendar (setDateQuick re-derives: the week about to open)');
-    ['updateFiltersSummary', '_searchLabel'].forEach((fn) => {
-      t.ok(/nextweek: 'Next week'/.test(grab(appSrc, 'function ' + fn + '(')), fn + ' names the preset (it printed the raw start date)');
-    });
+    t.ok(/nextweek: 'Next week'/.test(grab(appSrc, 'function _searchLabel(')), '_searchLabel names the preset (it printed the raw start date)');
+    // The Filters bar's summary used to name it too. It no longer prints a date
+    // at all: the date row is always on screen, with its own pill lit.
+    t.ok(!/_dateQuickMode|startDate/.test(grab(appSrc, 'function updateFiltersSummary(')), 'updateFiltersSummary prints no date — raw or named (the lit pill says it)');
     t.ok(/<button class="date-quick-btn"[^>]*onclick="setDateQuick\('nextweek'\)"[^>]*>Next week<\/button>\s*<button class="date-quick-btn"[^>]*setDateQuick\('2week'\)/.test(t.readSource('psycle-finder.html')),
       "psycle-finder.html: the 'Next week' pill sits right before '14 days'");
   }
@@ -111,11 +112,11 @@ module.exports = async function (t) {
     e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 10, 59), locations: ['3'] }, MON));
     t.eq(e.title, 'Next week opens Monday 12:00', 'filters or not: "nothing matches these filters" would be the wrong reason');
     e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 11, 0, 1) }, MON));
-    t.eq([e.title, e.actions], [undefined, ['week']], 'after noon an empty week is just empty');
+    t.eq([e.title, e.actions], ['No classes on these dates', ['week']], 'after noon an empty week is just empty');
     e = emptyCtx({ now: utc(2026, 9, 22, 9), today: '2026-09-22', start: '2026-09-28', end: '2026-10-04', mode: 'nextweek' });
-    t.eq(e.title, undefined, 'Tuesday to Sunday that week has long been open');
+    t.eq(e.title, 'No classes on these dates', 'Tuesday to Sunday that week has long been open');
     e = emptyCtx({ now: utc(2026, 9, 21, 9), today: '2026-09-21', start: '2026-10-07', mode: 'nextweek' });
-    t.eq(e.title, undefined, 'a stale "nextweek" mode over a date another flow picked makes no such claim');
+    t.eq(e.title, 'No classes on these dates', 'a stale "nextweek" mode over a date another flow picked makes no such claim');
     // A member in Sydney: device Monday 09:00 is Sunday 23:00 UTC — noon in London is 21:00 their time.
     e = emptyCtx({ now: utc(2026, 9, 20, 23), today: '2026-09-21', start: '2026-09-28', end: '2026-10-04', mode: 'nextweek' });
     t.eq(e.title, 'Next week opens Monday 12:00', 'the release is London\'s noon wherever the device is');
@@ -276,15 +277,15 @@ module.exports = async function (t) {
     // View schedule / View classes: features.js → _focusSearch({ instructorId }).
     let w = focusWorld({ startDate: TODAY, daysAhead: '1', mode: 'today' });
     w.ctx._focusSearch({ instructorId: '31' });
-    t.eq(w.state(), Object.assign({ instr: ['31'], locs: [], cats: [], date: [TODAY, 7, 'week'] }, clean),
+    t.eq(w.state(), Object.assign({ instr: ['31'], locs: [], cats: [], date: [TODAY, 6, 'week'] }, clean),
       'View schedule from a "Today" date row: that instructor alone, and the week (one instructor on one arbitrary day is mostly an empty list)');
     t.eq(w.calls, ['syncUI', 'tab:discover', 'search'], 'UI re-synced, Discover shown, THEN the search');
-    w = focusWorld({ startDate: TODAY, daysAhead: '14', mode: '2week' });
+    w = focusWorld({ startDate: TODAY, daysAhead: '13', mode: '2week' });
     w.ctx._focusSearch({ instructorId: 31 });
-    t.eq(w.state().date, [TODAY, 14, '2week'], 'a multi-day range the member chose is kept (the modal listed classes from it)');
-    w = focusWorld({ startDate: '2026-01-05', daysAhead: '7', mode: 'week' });
+    t.eq(w.state().date, [TODAY, 13, '2week'], 'a multi-day range the member chose is kept (the modal listed classes from it)');
+    w = focusWorld({ startDate: '2026-01-05', daysAhead: '6', mode: 'week' });
     w.ctx._focusSearch({ instructorId: 31 });
-    t.eq(w.state().date, [TODAY, 7, 'week'], 'a range that has already gone (app left open) falls back to the week');
+    t.eq(w.state().date, [TODAY, 6, 'week'], 'a range that has already gone (app left open) falls back to the week');
 
     // Stats "Find this week": tabs.js → { categoryKey, startDate, daysAhead: 1 }.
     w = focusWorld();

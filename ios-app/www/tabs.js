@@ -10,7 +10,7 @@
  * Depends on: app.js (all globals), features.js (openHistoryModal),
  *             explore.js (renderExplore), state.js (PsycleEvents)
  * Exposes on window:
- *   switchTab, renderInsights, weekNav, shareInsights, planDay,
+ *   switchTab, renderInsights, showStatsPage, weekNav, shareInsights, planDay,
  *   openYearReview, shareYearReview, saveWeekAsTemplate, bookTemplateWeek,
  *   clearUsualWeek, removeUsualWeekEntry, renderUsualWeekCard
  */
@@ -137,32 +137,42 @@
     var statsPanel = document.createElement('div');
     statsPanel.id = 'tab-stats';
     statsPanel.className = 'tab-panel';
+    // Every section's own container, by id. Which sub-page holds which, and in
+    // what order, is STATS_PAGES' to say (pure:stats-pages below) — not this
+    // list's: a section it does not name is never created.
+    var statsSectionHtml = {
+      // Quick stats
+      statsBar: '<div id="statsBar" class="stats-bar" style="display:none"></div>',
+      // Habitual slot alerts
+      habitSection: '<div id="habitSection" class="habit-section" style="display:none"></div>',
+      // Streaks & milestones
+      streakSection: '<div id="streakSection" class="streak-section" style="display:none"></div>',
+      lapsedSection: '<div id="lapsedSection" class="insights-section" style="display:none"></div>',
+      // Patterns
+      recoSection: '<div id="recoSection" class="reco-section" style="display:none"></div>',
+      // Instructor suggestions (explore.js fills them by id)
+      exploreLikeSection: '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>',
+      exploreNewSection: '<div id="exploreNewSection" class="explore-section" style="display:none"></div>',
+      classTypeSection: '<div id="classTypeSection" class="insights-section" style="display:none"></div>',
+      // Deep analytics
+      exploreMapSection: '<div id="exploreMapSection" class="explore-section" style="display:none"></div>',
+      varietySection: '<div id="varietySection" class="insights-section" style="display:none"></div>',
+      heatmapSection: '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>',
+      // Year in review entry point
+      yearReviewSection: '<div id="yearReviewSection" class="insights-section" style="display:none"></div>',
+      // Share
+      // (insets from .insights-section like its neighbours — it carried an inline 24px that ignored the phone inset)
+      shareSection: '<div id="shareSection" class="insights-section"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>',
+    };
     statsPanel.innerHTML =
       // Signed-out hero (filled by renderInsights)
       '<div id="statsEmpty" class="tab-empty" style="display:none"></div>' +
-      // Sync banner (if needed)
+      // Sync banner (if needed) — global: above the switcher, whichever page is open
       '<div id="exploreSyncSection" class="explore-section" style="display:none"></div>' +
-      // Quick stats
-      '<div id="statsBar" class="stats-bar" style="display:none"></div>' +
-      // Habitual slot alerts — near the top so the next nudge is front and centre
-      '<div id="habitSection" class="habit-section" style="display:none"></div>' +
-      // Streaks & milestones
-      '<div id="streakSection" class="streak-section" style="display:none"></div>' +
-      '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
-      // Patterns
-      '<div id="recoSection" class="reco-section" style="display:none"></div>' +
-      // Instructor suggestions (explore.js fills them by id on switchTab('stats'))
-      '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>' +
-      '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
-      '<div id="classTypeSection" class="insights-section" style="display:none"></div>' +
-      // Deep analytics
-      '<div id="exploreMapSection" class="explore-section" style="display:none"></div>' +
-      '<div id="varietySection" class="insights-section" style="display:none"></div>' +
-      '<div id="heatmapSection" class="heatmap-section" style="display:none"></div>' +
-      // Year in review entry point
-      '<div id="yearReviewSection" class="insights-section" style="display:none"></div>' +
-      // Share
-      '<div id="shareSection" class="insights-section" style="padding:8px 24px 24px"><button class="share-insights-btn" onclick="shareInsights()">Share my stats</button></div>';
+      // Content switcher + the three sub-pages (only the open one is displayed)
+      _statsPagesHtml(statsSectionHtml, _statsPageNow);
+    _wireStatsPages(statsPanel);
+    _wireStatsSwipe(statsPanel);
 
     // ── Membership tab: account, subscription, cost, settings ──
     var membershipPanel = document.createElement('div');
@@ -185,9 +195,9 @@
       // alerts" and "clear local data" existed nowhere). Reminders / Calendar
       // sync are iOS-only: renderMembershipInfo shows or hides those two rows.
       '<div class="ms-list">' +
-        '<button class="ms-row" onclick="openSettings(\'bike\')"><span class="ms-row-text"><span class="ms-row-label">Bike / spot preferences</span><span class="ms-row-sub">Prefer or avoid spots, per studio</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings(\'bike\')"><span class="ms-row-text"><span class="ms-row-label">Bike / spot preferences</span></span><span class="ms-row-chev">›</span></button>' +
         '<button class="ms-row" id="msRowReminders" onclick="openSettings(\'reminders\')"><span class="ms-row-text"><span class="ms-row-label">Reminders</span><span class="ms-row-sub">Monday booking · before each class</span></span><span class="ms-row-chev">›</span></button>' +
-        '<button class="ms-row" id="msRowCalendar" onclick="openSettings(\'calendar\')"><span class="ms-row-text"><span class="ms-row-label">Calendar sync</span><span class="ms-row-sub">Add bookings to your calendar</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" id="msRowCalendar" onclick="openSettings(\'calendar\')"><span class="ms-row-text"><span class="ms-row-label">Calendar sync</span></span><span class="ms-row-chev">›</span></button>' +
         '<button class="ms-row" onclick="openSettings(\'data\')"><span class="ms-row-text"><span class="ms-row-label">Data &amp; privacy</span><span class="ms-row-sub">Export · import · bug report</span></span><span class="ms-row-chev">›</span></button>' +
       '</div>' +
       // Sign out (signed-in only — toggled in renderMembershipInfo)
@@ -287,6 +297,18 @@
         window._datePillRevealOwed = false;
         if (typeof _revealActiveDatePill === 'function') _revealActiveDatePill();
       }
+      // The day strip the same way: a resume re-rendered Discover while another
+      // tab was up, and a strip with no layout box could not take its scroll
+      // offset back (app.js _paintDayStrip left this note) — the selected day
+      // sat out of sight. Once, like the date row.
+      if (window._dayStripRevealOwed) {
+        window._dayStripRevealOwed = false;
+        if (typeof _restoreDayStrip === 'function') _restoreDayStrip();
+      }
+      // The Filters bar's chips can name a RANK ("S/A"), and a rank changed on
+      // Membership has no event to follow: re-read them on the way back in
+      // (no DOM write when nothing changed).
+      if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
     }
     if (tab === 'stats') {
       renderInsights();
@@ -393,6 +415,330 @@
   _patchRender();
   if (!_origRender) setTimeout(_patchRender, 200);
 
+  // ── Stats sub-pages ─────────────────────────────────────────────
+  // Stats was one scroll of thirteen sections. It is three pages behind a
+  // segmented switcher now, grouped the way a member would name them:
+  // how much · when and what · who.
+
+  // ── pure:stats-pages:start ── (DOM-free; tests/suites/8c-stats-pages.js evaluates this block)
+  // THE grouping. initTabs builds the pages from it, the switcher and the lazy
+  // paint read it: moving a section is an edit to this table and nothing else.
+  //  · Overview    — how much: the tiles, streaks & milestones, the year wrap, share.
+  //  · Habits      — when and what: usual slots, routine, the weekday × hour
+  //                  heatmap (it plots WHEN you train, not how much), class types.
+  //  · Instructors — who: the map, variety (unique INSTRUCTORS per month),
+  //                  lapsed favourites, and the two suggestion rows.
+  var STATS_PAGES = [
+    { id: 'overview', label: 'Overview', tab: 'statsTabOverview', panel: 'statsPageOverview',
+      sections: ['statsBar', 'streakSection', 'yearReviewSection', 'shareSection'] },
+    { id: 'habits', label: 'Habits', tab: 'statsTabHabits', panel: 'statsPageHabits',
+      sections: ['habitSection', 'recoSection', 'heatmapSection', 'classTypeSection'] },
+    { id: 'instructors', label: 'Instructors', tab: 'statsTabInstructors', panel: 'statsPageInstructors',
+      sections: ['exploreMapSection', 'varietySection', 'lapsedSection', 'exploreLikeSection', 'exploreNewSection'] },
+  ];
+  var STATS_PAGE_DEFAULT = 'overview';
+  var STATS_PAGE_KEY = 'psycle_stats_page'; // sessionStorage: the page last opened, this session only
+
+  function _statsPageById(id) {
+    for (var i = 0; i < STATS_PAGES.length; i++) if (STATS_PAGES[i].id === id) return STATS_PAGES[i];
+    return null;
+  }
+  // Whatever was stored or passed in → a real page id. Anything else (nothing
+  // stored: a fresh launch; an id from another build) is Overview.
+  function _statsPageId(raw) {
+    return _statsPageById(raw) ? raw : STATS_PAGE_DEFAULT;
+  }
+  function _statsPageOfSection(sectionId) {
+    for (var i = 0; i < STATS_PAGES.length; i++) {
+      if (STATS_PAGES[i].sections.indexOf(sectionId) !== -1) return STATS_PAGES[i].id;
+    }
+    return null;
+  }
+  // A key pressed in the tab list → the page to move to, or null when the key
+  // is not the tab list's. Left / Right wrap round; Home / End jump to the ends.
+  function _statsPageForKey(currentId, key) {
+    var at = STATS_PAGES.indexOf(_statsPageById(_statsPageId(currentId)));
+    var n = STATS_PAGES.length;
+    if (key === 'ArrowRight') return STATS_PAGES[(at + 1) % n].id;
+    if (key === 'ArrowLeft') return STATS_PAGES[(at - 1 + n) % n].id;
+    if (key === 'Home') return STATS_PAGES[0].id;
+    if (key === 'End') return STATS_PAGES[n - 1].id;
+    return null;
+  }
+  // The neighbour a horizontal swipe leads to (dir: +1 = next, -1 = previous).
+  // Unlike the keys it does NOT wrap: a swipe past the last page goes nowhere.
+  function _statsPageStep(currentId, dir) {
+    var at = STATS_PAGES.indexOf(_statsPageById(_statsPageId(currentId))) + (dir < 0 ? -1 : 1);
+    return (at >= 0 && at < STATS_PAGES.length) ? STATS_PAGES[at].id : null;
+  }
+  // Is there nothing on this page? `shown` maps a section id to true while
+  // that section is displayed — whoever displayed it (tabs.js, explore.js).
+  function _statsPageIsEmpty(id, shown) {
+    var page = _statsPageById(id);
+    if (!page) return false;
+    return !page.sections.some(function (sid) { return !!(shown && shown[sid]); });
+  }
+  // What a page with nothing on it says: ONE line — never a blank page, never a
+  // paragraph. null = the page has content. `sync`: also offer the history
+  // sync — only to a member who holds a session, has never synced, and is not
+  // already looking at the banner above the switcher making the same offer.
+  function _statsEmptyState(id, shown, o) {
+    if (!_statsPageIsEmpty(id, shown)) return null;
+    o = o || {};
+    return { line: 'Nothing here yet.', sync: !!o.hasToken && !o.synced && !o.bannerUp };
+  }
+  // Where the scroller goes when a page opens. A new page starts at its top —
+  // but the switcher must not leave the thumb that just tapped it: scrolled
+  // past the point where it pins, go back to exactly that point (the page's
+  // first section right under it); above that point nothing moves at all.
+  // `pageTop`: the page's offset in the scrolled content; `pinTop`: what the
+  // switcher pins beneath (0 on a phone, the sticky tab bar when wider).
+  function _statsScrollTarget(current, pageTop, barHeight, pinTop) {
+    var pin = Math.max(0, Math.round((Number(pageTop) || 0) - (Number(barHeight) || 0) - (Number(pinTop) || 0)));
+    return Math.min(Math.max(0, Number(current) || 0), pin);
+  }
+  // ── pure:stats-pages:end ──
+
+  // The page on screen. Remembered for the session, so coming back to Stats
+  // (or a reload) reopens it; a fresh launch has nothing stored → Overview.
+  var _statsPageNow = (function () {
+    try { return _statsPageId(sessionStorage.getItem(STATS_PAGE_KEY)); } catch (e) { return STATS_PAGE_DEFAULT; }
+  })();
+  // Pages built since the last renderInsights(): a page is built when it is
+  // first opened, and not again until the data is looked at afresh.
+  var _statsPainted = {};
+  // Signed out / can't-reach-Psycle with nothing on record: the hero has the tab.
+  var _statsHeroOnly = false;
+
+  // Which function fills which section. The three explore sections are
+  // explore.js's (renderExplore); #shareSection is shown or hidden by
+  // renderInsights itself.
+  var _STATS_SECTION_PAINT = {
+    statsBar: renderQuickStats,
+    streakSection: renderStreaks,
+    yearReviewSection: renderYearReview,
+    habitSection: renderHabitSlots,
+    recoSection: renderRecommendations,
+    heatmapSection: renderHeatmap,
+    classTypeSection: renderClassTypeDistribution,
+    varietySection: renderVarietyTrend,
+    lapsedSection: renderLapsedFavourites,
+  };
+
+  // The switcher and the three page wrappers, from the table above. A real tab
+  // list: role=tab buttons with a roving tabindex, each naming its tabpanel.
+  function _statsPagesHtml(sectionHtml, current) {
+    var tabs = '', pages = '';
+    STATS_PAGES.forEach(function (p) {
+      var on = p.id === current;
+      tabs += '<button type="button" class="stats-switcher-tab" role="tab" id="' + p.tab + '" data-stats-page="' + p.id + '"' +
+        ' aria-selected="' + (on ? 'true' : 'false') + '" aria-controls="' + p.panel + '" tabindex="' + (on ? '0' : '-1') + '"' +
+        ' onclick="showStatsPage(\'' + p.id + '\')">' + p.label + '</button>';
+      pages += '<div id="' + p.panel + '" class="stats-page" role="tabpanel" aria-labelledby="' + p.tab + '"' + (on ? '' : ' hidden') + '>' +
+        p.sections.map(function (sid) { return sectionHtml[sid] || ''; }).join('') +
+        '<div class="stats-page-empty" hidden></div>' +
+      '</div>';
+    });
+    return '<div class="stats-switcher-bar"><div id="statsSwitcher" class="stats-switcher" role="tablist" aria-label="Stats pages">' + tabs + '</div></div>' + pages;
+  }
+
+  // Once, from initTabs. Arrow / Home / End move along the tab list (selection
+  // follows focus — a page opens at once and costs nothing to leave). And a
+  // page is "empty" when every section on it is hidden, whoever hid it:
+  // explore.js shows and hides its three after renderInsights has run, so the
+  // sections' own style attribute is watched rather than any one caller trusted.
+  function _wireStatsPages(panel) {
+    var switcher = panel.querySelector('#statsSwitcher');
+    if (switcher) {
+      switcher.addEventListener('keydown', function (e) {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        var to = _statsPageForKey(_statsPageNow, e.key);
+        if (!to) return;
+        e.preventDefault();
+        window.showStatsPage(to);
+        var tab = document.getElementById(_statsPageById(to).tab);
+        if (tab) tab.focus();
+      });
+    }
+    if (typeof MutationObserver !== 'function') return;
+    var watch = new MutationObserver(function () { _syncStatsEmpty(); });
+    var watched = ['exploreSyncSection']; // the banner too: while it offers the sync, an empty page does not
+    STATS_PAGES.forEach(function (p) { watched = watched.concat(p.sections); });
+    watched.forEach(function (sid) {
+      var el = panel.querySelector('#' + sid);
+      if (el) watch.observe(el, { attributes: true, attributeFilter: ['style'] });
+    });
+  }
+
+  // Build the sections of one page, unless they were built since the last
+  // renderInsights(). explore.js keeps its own dirty flag and does nothing
+  // while its page is closed — so it is asked again here, EVERY time its page
+  // opens (and only while Stats is up: renderInsights also runs behind other
+  // tabs). Not behind the built-already guard: /instructors landing, or a
+  // booking made from a sheet, while another page was open left explore.js
+  // dirty — and "Loading instructors…" stayed up until the member left Stats.
+  // renderExplore returns at once when nothing changed.
+  function _paintStatsPage(id) {
+    var page = _statsPageById(id);
+    if (!page) return;
+    var explore = page.sections.some(function (sid) { return !_STATS_SECTION_PAINT[sid] && sid.indexOf('explore') === 0; });
+    if (!_statsPainted[id]) {
+      _statsPainted[id] = true;
+      page.sections.forEach(function (sid) { if (_STATS_SECTION_PAINT[sid]) _STATS_SECTION_PAINT[sid](); });
+    }
+    if (explore && _currentTab === 'stats' && typeof renderExplore === 'function') renderExplore();
+  }
+
+  // Selected tab, roving tabindex, and which page is displayed.
+  function _applyStatsPage() {
+    var bar = document.querySelector('#tab-stats .stats-switcher-bar');
+    if (bar) bar.hidden = _statsHeroOnly;
+    STATS_PAGES.forEach(function (p) {
+      var on = p.id === _statsPageNow;
+      var tab = document.getElementById(p.tab);
+      if (tab) {
+        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        tab.tabIndex = on ? 0 : -1;
+      }
+      var panel = document.getElementById(p.panel);
+      if (panel) panel.hidden = _statsHeroOnly || !on;
+    });
+  }
+
+  // The one quiet line of a page with nothing on it (pure:stats-pages decides).
+  function _syncStatsEmpty() {
+    var page = _statsPageById(_statsPageNow);
+    var panel = page && document.getElementById(page.panel);
+    var slot = panel && panel.querySelector('.stats-page-empty');
+    if (!slot) return;
+    var shown = {};
+    page.sections.forEach(function (sid) {
+      var el = document.getElementById(sid);
+      shown[sid] = !!el && el.style.display !== 'none';
+    });
+    var banner = document.getElementById('exploreSyncSection');
+    var synced = false;
+    try { synced = !!localStorage.getItem('psycle_history_synced'); } catch (e) {}
+    var state = _statsHeroOnly ? null : _statsEmptyState(page.id, shown, {
+      hasToken: typeof getBearerToken === 'function' && !!getBearerToken(),
+      synced: synced,
+      bannerUp: !!banner && banner.style.display !== 'none' && !!banner.firstChild,
+    });
+    var html = !state ? '' : '<p class="stats-page-empty-line">' + escapeHTML(state.line) + '</p>' +
+      (state.sync && typeof window._explore_syncHistory === 'function'
+        ? '<button type="button" class="explore-sync-btn explore-sync-btn-secondary" onclick="window._explore_syncHistory()">Sync my history</button>' : '');
+    if (slot._lastHtml !== html) { slot.innerHTML = html; slot._lastHtml = html; }
+    slot.hidden = !state;
+  }
+
+  // Wider than a phone the document scrolls and the tab bar is what sticks to
+  // the top: the switcher pins beneath it, however tall the font makes it. On a
+  // phone the bar is docked to the bottom and .tab-content scrolls → 0.
+  function _syncStatsPin() {
+    var bar = document.querySelector('#tab-stats .stats-switcher-bar');
+    var tabBar = document.querySelector('.tab-bar');
+    if (!bar || !tabBar || typeof getComputedStyle !== 'function') return;
+    var top = getComputedStyle(tabBar).position === 'sticky' ? tabBar.offsetHeight : 0;
+    bar.style.setProperty('--stats-pin-top', top + 'px');
+  }
+  window.addEventListener('resize', function () { if (_currentTab === 'stats') _syncStatsPin(); });
+
+  // The DOM half of _statsScrollTarget. Which scroller: .tab-content on a phone
+  // (css/tabs.css makes it the scroller at <=640px), the document when wider.
+  function _scrollToStatsPageTop(page) {
+    var bar = document.querySelector('#tab-stats .stats-switcher-bar');
+    var panel = document.getElementById(page.panel);
+    var scroller = document.querySelector('.tab-content');
+    // Only while Stats is up: behind another tab the page measures nothing, and
+    // the scroller's offset belongs to that tab.
+    if (!bar || !panel || !scroller || _statsHeroOnly || _currentTab !== 'stats' || typeof getComputedStyle !== 'function') return;
+    var pinTop = parseFloat(bar.style.getPropertyValue('--stats-pin-top')) || 0;
+    var top = panel.getBoundingClientRect().top;
+    if (/auto|scroll/.test(getComputedStyle(scroller).overflowY)) {
+      var at = scroller.scrollTop;
+      var to = _statsScrollTarget(at, top - scroller.getBoundingClientRect().top + at, bar.offsetHeight, pinTop);
+      if (to !== at) scroller.scrollTop = to;
+    } else {
+      var y = window.scrollY || 0;
+      var toY = _statsScrollTarget(y, top + y, bar.offsetHeight, pinTop);
+      if (toY !== y) window.scrollTo(0, toY);
+    }
+  }
+
+  // renderInsights' half of the pages: every call is a fresh look at the data,
+  // so nothing built before it is trusted — and only the page on screen is
+  // built now; the other two when they are first opened.
+  function _syncStatsPages(heroOnly) {
+    _statsHeroOnly = !!heroOnly;
+    _statsPainted = {};
+    _applyStatsPage();
+    _syncStatsPin();
+    if (!_statsHeroOnly) _paintStatsPage(_statsPageNow);
+    _syncStatsEmpty();
+  }
+
+  /**
+   * Open one of the Stats sub-pages ('overview' | 'habits' | 'instructors').
+   * The switcher's segments call it; so can anything else (a swipe helper:
+   * _statsPageStep gives the neighbour). Returns false for an id it does not know.
+   */
+  window.showStatsPage = function (id) {
+    var page = _statsPageById(id);
+    if (!page) return false;
+    var changed = page.id !== _statsPageNow;
+    _statsPageNow = page.id;
+    try { sessionStorage.setItem(STATS_PAGE_KEY, page.id); } catch (e) {}
+    _applyStatsPage();
+    if (!_statsHeroOnly) _paintStatsPage(page.id);
+    _syncStatsEmpty();
+    _scrollToStatsPageTop(page);
+    if (changed) {
+      if (typeof announce === 'function') announce(page.label);
+      if (typeof window.pushAction === 'function') window.pushAction('stats:page to=' + page.id);
+    }
+    return true;
+  };
+  // For a swipe helper: the page a swipe in `dir` (+1 / -1) would open, or null.
+  window._statsPageStep = function (dir) { return _statsPageStep(_statsPageNow, dir); };
+
+  // Swipe left / right between the pages. js/interactions.js's _psycleSwipe
+  // owns the gesture — the day pager's rules: clearly sideways, a quarter of
+  // the width or a flick, never past an end, and a touch that starts in a row
+  // that itself scrolls sideways (the tiles, the habit / streak cards, the
+  // heatmap) stays that row's. Nothing follows the finger: only ONE page is
+  // laid out at a time, so the release simply opens the neighbour, exactly as
+  // a segment or an arrow key does (showStatsPage announces it and keeps the
+  // pinned switcher where it is). The pages carry touch-action: pan-y
+  // (css/tabs.css), so vertical scrolling stays the browser's.
+  // May a touch on `target` become a page swipe? On a page — not the banner,
+  // the hero or the switcher — with Stats on screen and nothing modal up.
+  function _statsSwipeMayStart(target) {
+    if (_statsHeroOnly || _currentTab !== 'stats') return false;
+    if (!target || typeof target.closest !== 'function' || !target.closest('.stats-page')) return false;
+    try {
+      if (typeof _dialogOpen === 'function' && _dialogOpen()) return false;
+      if (typeof _ownKeysOverlayUp === 'function' && _ownKeysOverlayUp()) return false;
+      if (typeof _overlayStack !== 'undefined' && _overlayStack.length > 0) return false;
+    } catch (e) { return false; }
+    return true;
+  }
+  // Once, from initTabs — bound to the panel, which outlives every repaint of
+  // its sections. interactions.js loads before this file; without it (a test
+  // page, an old cached copy) the segments and the keys are still all there.
+  function _wireStatsSwipe(panel) {
+    if (!panel || typeof window._psycleSwipe !== 'function') return;
+    window._psycleSwipe(panel, {
+      shouldIgnore: function (target) { return !_statsSwipeMayStart(target); },
+      edges: function () {
+        return { prev: !!_statsPageStep(_statsPageNow, -1), next: !!_statsPageStep(_statsPageNow, 1) };
+      },
+      onEnd: function (r) {
+        var to = r && r.dir && !r.cancelled ? _statsPageStep(_statsPageNow, r.dir) : null;
+        if (to) window.showStatsPage(to);
+      },
+    });
+  }
+
   // ── Render insights tab content ────────────────────────────────
 
   // One Stats paint asks getFullHistory() ~11 times (every section below) and
@@ -454,8 +800,8 @@
         statsEmpty.style.display = '';
         statsEmpty.innerHTML =
           '<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-6M12 20V8M19 20V5"/></svg></div>' +
-          '<div class="tab-empty-title">Your training<br>story starts here</div>' +
-          '<div class="tab-empty-sub">Sign in and sync your booking history to unlock stats, heatmaps, and instructor insights.</div>' +
+          '<div class="tab-empty-title">Your stats</div>' +
+          '<div class="tab-empty-sub">Sign in to see your streaks, habits and instructors.</div>' +
           '<button class="tab-empty-btn" onclick="openLoginPopup()">Sign in</button>';
         // Token still stored but /profile unconfirmed: Retry, never "Sign in".
         var _gate = (typeof authGateHTML === 'function') ? authGateHTML() : '';
@@ -464,17 +810,12 @@
         statsEmpty.style.display = 'none';
       }
     }
-    renderQuickStats();
-    renderHabitSlots();
-    renderStreaks();
+    // The sections themselves: three sub-pages, of which only the one on screen
+    // is built now (_syncStatsPages, above). While the hero has the tab — signed
+    // out, or a kept token with nothing on record — there is no switcher either.
+    _syncStatsPages(signedOut || (!signedIn && !hasHistory));
     renderCostTracker();
-    renderClassTypeDistribution();
-    renderHeatmap();
     renderWeekView();
-    renderRecommendations();
-    renderLapsedFavourites();
-    renderVarietyTrend();
-    renderYearReview();
   }
 
   // ── Quick Stats ────────────────────────────────────────────────
@@ -842,7 +1183,7 @@
       window.saveWeeklyTemplate(entries);
       _uwLog('usual-week:save');
       toast(fromHistory
-        ? 'Saved ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' from your history — remove any you no longer ride'
+        ? 'Saved ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' from your history — remove any you no longer take'
         : 'Saved ' + _uwPlural(entries.length, 'class', 'classes') + ' as your usual week', 'success');
       renderUsualWeekCard();
     } catch (e) {
@@ -956,7 +1297,7 @@
       // Nothing saved yet: a one-line invitation, not a second card under the hint.
       card.innerHTML =
         '<div class="usual-week-invite">' +
-          '<span class="usual-week-invite-text">Ride the same classes every week? Save them once, then book them together when the timetable opens.</span>' +
+          '<span class="usual-week-invite-text">Same classes every week? Save them once, then book them together.</span>' +
           '<button type="button" class="week-template-btn" onclick="saveWeekAsTemplate()">Save my usual week</button>' +
         '</div>';
       card.style.display = '';
@@ -1424,7 +1765,6 @@
     container.style.display = '';
 
     var html = '<div class="habit-title">Your usual slots</div>' +
-      '<div class="habit-subtitle">Tap to see that day\'s classes</div>' +
       '<div class="habit-cards">';
 
     habits.forEach(function (s) {
@@ -1443,7 +1783,7 @@
       var catKey = (typeof getCategory === 'function' && s.type !== 'Class') ? String((getCategory(s.type) || {}).key || '') : '';
 
       html += '<div class="habit-card">' +
-        '<div class="habit-line">You usually book <strong>' + escapeHTML(dayName) + 's ~' + timeLabel + '</strong></div>' +
+        '<div class="habit-line"><strong>' + escapeHTML(dayName) + 's ~' + timeLabel + '</strong></div>' +
         '<div class="habit-class">' + escapeHTML(s.type) + '</div>' +
         '<div class="habit-meta">' + s.count + 'x in your history</div>' +
         '<button class="habit-find-btn" data-date="' + dateStr + '" data-cat="' + escapeHTML(catKey) + '">Find this week</button>' +
@@ -1550,19 +1890,18 @@
     html += '<div class="streak-card' + (current >= 2 ? ' streak-live' : '') + '">' +
       '<div class="streak-value">' + current + '</div>' +
       '<div class="streak-label">Week streak</div>' +
-      '<div class="streak-hint">' + (current >= 2 ? 'Keep it alive!' : 'Book this week to build it') + '</div>' +
     '</div>';
 
     html += '<div class="streak-card">' +
       '<div class="streak-value">' + longest + '</div>' +
       '<div class="streak-label">Longest streak</div>' +
-      '<div class="streak-hint">Best run of weeks</div>' +
     '</div>';
 
+    // The one hint left is a number: how far the next badge below is.
     html += '<div class="streak-card">' +
       '<div class="streak-value">' + total + '</div>' +
       '<div class="streak-label">Classes</div>' +
-      '<div class="streak-hint">' + (nextMilestone ? (nextMilestone - total) + ' to ' + nextMilestone : 'Century club!') + '</div>' +
+      (nextMilestone ? '<div class="streak-hint">' + (nextMilestone - total) + ' to ' + nextMilestone + '</div>' : '') +
     '</div>';
 
     html += '</div>';
@@ -1873,7 +2212,7 @@
         savingsMsg = 'Book ' + remaining + ' more to hit ' + _formatGbp(costAtMax) + '/class';
       }
     } else if (max > 0 && made >= max) {
-      savingsMsg = 'You\'ve maxed out your ' + max + ' classes — incredible!';
+      savingsMsg = 'You\'ve maxed out your ' + max + ' classes';
     }
 
     var html = '<div class="cost-title">Cost tracker</div>';
@@ -1883,7 +2222,6 @@
     html += '<div class="cost-card cost-main">';
     html += '<div class="cost-value">' + _formatGbp(costPerClass) + '</div>';
     html += '<div class="cost-label">Per class this period</div>'; // bookings_made is per billing period
-    if (made === 0) html += '<div class="cost-hint">Book your first class!</div>';
     html += '</div>';
 
     // Monthly spend card
@@ -2280,7 +2618,6 @@
     container.style.display = '';
 
     var html = '<div class="insights-title">Lapsed favourites</div>';
-    html += '<div class="insights-subtitle">Instructors you used to book regularly</div>';
     html += '<div class="lapsed-list">';
     for (var i = 0; i < lapsed.length; i++) {
       var name = lapsed[i][0];
@@ -2331,8 +2668,8 @@
     var maxTotal = Math.max.apply(null, sorted.map(function (e) { return e[1].total; }));
 
     container.style.display = '';
-    var html = '<div class="insights-title">Instructor variety</div>';
-    html += '<div class="insights-subtitle">Unique instructors per month</div>';
+    // The heading carries the chart's unit; it used to need a subtitle for it.
+    var html = '<div class="insights-title">Instructors per month</div>';
     html += '<div class="variety-chart">';
     for (var i = 0; i < sorted.length; i++) {
       var key = sorted[i][0];

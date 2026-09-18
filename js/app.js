@@ -661,7 +661,12 @@ function _announceAllocations(eventIds, diffToPersist) {
   });
   if (!Object.keys(_pendingAnnounce.allocated).length) return;
   const show = () => {
-    if (_dialogOpen()) { _allocAnnounceTimer = setTimeout(show, 700); return; }
+    // …or for the welcome, which a signed-in member can replay from Settings:
+    // it is full-screen and above confirmModal, so the dialog opened UNDER it,
+    // took focus there, and the Escape that closed the welcome answered this
+    // too — a chargeable seat recorded as announced, never seen. (Checked here
+    // and not in _dialogOpen(): launch rendering must not wait for the welcome.)
+    if (_dialogOpen() || document.getElementById('onboardOverlay')) { _allocAnnounceTimer = setTimeout(show, 700); return; }
     _allocAnnounceTimer = null;
     const ids = Object.keys(_pendingAnnounce.allocated);
     if (!ids.length) return;
@@ -1634,7 +1639,7 @@ let _syncPromptDefers = 0;
 function _dismissSyncPrompt() {
   try { localStorage.setItem(HISTORY_PROMPT_DISMISSED_KEY, '1'); } catch (e) {}
   document.getElementById('syncPromptOverlay')?.remove();
-  toast('No problem — you can sync your history any time from the Stats tab', 'info');
+  toast('You can sync your history any time from the Stats tab', 'info');
 }
 
 function showHistorySyncPrompt() {
@@ -1653,8 +1658,13 @@ function showHistorySyncPrompt() {
   if (document.getElementById('syncPromptOverlay')) return;
 
   // Never stack on another dialog, the class sheet, the "Booked!" sheet or the
-  // first-run tour (not finished until its key is set) — come back when it's
-  // gone. Bounded, so a stuck overlay can't keep this polling all session.
+  // first-run welcome — come back when it's gone. Bounded, so a stuck overlay
+  // can't keep this polling all session. The welcome is judged by its overlay
+  // alone: it is inserted while app.js is evaluated (in the iOS app its holding
+  // cover carries the same id until the launch has its answer), long before a
+  // checkAuth can arm this. A missing completion flag is NOT "still to come":
+  // a launch on a #bookings link skips the welcome and leaves the flag unset,
+  // and the newcomer who signed in there was never offered the sync.
   // Nor UNDER a panel: Settings, Diagnostics, an instructor profile, history
   // and the year review all sit above .modal-overlay, and the focus stack
   // takes the last overlay to open for the top one — focus was pulled into a
@@ -1662,7 +1672,7 @@ function showHistorySyncPrompt() {
   // offer for good. Every overlay the stack knows, bar this one.
   var busy = _dialogOpen() || document.getElementById('classDetailOverlay') ||
     document.getElementById('bookingConfirmation') ||
-    document.getElementById('onboardOverlay') || !localStorage.getItem(ONBOARDING_KEY) ||
+    document.getElementById('onboardOverlay') ||
     _OVERLAYS.some(([id]) => id !== 'syncPromptOverlay' && _overlayIsOpen(document.getElementById(id)));
   clearTimeout(_syncPromptTimer);
   if (busy) {
@@ -1682,22 +1692,21 @@ function showHistorySyncPrompt() {
     if (!(syncBtn && syncBtn.disabled)) _dismissSyncPrompt();
   };
 
-  var userName = (currentUser && currentUser.first_name) ? currentUser.first_name : '';
-
+  // Says what it is. (It was headed "Welcome, <name>!" over a subtitle about
+  // "your experience" — the first-run welcome has already said hello.)
   overlay.innerHTML =
     '<div class="modal" style="max-width:400px" role="dialog" aria-modal="true" aria-labelledby="syncPromptTitle" tabindex="-1">' +
       '<div class="modal-header">' +
         '<div>' +
-          '<div class="modal-title" id="syncPromptTitle">Welcome' + (userName ? ', ' + escapeHTML(userName) : '') + '!</div>' +
-          '<div class="modal-subtitle">One more step to get the most out of your experience</div>' +
+          '<div class="modal-title" id="syncPromptTitle">Sync your booking history?</div>' +
         '</div>' +
         '<button class="modal-close" onclick="_dismissSyncPrompt()" aria-label="Close">&times;</button>' +
       '</div>' +
       '<div style="padding:0 20px 8px;font-size:13px;color:var(--text-muted,#aaa);line-height:1.6">' +
-        'Import your full booking history from Psycle to unlock personalised insights, instructor discovery, and class analytics.' +
+        'Brings in your past bookings from Psycle, so your Stats and suggestions are accurate.' +
       '</div>' +
       '<div class="modal-actions" style="gap:8px">' +
-        '<button class="btn btn-ghost" onclick="_dismissSyncPrompt()">Skip for now</button>' +
+        '<button class="btn btn-ghost" onclick="_dismissSyncPrompt()">Not now</button>' +
         '<button class="btn" id="syncPromptBtn" onclick="startSyncFromPrompt()">Sync my history</button>' +
       '</div>' +
     '</div>';
@@ -2063,46 +2072,176 @@ function triggerAutoSearch() {
   _autoSearchTimer = setTimeout(() => search(), 600);
 }
 
-// One-line digest of the active filters, shown in the collapsed
-// Filters bar so its state is readable without expanding.
+// ── pure:filter-summary:start ── (DOM-free; tests/suites/8a-filters.js evaluates this block)
+// The active filters as the collapsed Filters bar shows them: one removable
+// chip each — [{kind, id, label}] (+ `name` where the spoken name needs more
+// than the label). Plain arrays in, plain objects out.
+//   state: { locationIds, categories, strengthSubs, reformerSubs, timeBands,
+//            availableOnly, instructorIds, favouriteIds, topTierIds }
+//   maps:  { locations: [{id, name}], instructors: [{id, name}],
+//            categories / strengthSubs / reformerSubs / timeBands: [{key, label}] }
+// Lists, not objects: studios, class types and time bands read in the panel's
+// own order, and an object keyed by numeric ids would hand them back sorted by
+// id. The date is not here — its row is always on screen. A selected id the
+// lists do not know still gets a chip: it IS filtering, and the chip is the
+// way to lift it.
+function _filterSummaryChips(state, maps) {
+  const s = state || {}, m = maps || {};
+  const strs = v => (Array.isArray(v) ? v : []).map(String);
+  const list = v => (Array.isArray(v) ? v : []).filter(d => d && typeof d === 'object');
+  const chips = [];
+
+  // Studios, named as the panel's chips are ("Psycle " is dropped there too).
+  const locs = strs(s.locationIds);
+  const knownLocs = list(m.locations);
+  knownLocs.forEach(l => {
+    if (locs.indexOf(String(l.id)) === -1) return;
+    chips.push({ kind: 'location', id: String(l.id), label: String(l.name || 'Studio').replace('Psycle ', '') });
+  });
+  locs.forEach(id => {
+    if (!knownLocs.some(l => String(l.id) === id)) chips.push({ kind: 'location', id, label: 'Studio' });
+  });
+
+  // Class types. A narrowed sub-type row reads on its parent's chip
+  // ("Strength · Upper"): removing the chip removes the class type, as its pill
+  // does — the sub-pills only exist while it is on.
+  const cats = strs(s.categories);
+  const narrowed = (defs, picked) => {
+    const on = list(defs).filter(d => picked.indexOf(String(d.key)) !== -1);
+    return (on.length && on.length < list(defs).length) ? on.map(d => d.label) : [];
+  };
+  const subsOf = { STRENGTH: narrowed(m.strengthSubs, strs(s.strengthSubs)), PILATES: narrowed(m.reformerSubs, strs(s.reformerSubs)) };
+  const knownCats = list(m.categories);
+  const catChip = (key, label) => ({
+    kind: 'category', id: key,
+    label: [label].concat(Object.prototype.hasOwnProperty.call(subsOf, key) ? subsOf[key] : []).join(' · '),
+  });
+  knownCats.forEach(c => { if (cats.indexOf(String(c.key)) !== -1) chips.push(catChip(String(c.key), c.label)); });
+  cats.forEach(key => { if (!knownCats.some(c => String(c.key) === key)) chips.push(catChip(key, key)); });
+
+  // The Time row.
+  const bands = strs(s.timeBands);
+  const knownBands = list(m.timeBands);
+  knownBands.forEach(b => { if (bands.indexOf(String(b.key)) !== -1) chips.push({ kind: 'time', id: String(b.key), label: b.label }); });
+  bands.forEach(key => { if (!knownBands.some(b => String(b.key) === key)) chips.push({ kind: 'time', id: key, label: key }); });
+  if (s.availableOnly === true) chips.push({ kind: 'available', id: '', label: 'Available only' });
+
+  // Instructors, in the order they were picked (the panel's own chips). ★ Favs
+  // and S/A select a whole set in one tap, so that set reads as ONE chip while
+  // it still IS that set: every selected id belongs to it, and every member of
+  // it that is on the instructor list is selected. One instructor is a name.
+  const instrs = strs(s.instructorIds);
+  const knownInstrs = list(m.instructors);
+  const isSet = group => {
+    const g = strs(group);
+    return instrs.length > 1 && instrs.every(id => g.indexOf(id) !== -1) &&
+      g.every(id => instrs.indexOf(id) !== -1 || !knownInstrs.some(i => String(i.id) === id));
+  };
+  if (isSet(s.favouriteIds)) chips.push({ kind: 'favs', id: '', label: 'Favourites' });
+  else if (isSet(s.topTierIds)) chips.push({ kind: 'tier', id: '', label: 'S/A', name: 'instructors ranked S or A' });
+  else {
+    instrs.forEach(id => {
+      const i = knownInstrs.find(x => String(x.id) === id);
+      chips.push({ kind: 'instructor', id, label: (i && i.name) ? String(i.name) : 'Instructor' });
+    });
+  }
+  return chips;
+}
+
+// What the Filters bar is called: the count is part of the NAME — the badge
+// beside the word is decoration to a screen reader.
+function _filtersBarName(count) {
+  return count > 0 ? 'Filters, ' + count + ' active' : 'Filters';
+}
+// ── pure:filter-summary:end ──
+
+// The Filters bar's digest: a count on the bar and one removable chip per
+// active filter in #controlsSummary (the chips show while the panel is
+// collapsed — css/redesign.css), plus "Clear" while anything is on. The date
+// is not repeated here: its row is always on screen.
 function updateFiltersSummary() {
   _mirrorDatePillAria(); // every date-row change ends up here (triggerAutoSearch, restoreFilters, the presets)
   const el = document.getElementById('controlsSummary');
   if (!el) return;
-  const parts = [];
-  const modeLabels = { today: 'Today', tomorrow: 'Tomorrow', week: '7 days', nextweek: 'Next week', '2week': '14 days' };
-  if (_dateQuickMode && modeLabels[_dateQuickMode]) {
-    parts.push(modeLabels[_dateQuickMode]);
-  } else {
-    const d = document.getElementById('startDate')?.value;
-    if (d) {
-      const [y, m, dd] = d.split('-').map(Number);
-      parts.push(new Date(y, m - 1, dd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
-    }
+  _followStarsInSummary();
+  // ★ Favs / S-A are only worth comparing against a multi-instructor filter.
+  const many = selectedInstructors.size > 1;
+  const chips = _filterSummaryChips({
+    locationIds: [...selectedLocations], categories: [...selectedCategories],
+    strengthSubs: [...selectedStrengthSubs], reformerSubs: [...selectedReformerSubs],
+    timeBands: [...selectedTimeBands], availableOnly: _availableOnly === true,
+    instructorIds: [...selectedInstructors],
+    favouriteIds: many ? [...favouriteInstructors] : [],
+    topTierIds: many ? _topTierInstructorIds() : [],
+  }, {
+    locations: locations, instructors: instructors.map(i => ({ id: i.id, name: i.full_name })),
+    categories: CATEGORY_MAP, strengthSubs: STRENGTH_SUBS, reformerSubs: REFORMER_SUBS, timeBands: TIME_BANDS,
+  });
+
+  const bar = document.getElementById('controlsToggle');
+  const count = document.getElementById('controlsCount');
+  if (count) { count.textContent = chips.length ? String(chips.length) : ''; count.hidden = !chips.length; }
+  if (bar) bar.setAttribute('aria-label', _filtersBarName(chips.length));
+
+  // kind + id ride on the button as data: an id can come out of storage, and an
+  // attribute is escaped once where a quoted handler argument needs it twice.
+  const html = chips.map(c =>
+    `<button type="button" class="filter-chip" data-kind="${escapeHTML(c.kind)}" data-id="${escapeHTML(c.id)}" onclick="removeFilterChip(this)" aria-label="Remove filter: ${escapeHTML(c.name || c.label)}"><span class="filter-chip-label">${escapeHTML(c.label)}</span><span class="filter-chip-x" aria-hidden="true">×</span></button>`
+  ).join('') + (chips.length ? '<button type="button" class="controls-clear" onclick="clearFilters()" aria-label="Clear all filters">Clear</button>' : '');
+  if (el._summaryHtml === html) return; // same chips: nothing to rebuild under a finger or a focus ring
+  el._summaryHtml = html;
+  // A removed chip takes the focus with it: it goes to the chip now in its
+  // place (then "Clear"), and to the bar once nothing is left to remove.
+  const hadFocus = !!document.activeElement && el.contains(document.activeElement);
+  _repaintKeepingFocus(el, html, 'button');
+  if (hadFocus && !el.contains(document.activeElement) && bar && typeof bar.focus === 'function') {
+    try { bar.focus({ preventScroll: true }); } catch (e) {}
   }
-  if (selectedLocations.size === 1) {
-    const l = locations.find(x => selectedLocations.has(String(x.id)));
-    if (l) parts.push(l.name.replace('Psycle ', ''));
-  } else if (selectedLocations.size > 1) {
-    parts.push(selectedLocations.size + ' studios');
-  }
-  if (selectedInstructors.size === 1) {
-    const i = instructors.find(x => String(x.id) === [...selectedInstructors][0]);
-    if (i) parts.push(i.full_name.split(' ')[0]);
-  } else if (selectedInstructors.size > 1) {
-    parts.push(selectedInstructors.size + ' instructors');
-  }
-  if (selectedCategories.size > 0) {
-    parts.push([...selectedCategories].map(k => {
-      const c = CATEGORY_MAP.find(c => c.key === k);
-      return c ? c.label : k;
-    }).join(' · '));
-  }
-  if (selectedTimeBands.size > 0) {
-    parts.push(TIME_BANDS.filter(b => selectedTimeBands.has(b.key)).map(b => b.label).join(' · '));
-  }
-  if (_availableOnly) parts.push('Available only');
-  el.textContent = parts.join(' · ');
+}
+
+// A star can change where no filter toggle runs (the instructor sheet, the
+// Membership tab), and "Favourites" is only that chip while the selection still
+// IS the starred set. Wired on the summary's first paint, not at load: this
+// file's own launch-time `favouriteInstructors = loadFavourites()` must not
+// paint a summary before the Time row's state exists further down.
+let _summaryFollowsStars = false;
+function _followStarsInSummary() {
+  if (_summaryFollowsStars || typeof PsycleState === 'undefined' || typeof PsycleState.subscribe !== 'function') return;
+  _summaryFollowsStars = true;
+  PsycleState.subscribe('favouriteInstructors', () => updateFiltersSummary());
+}
+
+// × on a summary chip. Every kind goes through the SAME function the panel's own
+// control calls — a bare call, so it is the copy interactions.js wraps with
+// saveFilters — and that is what releases the focus stash, saves, refreshes the
+// counts and re-filters the list. Only while that filter is really on: a toggle
+// called for a chip that has gone stale would switch the filter ON.
+function _removeFilter(kind, id) {
+  const sid = String(id == null ? '' : id);
+  if (kind === 'location') { if (!selectedLocations.has(sid)) return false; toggleLocation(sid); }
+  else if (kind === 'category') { if (!selectedCategories.has(sid)) return false; toggleCategory(sid); }
+  else if (kind === 'time') { if (!selectedTimeBands.has(sid)) return false; toggleTimeBand(sid); }
+  else if (kind === 'available') { if (!_availableOnly) return false; toggleAvailableOnly(); }
+  else if (kind === 'instructor') { if (!selectedInstructors.has(sid)) return false; removeInstructor(sid); }
+  else if (kind === 'favs' || kind === 'tier') {
+    // One chip for the whole set: all but the last leave quietly, and the last
+    // goes through removeInstructor — ONE repaint, search and save, and its
+    // "last chip" rule (a shortcut's set-aside filters come back) still runs.
+    const ids = [...selectedInstructors];
+    if (!ids.length) return false;
+    ids.slice(0, -1).forEach(i => selectedInstructors.delete(i));
+    removeInstructor(ids[ids.length - 1]);
+  } else return false;
+  return true;
+}
+
+function removeFilterChip(btn) {
+  if (!btn || typeof btn.getAttribute !== 'function') return;
+  const labelEl = typeof btn.querySelector === 'function' ? btn.querySelector('.filter-chip-label') : null;
+  const label = labelEl ? labelEl.textContent : '';
+  // Stale (the filter went some other way since it was painted): just repaint.
+  if (!_removeFilter(btn.getAttribute('data-kind'), btn.getAttribute('data-id'))) { updateFiltersSummary(); return; }
+  if (label && typeof announce === 'function') announce(label + ' filter removed');
 }
 
 // ── pure:filters:start ── (DOM-free date-range helpers; tests/suites/filters.js evaluates this block)
@@ -2128,9 +2267,13 @@ function _dateModeWindow(mode, todayStr) {
     const dow = new Date(y, m - 1, d).getDay();
     return { startDate: _addDaysStr(todayStr, ((8 - dow) % 7) || 7), daysAhead: 6, label: labels[mode] };
   }
+  // "7 days" is seven days and "14 days" fourteen, today included: daysAhead
+  // counts the days AFTER the first, as for Next week. They were 7 and 14 —
+  // today + 7 — and the day strip drew eight pills under "7 days", fifteen
+  // under "14 days".
   return {
     startDate: mode === 'tomorrow' ? _addDaysStr(todayStr, 1) : todayStr,
-    daysAhead: mode === '2week' ? 14 : mode === 'week' ? 7 : 1,
+    daysAhead: mode === '2week' ? 13 : mode === 'week' ? 6 : 1,
     label: labels[mode],
   };
 }
@@ -2139,7 +2282,7 @@ function _dateModeWindow(mode, todayStr) {
 // however it was chosen (Today/Tomorrow, the calendar, the planner, rebook),
 // so a picked Saturday does not bleed into Sunday. The rule reads the INPUTS
 // only: every Today/Tomorrow writer also sets daysAhead=1, and a mode left
-// stale by a flow that moved the inputs (Find similar asks for 7–8 days) must
+// stale by a flow that moved the inputs (Find similar asks for a week) must
 // not shrink that range to one day. `mode` stays in the signature for the two
 // callers, which have to keep producing the same window key.
 function _windowEndDate(startDate, days, mode) {
@@ -2166,12 +2309,12 @@ function _restoredDateState(saved, todayStr) {
   const s = saved || {};
   const w = _dateModeWindow(s.dateQuickMode, todayStr);
   if (w) return { mode: s.dateQuickMode, startDate: w.startDate, daysAhead: w.daysAhead };
+  const week = _dateModeWindow('week', todayStr);
   const start = String(s.startDate || '');
   if (/^\d{4}-\d{2}-\d{2}$/.test(start) && start >= todayStr) {
     const days = parseInt(s.daysAhead, 10);
-    return { mode: null, startDate: start, daysAhead: days > 0 ? days : 7 };
+    return { mode: null, startDate: start, daysAhead: days > 0 ? days : week.daysAhead };
   }
-  const week = _dateModeWindow('week', todayStr);
   return { mode: 'week', startDate: week.startDate, daysAhead: week.daysAhead };
 }
 
@@ -2306,21 +2449,30 @@ function onDateInputChange() {
   triggerAutoSearch();
 }
 
-// ── Collapsible filters (mobile) ─────────────────────────────────
-// Redesign: filters are shown inline by default (the design has no collapse
-// header); the toggle is hidden via CSS, but kept functional as a fallback.
-let _filtersCollapsed = false;
+// ── The Filters bar (below 1024px) ───────────────────────────────
+// The date row is always on screen; Time / Location / Class Type / Instructor
+// sit in #controlsBody behind ONE bar. Collapsed at every launch and never
+// stored: it stays as the member left it for this page only, and a "find it"
+// shortcut (_focusSearch) does not open it — the chips beside the bar say what
+// the shortcut set. The state is a class on #controlsPanel, never an inline
+// display: at >=1024px the stylesheet keeps the panel open and hides the bar
+// whatever this says, and nothing is measured, scrolled or searched here — the
+// bar is a real button that is not repainted, so focus stays on it.
+let _filtersCollapsed = true;
 
 function applyFiltersCollapsedState() {
-  const body = document.getElementById('controlsBody');
-  const chevron = document.getElementById('controlsChevron');
-  if (body) body.style.display = _filtersCollapsed ? 'none' : '';
-  if (chevron) chevron.classList.toggle('collapsed', _filtersCollapsed);
+  const panel = document.getElementById('controlsPanel');
+  const bar = document.getElementById('controlsToggle');
+  if (panel) panel.classList.toggle('filters-collapsed', _filtersCollapsed);
+  if (bar) bar.setAttribute('aria-expanded', String(!_filtersCollapsed));
 }
 
 function toggleFilters() {
   _filtersCollapsed = !_filtersCollapsed;
   applyFiltersCollapsedState();
+  // The chips were out of sight while the panel was open, and a star toggled in
+  // its instructor list changes what "Favourites" means: repaint on the way back.
+  if (_filtersCollapsed) updateFiltersSummary();
 }
 applyFiltersCollapsedState();
 
@@ -3458,14 +3610,19 @@ function _discoverEmptyContext() {
   const today = localDateStr();
   const filtered = selectedInstructors.size > 0 || selectedLocations.size > 0 ||
     selectedCategories.size > 0 || !!window._discoverQuery;
+  // One line each from here on: the title IS the reason, and a sentence under
+  // it could only say it again. (The two returns above keep theirs — a cause
+  // and a time the title cannot carry.)
   if (filtered) {
-    return { sub: 'Nothing matches these filters on the dates shown.', actions: ['clear'] };
+    // render()'s own title stands: "No classes found for these filters."
+    return { actions: ['clear'] };
   }
   if (sel.startDate === today && sel.endDateStr === today) {
     // render() drops started classes, so late in the day "Today" runs dry.
-    return { title: 'No more classes today', sub: "Nothing left on today's timetable.", actions: ['tomorrow', 'week'] };
+    return { title: 'No more classes today', actions: ['tomorrow', 'week'] };
   }
-  return { sub: 'There are no classes on the dates shown.', actions: _dateQuickMode === 'week' ? [] : ['week'] };
+  // No filter to blame (render()'s title names "these filters"): say what is true.
+  return { title: 'No classes on these dates', actions: _dateQuickMode === 'week' ? [] : ['week'] };
 }
 
 function mergeRelations(base, incoming) {
@@ -6644,6 +6801,159 @@ function _mergeInsertPoints(existingStarts, newStarts) {
 }
 // ── pure:discover:end ──
 
+// ── pure:day-pager:start ── (DOM-free; tests/suites/8b-day-pager.js evaluates this block)
+// A range of more than one day is shown ONE DAY AT A TIME: a strip of days
+// over a pager that holds a single day's cards (render() → _paintDays). These
+// are its decisions. Every day here is the 'YYYY-MM-DD' at the front of
+// start_at — the gym's own calendar — and day arithmetic goes through UTC,
+// where a day is always 24 hours: a naive class time is never read through
+// Date, because the device is not always on UK time.
+const PAGER_MAX_DAYS = 62; // no preset comes near it; a bad bound must not build a year of pills
+const _PAGER_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const _PAGER_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function _pagerIsDay(day) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(day == null ? '' : day));
+}
+
+// 'YYYY-MM-DD' n days on ('' for anything that is not a day).
+function _pagerAddDays(day, n) {
+  if (!_pagerIsDay(day)) return '';
+  const p = String(day).split('-').map(Number);
+  const t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n));
+  return isNaN(t.getTime()) ? '' : t.toISOString().slice(0, 10);
+}
+
+// Every day of start..end, in order. [] unless both are days, in order.
+function _pagerDays(start, end) {
+  if (!_pagerIsDay(start) || !_pagerIsDay(end) || start > end) return [];
+  const days = [];
+  for (let d = String(start); d && d <= end && days.length < PAGER_MAX_DAYS; d = _pagerAddDays(d, 1)) days.push(d);
+  return days;
+}
+
+// The days to page over. The selected range when it has both bounds — a day
+// with nothing on keeps its place in the strip. A restored legacy search has
+// no bounds: it gets the days its classes fall on — as does whatever lies past
+// the cap, so no class can end up on a day that has no pill.
+function _pagerDayList(start, end, eventDays) {
+  const range = _pagerDays(start, end);
+  const last = range.length ? range[range.length - 1] : '';
+  const seen = {};
+  return range.concat((eventDays || []).filter(d => _pagerIsDay(d) && d > last && !seen[d] && (seen[d] = true)).sort());
+}
+
+// What a day is called. `todayStr` is handed in: the date the date row's
+// Today / Tomorrow presets were built from (the device's — see _pagerModelFor).
+//   rel   'Today' | 'Tomorrow' | ''
+//   short the strip pill: 'Today' · 'Tomorrow' · 'Sat 20'
+//   long  the pager heading and what is announced: 'Saturday 20 September'
+//   head  a single day's heading, as before the pager: 'Today · 18 September'
+// No year anywhere: with a count beside it the line has to fit 390px.
+function _pagerDayLabel(day, todayStr) {
+  if (!_pagerIsDay(day)) { const raw = String(day == null ? '' : day); return { rel: '', short: raw, long: raw, head: raw }; }
+  const p = String(day).split('-').map(Number);
+  const weekday = _PAGER_WEEKDAYS[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()];
+  const month = _PAGER_MONTHS[p[1] - 1] || '';
+  const tomorrowStr = _pagerAddDays(todayStr, 1);
+  const rel = day === todayStr ? 'Today' : day === tomorrowStr ? 'Tomorrow' : '';
+  const long = weekday + ' ' + p[2] + ' ' + month;
+  return { rel, short: rel || (weekday.slice(0, 3) + ' ' + p[2]), long, head: rel ? rel + ' · ' + p[2] + ' ' + month : long };
+}
+
+function _pagerCountText(n) {
+  return n === 1 ? '1 class' : (n > 0 ? n + ' classes' : 'No classes');
+}
+
+// "Saturday 20 September, 14 classes" — what a screen reader hears on every
+// change of day, and the name of the day's tab. A day that may not say "no
+// classes" (`state`, from _pagerEmptyState) says what it is instead.
+function _pagerSpoken(day, todayStr, n, state) {
+  const what = state === 'unopened' ? 'not open yet' : state === 'unknown' ? 'not loaded' : _pagerCountText(n).toLowerCase();
+  return _pagerDayLabel(day, todayStr).long + ', ' + what;
+}
+
+// The Monday of a day's Monday-to-Sunday week ('' for anything that is not a day).
+function _pagerMondayOf(day) {
+  if (!_pagerIsDay(day)) return '';
+  const p = String(day).split('-').map(Number);
+  return _pagerAddDays(day, -((new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() + 6) % 7));
+}
+
+// A day with nothing to show is not always a day with no classes. What such a
+// day is INSTEAD — null when "no classes" is the truth as far as anyone knows:
+//   'unopened' Psycle has not released its week yet: o.opensMs(monday) is when
+//              that week opens (_weekOpensMs), o.now the clock. Every "14 days"
+//              view reaches past the Monday-noon release;
+//   'unknown'  it lies past o.heldEnd, the last day a provisional window (an
+//              older cache shown while the real range loads) really holds. It
+//              was never loaded, so "no classes" would be a guess — the rule
+//              _discoverEmptyContext keeps for a whole range.
+// Unopened first: it is true whatever was loaded, and no retry changes it.
+function _pagerEmptyState(day, n, o) {
+  if (n > 0 || !_pagerIsDay(day)) return null;
+  o = o || {};
+  let opens = null;
+  try { opens = typeof o.opensMs === 'function' ? o.opensMs(_pagerMondayOf(day)) : null; } catch (e) {}
+  if (opens && o.now < opens) return 'unopened';
+  return (_pagerIsDay(o.heldEnd) && day > o.heldEnd) ? 'unknown' : null;
+}
+
+// "Booking opens Monday 21 September, 12:00" — the Monday BEFORE the day's own
+// week, by its date: the day on screen sits in a week that starts on a Monday
+// too, and a bare "Monday" would read as that one.
+function _pagerOpensText(day, todayStr) {
+  const opensDay = _pagerAddDays(_pagerMondayOf(day), -7);
+  if (!opensDay) return '';
+  return opensDay === todayStr ? 'Booking opens today at 12:00' : 'Booking opens ' + _pagerDayLabel(opensDay, '').long + ', 12:00';
+}
+
+function _pagerFirstWithClasses(days, counts) {
+  return (days || []).find(d => (counts && counts[d]) > 0) || null;
+}
+
+// The neighbouring day; null at either end of the range (the pager resists).
+function _pagerStep(days, current, dir) {
+  const i = (days || []).indexOf(current);
+  if (i === -1) return null;
+  return days[i + (dir < 0 ? -1 : 1)] || null;
+}
+
+// Where an empty day sends the member: the next day with classes, else the
+// nearest one before it. null when no other day has any.
+function _pagerJump(days, counts, current) {
+  const i = (days || []).indexOf(current);
+  if (i === -1) return null;
+  for (let k = i + 1; k < days.length; k++) if (counts[days[k]] > 0) return { day: days[k], dir: 1 };
+  for (let k = i - 1; k >= 0; k--) if (counts[days[k]] > 0) return { day: days[k], dir: -1 };
+  return null;
+}
+
+// Which day is on screen. s = { days, counts, current, sameRange, chosen, done }.
+//  - a new range or preset, or a day that has left the range (the midnight
+//    roll-forward), starts again on the first day — and is nobody's choice;
+//  - the same range keeps its day: across filter taps, a background refresh
+//    re-rendering in place, and a search still streaming in;
+//  - until the member picks a day themselves, a FINISHED load shows the first
+//    day that has classes. While results are still arriving nothing moves:
+//    "empty so far" is not "empty".
+function _pagerPickDay(s) {
+  const days = (s && s.days) || [];
+  if (!days.length) return { day: null, chosen: false };
+  const kept = !!s.sameRange && days.indexOf(s.current) !== -1;
+  const chosen = kept && !!s.chosen;
+  let day = kept ? s.current : days[0];
+  if (!chosen && s.done) day = _pagerFirstWithClasses(days, s.counts) || day;
+  return { day, chosen };
+}
+
+// The one-time "Swipe to change day" line: a touch screen, the first paged
+// range ever shown — and never over or straight after the first-run welcome.
+function _pagerHintWanted(f) {
+  return !!f && !!f.paged && !!f.touch && !f.seen && !f.welcomeUp && !f.welcomedThisSession;
+}
+// ── pure:day-pager:end ──
+
 // Are the counts in this render() pass recent enough to print? A flag, not an
 // argument: eventCard is wrapped by features.js and performance.js, and both
 // forward exactly five parameters.
@@ -6928,73 +7238,589 @@ function render(events, relations, filters, done) {
     <strong>${filtered.length}</strong> class${filtered.length !== 1 ? 'es' : ''}
     ${instructorName ? `with <strong>${escapeHTML(instructorName)}</strong>` : ''}
     ${done ? '' : 'found so far…'}`;
+  // Once the load is over the day strip carries every count: css/redesign.css
+  // drops this line over a paged range (it stays while results stream in).
+  summary.classList.toggle('is-settled', !!done);
   if (done) refreshUpcomingPanel();
-  // Incrementally update day groups
-  const sortedDays = Object.keys(byDay).sort();
-  const todayStr = localDateStr(), tomorrowStr = _addDaysStr(todayStr, 1);
-  for (const day of sortedDays) {
-    // Sort by time. Plain string order, the one _mergeInsertPoints compares
-    // with (and localeCompare was the slow part of sorting a week).
-    const dayEvents = byDay[day].sort((a, b) => (a.start_at < b.start_at ? -1 : a.start_at > b.start_at ? 1 : 0));
-
-    let group = container.querySelector(`[data-day="${day}"]`);
-    if (!group) {
-      // "Today · 18 September": in a week of every studio the header is the only
-      // cue to which day is on screen (it sticks on a phone — css/redesign.css).
-      // No year: with the count beside it the line has to fit 390px.
-      const date = new Date(day + 'T12:00:00');
-      const rel = day === todayStr ? 'Today' : day === tomorrowStr ? 'Tomorrow' : '';
-      const dayLabel = rel
-        ? rel + ' · ' + date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
-        : date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-      group = document.createElement('div');
-      group.className = 'day-group';
-      group.dataset.day = day;
-      group.innerHTML = `<div class="day-header"><span>${dayLabel}</span><span class="day-count"></span></div><div class="day-body"></div>`;
-      const existing = [...container.querySelectorAll('[data-day]')];
-      const after = existing.find(el => el.dataset.day > day);
-      after ? container.insertBefore(group, after) : container.appendChild(group);
-    }
-    // Every pass: a day fills up studio by studio while a search streams in.
-    const countEl = group.querySelector('.day-count');
-    if (countEl) countEl.textContent = dayEvents.length + (dayEvents.length === 1 ? ' class' : ' classes');
-
-    const body = group.querySelector('.day-body');
-
-    // All of the day's classes in ONE list, mixed across types and time-sorted
-    // (no per-category sections) — so multiple selected class types interleave.
-    let grid = body.querySelector('.class-grid');
-    if (!grid) {
-      grid = document.createElement('div');
-      grid.className = 'class-grid';
-      body.appendChild(grid);
-    }
-    // The bare global eventCard both ways: features.js (notify bell) and
-    // performance.js wrap window.eventCard, and a captured reference skips them.
-    const kids = Array.from(grid.children);
-    if (!kids.length) {
-      // An empty grid — every filter tap, renderFromWindow wipes #results first
-      // — is built in one parse instead of a card at a time.
-      grid.innerHTML = dayEvents.map(e => eventCard(e, instrMap, studioMap, locationMap, typeMap)).join('');
-      continue;
-    }
-    // Cards already up (a search streaming in studio by studio): merge the new
-    // ones between them in one forward walk.
-    const have = new Set(kids.map(el => el.dataset.id));
-    const fresh = dayEvents.filter(e => !have.has(String(e.id)));
-    if (!fresh.length) continue;
-    const startById = new Map(dayEvents.map(e => [String(e.id), e.start_at]));
-    const points = _mergeInsertPoints(kids.map(el => startById.get(el.dataset.id)), fresh.map(e => e.start_at));
-    const holder = document.createElement('div');
-    fresh.forEach((evt, i) => {
-      holder.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
-      grid.insertBefore(holder.firstElementChild, kids[points[i]] || null);
-    });
-  }
+  // The days themselves: one group for a single day, the strip + pager for a
+  // range. The model is kept — a change of day repaints from it, with no
+  // search and no second pass over the window. A provisional window (an older
+  // cache under today's key) holds nothing past _windowHeldEnd: those days
+  // are unknown, not empty.
+  const heldEnd = (events === window._windowEvents && window._windowPartial && window._windowHeldEnd) || null;
+  _pagerModel = _pagerModelFor(byDay, filters, done, dataAt, { instrMap, studioMap, locationMap, typeMap }, heldEnd);
+  _paintDays(container, _pagerModel);
 
   // Feature 13: Persist search results to sessionStorage for tab-switch restore
   if (done) _saveLastResultsSoon(events, relations, filters, dataAt);
 }
+
+// ── Discover: one day at a time ──────────────────────────────────────
+// A week of every studio is ~100 cards a day: as one long list, nobody could
+// tell where one day ended. A range of MORE THAN ONE day is now paged — a
+// strip of days (#dayStrip, a tablist; sticky on a phone) over a pager
+// (#dayPager) holding ONE day's cards. Tap a day in the strip, use the
+// arrow keys in the strip, or swipe the list (js/interactions.js
+// hands the gesture to window._dayPagerSwipe). A single-day range is the
+// day's heading and list, as before. Only the day on screen is in the DOM;
+// everything that looks a card up by id already copes with one that is not
+// there (the class sheet books through a button of its own).
+//
+// Which day is showing lives in memory only. (The brief's name for it,
+// window._discoverDay, is taken: `let _discoverDay` above is the day the DATE
+// ROW was last checked against, and the suites pin it.)
+//   window._pagerDay      'YYYY-MM-DD' on screen; null while nothing is paged
+//   window._pagerRangeKey the 'start|end' it belongs to — another range starts
+//                         again on its first day
+//   window._pagerChosen   the member picked it (pill, key, swipe)
+// The decisions are pure:day-pager's; this is only the DOM.
+window._pagerDay = null;
+window._pagerRangeKey = null;
+window._pagerChosen = false;
+let _pagerModel = null;        // what render() last laid out (see _pagerModelFor)
+let _pagerStripLeft = 0;       // the strip's own scroll offset: every filter tap rebuilds #results
+let _pagerStripFocused = false; // …and would drop keyboard focus out of the strip with it
+let _pagerSwap = null;         // { timer, paint }: the old day is sliding out, the new one is not painted yet
+let _pagerSettleTimer = null;  // the slide-in / spring-back clean-up (styles only — safe to drop)
+let _pagerHintLive = false;    // the one-time hint is up for this page session
+let _pagerSawWelcome = false;  // the first-run welcome was on screen in this page session
+const PAGER_HINT_KEY = 'psycle_hint_dayswipe';
+const PAGER_SLIDE_MS = 150;
+
+function _pagerModelFor(byDay, filters, done, dataAt, maps, heldEnd) {
+  const shown = Object.keys(byDay).sort();
+  const days = _pagerDayList(filters.startDate, filters.endDateStr, shown);
+  const counts = {};
+  days.forEach(d => { counts[d] = (byDay[d] || []).length; });
+  // Today / Tomorrow off the clock that BUILT the range: the date row's presets
+  // are the device's date (_applyDateQuick). Read off London's, a member in New
+  // York at 8pm got the heading "Today · 19 September" under a lit "Tomorrow".
+  const todayStr = localDateStr();
+  // Days with nothing to show that may not say "no classes" (_pagerEmptyState).
+  const states = {}, now = Date.now();
+  days.forEach(d => { const s = _pagerEmptyState(d, counts[d], { heldEnd, now, opensMs: _weekOpensMs }); if (s) states[d] = s; });
+  const m = { paged: days.length > 1 && shown.length > 0, days, counts, states, byDay, maps, shown, done: !!done, dataAt, todayStr };
+  if (days.length <= 1) {
+    // A single day. Back on a range later, it starts on its first day: the range changed.
+    window._pagerDay = null; window._pagerRangeKey = null; window._pagerChosen = false;
+    return m;
+  }
+  // A range with nothing to show YET (a search whose first studio had nothing
+  // for these filters): no strip over an empty list, and the day is left alone.
+  if (!m.paged) return m;
+  const rangeKey = (filters.startDate || '') + '|' + (filters.endDateStr || '');
+  const pick = _pagerPickDay({
+    days, counts, done, current: window._pagerDay, chosen: window._pagerChosen,
+    sameRange: rangeKey === window._pagerRangeKey,
+  });
+  if (rangeKey !== window._pagerRangeKey) _pagerStripLeft = 0;
+  window._pagerRangeKey = rangeKey;
+  window._pagerDay = pick.day;
+  window._pagerChosen = pick.chosen;
+  return m;
+}
+
+// Lay the model out in #results. Owns every .day-group, #dayStrip and
+// #dayPager in there: a group for a day that is not shown goes, and so does
+// the pager's chrome when the range is a single day.
+function _paintDays(container, m) {
+  const mode = m.paged ? 'paged' : 'list';
+  if (container.dataset.dayMode !== mode) {
+    // The layout changed under a list nobody wiped (restoreLastResults over a
+    // half-loaded search): start clean rather than mix the two.
+    container.querySelectorAll('.day-group, #dayStrip, #dayPager').forEach(el => el.remove());
+    container.dataset.dayMode = mode;
+  }
+  let host = container;
+  const shown = m.paged ? [window._pagerDay] : m.shown;
+  if (m.paged) {
+    _wireDayPager(container);
+    _paintDayStrip(container, m);
+    host = _ensureDayPager(container, m);
+  } else {
+    _pagerStripFocused = false;
+  }
+  container.querySelectorAll('.day-group').forEach(g => { if (shown.indexOf(g.dataset.day) === -1) g.remove(); });
+  _cardCountsFresh = _countsFresh(m.dataAt, Date.now()); // a change of day repaints long after render()'s pass
+  for (const day of shown) _paintDayGroup(host, day, m);
+}
+
+// One day: its heading and its cards, built — or brought up to date in place
+// while a search streams in studio by studio.
+function _paintDayGroup(host, day, m) {
+  const { instrMap, studioMap, locationMap, typeMap } = m.maps;
+  // Sort by time. Plain string order, the one _mergeInsertPoints compares
+  // with (and localeCompare was the slow part of sorting a week).
+  const dayEvents = (m.byDay[day] || []).sort((a, b) => (a.start_at < b.start_at ? -1 : a.start_at > b.start_at ? 1 : 0));
+
+  // By dataset, never a selector built from the day: it is API text.
+  let group = Array.from(host.children).find(el => el.dataset && el.dataset.day === day);
+  if (!group) {
+    // A single day reads "Today · 18 September", as before. In the pager the
+    // strip already says Today, so its heading is the full date — and the only
+    // cue, with the strip, to which day is on screen.
+    const label = _pagerDayLabel(day, m.todayStr);
+    const dayLabel = escapeHTML(m.paged ? label.long : label.head);
+    group = document.createElement('div');
+    group.className = 'day-group';
+    group.dataset.day = day;
+    group.innerHTML = `<div class="day-header"><span>${dayLabel}</span><span class="day-count"></span></div><div class="day-body"></div>`;
+    host.appendChild(group);
+  }
+  // Every pass: a day fills up studio by studio while a search streams in.
+  // An empty day has no count here: the line under the heading says why it is
+  // empty, and "No classes" over "No classes on this day." said it twice.
+  const countEl = group.querySelector('.day-count');
+  if (countEl) countEl.textContent = dayEvents.length ? _pagerCountText(dayEvents.length) : '';
+
+  const body = group.querySelector('.day-body');
+
+  // A day of the range with nothing on it (or nothing the filters keep): one
+  // line and the one way on. Not .no-results — theme.js flattens that to text.
+  // The WHOLE range empty never gets here: render() has its own block for it.
+  let empty = body.querySelector('.day-empty');
+  if (!dayEvents.length) {
+    const old = body.querySelector('.class-grid');
+    if (old) old.remove();
+    const jump = m.done ? _pagerJump(m.days, m.counts, day) : null;
+    if (!m.done) { if (empty) empty.remove(); return; }
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'day-empty';
+      body.appendChild(empty);
+    }
+    // WHY it is empty decides what it may say (_pagerEmptyState). A week Psycle
+    // has not opened yet says when it opens. A day a provisional window never
+    // held is still being checked — or could not be, and then the way on is the
+    // whole-range state's own retry: a forced search shows the studios that
+    // answer, where a refresh is all-or-nothing. (.empty-loading: once nothing
+    // more is coming, _runRevalidate repaints whatever carries it.)
+    const state = (m.states && m.states[day]) || null;
+    if (state === 'unknown') {
+      empty.innerHTML = _revalInFlight
+        ? '<div class="day-empty-line empty-loading">Checking the latest timetable…</div>'
+        : '<div class="day-empty-line">Couldn\'t check this day</div><button type="button" class="empty-action primary" data-pager-retry>Try again</button>';
+      return;
+    }
+    const line = (state === 'unopened' && _pagerOpensText(day, m.todayStr)) || 'No classes on this day.';
+    empty.innerHTML = `<div class="day-empty-line">${escapeHTML(line)}</div>` + (jump
+      ? `<button type="button" class="empty-action primary" data-pager-day="${jump.day}">${jump.dir > 0 ? 'Next' : 'Previous'} day with classes: ${escapeHTML(_pagerDayLabel(jump.day, m.todayStr).short)}</button>`
+      : '');
+    return;
+  }
+  if (empty) empty.remove();
+
+  // All of the day's classes in ONE list, mixed across types and time-sorted
+  // (no per-category sections) — so multiple selected class types interleave.
+  let grid = body.querySelector('.class-grid');
+  if (!grid) {
+    grid = document.createElement('div');
+    grid.className = 'class-grid';
+    body.appendChild(grid);
+  }
+  // The bare global eventCard both ways: features.js (notify bell) and
+  // performance.js wrap window.eventCard, and a captured reference skips them.
+  const kids = Array.from(grid.children);
+  if (!kids.length) {
+    // An empty grid — every filter tap, renderFromWindow wipes #results first,
+    // and every change of day — is built in one parse instead of a card at a time.
+    grid.innerHTML = dayEvents.map(e => eventCard(e, instrMap, studioMap, locationMap, typeMap)).join('');
+    return;
+  }
+  // Cards already up (a search streaming in studio by studio): merge the new
+  // ones between them in one forward walk.
+  const have = new Set(kids.map(el => el.dataset.id));
+  const fresh = dayEvents.filter(e => !have.has(String(e.id)));
+  if (!fresh.length) return;
+  const startById = new Map(dayEvents.map(e => [String(e.id), e.start_at]));
+  const points = _mergeInsertPoints(kids.map(el => startById.get(el.dataset.id)), fresh.map(e => e.start_at));
+  const holder = document.createElement('div');
+  fresh.forEach((evt, i) => {
+    holder.innerHTML = eventCard(evt, instrMap, studioMap, locationMap, typeMap);
+    grid.insertBefore(holder.firstElementChild, kids[points[i]] || null);
+  });
+}
+
+// The strip: one tab per day of the range, each with its matching-class
+// count. Updated IN PLACE while the days are the same (a search streaming in,
+// a change of day) so focus and the row's scroll offset stay put; rebuilt
+// after a wipe, and then both are put back.
+function _paintDayStrip(container, m) {
+  const key = m.days.join(',');
+  let strip = document.getElementById('dayStrip');
+  if (strip && (strip.parentNode !== container || strip.dataset.days !== key)) { strip.remove(); strip = null; }
+  const built = !strip;
+  if (built) {
+    strip = document.createElement('div');
+    strip.id = 'dayStrip';
+    strip.className = 'day-strip';
+    strip.setAttribute('role', 'tablist');
+    strip.setAttribute('aria-label', 'Days');
+    strip.dataset.days = key;
+    strip.innerHTML = m.days.map(d =>
+      `<button type="button" role="tab" class="day-pill" id="dayTab-${d}" data-day="${d}" aria-controls="dayPager">` +
+      `<span class="day-pill-label">${escapeHTML(_pagerDayLabel(d, m.todayStr).short)}</span><span class="day-pill-count"></span></button>`).join('');
+    strip.addEventListener('scroll', () => { _pagerStripLeft = strip.scrollLeft; }, { passive: true });
+    strip.addEventListener('focusin', () => { _pagerStripFocused = true; });
+    strip.addEventListener('focusout', e => {
+      if (e.relatedTarget) { _pagerStripFocused = false; return; }
+      // Focus went NOWHERE: a tap on the page, another window — or #results
+      // wiped from under it (Chrome says so as the tab is removed; Safari says
+      // nothing). Then the rebuild follows in this same task and reads the
+      // flag before this timer clears it.
+      setTimeout(() => {
+        const now = document.getElementById('dayStrip');
+        if (!now || !now.contains(document.activeElement)) _pagerStripFocused = false;
+      }, 0);
+    });
+    strip.addEventListener('keydown', _dayStripKeydown);
+    const summary = container.querySelector('.summary');
+    container.insertBefore(strip, summary ? summary.nextSibling : container.firstChild);
+  }
+  strip.querySelectorAll('.day-pill').forEach(pill => {
+    const d = pill.dataset.day, n = m.counts[d] || 0, on = d === window._pagerDay;
+    // A day that was never loaded, or is not open for booking yet, prints no
+    // "0" — that is a claim about the timetable — and the first is not quiet
+    // either: nobody knows that it is empty.
+    const state = (m.states && m.states[d]) || null;
+    pill.classList.toggle('active', on);
+    pill.classList.toggle('is-empty', n === 0 && state !== 'unknown');
+    pill.classList.remove('is-target');
+    pill.setAttribute('aria-selected', String(on));
+    pill.setAttribute('aria-label', _pagerSpoken(d, m.todayStr, n, state));
+    pill.tabIndex = on ? 0 : -1; // one tab stop; the arrow keys move inside it
+    const countEl = pill.querySelector('.day-pill-count');
+    const count = state ? '' : String(n);
+    if (countEl && countEl.textContent !== count) countEl.textContent = count;
+  });
+  if (!built) return;
+  // A rebuild: the row goes back to where the member left it — and only a
+  // day that is out of sight moves it (a new range starts from 0, above).
+  // Rebuilt while another tab is up (a resume re-renders Discover in place) it
+  // has no layout box: the offset cannot be written and nothing can be
+  // measured. It is owed instead — switchTab (tabs.js) pays it, as it does
+  // for the date row (_revealActiveDatePill).
+  window._dayStripRevealOwed = !(strip.clientWidth > 0);
+  strip.scrollLeft = _pagerStripLeft;
+  _revealDayPill(strip);
+  // Focus that was in the strip when #results was wiped fell to <body>: hand
+  // it back. Never taken from anything else that holds it by now.
+  const at = document.activeElement;
+  if (_pagerStripFocused && (!at || at === document.body)) {
+    const sel = strip.querySelector('.day-pill.active');
+    if (sel) { try { sel.focus({ preventScroll: true }); } catch (e) {} }
+  } else {
+    _pagerStripFocused = false;
+  }
+}
+
+// Bring the selected day into view inside the strip — the ROW's own
+// scrollLeft, never scrollIntoView(): that scrolls the page as well.
+function _revealDayPill(strip) {
+  try {
+    const pill = strip.querySelector('.day-pill.active');
+    if (!pill || !(strip.clientWidth > 0) || !(strip.scrollWidth > strip.clientWidth)) return;
+    const rowBox = strip.getBoundingClientRect(), box = pill.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(strip).columnGap) || 0;
+    const next = _scrollLeftToReveal(strip.scrollLeft, strip.clientWidth, box.left - rowBox.left + strip.scrollLeft, box.width, pad);
+    if (next !== strip.scrollLeft) strip.scrollLeft = next;
+    _pagerStripLeft = strip.scrollLeft;
+  } catch (e) { /* a nicety */ }
+}
+
+// switchTab('discover') pays what _paintDayStrip owed (window._dayStripRevealOwed):
+// the strip is laid out now, so its offset goes back and the selected day comes
+// into view. Without it a member who had picked Thursday came back to a strip
+// showing Today · Tomorrow · Sun, the lit pill out of sight.
+function _restoreDayStrip() {
+  const strip = document.getElementById('dayStrip');
+  if (!strip) return;
+  strip.scrollLeft = _pagerStripLeft;
+  _revealDayPill(strip);
+}
+
+// A theme re-measures every pill without the strip being rebuilt: Terminal and
+// Handheld swap in a monospace body face, each pill widens, the row's
+// scrollLeft stays put — and the lit day (a picked Tue 22) sat cut off at the
+// right edge, count and all. Picked in Membership → Appearance the strip has
+// no layout box, so it is owed like a rebuild behind another tab and
+// switchTab('discover') pays it; changed with Discover up (the header toggle
+// out of a mono theme narrows the pills again) it is brought in at once. The
+// date row's lit pill is a pill in the same kind of row: _revealActiveDatePill
+// owes itself when it cannot measure. Neither moves a pill already in view.
+function _revealPillsAfterThemeChange() {
+  const strip = document.getElementById('dayStrip');
+  if (strip) {
+    if (strip.clientWidth > 0) _revealDayPill(strip);
+    else window._dayStripRevealOwed = true;
+  }
+  _revealActiveDatePill();
+}
+PsycleEvents.on('theme:changed', _revealPillsAfterThemeChange);
+
+// The pager: the tab panel of whichever day is selected. Returns the track —
+// the element a swipe moves, and the host of the day's group.
+function _ensureDayPager(container, m) {
+  let pager = document.getElementById('dayPager');
+  if (pager && pager.parentNode !== container) { pager.remove(); pager = null; }
+  if (!pager) {
+    pager = document.createElement('div');
+    pager.id = 'dayPager';
+    pager.className = 'day-pager';
+    pager.setAttribute('role', 'tabpanel');
+    pager.innerHTML = '<div class="day-track"></div>';
+    container.appendChild(pager);
+  }
+  pager.setAttribute('aria-labelledby', 'dayTab-' + window._pagerDay);
+  _paintDayHint(pager, m);
+  return pager.querySelector('.day-track');
+}
+
+// "Swipe to change day" — once, ever. Marked seen the moment it is first
+// shown; it then stays up for this page session (every filter tap rebuilds
+// #results) until it is tapped away or a swipe has changed the day.
+function _paintDayHint(pager, m) {
+  let hint = pager.querySelector('.day-hint');
+  if (!_pagerHintLive) {
+    let seen = true, touch = false;
+    try { seen = localStorage.getItem(PAGER_HINT_KEY) === '1'; } catch (e) {}
+    try { touch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) {}
+    // The welcome is up (in the iOS app, its holding cover): a hint shown now
+    // would sit under it, spent. Judged by the overlay — it is inserted while
+    // app.js is evaluated, before any list is drawn. A missing completion flag
+    // says nothing: a launch on a #bookings link skips the welcome and leaves
+    // it unset, and that newcomer is exactly who was never told about swiping.
+    const welcomeUp = !!document.getElementById('onboardOverlay');
+    if (welcomeUp) _pagerSawWelcome = true;
+    // …or it was opened and closed with no paint of this list in between (at
+    // launch, or a replay from Settings): the welcome says so itself (_onboardReveal).
+    if (_pagerHintWanted({ paged: m.paged, touch, seen, welcomeUp, welcomedThisSession: _pagerSawWelcome || window._psycleWelcomeSeen === true })) {
+      _pagerHintLive = true;
+      try {
+        if (typeof window._psycleSafeSetItem === 'function') window._psycleSafeSetItem(PAGER_HINT_KEY, '1');
+        else localStorage.setItem(PAGER_HINT_KEY, '1');
+      } catch (e) {}
+    }
+  }
+  if (!_pagerHintLive) { if (hint) hint.remove(); return; }
+  if (hint) return;
+  hint = document.createElement('button');
+  hint.type = 'button';
+  hint.className = 'day-hint';
+  hint.setAttribute('aria-label', 'Swipe to change day. Dismiss');
+  hint.innerHTML = '<span>Swipe to change day</span><span class="day-hint-x" aria-hidden="true">×</span>';
+  pager.insertBefore(hint, pager.firstChild);
+}
+
+function _dismissDayHint() {
+  _pagerHintLive = false;
+  const hint = document.querySelector('#dayPager .day-hint');
+  if (hint) hint.remove();
+}
+
+// One click listener on #results (it outlives every wipe): day pills, the
+// an empty day's way on, and the hint.
+function _wireDayPager(container) {
+  if (container._pagerWired) return;
+  container._pagerWired = true;
+  container.addEventListener('click', e => {
+    const t = e.target && typeof e.target.closest === 'function' ? e.target : null;
+    if (!t) return;
+    if (t.closest('.day-hint')) { _dismissDayHint(); return; }
+    if (t.closest('[data-pager-retry]')) { search({ force: true }); return; } // "Couldn't check this day"
+    const to = t.closest('.day-pill, [data-pager-day]');
+    if (to) showDiscoverDay(to.dataset.day || to.dataset.pagerDay, to.classList.contains('day-pill') ? 'tap' : 'jump');
+  });
+}
+
+// Left / Right / Home / End with focus in the strip. The tab that becomes
+// selected takes focus (tabs with automatic activation).
+function _dayStripKeydown(e) {
+  const m = _pagerModel;
+  if (!m || !m.paged || e.altKey || e.ctrlKey || e.metaKey) return;
+  let day = null;
+  if (e.key === 'ArrowLeft') day = _pagerStep(m.days, window._pagerDay, -1);
+  else if (e.key === 'ArrowRight') day = _pagerStep(m.days, window._pagerDay, 1);
+  else if (e.key === 'Home') day = m.days[0];
+  else if (e.key === 'End') day = m.days[m.days.length - 1];
+  else return;
+  e.preventDefault(); // Home / End would scroll the page
+  if (day) showDiscoverDay(day, 'key');
+}
+
+function _pagerReducedMotion() {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+}
+
+// A change of day puts the top of the day under the strip — and moves nothing
+// when that is where it already is (filters still on screen above it). On a
+// phone .tab-content scrolls and the strip is stuck to its top; wider, the
+// document scrolls and the strip left with it, so it is brought back under
+// the tab bar.
+function _pagerScrollToTop() {
+  const strip = document.getElementById('dayStrip'), pager = document.getElementById('dayPager');
+  if (!strip || !pager) return;
+  const sc = document.querySelector('.tab-content');
+  const inner = !!sc && sc.scrollHeight > sc.clientHeight + 1 && getComputedStyle(sc).overflowY !== 'hidden' &&
+    getComputedStyle(sc).overflowY !== 'visible';
+  let edge = 0;
+  if (inner) edge = sc.getBoundingClientRect().top;
+  else {
+    const bar = document.querySelector('.tab-bar');
+    if (bar && getComputedStyle(bar).position === 'sticky') edge = Math.max(0, bar.getBoundingClientRect().bottom);
+  }
+  const s = strip.getBoundingClientRect();
+  const delta = pager.getBoundingClientRect().top - (Math.max(s.top, edge) + s.height);
+  if (delta >= -1) return;
+  if (inner) sc.scrollTop += delta; else window.scrollBy(0, delta);
+}
+
+// Show another day of the loaded range. No search, nothing saved: the model
+// render() kept is repainted. Refused while a Book button is mid-request or a
+// dialog is up — that flow holds a button in the list (as _renderWindowInPlace).
+//   how: 'tap' | 'key' | 'nav' | 'jump' | 'swipe'
+function showDiscoverDay(day, how) {
+  const m = _pagerModel;
+  const container = document.getElementById('results');
+  if (!m || !m.paged || !container || !document.getElementById('dayPager')) return false;
+  if (m.days.indexOf(day) === -1 || day === window._pagerDay) return false;
+  if (_discoverBusy()) return false;
+  const dir = day > window._pagerDay ? 1 : -1;
+  window._pagerDay = day;
+  window._pagerChosen = true;
+  if (how === 'swipe') _dismissDayHint();
+  _paintDayStrip(container, m);
+  const strip = document.getElementById('dayStrip');
+  if (strip) {
+    _revealDayPill(strip);
+    if (how === 'key') { const sel = strip.querySelector('.day-pill.active'); if (sel) { try { sel.focus({ preventScroll: true }); } catch (e) {} } }
+  }
+  announce(_pagerSpoken(day, m.todayStr, m.counts[day] || 0, (m.states && m.states[day]) || null));
+  _swapPagerDay(container, dir);
+  return true;
+}
+
+function stepDiscoverDay(dir, how) {
+  const m = _pagerModel;
+  const day = m && m.paged ? _pagerStep(m.days, window._pagerDay, dir) : null;
+  return day ? showDiscoverDay(day, how || 'nav') : false;
+}
+
+// Old day out, new day in: a short slide the way the days run. Reduced motion
+// — or a list that has been rebuilt meanwhile — simply swaps. Whatever runs,
+// the day painted is window._pagerDay AS IT IS BY THEN: two quick taps end on
+// the second day, and a render() that landed in between already drew it.
+function _swapPagerDay(container, dir) {
+  if (_pagerSwap) clearTimeout(_pagerSwap.timer); // a second change mid-slide: one paint, of the latest day
+  clearTimeout(_pagerSettleTimer);
+  _pagerSwap = null;
+  const track = container.querySelector('#dayPager .day-track');
+  const paint = () => {
+    const m = _pagerModel;
+    if (!m || !m.paged || !container.isConnected) return;
+    // An empty day's "Next day with classes" button is rebuilt away with the
+    // day. Pressed from the keyboard, focus would fall to <body>: it goes to
+    // the strip's selected day instead — the pills are the tappable (and
+    // arrow-key) twin of the swipe; the heading carries no buttons.
+    const at = document.activeElement;
+    const held = at && typeof at.closest === 'function' && at.closest('#dayPager') ? at.closest('[data-pager-day]') : null;
+    _paintDays(container, m);
+    if (held) {
+      const to = document.querySelector('#dayStrip .day-pill[aria-selected="true"]');
+      if (to) { try { to.focus({ preventScroll: true }); } catch (e) {} }
+    }
+    const now = container.querySelector('#dayPager .day-track');
+    // From here on this track's cards skip their own entrance: it would replay
+    // under the slide, on every change of day. (Never taken off again — lifting
+    // `animation: none` is what would start it.)
+    if (now) now.classList.add('is-swapped');
+    _pagerScrollToTop();
+  };
+  if (!track || _pagerReducedMotion()) { _resetDayTrack(track); paint(); return; }
+  const w = (track.parentNode && track.parentNode.clientWidth) || 0;
+  const slide = `transform ${PAGER_SLIDE_MS}ms ease-out, opacity ${PAGER_SLIDE_MS}ms ease-out`;
+  track.style.transition = slide;
+  track.style.transform = `translateX(${-dir * Math.max(w * 0.35, 48)}px)`;
+  track.style.opacity = '0';
+  const swap = { paint, timer: setTimeout(() => {
+    if (_pagerSwap === swap) _pagerSwap = null;
+    paint();
+    const now = container.querySelector('#dayPager .day-track');
+    if (!now) return;
+    now.style.transition = 'none';
+    now.style.transform = `translateX(${dir * 48}px)`;
+    now.style.opacity = '0';
+    void now.offsetWidth; // commit the starting point before the transition is switched back on
+    now.style.transition = slide;
+    now.style.transform = 'translateX(0)';
+    now.style.opacity = '1';
+    _pagerSettleTimer = setTimeout(() => _resetDayTrack(now), PAGER_SLIDE_MS + 30);
+  }, PAGER_SLIDE_MS) };
+  _pagerSwap = swap;
+}
+
+// A day still sliding out has not been painted yet. Whoever needs the list to
+// BE the selected day right now (a new drag) paints it first — the timer is
+// never simply dropped, or the old day would stay under the new day's tab.
+function _flushPagerSwap() {
+  const swap = _pagerSwap;
+  if (!swap) return;
+  _pagerSwap = null;
+  clearTimeout(swap.timer);
+  swap.paint();
+}
+
+function _resetDayTrack(track) {
+  if (!track) return;
+  track.style.transition = '';
+  track.style.transform = '';
+  track.style.opacity = '';
+  track.style.willChange = '';
+}
+
+// The swipe, as js/interactions.js's _psycleSwipe reports it (that helper owns
+// the gesture rules — horizontal intent, the 25% / flick release, resistance
+// at an edge; this only says where it may start and what it moves).
+window._dayPagerSwipe = {
+  // May a touch on `target` become a day swipe?
+  canStart(target) {
+    const m = _pagerModel;
+    if (!m || !m.paged || !target || typeof target.closest !== 'function' || !target.closest('#dayPager')) return false;
+    let overlay = false;
+    try { overlay = _dialogOpen() || _ownKeysOverlayUp() || _overlayStack.length > 0; } catch (e) {}
+    return !overlay && !_discoverBusy();
+  },
+  edges() {
+    const m = _pagerModel;
+    return { prev: !!(m && _pagerStep(m.days, window._pagerDay, -1)), next: !!(m && _pagerStep(m.days, window._pagerDay, 1)) };
+  },
+  // The list follows the finger; the day it is heading for lights up in the strip.
+  drag(offset, dx) {
+    const m = _pagerModel;
+    if (!m || _pagerReducedMotion()) return;
+    _flushPagerSwap();
+    clearTimeout(_pagerSettleTimer);
+    const track = document.querySelector('#dayPager .day-track');
+    if (!track) return;
+    track.style.transition = 'none';
+    track.style.willChange = 'transform';
+    track.style.opacity = '';
+    track.style.transform = `translateX(${offset}px)`;
+    const to = _pagerStep(m.days, window._pagerDay, dx < 0 ? 1 : -1);
+    document.querySelectorAll('#dayStrip .day-pill').forEach(p => p.classList.toggle('is-target', !!to && p.dataset.day === to));
+  },
+  // dir: 1 = next day (swiped left), -1 = previous, 0 = spring back.
+  release(r) {
+    document.querySelectorAll('#dayStrip .day-pill.is-target').forEach(p => p.classList.remove('is-target'));
+    if (r && r.dir && !r.cancelled && stepDiscoverDay(r.dir, 'swipe')) return;
+    const track = document.querySelector('#dayPager .day-track');
+    if (!track || !track.style.transform) return;
+    track.style.transition = `transform ${PAGER_SLIDE_MS}ms ease-out`;
+    track.style.transform = 'translateX(0)';
+    clearTimeout(_pagerSettleTimer);
+    _pagerSettleTimer = setTimeout(() => _resetDayTrack(track), PAGER_SLIDE_MS + 30);
+  },
+};
 
 // ── Studio multi-select chips ────────────────────────────────────
 // selectedLocations: Set of location IDs (strings). Empty = all studios.
@@ -7566,6 +8392,9 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   if (document.getElementById('psycleConfirmOverlay')) return;
   if (!e.target || !e.target.closest || !e.target.closest('#controlsPanel')) return;
+  // The Filters bar, its chips and "Clear" are buttons with a job of their own:
+  // Enter there opens the panel / lifts a filter, and must not ALSO search.
+  if (e.target.closest('#controlsBar')) return;
   search();
 });
 
@@ -7983,7 +8812,6 @@ function renderMyBookings() {
         : currentUser
         ? `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
            <div class="tab-empty-title">Nothing booked<br>— yet</div>
-           <div class="tab-empty-sub">Find your next ride, lift, or flow and it'll show up here.</div>
            <button class="tab-empty-btn" onclick="switchTab('discover')">Find a class</button>`
         : `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
            <div class="tab-empty-title">Your bookings<br>live here</div>
@@ -9113,7 +9941,7 @@ window.findSimilar = function(eventId) {
     '<button class="find-similar-option" data-action="same-time">' +
       '<span class="find-similar-icon">&#128336;</span>' +
       '<span class="find-similar-label">Same time, any instructor</span>' +
-      '<span class="find-similar-desc">' + dayName + 's at ' + timeLabel + ', any instructor</span>' +
+      '<span class="find-similar-desc">' + dayName + 's at ' + timeLabel + '</span>' +
     '</button>';
 
   // Position near the trigger button
@@ -9155,9 +9983,9 @@ window.findSimilar = function(eventId) {
     } else if (action === 'same-instructor') {
       // This instructor, this week, anywhere and in any class type — a studio
       // or class-type filter left on Discover hid the classes the toast
-      // announces. Today + 7 IS the week preset, and is named as such: a mode
-      // left over from an earlier Today/Tomorrow tap lit nothing on the date
-      // row and recorded this search as "Today".
+      // announces. "This week" IS the week preset, and is named as such: a
+      // mode left over from an earlier Today/Tomorrow tap lit nothing on the
+      // date row and recorded this search as "Today".
       _focusSearch({ instructorId: evt.instructor_id, mode: 'week' });
       toast('Showing classes with ' + instrName, 'info');
     } else if (action === 'same-time') {
@@ -9254,7 +10082,7 @@ window.shareClass = function(eventId) {
     navigator.share({ text: message }).catch(function() {});
   } else if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(message).then(function() {
-      toast('Copied to clipboard!', 'success');
+      toast('Copied to clipboard', 'success');
     }).catch(function() {
       toast('Could not copy to clipboard', 'error');
     });
@@ -9268,7 +10096,7 @@ window.shareClass = function(eventId) {
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    toast('Copied to clipboard!', 'success');
+    toast('Copied to clipboard', 'success');
   }
 };
 
@@ -10400,7 +11228,7 @@ function _currentSearchState() {
     availableOnly: _availableOnly,
     dateMode: _dateQuickMode || null,
     startDate: document.getElementById('startDate')?.value || '',
-    daysAhead: document.getElementById('daysAhead')?.value || '7',
+    daysAhead: document.getElementById('daysAhead')?.value || '6',
   };
 }
 
@@ -10502,9 +11330,12 @@ function getSearchPresets() {
         ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
         selectedReformerSubs.clear();
         REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
+        // The week preset's own range (it wrote 7 by hand: eight days, and no
+        // longer the window "7 days" lights up for).
+        const week = _dateModeWindow('week', localDateStr());
         _dateQuickMode = 'week';
-        document.getElementById('startDate').value = localDateStr();
-        document.getElementById('daysAhead').value = 7;
+        document.getElementById('startDate').value = week.startDate;
+        document.getElementById('daysAhead').value = week.daysAhead;
         document.querySelectorAll('.date-quick-btn').forEach(b => {
           b.classList.toggle('active', b.textContent.trim() === '7 days');
         });
@@ -10641,6 +11472,11 @@ function _focusSearch(o) {
 
   _syncFilterUI();
   if (typeof switchTab === 'function') switchTab('discover');
+  // A search made FOR the member is a fresh view: over the same range the pager
+  // would keep a day they had swiped to — "Showing classes with Alex" over "No
+  // classes on this day", because Alex does not teach on Sundays. Unchosen, the
+  // finished render lands on the first day that has a match (_pagerPickDay).
+  window._pagerChosen = false;
   search();
 }
 
@@ -10677,6 +11513,7 @@ function applySavedSearch(obj) {
 
   _syncFilterUI();
   if (typeof switchTab === 'function') switchTab('discover');
+  window._pagerChosen = false; // a fresh view, as in _focusSearch: the first day with a match
   search();
 }
 
@@ -10687,6 +11524,7 @@ function applySearchPreset(key) {
   preset.apply();
   _syncFilterUI();
   if (typeof switchTab === 'function') switchTab('discover');
+  window._pagerChosen = false; // a fresh view, as in _focusSearch
   search();
 }
 
@@ -10749,129 +11587,455 @@ window.applySearchPreset = applySearchPreset;
 window.renderDiscoverPresets = renderDiscoverPresets;
 
 // ════════════════════════════════════════════════════════════════
-// Feature: Onboarding tour (first run only)
+// Feature: First-run welcome (full screen, four swipeable pages)
 // ════════════════════════════════════════════════════════════════
 const ONBOARDING_KEY = 'psycle_onboarded_v1';
 
-// Centred modal carousel — just shows the key things. No element targeting,
-// so nothing can misalign. Icons are trusted static SVGs (inherit accent).
-const _OB_ICON = {
-  logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="13" r="3"/><circle cx="18" cy="13" r="3"/><path d="M9 13c1-1.7 2-1.7 3 0s2 1.7 3 0"/></svg>',
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
-  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>',
-  bars: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-6M12 20V8M19 20V5"/></svg>',
-};
+// ── pure:welcome:start ── (no document / app state; tests/suites/8d-welcome.js evaluates this block)
+// Should the welcome open at launch? Asked more than once per launch (see
+// _maybeStartOnboarding), so every answer has to be safe to reach twice.
+//   'show'  a newcomer, and nothing else wants the screen
+//   'done'  not a newcomer: write the completion flag quietly, show nothing
+//   'skip'  not this launch — the flag is left alone, so the next one asks again
+//   'wait'  the iOS app before its storage restore has landed: the flag or a
+//           token may be about to come back, so nobody is taught anything yet
+function _welcomeDecision(s) {
+  s = s || {};
+  if (s.completed || s.smoke) return 'skip';
+  // Signed in on this install at some point, or a history to show for it. A
+  // member whose flag went missing (an import, a restore that brought the
+  // token back but not the flag) is never walked through a tutorial over
+  // their own bookings. (History > 3 was the old tour's rule.)
+  if (s.hasToken || Number(s.historyCount) > 3) return 'done';
+  if (s.restorePending) return 'wait';
+  // A launch that is going somewhere — a #tab link, a notification or widget
+  // tap on its way to a class, a sheet already open — is not the moment.
+  if (s.deepLink || s.dialogUp) return 'skip';
+  return 'show';
+}
 
-const ONBOARDING_STEPS = [
-  { icon: _OB_ICON.logo, title: 'Psync', body: 'An independent companion for booking Psycle classes.' },
-  { icon: _OB_ICON.search, title: 'Search and book', body: 'Filter the timetable by instructor, studio, type or time, then book in a tap. Your usual bike is remembered.' },
-  { icon: _OB_ICON.calendar, title: 'Plan the week', body: 'Save the classes you ride every week as your usual week in My Bookings, then book them together when the timetable opens. You check the list first.' },
-  { icon: _OB_ICON.bars, title: 'Track your training', body: 'Streaks, cost per class and instructor suggestions, from your booking history.' },
-];
+// The four pages: a title and ONE sentence each. Widgets and reminders exist
+// in the iOS app only, so the web build says nothing about them — and only a
+// touch screen is told to swipe: the day pager's swipe is touch-only (its own
+// hint is gated on a coarse pointer too), and with a mouse the days are
+// stepped through with the strip, the arrow keys or a swipe. The note on
+// the first page is required wording, not decoration.
+function _welcomePages(native, touch) {
+  return [
+    { id: 'welcome', title: 'Psync', body: 'The quick way to find and book your Psycle classes.',
+      note: 'An independent companion for Psycle London members, not affiliated with or endorsed by Psycle.' },
+    { id: 'find', title: 'Find your class', body: touch ? 'Choose your dates, then swipe between days.' : 'Choose your dates, then step through the days.' },
+    { id: 'book', title: 'Book in two taps', body: 'Your usual spot is ready to confirm, and you are warned about clashes and the late-cancel window.' },
+    { id: 'keep', title: 'Keep up', body: native
+      ? 'Everything you hold in one place, with widgets and reminders on iPhone.'
+      : 'Everything you hold in one place.' },
+  ];
+}
+
+function _welcomeClamp(idx, count) {
+  return Math.max(0, Math.min(Math.max(0, count - 1), Number(idx) || 0));
+}
+
+// One finger, two possible owners: the page under it (vertical) or the pager
+// (horizontal). Horizontal only once it clearly is — the Discover day pager's
+// rule — so a slanted scroll never turns a page. '' = too early to say.
+function _welcomeSwipeAxis(dx, dy) {
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  if (ax > 12 && ax > 1.5 * ay) return 'x';
+  if (ay > 12) return 'y';
+  return '';
+}
+
+// How far the pages follow the finger: all the way between pages, a third of
+// it (it resists, then stays) where there is no page in that direction.
+function _welcomeDragOffset(idx, count, dx) {
+  const noPage = (idx <= 0 && dx > 0) || (idx >= count - 1 && dx < 0);
+  return noPage ? dx / 3 : dx;
+}
+
+// Where a released drag lands: past a quarter of the width, or a quick flick,
+// turns the page; anything less springs back.
+function _welcomeSwipeTarget(idx, count, dx, width, ms) {
+  const far = Math.abs(dx) > (Number(width) || 0) * 0.25;
+  const flick = Math.abs(dx) > 40 && ms > 0 && ms < 250;
+  if (!far && !flick) return _welcomeClamp(idx, count);
+  return _welcomeClamp(idx + (dx < 0 ? 1 : -1), count);
+}
+
+// Labels for the miniature day strip, from a calendar date the caller read
+// off the device (y, m 1–12, d). Decoration — never timetable data.
+function _welcomeDayLabels(y, m, d, n) {
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const day = new Date(Date.UTC(y, m - 1, d + i));
+    out.push(i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : names[day.getUTCDay()] + ' ' + day.getUTCDate());
+  }
+  return out;
+}
+// ── pure:welcome:end ──
 
 let _onboardIdx = 0;
+let _onboardPages = [];
+let _onboardOpener = null; // what had focus when the welcome opened — it goes back there
+let _onboardTurnedAt = 0; // when the page last turned (see the click handler in startOnboarding)
+let _onboardLaunchSettled = false; // this launch's "should it show?" has its answer
 
-function _onboardCleanup() {
-  document.getElementById('onboardOverlay')?.remove();
+function _onboardNative() {
+  try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch { return false; }
+}
+
+// `only`: the overlay a fade-out was started on. If the welcome was reopened
+// during those 220ms, the timer must not take the new one away.
+function _onboardCleanup(only) {
+  const ov = document.getElementById('onboardOverlay');
+  if (only && ov !== only) return;
+  if (ov) ov.remove();
   document.removeEventListener('keydown', _onboardKey);
+  const opener = _onboardOpener;
+  _onboardOpener = null;
+  if (opener && opener.isConnected && typeof opener.focus === 'function') {
+    try { opener.focus({ preventScroll: true }); } catch {}
+  }
 }
 
 function _onboardFinish(thenSignIn) {
   try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch {}
   const ov = document.getElementById('onboardOverlay');
   // (_psycleClosing: fading, but no longer a dialog to announce into — see _dialogLiveRegion.)
-  if (ov) { ov._psycleClosing = true; ov.classList.remove('show'); setTimeout(_onboardCleanup, 220); }
+  if (ov) { ov._psycleClosing = true; ov.classList.remove('show'); setTimeout(() => _onboardCleanup(ov), 220); }
   else _onboardCleanup();
   if (thenSignIn && typeof openLoginPopup === 'function') openLoginPopup();
 }
 
+// The buttons Tab may land on right now (Back is `hidden` on the first page,
+// "Look around first" disabled everywhere but the last).
+function _onboardButtons(ov) {
+  return Array.from(ov.querySelectorAll('button')).filter(b => !b.disabled && !b.hidden);
+}
+
+// Own keys, like confirmModal (_ownKeysOverlayUp makes the shared overlay
+// handler stand aside while .onboard-overlay exists). Enter and Space are left
+// to the focused button: advancing on Enter here as well made one press on
+// "Skip" do two things.
 function _onboardKey(e) {
-  if (e.key === 'Escape') _onboardFinish();
-  else if (e.key === 'ArrowRight' || e.key === 'Enter') _onboardAdvance();
-  else if (e.key === 'ArrowLeft' && _onboardIdx > 0) { _onboardIdx--; _onboardRender(); }
+  const ov = document.getElementById('onboardOverlay');
+  if (!ov || ov._psycleClosing) return;
+  if (e.key === 'Escape') { e.preventDefault(); _onboardFinish(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); _onboardGo(_onboardIdx + 1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); _onboardGo(_onboardIdx - 1); }
+  else if (e.key === 'Tab') {
+    const items = _onboardButtons(ov);
+    if (!items.length) return;
+    e.preventDefault();
+    const at = items.indexOf(document.activeElement);
+    const to = e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at === items.length - 1 ? 0 : at + 1);
+    items[to].focus();
+  }
 }
 
 // Signed out = no session at all. A stored token whose /profile check is still
-// pending (the tour opens ~2s after launch) or couldn't reach Psycle is a
-// member who HAS signed in — same rule as updateDiscoverEmptyState — so the
-// last step must not say "Sign in" or open the login page for them.
+// pending or couldn't reach Psycle is a member who HAS signed in — same rule as
+// updateDiscoverEmptyState — so the last page must not offer "Sign in" or open
+// the login page for them (they can only have come here from Settings).
 function _onboardSignedOut() {
   return !currentUser && !getBearerToken();
 }
 
-function _onboardAdvance() {
-  if (_onboardIdx >= ONBOARDING_STEPS.length - 1) {
-    _onboardFinish(_onboardSignedOut()); // last step → finish, opening sign-in if signed out
-    return;
+function _onboardGo(idx) {
+  const to = _welcomeClamp(idx, _onboardPages.length);
+  const moved = to !== _onboardIdx;
+  _onboardIdx = to;
+  if (moved) _onboardTurnedAt = Date.now();
+  _onboardRender(!moved); // not moved = a drag that sprang back, or an arrow key at either end
+}
+
+// Updated in place, never rebuilt: the dialog keeps its focus and the live
+// region announce() made inside it.
+function _onboardRender(quiet) {
+  const ov = document.getElementById('onboardOverlay');
+  const page = _onboardPages[_onboardIdx];
+  if (!ov || !page) return;
+  const last = _onboardIdx === _onboardPages.length - 1;
+  const track = ov.querySelector('.onboard-track');
+  if (track) {
+    track.classList.remove('is-dragging');
+    track.style.transform = `translateX(${-100 * _onboardIdx}%)`;
   }
-  _onboardIdx++;
-  _onboardRender();
+  ov.querySelectorAll('.onboard-page').forEach((el, i) => el.setAttribute('aria-hidden', String(i !== _onboardIdx)));
+  ov.querySelectorAll('.onboard-dot').forEach((el, i) => el.classList.toggle('active', i === _onboardIdx));
+
+  const back = ov.querySelector('.onboard-back');
+  const next = ov.querySelector('.onboard-next');
+  const look = ov.querySelector('.onboard-look');
+  const offerSignIn = last && _onboardSignedOut();
+  const held = document.activeElement;
+  if (back) back.hidden = _onboardIdx === 0;
+  if (next) {
+    next.textContent = !last ? 'Next' : offerSignIn ? 'Sign in with Psycle' : 'Done';
+    next.dataset.onboard = !last ? 'next' : offerSignIn ? 'signin' : 'done';
+  }
+  if (look) { look.disabled = !offerSignIn; look.classList.toggle('is-off', !offerSignIn); }
+  // The button that had focus may just have gone (Back, on reaching page one).
+  if (next && held && (held === back || held === look) && (held.hidden || held.disabled)) next.focus();
+  if (!quiet) announce(`${page.title}, ${_onboardIdx + 1} of ${_onboardPages.length}`);
 }
 
-function _onboardRender() {
-  const card = document.querySelector('#onboardOverlay .onboard-card');
-  if (!card) return;
-  const step = ONBOARDING_STEPS[_onboardIdx];
-  const isLast = _onboardIdx === ONBOARDING_STEPS.length - 1;
-  const cta = isLast ? (_onboardSignedOut() ? 'Sign in' : 'Get started') : 'Next';
-  card.innerHTML =
-    '<button class="onboard-skip" data-onboard="skip">Skip</button>' +
-    `<div class="onboard-icon">${step.icon}</div>` +
-    `<div class="onboard-title">${escapeHTML(step.title)}</div>` +
-    `<div class="onboard-body">${escapeHTML(step.body)}</div>` +
-    `<div class="onboard-dots">${ONBOARDING_STEPS.map((_, i) =>
-      `<span class="onboard-dot${i === _onboardIdx ? ' active' : ''}"></span>`).join('')}</div>` +
-    `<button class="onboard-cta" data-onboard="next">${cta}</button>`;
-  // replay the per-step content animation
-  card.classList.remove('step-in');
-  void card.offsetWidth;
-  card.classList.add('step-in');
+// Miniatures of the app's own components (css/styles.css .onboard-mini-*, the
+// same tokens as the real ones). Static text only; aria-hidden decoration.
+function _onboardMiniCard(cls, time, ampm, name, sub, extra, action) {
+  return `<div class="onboard-mini-card${cls ? ' ' + cls : ''}">` +
+    `<div class="onboard-mini-time">${time}<span>${ampm}</span></div>` +
+    '<div class="onboard-mini-rule"></div>' +
+    `<div class="onboard-mini-info"><div class="onboard-mini-name">${name}</div><div class="onboard-mini-sub">${sub}</div>${extra}</div>` +
+    action +
+  '</div>';
 }
 
-function startOnboarding() {
+function _onboardArt(id) {
+  let inner = '';
+  if (id === 'find') {
+    const now = new Date();
+    const days = _welcomeDayLabels(now.getFullYear(), now.getMonth() + 1, now.getDate(), 5);
+    const book = '<span class="onboard-mini-pill">Book</span>';
+    inner =
+      '<div class="onboard-mini-strip">' + days.map((d, i) =>
+        `<span class="onboard-mini-day${i === 1 ? ' is-on' : ''}">${escapeHTML(d)}</span>`).join('') + '</div>' +
+      // Two days side by side, the next one peeking in: what a swipe brings.
+      '<div class="onboard-mini-lane">' +
+        '<div class="onboard-mini-col">' +
+          _onboardMiniCard('', '7:00', 'am', 'Ride 45', 'Oxford Circus', '', book) +
+          _onboardMiniCard('', '6:30', 'pm', 'Strength 50', 'Shoreditch', '', book) +
+        '</div>' +
+        '<div class="onboard-mini-col">' +
+          _onboardMiniCard('', '6:45', 'am', 'Ride 45', 'Clapham', '', book) +
+          _onboardMiniCard('', '12:15', 'pm', 'Reformer 50', 'Oxford Circus', '', book) +
+        '</div>' +
+      '</div>';
+  } else if (id === 'book') {
+    const taken = [2, 3, 7, 10, 11, 14, 16];
+    let seats = '';
+    for (let n = 1; n <= 18; n++) {
+      seats += `<span class="onboard-mini-seat${n === 9 ? ' is-on' : taken.indexOf(n) !== -1 ? ' is-taken' : ''}">${n}</span>`;
+    }
+    inner = `<div class="onboard-mini-map">${seats}</div>` +
+      '<div class="onboard-mini-caution">Clashes with your 7:00am Ride 45</div>';
+  } else if (id === 'keep') {
+    // My Bookings cards: a seat (chip + free-cancel line) and a waitlist place.
+    inner =
+      _onboardMiniCard('is-held', '7:00', 'am', 'Ride 45', 'Oxford Circus · Studio 1',
+        '<span class="onboard-mini-chip">Bike 9</span><div class="onboard-mini-deadline">Free cancel until Mon 7:00pm</div>', '') +
+      _onboardMiniCard('is-waitlisted', '6:30', 'pm', 'Strength 50', 'Shoreditch',
+        '<span class="onboard-mini-badge">Waitlisted</span>', '');
+  }
+  return inner ? `<div class="onboard-art onboard-art-${id}" aria-hidden="true">${inner}</div>` : '';
+}
+
+function _onboardPageHTML(page, i) {
+  return `<section class="onboard-page" aria-hidden="${i !== 0}"><div class="onboard-page-inner">` +
+    (page.id === 'welcome'
+      ? `<h2 class="onboard-wordmark">${escapeHTML(page.title)}</h2>`
+      : _onboardArt(page.id) + `<h2 class="onboard-title">${escapeHTML(page.title)}</h2>`) +
+    `<p class="onboard-body">${escapeHTML(page.body)}</p>` +
+    (page.note ? `<p class="onboard-note">${escapeHTML(page.note)}</p>` : '') +
+  '</div></section>';
+}
+
+// Pages follow the finger. Every listener is passive and the viewport is
+// touch-action: pan-y, so a vertical scroll (a small phone, large type) stays
+// the browser's and is never fought for. Buttons and arrow keys do the same job.
+function _onboardBindSwipe(ov) {
+  const viewport = ov.querySelector('.onboard-viewport');
+  const track = ov.querySelector('.onboard-track');
+  if (!viewport || !track) return;
+  let x0 = 0, y0 = 0, t0 = 0, dx = 0, axis = '', live = false;
+  const stillMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const release = (cancelled) => {
+    if (!live) return;
+    live = false;
+    if (axis !== 'x') return;
+    _onboardGo(cancelled ? _onboardIdx : _welcomeSwipeTarget(_onboardIdx, _onboardPages.length, dx, viewport.clientWidth, Date.now() - t0));
+  };
+  viewport.addEventListener('touchstart', (e) => {
+    live = e.touches.length === 1 && !ov._psycleClosing && !ov.classList.contains('is-holding');
+    if (!live) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); dx = 0; axis = '';
+  }, { passive: true });
+  viewport.addEventListener('touchmove', (e) => {
+    if (!live) return;
+    if (e.touches.length !== 1) { release(true); return; } // a second finger: not a swipe
+    const mx = e.touches[0].clientX - x0;
+    if (!axis) axis = _welcomeSwipeAxis(mx, e.touches[0].clientY - y0);
+    if (axis === 'y') { live = false; return; }
+    if (axis !== 'x') return;
+    dx = mx;
+    if (stillMotion()) return; // reduced motion: nothing slides — the release simply swaps the page
+    track.classList.add('is-dragging');
+    track.style.transform = `translateX(calc(${-100 * _onboardIdx}% + ${_welcomeDragOffset(_onboardIdx, _onboardPages.length, dx)}px))`;
+  }, { passive: true });
+  viewport.addEventListener('touchend', () => release(false), { passive: true });
+  viewport.addEventListener('touchcancel', () => release(true), { passive: true });
+}
+
+// The last step of opening: keys and focus. Split from startOnboarding because
+// the iOS launch holds the overlay as a plain cover first (_maybeStartOnboarding).
+function _onboardReveal() {
+  const ov = document.getElementById('onboardOverlay');
+  if (!ov) return;
+  ov.classList.remove('is-holding');
+  ov.removeAttribute('aria-hidden');
+  // Its "Find your class" page has just said "swipe between days": Discover's
+  // one-time "Swipe to change day" hint keeps for a later launch
+  // (_paintDayHint). Set here, not where the overlay is built — the iOS
+  // holding cover teaches nothing, and a replay from Settings never repaints
+  // Discover while it is up, so the hint could not see it for itself.
+  window._psycleWelcomeSeen = true;
+  document.removeEventListener('keydown', _onboardKey);
+  document.addEventListener('keydown', _onboardKey);
+  // The panel, not a button: the dialog's name is what gets read first.
+  const shell = ov.querySelector('.onboard-shell');
+  if (shell) { try { shell.focus({ preventScroll: true }); } catch {} }
+}
+
+// opts.atLaunch — opaque from its first frame (a fade-in would show the app
+// behind it). opts.holding — the wordmark alone, no keys, no focus, until
+// _onboardReveal or _onboardCleanup settles it.
+function startOnboarding(opts) {
+  opts = opts || {};
   _onboardCleanup();
   _onboardIdx = 0;
+  let touch = _onboardNative(); // the iOS app is a touch screen whatever matchMedia makes of it
+  try { touch = touch || !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch {}
+  _onboardPages = _welcomePages(_onboardNative(), touch);
+  const active = document.activeElement;
+  _onboardOpener = active && active !== document.body ? active : null;
 
   const overlay = document.createElement('div');
   overlay.id = 'onboardOverlay';
   overlay.className = 'onboard-overlay';
-  overlay.innerHTML = '<div class="onboard-card" role="dialog" aria-modal="true" aria-label="Welcome to Psync"></div>';
+  overlay.innerHTML =
+    '<div class="onboard-shell" role="dialog" aria-modal="true" aria-label="Welcome to Psync" tabindex="-1">' +
+      '<button type="button" class="onboard-skip" data-onboard="skip">Skip</button>' +
+      '<div class="onboard-viewport"><div class="onboard-track">' + _onboardPages.map(_onboardPageHTML).join('') + '</div></div>' +
+      '<div class="onboard-foot">' +
+        '<div class="onboard-dots" aria-hidden="true">' + _onboardPages.map(() => '<span class="onboard-dot"></span>').join('') + '</div>' +
+        '<div class="onboard-actions">' +
+          '<button type="button" class="onboard-btn onboard-back" data-onboard="back">Back</button>' +
+          '<button type="button" class="onboard-btn onboard-btn-primary onboard-next" data-onboard="next">Next</button>' +
+        '</div>' +
+        '<button type="button" class="onboard-btn onboard-look" data-onboard="look">Look around first</button>' +
+      '</div>' +
+    '</div>';
   overlay.addEventListener('click', e => {
     const act = e.target.closest('[data-onboard]')?.dataset.onboard;
-    if (act === 'skip') { _onboardFinish(); return; }
-    if (act === 'next') { _onboardAdvance(); return; }
-    // Tapping the backdrop does nothing — avoids accidental dismissal.
+    if (!act || overlay._psycleClosing) return;
+    // On the last page "Next" turns into "Sign in with Psycle" / "Done" under
+    // the same fingertip: the second half of a double tap must not finish the
+    // welcome for good and open the sign-in page.
+    const justTurned = Date.now() - _onboardTurnedAt < 400;
+    if (act === 'next') _onboardGo(_onboardIdx + 1);
+    else if (act === 'back') _onboardGo(_onboardIdx - 1);
+    else if (act === 'signin') { if (!justTurned) _onboardFinish(true); }
+    else if (act === 'done') { if (!justTurned) _onboardFinish(); }
+    else if (act === 'skip' || act === 'look') _onboardFinish();
   });
+  // The page underneath listens for touches on document (pull-to-refresh,
+  // swipe-to-cancel, the day pager): a drag on the welcome is none of theirs.
+  ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(type =>
+    overlay.addEventListener(type, e => e.stopPropagation(), { passive: true }));
+  _onboardBindSwipe(overlay);
+  if (opts.holding) { overlay.classList.add('is-holding'); overlay.setAttribute('aria-hidden', 'true'); }
   document.body.appendChild(overlay);
-  document.addEventListener('keydown', _onboardKey);
+  _onboardRender(true);
 
-  requestAnimationFrame(() => { overlay.classList.add('show'); _onboardRender(); });
+  // .show in the same tick as the insert: no transition runs, opaque at once.
+  if (opts.atLaunch) overlay.classList.add('show');
+  else requestAnimationFrame(() => overlay.classList.add('show'));
+  if (!opts.holding) _onboardReveal();
 }
 
+// Settings → "Show the welcome again". Clears nothing: the flag stays set, so
+// leaving half-way through does not bring the welcome back at the next launch.
 function replayOnboarding() {
-  try { localStorage.removeItem(ONBOARDING_KEY); } catch {}
   startOnboarding();
 }
 window.replayOnboarding = replayOnboarding;
 
-// First-run trigger: only for genuinely new users. A returning/signed-in user
-// who already has booking history shouldn't be interrupted.
-function _maybeStartOnboarding() {
+// What a launch can know about the person in front of it. `early` = the first
+// look, taken while this file is still being evaluated.
+function _onboardLaunchFacts(early) {
+  let completed = true, hasToken = false, historyCount = 0;
   try {
-    if (localStorage.getItem(ONBOARDING_KEY)) return;
-    let hist = [];
-    try { hist = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch {}
-    if (Array.isArray(hist) && hist.length > 3) {
-      // Existing user — mark onboarded silently rather than nag.
-      localStorage.setItem(ONBOARDING_KEY, '1');
+    // Storage that cannot be read cannot remember an answer either: better no
+    // welcome than the same one at every launch (completed stays true).
+    completed = !!localStorage.getItem(ONBOARDING_KEY);
+    // Presence only, under the keys security.js keeps the session in — they
+    // can be seen before anything is decrypted, which is what lets the first
+    // look run at once.
+    hasToken = !!(localStorage.getItem('psycle_bearer_token') || localStorage.getItem('psycle_bearer_token_enc') || getBearerToken());
+    if (!completed && !hasToken) {
+      let hist = [];
+      try { hist = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch {} // unreadable = no proof of anything
+      historyCount = Array.isArray(hist) ? hist.length : 0;
+    }
+  } catch {}
+  const hash = String(location.hash || '').replace('#', '');
+  const panel = document.querySelector('.tab-panel.active');
+  return {
+    completed, hasToken, historyCount,
+    smoke: !!(window.__smokeLoadErrors || window.__smokeFetchStub), // tests/smoke.html
+    // native-bridge.js (the LAST script) restores purged keys from Preferences;
+    // securityReady waits for it, and so does the second look.
+    restorePending: !!early && _onboardNative(),
+    deepLink: (!!hash && hash !== 'discover') || (!!panel && panel.id !== 'tab-discover'),
+    dialogUp: _dialogOpen() || !!document.getElementById('bookingConfirmation') ||
+      _OVERLAYS.some(([id]) => _overlayIsOpen(document.getElementById(id))),
+  };
+}
+
+// First-run trigger: only for genuinely new users. Looked at three times per
+// launch and the first answer wins: at once (below) with what localStorage
+// alone can say, so a newcomer gets the welcome INSTEAD of the app's first
+// frames rather than over them two seconds in; again when security.js has
+// settled (the token is readable and, in the iOS app, the storage restore has
+// landed); and a last time from the first-paint block at the end of this file.
+function _maybeStartOnboarding(early) {
+  if (_onboardLaunchSettled) return;
+  if (!document.body) { // scripts in <head> without defer
+    document.addEventListener('DOMContentLoaded', () => _maybeStartOnboarding(early), { once: true });
+    return;
+  }
+  // The first look runs while app.js is still loading: nothing in here may
+  // throw past this function, or everything below it in the file never runs.
+  try {
+    const verdict = _welcomeDecision(_onboardLaunchFacts(early === true));
+    const up = document.getElementById('onboardOverlay');
+    if (verdict === 'wait') {
+      // Up as a cover now, so a newcomer never sees the app flash by — but the
+      // wordmark alone: a member whose storage is about to come back gets a
+      // splash for a moment, not a tutorial. A stuck start-up must not leave
+      // it there, so the question is asked again after 5s whatever happens.
+      if (!up) {
+        startOnboarding({ atLaunch: true, holding: true });
+        setTimeout(() => _maybeStartOnboarding(), 5000);
+      }
       return;
     }
-    // Brief delay so the app paints behind the welcome modal first.
-    setTimeout(() => {
-      if (!document.getElementById('onboardOverlay')) startOnboarding();
-    }, 700);
-  } catch {}
+    _onboardLaunchSettled = true;
+    // Existing user — mark onboarded silently rather than nag.
+    if (verdict === 'done') { try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch {} }
+    const holding = !!up && up.classList.contains('is-holding');
+    if (verdict !== 'show') { if (holding) _onboardCleanup(); return; }
+    if (holding) _onboardReveal();
+    else if (!up) startOnboarding({ atLaunch: true });
+  } catch (e) {
+    // Half a welcome is worse than none: it would sit over the whole app.
+    _onboardLaunchSettled = true;
+    try { _onboardCleanup(); } catch {}
+  }
 }
+_maybeStartOnboarding(true);
+(window.securityReady || Promise.resolve()).then(function () {}, function () {}).then(function () { _maybeStartOnboarding(); });
 
 // ════════════════════════════════════════════════════════════════
 // Feature: Timezone-aware travel notice

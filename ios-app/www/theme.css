@@ -674,7 +674,7 @@ select:focus, input:focus { border-color: var(--accent); }
   color: var(--text-muted);
   width: var(--space-10);
   height: var(--space-10);
-  border-radius: 50%;
+  border-radius: var(--radius-full); /* a circle — and square on Handheld, which zeroes the radius tokens */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1151,7 +1151,6 @@ select:focus, input:focus { border-color: var(--accent); }
 /* ── explore.css: Explore Tab ──────────────────────────────────────── */
 
 .explore-title { color: var(--text-dim); }
-.explore-subtitle { color: var(--text-ghost); }
 .explore-card {
   background: var(--bg-panel);
   border-color: var(--border);

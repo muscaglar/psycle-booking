@@ -77,6 +77,27 @@ declare global {
   /** Quota-aware localStorage.setItem (security.js): frees the app's own caches and retries. false = not saved; never throws. */
   var _psycleSafeSetItem: ((key: string, value: string) => boolean) | undefined;
 
+  /** Discover's day pager (app.js): the day on screen ('YYYY-MM-DD'; null = not paged), the 'start|end' it belongs to, and whether the member chose it. Memory only. */
+  var _pagerDay: string | null;
+  var _pagerRangeKey: string | null;
+  var _pagerChosen: boolean;
+  /** The day strip was rebuilt — or a theme re-measured its pills — while Discover was hidden (no layout box): switchTab('discover') puts its scroll offset back, once (tabs.js → app.js _restoreDayStrip). */
+  var _dayStripRevealOwed: boolean | undefined;
+  /** …and what the day swipe (interactions.js) asks of it: may a touch start, is there a day either way, follow the finger, let go. */
+  var _dayPagerSwipe: {
+    canStart(target: any): boolean;
+    edges(): { prev: boolean; next: boolean };
+    drag(offset: number, dx: number): void;
+    release(result: { dir: number; dx: number; cancelled: boolean }): void;
+  };
+  /** The shared sideways-swipe helper (interactions.js): horizontal intent, 25% / flick release, resistance at an edge. Returns a detach function. */
+  var _psycleSwipe: ((el: any, opts?: Record<string, any>) => () => void) | undefined;
+  /** Stats sub-pages (tabs.js): open 'overview' | 'habits' | 'instructors' (false = unknown id); the neighbour a swipe in `dir` (+1 / -1) leads to, or null. */
+  var showStatsPage: (id: string) => boolean;
+  var _statsPageStep: (dir: number) => string | null;
+  /** The first-run welcome was really shown in this page session (app.js _onboardReveal): Discover's one-time swipe hint then keeps for a later launch. */
+  var _psycleWelcomeSeen: boolean | undefined;
+
   /** iOS only (security.js creates it, native-bridge resolves it): the Preferences → localStorage restore has settled. */
   var _psycleNativeRestoreReady: Promise<void> | undefined;
 

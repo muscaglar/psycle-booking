@@ -161,7 +161,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
 <!-- Colours/layout live in .app-banner (styles.css) so the banner follows the
      theme; only `display` stays inline because JS toggles it ('flex'/'none'). -->
 <div id="sessionBanner" class="app-banner" style="display:none">
-  <span>⚠️ Your session has expired.</span>
+  <span>Your session has expired.</span>
   <a href="#" onclick="event.preventDefault();openLoginPopup()" class="app-banner-action">Sign in again →</a>
   <button onclick="document.getElementById('sessionBanner').style.display='none'" class="app-banner-close" aria-label="Dismiss">×</button>
 </div>
@@ -241,15 +241,14 @@ catch (e) { document.documentElement.style.display = 'none'; }
   For secure access, serve locally: <code>npx serve -l 8080</code> then open <code>http://localhost:8080</code>
 </div>
 
-<div class="controls" id="controlsPanel">
-  <div class="controls-toggle" id="controlsToggle" onclick="toggleFilters()">
-    <span>Filters</span>
-    <span class="controls-summary" id="controlsSummary"></span>
-    <span class="controls-chevron" id="controlsChevron">▼</span>
-  </div>
-  <div class="controls-body" id="controlsBody">
-  <div class="control-group">
-    <label>Date</label>
+<!-- Discover's filters. The date row is always on screen; Time / Location /
+     Class Type / Instructor sit behind ONE Filters bar, collapsed at every
+     launch below 1024px (.filters-collapsed is in the markup so the first paint
+     is already collapsed; app.js toggleFilters keeps it in step). At
+     >=1024px the CSS keeps the panel open and hides the bar. -->
+<div class="controls filters-collapsed" id="controlsPanel">
+  <!-- No visible "Date" label: the group carries the name. -->
+  <div class="control-group controls-dates" role="group" aria-label="Date">
     <div class="date-presets">
       <button class="date-quick-btn date-pick" id="pickDateBtn" onclick="toggleDatePicker()" aria-label="Pick a date" aria-expanded="false" aria-controls="datePicker" title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg></button>
       <button class="date-quick-btn" aria-pressed="false" onclick="setDateQuick('today')">Today</button>
@@ -262,9 +261,22 @@ catch (e) { document.documentElement.style.display = 'none'; }
     <div style="display:none">
       <input type="date" id="startDate" onchange="onDateInputChange()" style="min-width:140px">
     </div>
-    <input type="hidden" id="daysAhead" value="7">
+    <input type="hidden" id="daysAhead" value="6">
   </div>
 
+  <!-- The Filters bar. While the panel is collapsed, updateFiltersSummary()
+       (app.js) fills #controlsSummary with one removable chip per active
+       filter, plus "Clear"; the bar's count and spoken name come from there too. -->
+  <div class="controls-bar" id="controlsBar">
+    <button type="button" class="controls-toggle" id="controlsToggle" aria-expanded="false" aria-controls="controlsBody" onclick="toggleFilters()">
+      <span class="controls-toggle-label">Filters</span>
+      <span class="controls-count" id="controlsCount" aria-hidden="true" hidden></span>
+      <svg class="controls-chevron" id="controlsChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="controls-summary" id="controlsSummary"></div>
+  </div>
+
+  <div class="controls-body" id="controlsBody">
   <!-- Time of day + "Available only". The pills are painted by renderTimePills()
        (app.js). class="location-chips": pill rows are styled by that class /
        by id in redesign.css, so this row needs no rules of its own. -->
@@ -311,7 +323,6 @@ catch (e) { document.documentElement.style.display = 'none'; }
   <div class="discover-empty-state">
     <div class="discover-empty-title">Find your<br>next class</div>
     <div id="discoverQuickWrap">
-      <div class="discover-empty-sub">Search by instructor, studio, class type, or date — or jump straight in:</div>
       <div class="discover-quick-actions">
         <button class="discover-quick-btn" onclick="setDateQuick('today');search()">Today's classes</button>
         <button class="discover-quick-btn" onclick="setDateQuick('tomorrow');search()">Tomorrow</button>

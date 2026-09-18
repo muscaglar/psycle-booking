@@ -502,13 +502,6 @@
    the settings overlay so it can be opened from within it. */
 .diag-overlay { z-index: 320; }
 
-.diag-section-hint {
-  font-size: var(--text-sm);
-  color: var(--text-muted, #aaa);
-  line-height: 1.45;
-  margin-bottom: var(--space-4);
-}
-
 /* Generous touch target for the close button (>= 44px). */
 .settings-close.diag-close {
   min-width: 44px;

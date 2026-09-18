@@ -470,7 +470,7 @@ module.exports = async function (t) {
     let w = similarWorld({ instructors: ['99'] });
     w.open();
     w.pick('same-instructor');
-    t.eq([w.inputs.daysAhead.value, w.ctx._dateQuickMode], [7, 'week'], '"Same instructor, any time": today + 7 days IS the week preset — the stale "today" mode is replaced');
+    t.eq([w.inputs.daysAhead.value, w.ctx._dateQuickMode], [6, 'week'], '"Same instructor, any time": the week preset itself (today + 6: seven days) — the stale "today" mode is replaced');
     t.eq([...w.ctx.selectedInstructors], ['31'], 'filtered to that instructor only');
     // Both branches go through _focusSearch now: _syncFilterUI repaints chips,
     // pills, date row and the summary in one go.

@@ -297,17 +297,18 @@
       var total = Object.keys(profiles).length;
       if (total > 0 && booked.size >= total) {
         setHtml(container, '<div class="explore-title">New to you</div>' +
-          '<div class="explore-empty">You\'ve booked with every instructor — impressive range!</div>');
+          '<div class="explore-empty">You\'ve booked with every instructor.</div>');
       } else {
+        // Everyone left is already ranked or starred (every instructor has a
+        // profile, so an empty list never means "nothing booked yet").
         setHtml(container, '<div class="explore-title">New to you</div>' +
-          '<div class="explore-empty">Book some classes to see who you haven\'t tried yet.</div>');
+          '<div class="explore-empty">No one new right now.</div>');
       }
       container.style.display = '';
       return;
     }
 
     var html = '<div class="explore-title">New to you</div>';
-    html += '<div class="explore-subtitle">Instructors you haven\'t booked with yet</div>';
     html += '<div class="explore-grid">';
     for (var i = 0; i < list.length; i++) {
       html += instrCard(list[i], null);
@@ -501,20 +502,19 @@
 
     if (data.noRefs) {
       setHtml(container, '<div class="explore-title">You might like</div>' +
-        '<div class="explore-empty">Star some favourite instructors or rank them on the Membership tab to get personalised recommendations.</div>');
+        '<div class="explore-empty">Star or rank a few instructors on the Membership tab to get suggestions.</div>');
       container.style.display = '';
       return;
     }
 
     if (data.results.length === 0) {
       setHtml(container, '<div class="explore-title">You might like</div>' +
-        '<div class="explore-empty">Run a search to help us find instructors similar to your favourites.</div>');
+        '<div class="explore-empty">No suggestions right now.</div>');
       container.style.display = '';
       return;
     }
 
     var html = '<div class="explore-title">You might like</div>';
-    html += '<div class="explore-subtitle">Matched on your taste, your usual times & what\'s bookable</div>';
     html += '<div class="explore-grid">';
     for (var i = 0; i < data.results.length; i++) {
       var c = data.results[i];
@@ -866,8 +866,8 @@
       setHtml(container,
         '<div class="explore-sync-banner">' +
           '<div class="explore-sync-text">' +
-            '<strong>Sync your full booking history</strong><br>' +
-            '<span>Import all past bookings from your Psycle account so your Stats and suggestions are accurate.</span>' +
+            '<strong>Sync your booking history</strong><br>' +
+            '<span>Makes your Stats and suggestions accurate.</span>' +
           '</div>' +
           '<button class="explore-sync-btn" id="syncHistoryBtn" onclick="window._explore_syncHistory()"' + (btnState || '>Sync now') + '</button>' +
         '</div>');
@@ -1282,6 +1282,12 @@
 
     // Sync banner
     renderSyncBanner(syncSection);
+
+    // The three sections sit on a Stats sub-page (tabs.js, pure:stats-pages)
+    // and are not built while it is closed — showStatsPage() asks again when it
+    // opens. The banner above is global, so it is drawn either way.
+    var closed = function (el) { var page = el.closest ? el.closest('.stats-page') : null; return !!(page && page.hidden); };
+    if (closed(newSection) && closed(likeSection) && closed(mapSection)) { _exploreDirty = true; return; }
 
     // Loading state if data not ready
     if (!instrs || instrs.length === 0) {

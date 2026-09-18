@@ -551,9 +551,6 @@
   font-size: var(--text-base); font-weight: var(--weight-bold); text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--text-dim, #888); margin-bottom: var(--space-5);
 }
-.insights-subtitle {
-  font-size: var(--text-base); color: var(--text-ghost, #555); margin-top: -8px; margin-bottom: var(--space-5);
-}
 
 /* ── Class Type Distribution ─────────────────────────────────────── */
 
@@ -705,12 +702,6 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim, #888);
-  margin-bottom: var(--space-1);
-}
-
-.habit-subtitle {
-  font-size: var(--text-base);
-  color: var(--text-ghost, #555);
   margin-bottom: var(--space-5);
 }
 
@@ -1292,6 +1283,8 @@
 .tab-empty-btn:hover { background: var(--accent-hover, #c73650); }
 .tab-empty-btn:active { transform: scale(0.96); }
 .tab-empty-btn:disabled { opacity: 0.6; cursor: default; } /* "Retrying…" on the can't-reach-Psycle hero */
+/* A hero with no sub line ("Nothing booked — yet"): title to button keeps the gap a sub line gives. */
+.tab-empty-title + .tab-empty-btn { margin-top: var(--space-3); }
 
 /* Signed out, Stats is the Sign-in hero and nothing else: the history on the
    device belongs to the last member, not to whoever holds it now. A rule, not
@@ -1606,4 +1599,131 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Stats sub-pages (wave 8c) — a segmented switcher over three pages:
+   Overview · Habits · Instructors (js/tabs.js, pure:stats-pages).
+   Tokens only: a --bg-deep track with a --bg-panel thumb reads as "sunk
+   track, raised thumb" in every theme (the panel is the lighter of the two in
+   all seven); Handheld squares it off through the radius tokens and has no
+   shadow, so the thumb also carries a border.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Pinned while the page scrolls under it. Solid page background so sections
+   do not show through; above their stacking contexts (card transforms), below
+   the tab bar and every overlay. Phones: .tab-content is the scroller and the
+   header sits outside it → top 0. Wider: see the media block below. */
+.stats-switcher-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: var(--space-3) var(--space-9);
+  background: var(--bg);
+}
+
+/* [hidden] alone loses to any display rule: say it once for all three. */
+.stats-switcher-bar[hidden],
+.stats-page[hidden],
+.stats-page-empty[hidden] { display: none; }
+
+.stats-switcher {
+  display: flex;
+  box-sizing: border-box;
+  min-height: var(--tap-min);
+  padding: var(--space-1);
+  gap: var(--space-1);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+}
+
+/* Three equal segments. The thumb is inset in the track, so the button is
+   shorter than a fingertip: ::before stretches the hit area over the full
+   height of the track (and half the gap beside it). */
+.stats-switcher-tab {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--space-2);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* From the button's padding box: its own 1px border + the track's padding +
+   the track's 1px border upwards and downwards; sideways, half the gap. */
+.stats-switcher-tab::before {
+  content: '';
+  position: absolute;
+  inset: calc(-2px - var(--space-1)) calc(-1px - var(--space-1) / 2);
+}
+.stats-switcher-tab:hover { color: var(--text-heading); }
+.stats-switcher-tab[aria-selected="true"] {
+  background: var(--bg-panel);
+  border-color: var(--border-light);
+  color: var(--text-heading);
+  font-weight: var(--weight-bold);
+  box-shadow: var(--shadow-sm);
+}
+.stats-switcher-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Motion is added for those who have not asked for less of it. */
+@media (prefers-reduced-motion: no-preference) {
+  .stats-switcher-tab {
+    transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base);
+  }
+}
+
+/* One gap under the switcher for all three pages: the first section of each
+   brought its own (12px, 0 and .explore-section:first-child's 12px). */
+.stats-page { padding-top: var(--space-5); }
+/* Swiped sideways between pages (js/tabs.js _wireStatsSwipe, through the shared
+   _psycleSwipe): vertical scrolling and pinch-zoom stay the browser's, a
+   sideways drag is left to the helper — which is why it never preventDefaults.
+   Rows inside that scroll sideways keep doing so: they are their own scroller. */
+.stats-page { touch-action: pan-y pinch-zoom; }
+.stats-page > .stats-bar:first-child,
+.stats-page > .explore-section:first-child { padding-top: 0; }
+/* "Share my stats" closes Overview: a step below the section before it. */
+.stats-page > #shareSection { padding-top: var(--space-3); }
+
+/* A page with nothing on it: one quiet line at the sections' own inset. */
+.stats-page-empty { padding: var(--space-3) var(--space-9) var(--space-9); }
+.stats-page-empty-line {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.stats-page-empty .explore-sync-btn { margin-top: var(--space-5); }
+
+@media (max-width: 640px) {
+  .stats-switcher-bar { padding: var(--space-3) var(--space-7); }
+  .stats-page-empty { padding: var(--space-3) var(--space-7) var(--space-9); }
+  /* The tiles kept the desktop 24px inset; right under the switcher that is a
+     visible step to the right of it and of every section below. */
+  .stats-page > .stats-bar { padding-left: var(--space-7); padding-right: var(--space-7); }
+}
+
+/* Wider than a phone the DOCUMENT scrolls, and .tab-content's overflow:hidden
+   makes it the switcher's scroll container — one that never scrolls, so
+   nothing would pin. clip cuts the same overflow without becoming one; only
+   while Stats is up, and a browser without :has() or clip simply does not pin.
+   --stats-pin-top is the sticky tab bar's height (js/tabs.js, _syncStatsPin). */
+@media (min-width: 641px) {
+  .tab-content:has(> #tab-stats.active) { overflow: clip; }
+  .stats-switcher-bar { top: var(--stats-pin-top, 0px); }
+  .stats-switcher { max-width: 480px; }
 }

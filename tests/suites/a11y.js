@@ -510,11 +510,11 @@ module.exports = async function (t) {
     const promptSrc = between(appSrc, 'function showHistorySyncPrompt() {', 'async function startSyncFromPrompt() {');
     const registry = between(appSrc, 'const _OVERLAYS = [', 'const _overlayStack = [];') + between(appSrc, 'function _overlayIsOpen(el) {', '// confirmModal and the tour keep their own focus');
     ok(!!promptSrc && /const _OVERLAYS = \[/.test(registry) && /function _overlayIsOpen\(/.test(registry), 'showHistorySyncPrompt and the overlay registry found between their anchors');
-    const promptWorld = (open) => {
+    const promptWorld = (open, o) => {
       const pw = { appended: [], timers: [], els: {} };
       Object.keys(open || {}).forEach((id) => { pw.els[id] = { id, isConnected: true, style: { display: open[id] } }; });
       const ctx = t.loadPure('js/app.js', 'session', {
-        localStorage: { getItem: (k) => (k === 'psycle_onboarded_v1' ? '1' : null) },
+        localStorage: { getItem: (k) => (k === 'psycle_onboarded_v1' && !(o && o.noWelcomeFlag) ? '1' : null) },
         getBearerToken: () => 'tok', currentUser: { first_name: 'Ada' }, escapeHTML: (x) => String(x),
         _dialogOpen: () => false,
         setTimeout: (fn, ms) => { pw.timers.push([fn, ms]); return pw.timers.length; }, clearTimeout: () => {},
@@ -548,6 +548,20 @@ module.exports = async function (t) {
     pw.els.settingsOverlay.isConnected = false;
     pw.timers[0][0]();
     eq(pw.appended, ['syncPromptOverlay'], 'Settings closed: the re-armed call mounts it');
+    // The first-run welcome: judged by its overlay, never by a missing completion
+    // flag. A launch on a #bookings link skips the welcome and leaves the flag
+    // unset — the newcomer who then signed in polled "busy" 40 times and was
+    // never offered the sync in that page session.
+    pw = promptWorld({}, { noWelcomeFlag: true });
+    pw.ctx.showHistorySyncPrompt();
+    eq([pw.appended, pw.timers.length], [['syncPromptOverlay'], 0], 'no completion flag, no welcome on screen, signed in: the prompt opens');
+    pw = promptWorld({ onboardOverlay: '' }, { noWelcomeFlag: true });
+    pw.ctx.showHistorySyncPrompt();
+    eq([pw.appended, pw.timers.length, pw.timers[0] && pw.timers[0][1]], [[], 1, 3000], 'the welcome IS up (or its iOS holding cover): it waits, and comes back in 3s');
+    delete pw.els.onboardOverlay;
+    pw.timers[0][0]();
+    eq(pw.appended, ['syncPromptOverlay'], '…and mounts once the welcome has gone');
+    ok(!/ONBOARDING_KEY|psycle_onboarded_v1/.test(promptSrc.replace(/\/\/[^\n]*/g, '')), 'the completion flag is not read here at all');
   }
 
   // Enter / Space on clickable non-buttons.

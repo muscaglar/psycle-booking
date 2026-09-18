@@ -41,7 +41,7 @@ header h1::after { content: none; } /* drop the old accent full-stop */
 /* Avatar / account button — accent-soft circle with the rider's initials */
 .header-avatar {
   width: 38px; height: 38px; flex: none;
-  border: none; border-radius: 50%;
+  border: none; border-radius: var(--radius-full); /* a circle — and square on Handheld, which zeroes the radius tokens */
   background: var(--accent-soft, #e4efe9);
   color: var(--accent, #1f6f5c);
   font: 700 14px/1 var(--font-display);
@@ -141,18 +141,103 @@ header .theme-toggle {
 /* ── Discover: filter rows (section label + horizontal-scroll pills) ─────── */
 /* The filters are inline on the page now — no card chrome; #tab-discover
    provides the uniform 22px side padding (the design's gutter). */
-.controls { background: var(--bg, #efeee9); border: none; border-radius: 0; padding: 0; margin-top: 14px; }
+/* Three full-width rows, one rhythm: the date row · the Filters bar · the panel. */
+.controls {
+  background: var(--bg, #efeee9); border: none; border-radius: 0; padding: 0; margin-top: 14px;
+  flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 14px;
+}
 /* Bottom: the .tab-panel clearance for the floating next-class pill (72px),
    like Bookings and Stats — .tab-content already clears the docked tab bar.
    (Was 120px: ~200px of empty scroll under the last card on a phone.) */
 #tab-discover { padding: 18px 22px 72px; }
 #tab-discover .results { padding-left: 0; padding-right: 0; }
 .disc-title, .disc-search, .disc-count { margin-left: 0; margin-right: 0; }
-.controls-toggle { display: none; } /* design shows filters inline — no collapse header */
 /* flex-wrap:nowrap is critical — the max-width:640px base rule sets
    flex-wrap:wrap, which combined with column direction made the filter
-   groups wrap into clipped extra columns in portrait (only Studios showed). */
-.controls-body { display: flex !important; flex-direction: column; flex-wrap: nowrap !important; gap: 14px; }
+   groups wrap into clipped extra columns in portrait (only Studios showed).
+   (display carried !important while the collapse was an inline style it had to
+   beat; the state is a class now — see the Filters bar below.) */
+.controls-body { display: flex; flex-direction: column; flex-wrap: nowrap !important; gap: 14px; }
+
+/* ── Discover: the Filters bar ─────────────────────────────────────────────
+   The date row is always on screen. Time / Location / Class Type / Instructor
+   sit behind ONE bar, collapsed at every launch (#controlsPanel carries
+   .filters-collapsed — js/app.js toggleFilters). While collapsed, the active
+   filters ride beside the bar as removable chips: #controlsSummary is
+   display:contents, so they share the bar's row and wrap under it, and the
+   results move down by exactly the rows the chips need. No height animation
+   and no overflow on the panel — the instructor dropdown opens past its edge.
+   At >=1024px the panel is always open and the bar is hidden (styles.css). */
+.controls-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.controls-summary { display: contents; }
+.controls-toggle {
+  position: relative; flex: none; width: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 12px 0 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line, #e7e5df);
+  background: var(--surface, #fff);
+  color: var(--ink, #17181c);
+  font: 600 13px/1 var(--font-body);
+  letter-spacing: 0; text-transform: none;
+  cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+/* How many filters are on — the one accent in the row, so it reads at a glance. */
+.controls-count {
+  min-width: 19px; height: 19px; padding: 0 6px;
+  border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center;
+  font: 700 11px/1 var(--font-body); font-variant-numeric: tabular-nums;
+  background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
+}
+.controls-count[hidden] { display: none; }
+.controls-chevron { flex: none; display: block; color: var(--ink-2, #5c5e63); transform: rotate(180deg); transition: transform var(--transition-base); }
+.controls.filters-collapsed .controls-chevron { transform: none; }
+
+/* An active filter: tap to remove it. Quieter than the panel's accent pills —
+   there can be several, right above the results. A long studio name gives way
+   inside its chip (the label truncates); the chip never outgrows the row. */
+.filter-chip {
+  position: relative; flex: 0 1 auto; min-width: 0; max-width: 100%;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 10px 0 13px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: var(--accent-soft, #e2ede7);
+  /* The top of the ink ladder: on Handheld --text IS the accent, and --text on
+     its own soft tint measured 4.47:1. --text-heading holds >= 6.5:1 on
+     --accent-soft in all seven themes; the × takes --text (a glyph: >= 3:1). */
+  color: var(--text-heading, #0e0f12);
+  font: 600 13px/1 var(--font-body);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.filter-chip-label { min-width: 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-chip-x { flex: none; font-size: var(--text-2xl); font-weight: var(--weight-normal); line-height: 1; color: var(--ink, #17181c); }
+/* Open panel: its own pills show what is on; the count and "Clear" stay. */
+.controls:not(.filters-collapsed) .filter-chip { display: none; }
+.controls-clear {
+  position: relative; flex: none; margin-left: auto;
+  height: 36px; padding: 0 var(--space-1);
+  background: none; border: none;
+  color: var(--ink-2, #5c5e63); font: 600 13px/1 var(--font-body);
+  text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
+  cursor: pointer;
+}
+/* A fingertip's height behind each (--tap-min), grown up and down only: rows of
+   36px chips sit 8px apart, so one row's area ends where the next begins. */
+.controls-toggle::after, .filter-chip::after, .controls-clear::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%;
+  height: var(--tap-min); transform: translateY(-50%);
+}
+.controls-toggle:focus-visible, .filter-chip:focus-visible, .controls-clear:focus-visible {
+  outline: 2px solid var(--accent, #1f6f5c); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) { .controls-chevron { transition: none; } }
+@media (max-width: 1023px) {
+  .controls.filters-collapsed > .controls-body { display: none; }
+  /* "Clear" lives in the Filters bar on these widths: the header's own
+     "Clear filters" would be the same action twice on one phone screen. */
+  .disc-clear-btn { display: none; }
+}
 .control-group { gap: 8px; }
 .control-group > label,
 .controls-body label {
@@ -328,20 +413,8 @@ header .theme-toggle {
   letter-spacing: 0; text-transform: none; white-space: nowrap;
   color: var(--ink-3);
 }
-/* Phones: the day header stays on screen while its classes scroll under it —
-   a week of every studio is ~100 cards a day, and the date was gone after the
-   first swipe. Only where .tab-content is the scroller (<=640px, css/tabs.css):
-   on wider screens the document scrolls and the tab bar is what sticks to the
-   top. Solid page background so cards do not show through; above the cards'
-   own stacking contexts (:hover / :active transforms), below every overlay.
-   The 6px top margin moves into the padding so the stuck text clears the edge. */
-@media (max-width: 640px) {
-  .day-header {
-    position: sticky; top: 0; z-index: 2;
-    background: var(--bg);
-    margin-top: 0; padding-top: var(--space-4);
-  }
-}
+/* (The header no longer sticks on a phone: a range is shown one day at a time,
+   and what stays on screen is the day strip — the block at the end of this file.) */
 .type-section-header { border-bottom: none; margin: 14px 0 8px; }
 .class-grid { display: flex; flex-direction: column; gap: 10px; }
 
@@ -651,3 +724,122 @@ header .theme-toggle {
 
 .week-event.is-waitlisted { border-left-color: var(--badge-waitlist-text); border-style: dashed; border-left-style: solid; }
 .week-event-social.week-event-wl { background: var(--badge-waitlist-bg); color: var(--badge-waitlist-text); border: 1px solid var(--badge-waitlist-border); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Discover: one day at a time — the day strip + pager
+   (js/app.js _paintDays; the swipe is js/interactions.js section D)
+   A range of more than one day is a strip of days (#dayStrip, a tablist)
+   over ONE day's cards (#dayPager). A single day keeps the plain heading
+   and list above. Layout + type only: every colour, size, radius and
+   duration is a token, so all seven themes follow.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* The strip carries a count per day: once the load is over, the "N classes"
+   line above it has nothing left to say. (It stays while results stream in —
+   it is where the spinner lives.) */
+#results[data-day-mode="paged"] > .summary.is-settled { display: none; }
+
+/* One scrolling row, like the pill rows above it; it never scrolls the page. */
+.day-strip {
+  display: flex; flex-wrap: nowrap; gap: var(--space-3);
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: var(--space-3) 0 var(--space-4);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.day-strip::-webkit-scrollbar { display: none; }
+/* Phones: the strip stays on screen while the day's classes scroll under it —
+   it is the cue to which day this is. Only where .tab-content is the scroller
+   (<=640px, css/tabs.css): wider, the document scrolls and the tab bar is what
+   sticks to the top. Solid page background so cards do not show through; above
+   the cards' own stacking contexts (:hover / :active transforms), below every
+   overlay. */
+@media (max-width: 640px) {
+  .day-strip { position: sticky; top: 0; z-index: 2; }
+}
+/* Desktop: the row wraps instead — a mouse wheel cannot scroll it sideways
+   (same rule as the filter rows, css/discover-layout-fix.css). */
+@media (min-width: 1024px) {
+  .day-strip { flex-wrap: wrap; overflow-x: visible; }
+}
+
+.day-pill {
+  position: relative; flex: none;
+  display: inline-flex; align-items: center; gap: var(--space-3);
+  height: calc(var(--tap-min) - var(--space-2)); padding: 0 var(--space-6);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2);
+  font-family: var(--font-body); font-size: var(--text-md); font-weight: var(--weight-semibold);
+  line-height: 1; white-space: nowrap; cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+/* Drawn the height of the filter pills; tappable at the full --tap-min. */
+.day-pill::after { content: ''; position: absolute; inset: calc(var(--space-2) / -2) 0; }
+.day-pill-count {
+  min-width: var(--space-8); height: var(--space-8); padding: 0 var(--space-2);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: var(--radius-full);
+  background: var(--surface-2); color: inherit;
+  font-size: var(--text-sm); font-weight: var(--weight-bold);
+}
+/* A day with nothing on keeps its place, quieter — by its SHAPE (no fill, no
+   outline), not by fainter text: the ink steps are a shade apart in the dark
+   themes, and the label still has to be read. */
+.day-pill.is-empty { background: transparent; border-color: transparent; color: var(--ink-3); }
+.day-pill.is-empty .day-pill-count { background: transparent; }
+/* No count to print (a day never loaded, or not open for booking yet): no
+   bubble either. */
+.day-pill-count:empty { display: none; }
+/* Where a swipe in progress is heading. */
+.day-pill.is-target { border-color: var(--accent); color: var(--ink); }
+.day-pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.day-pill.active .day-pill-count { background: transparent; border-color: currentColor; }
+.day-pill:focus-visible, .day-hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The pager. pan-y: the browser keeps vertical scrolling and leaves a sideways
+   drag to the swipe — which is why that never has to preventDefault. And
+   pinch-zoom, as on the Stats pages: nearly all of Discover sits inside the
+   pager, the viewport allows zoom, and the swipe drops a second finger. */
+.day-pager { touch-action: pan-y pinch-zoom; }
+#dayPager .day-group { margin-bottom: 0; }
+/* After a change of day the cards do not replay their entrance under the slide. */
+.day-track.is-swapped .class-card { animation: none; }
+
+/* Saturday 20 September, with the count under the date: two short lines hold
+   at 375px in the mono themes, where one line of both did not — and the list
+   must not jump between a one- and a two-line heading from day to day. No
+   previous / next buttons here: the strip's pills and the swipe move days. */
+#dayPager .day-header {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  align-items: center; row-gap: var(--space-1);
+  padding: 0; margin: 0 0 var(--space-6);
+  border-bottom: 0;
+  font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold);
+  letter-spacing: 0; text-transform: none; text-align: center;
+}
+#dayPager .day-header > span { grid-column: 1; }
+#dayPager .day-header > .day-count { margin-left: 0; }
+
+/* An empty day: one line, one way on (.empty-action is the shared pill above). */
+.day-empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-6);
+  padding: var(--space-10) 0; text-align: center;
+}
+.day-empty-line { color: var(--ink-2); font-family: var(--font-body); font-size: var(--text-lg); }
+
+/* "Swipe to change day" — shown once, ever; the whole line is the dismiss button. */
+.day-hint {
+  display: flex; align-items: center; justify-content: center; gap: var(--space-3);
+  width: 100%; min-height: var(--tap-min); margin: 0 0 var(--space-3); padding: 0;
+  border: 0; background: none; color: var(--ink-3);
+  font-family: var(--font-body); font-size: var(--text-base); font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.day-hint-x { font-size: var(--text-xl); line-height: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .day-pill { transition: none; }
+}

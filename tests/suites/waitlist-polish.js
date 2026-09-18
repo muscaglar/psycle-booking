@@ -483,11 +483,12 @@ module.exports = async function (t) {
   t.section('"You\'re in" announcement: the overlap with a held seat and the real cancel terms');
   function announceWorld(o) {
     o = o || {};
-    const log = { confirms: [], events: [] };
+    const log = { confirms: [], events: [], timers: [] };
+    const els = o.els || {};
     const ctx = t.loadPure('js/app.js', 'bookings-card', {
       Date: pinnedDate(new Date(o.now || '2026-09-21T09:00:00').getTime()), // class (77) at 18:00 → 9h
-      setTimeout: () => 0, clearTimeout: () => {},
-      document: { getElementById: () => null },
+      setTimeout: (fn, ms) => { log.timers.push([fn, ms]); return log.timers.length; }, clearTimeout: () => {},
+      document: { getElementById: (id) => els[id] || null },
       PsycleEvents: { emit: (e) => log.events.push(e) },
       confirmModal: (opts) => { log.confirms.push(opts); return new Promise(() => {}); }, // left open
       _waitlistClassLine: (id) => 'Class ' + id,
@@ -496,7 +497,24 @@ module.exports = async function (t) {
     });
     t.vm.runInContext(clashBlock + '\n' + [grab('function _clashFor('), grab('function _dialogOpen(')].join('\n') +
       '\nvar _allocAnnounceTimer = null, _announceShowing = false; var _pendingAnnounce = { allocated: {}, emitted: {} };\n' + grab('function _announceAllocations('), ctx);
-    return { ctx, log };
+    return { ctx, log, els };
+  }
+  {
+    // The first-run welcome can be replayed from Settings while signed in. It is
+    // full-screen and ABOVE confirmModal: the dialog opened under it, took focus
+    // there, and the Escape that closed the welcome answered it too — a
+    // chargeable seat recorded as announced without ever being seen.
+    const w = announceWorld({ els: { onboardOverlay: {} } });
+    w.ctx._announceAllocations([77]);
+    eq([w.log.confirms.length, w.log.events, w.log.timers.length, w.log.timers[0] && w.log.timers[0][1]], [0, [], 1, 700],
+      'the welcome is up: nothing opens under it and nothing is emitted — it looks again in 700ms, as for any dialog');
+    w.log.timers[0][0]();
+    eq([w.log.confirms.length, w.log.timers.length], [0, 2], '…and again, for as long as it stays up');
+    delete w.els.onboardOverlay;
+    w.log.timers[1][0]();
+    eq([w.log.confirms.length, w.log.confirms[0] && w.log.confirms[0].title, w.log.events], [1, "You're in — Psycle gave you a spot", ['waitlist:allocated']],
+      'welcome closed: the announcement goes up, to be acknowledged for real');
+    ok(!/onboardOverlay/.test(grab('function _dialogOpen(')), '_dialogOpen() itself does not know the welcome: launch rendering underneath must not wait for it');
   }
   {
     const fallback = { bookings: { 10: seat() }, cache: { 10: { id: 10, start_at: '2026-09-21T17:45:00', duration: 45, _typeName: 'Ride 45', _locName: 'Oxford Circus' } } };

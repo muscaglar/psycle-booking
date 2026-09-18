@@ -23,8 +23,22 @@ module.exports = async function (t) {
   t.section('Filters: date presets → {startDate, daysAhead, label}');
   t.eq(F._dateModeWindow('today', TODAY), { startDate: TODAY, daysAhead: 1, label: 'Today' }, 'today');
   t.eq(F._dateModeWindow('tomorrow', TODAY), { startDate: '2026-09-18', daysAhead: 1, label: 'Tomorrow' }, 'tomorrow');
-  t.eq(F._dateModeWindow('week', TODAY), { startDate: TODAY, daysAhead: 7, label: '7 days' }, 'week');
-  t.eq(F._dateModeWindow('2week', TODAY), { startDate: TODAY, daysAhead: 14, label: '14 days' }, '2week is a preset too (it restored as 7 days with no pill lit)');
+  t.eq(F._dateModeWindow('week', TODAY), { startDate: TODAY, daysAhead: 6, label: '7 days' }, 'week: daysAhead counts the days AFTER the first, so "7 days" is 6 (it was 7 — eight days under that label)');
+  t.eq(F._dateModeWindow('2week', TODAY), { startDate: TODAY, daysAhead: 13, label: '14 days' }, '2week is a preset too (it restored as 7 days with no pill lit) — 13, for fourteen days');
+  {
+    // The label is a promise about the range: count the calendar days each
+    // multi-day preset really fetches (start … _windowEndDate, both included).
+    const daysIn = (mode, today) => {
+      const w = F._dateModeWindow(mode, today);
+      let n = 1;
+      for (let d = w.startDate; d < F._windowEndDate(w.startDate, w.daysAhead, mode) && n < 40; d = F._addDaysStr(d, 1)) n++;
+      return n;
+    };
+    t.eq([daysIn('week', TODAY), daysIn('2week', TODAY), daysIn('nextweek', TODAY)], [7, 14, 7], '"7 days" is seven days, "14 days" fourteen and "Next week" Monday–Sunday (they were 8 · 15 · 7: the day strip drew a pill too many)');
+    t.eq([daysIn('week', '2026-10-23'), daysIn('2week', '2026-10-23'), daysIn('week', '2026-12-28')], [7, 14, 7], '…across the clock change and a year end as well');
+    t.eq([F._windowEndDate(TODAY, F._dateModeWindow('week', TODAY).daysAhead, 'week'), F._windowEndDate(TODAY, F._dateModeWindow('2week', TODAY).daysAhead, '2week')], ['2026-09-23', '2026-09-30'],
+      'from Thursday 17th: "7 days" ends on Wednesday 23rd, "14 days" on Wednesday 30th — a window cached under the old, longer key still covers both');
+  }
   t.eq(F._dateModeWindow('tomorrow', '2026-09-30').startDate, '2026-10-01', 'tomorrow crosses a month end');
   t.eq(F._dateModeWindow(null, TODAY), null, 'null mode is not a preset');
   t.eq(F._dateModeWindow('month', TODAY), null, 'an unknown mode is not a preset');
@@ -37,8 +51,8 @@ module.exports = async function (t) {
   t.eq(F._windowEndDate('2026-09-18', 1, 'tomorrow'), '2026-09-18', 'Tomorrow ends on its own day');
   t.eq(F._windowEndDate('2026-09-19', 1, null), '2026-09-19', 'a calendar-picked date is ONE day (it used to span two)');
   t.eq(F._windowEndDate('2026-09-19', 1, 'week'), '2026-09-19', 'the planner sets one day without clearing the mode — still one day');
-  t.eq(F._windowEndDate(TODAY, 7, 'week'), '2026-09-24', '7 days is unchanged (start + 7), so cached window keys still match');
-  t.eq(F._windowEndDate(TODAY, 14, '2week'), '2026-10-01', '14 days is unchanged (start + 14)');
+  t.eq(F._windowEndDate(TODAY, 7, 'week'), '2026-09-24', 'the rule itself is unchanged (start + days): it is the PRESETS that ask for 6 / 13 now');
+  t.eq(F._windowEndDate(TODAY, 14, '2week'), '2026-10-01', '…start + 14');
   t.eq(F._windowEndDate(TODAY, 8, null), '2026-09-25', 'a multi-day range with no mode runs start + days');
   // Find similar writes 7 / 8 days without a pill tap: the mode left from an
   // earlier Today/Tomorrow tap shrank both searches to a single day.
@@ -54,8 +68,9 @@ module.exports = async function (t) {
 
   // ── _datePillState ───────────────────────────────────────────────────────
   t.section('Filters: date row state');
-  t.eq(F._datePillState('week', TODAY, '7', TODAY), { label: '7 days', picked: null }, 'week lights "7 days" (input values arrive as strings)');
-  t.eq(F._datePillState('2week', TODAY, 14, TODAY), { label: '14 days', picked: null }, '2week lights "14 days"');
+  t.eq(F._datePillState('week', TODAY, '6', TODAY), { label: '7 days', picked: null }, 'week lights "7 days" (input values arrive as strings)');
+  t.eq(F._datePillState('2week', TODAY, 13, TODAY), { label: '14 days', picked: null }, '2week lights "14 days"');
+  t.eq(F._datePillState('week', TODAY, '7', TODAY), { label: null, picked: null }, 'eight days (what "7 days" used to write) is no longer the week preset: nothing lit');
   t.eq(F._datePillState('today', TODAY, '1', TODAY), { label: 'Today', picked: null }, 'today lights "Today", not the calendar button');
   t.eq(F._datePillState('tomorrow', '2026-09-18', '1', TODAY), { label: 'Tomorrow', picked: null }, 'tomorrow lights "Tomorrow"');
   t.eq(F._datePillState(null, '2026-09-19', '1', TODAY), { label: null, picked: '2026-09-19' }, 'a picked date lights no preset and is printed on the calendar button');
@@ -68,27 +83,27 @@ module.exports = async function (t) {
   // ── _restoredDateState ───────────────────────────────────────────────────
   t.section('Filters: saved date filter → restored state');
   t.eq(F._restoredDateState({ dateQuickMode: '2week', startDate: '2026-09-01', daysAhead: '7' }, TODAY),
-    { mode: '2week', startDate: TODAY, daysAhead: 14 }, '14 days comes back as 14 days from today (it came back as 7)');
+    { mode: '2week', startDate: TODAY, daysAhead: 13 }, '14 days comes back as 14 days from today (it came back as 7)');
   t.eq(F._restoredDateState({ dateQuickMode: 'today', startDate: '2026-09-10', daysAhead: '1' }, TODAY),
     { mode: 'today', startDate: TODAY, daysAhead: 1 }, 'Today is re-derived from the current date, not the saved one');
   t.eq(F._restoredDateState({ dateQuickMode: 'tomorrow', startDate: '2026-09-10', daysAhead: '1' }, TODAY),
     { mode: 'tomorrow', startDate: '2026-09-18', daysAhead: 1 }, 'Tomorrow is re-derived too');
   t.eq(F._restoredDateState({ dateQuickMode: 'week', startDate: '2026-09-10', daysAhead: '7' }, TODAY),
-    { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'week');
+    { mode: 'week', startDate: TODAY, daysAhead: 6 }, 'week — a save from before the change (daysAhead "7") comes back as the seven-day week, pill lit');
   t.eq(F._restoredDateState({ dateQuickMode: null, startDate: '2026-09-19', daysAhead: '1' }, TODAY),
     { mode: null, startDate: '2026-09-19', daysAhead: 1 }, 'a picked date still ahead is kept, with NO mode');
   t.eq(F._restoredDateState({ dateQuickMode: null, startDate: TODAY, daysAhead: '1' }, TODAY),
     { mode: null, startDate: TODAY, daysAhead: 1 }, 'a picked date that is today is kept');
   t.eq(F._restoredDateState({ dateQuickMode: null, startDate: '2026-09-12', daysAhead: '1' }, TODAY),
-    { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'a picked date in the PAST falls back to the week (it opened on "No classes found")');
+    { mode: 'week', startDate: TODAY, daysAhead: 6 }, 'a picked date in the PAST falls back to the week (it opened on "No classes found")');
   t.eq(F._restoredDateState({ dateQuickMode: null, startDate: '2026-09-16', daysAhead: '7' }, TODAY),
-    { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'a range that merely STARTED in the past falls back as well');
-  t.eq(F._restoredDateState({ dateQuickMode: null, startDate: '2026-09-19', daysAhead: 'x' }, TODAY).daysAhead, 7, 'unreadable daysAhead → 7');
+    { mode: 'week', startDate: TODAY, daysAhead: 6 }, 'a range that merely STARTED in the past falls back as well');
+  t.eq(F._restoredDateState({ dateQuickMode: null, startDate: '2026-09-19', daysAhead: 'x' }, TODAY).daysAhead, 6, 'unreadable daysAhead → a week from that day (the week preset\'s own 6)');
   t.eq(F._restoredDateState({ dateQuickMode: 'constructor', startDate: '2026-09-12' }, TODAY).mode, 'week', 'garbage mode + past date → week');
   t.eq(F._restoredDateState({ dateQuickMode: 'constructor', startDate: '2026-09-19', daysAhead: '1' }, TODAY),
     { mode: null, startDate: '2026-09-19', daysAhead: 1 }, 'garbage mode + future date → the date, mode cleared');
-  t.eq(F._restoredDateState({}, TODAY), { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'nothing saved about dates → week');
-  t.eq(F._restoredDateState(null, TODAY), { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'null → week (no throw)');
+  t.eq(F._restoredDateState({}, TODAY), { mode: 'week', startDate: TODAY, daysAhead: 6 }, 'nothing saved about dates → week');
+  t.eq(F._restoredDateState(null, TODAY), { mode: 'week', startDate: TODAY, daysAhead: 6 }, 'null → week (no throw)');
   ['today', 'tomorrow', 'week', 'nextweek', '2week'].forEach((mode) => {
     const r = F._restoredDateState({ dateQuickMode: mode }, TODAY);
     t.eq(F._datePillState(r.mode, r.startDate, r.daysAhead, TODAY).label, F._dateModeWindow(mode, TODAY).label,
@@ -240,7 +255,7 @@ module.exports = async function (t) {
     };
     const SAT = '2026-09-19';
     const cases = [
-      ['14 days', { dateQuickMode: '2week', startDate: '2026-09-10', daysAhead: '14' }, { mode: '2week', startDate: TODAY, daysAhead: 14, lit: { label: '14 days', picked: null } }],
+      ['14 days', { dateQuickMode: '2week', startDate: '2026-09-10', daysAhead: '14' }, { mode: '2week', startDate: TODAY, daysAhead: 13, lit: { label: '14 days', picked: null } }],
       ['Next week', { dateQuickMode: 'nextweek', startDate: '2026-09-14', daysAhead: '6' }, { mode: 'nextweek', startDate: '2026-09-21', daysAhead: 6, lit: { label: 'Next week', picked: null } }],
       ['Tomorrow', { dateQuickMode: 'tomorrow', startDate: '2026-09-11', daysAhead: '1' }, { mode: 'tomorrow', startDate: '2026-09-18', daysAhead: 1, lit: { label: 'Tomorrow', picked: null } }],
       ['Today', { dateQuickMode: 'today', startDate: '2026-09-10', daysAhead: '1' }, { mode: 'today', startDate: TODAY, daysAhead: 1, lit: { label: 'Today', picked: null } }],
@@ -256,7 +271,7 @@ module.exports = async function (t) {
     });
     let w = launch(null);
     w.ctx.__initTail();
-    t.eq(w.state(), { mode: 'week', startDate: TODAY, daysAhead: 7, lit: { label: '7 days', picked: null } }, 'nothing saved: week / today / 7 with "7 days" lit, as before');
+    t.eq(w.state(), { mode: 'week', startDate: TODAY, daysAhead: 6, lit: { label: '7 days', picked: null } }, 'nothing saved: week / today / seven days with "7 days" lit, as before');
     w = launch('{not json');
     w.ctx.__initTail();
     t.eq(w.state().mode, 'week', 'an unreadable save falls back to the week (no throw)');

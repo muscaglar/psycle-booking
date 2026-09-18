@@ -99,7 +99,7 @@ module.exports = async function (t) {
       console: { log() {}, warn() {}, error: console.error },
       setTimeout: (fn, ms) => { log.timers.push({ fn, ms }); return log.timers.length; },
       clearTimeout: () => {},
-      document: { querySelector: () => null, getElementById: () => null },
+      document: { querySelector: () => null, getElementById: (id) => (o.els && o.els[id]) || null },
       toast: (msg, kind) => log.toasts.push([msg, kind]),
       Promise,
     };
@@ -269,6 +269,19 @@ module.exports = async function (t) {
     open = false;
     await w.ctx.checkWatchedEvents(false);
     eq([w.log.modals.length, w.log.gets.length], [1, 1], 'found earlier, a dialog was in the way → shown on the next check even though that one sends nothing');
+  }
+  {
+    // The first-run welcome (replayable from Settings while signed in) is
+    // full-screen and above confirmModal, and _dialogOpen() does not know it:
+    // "Spot opened" opened UNDER it, and the Escape that closed the welcome
+    // answered it too — the class left the watchlist unseen.
+    const els = { onboardOverlay: {} };
+    const w = world({ watch: ['10'], cache: FULL_CACHE(['10']), api: { 10: detail(10) }, els });
+    await w.ctx.checkWatchedEvents(true);
+    eq([w.log.modals.length, w.watch(), w.log.timers.some((x) => x.ms === 700)], [0, ['10'], true], 'the welcome is up: no dialog under it, still watched, and it looks again in 700ms');
+    delete els.onboardOverlay;
+    w.log.timers.filter((x) => x.ms === 700).pop().fn();
+    eq(w.log.modals.length, 1, 'welcome closed → the dialog gets its turn');
   }
   {
     let w = world({ watch: ['10'], cache: FULL_CACHE(['10']), api: { 10: detail(10, { data: { is_fully_booked: undefined } }) } });

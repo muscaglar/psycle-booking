@@ -241,7 +241,7 @@
 
     let bodyHtml = '';
     if (history.length === 0) {
-      bodyHtml = '<div class="history-empty">No booking history yet. Book a class and it will appear here.</div>';
+      bodyHtml = '<div class="history-empty">No booking history yet.</div>';
     } else {
       if (!_histMonthFmt) {
         _histMonthFmt = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' });
@@ -866,7 +866,11 @@
     const list = getNotifyWatchlist().map(String);
     while (_watchOpened.length && !(list.includes(_watchOpened[0]) && (window._eventCache || {})[_watchOpened[0]])) _watchOpened.shift();
     if (!_watchOpened.length) return;
-    const busy = typeof window._dialogOpen === 'function' ? window._dialogOpen() : !!document.getElementById('psycleConfirmOverlay');
+    // The first-run welcome counts too (it can be replayed from Settings while
+    // signed in): full-screen and above confirmModal, the dialog would open
+    // under it and its Escape would answer both.
+    const busy = (typeof window._dialogOpen === 'function' ? window._dialogOpen() : !!document.getElementById('psycleConfirmOverlay')) ||
+      !!document.getElementById('onboardOverlay');
     if (busy) { _watchDialogTimer = setTimeout(_showOpenedSpots, 700); return; }
     const eid = _watchOpened[0];
     const evt = window._eventCache[eid];
@@ -967,8 +971,9 @@
           // Browser notification if permitted (the tab may be in the background)
           if ('Notification' in window && Notification.permission === 'granted') {
             try {
-              new Notification('Psycle — Spot Available!', {
-                body: 'Spot opened! ' + ((typeof window._waitlistClassLine === 'function' && window._waitlistClassLine(eid)) || cache[eid]._typeName || 'Class'),
+              // Same title as the in-app dialog. (It was headed "Psycle — …": this is Psync, not Psycle.)
+              new Notification('Spot opened', {
+                body: (typeof window._waitlistClassLine === 'function' && window._waitlistClassLine(eid)) || cache[eid]._typeName || 'Class',
                 icon: 'icons/icon-192.png',
                 tag: 'psycle-notify-' + eid,
               });
