@@ -393,11 +393,12 @@
       banner.id = SAFE_BANNER_ID;
       banner.className = 'safe-mode-banner';
       banner.setAttribute('role', 'alert');
-      // Inline styles mirror #sessionBanner's amber/warning treatment so it
-      // looks native even if css/*.css hasn't shipped a .safe-mode-banner rule.
+      // Layout stays inline (mirrors #sessionBanner); the amber/warning COLOURS
+      // come from the .safe-mode-banner rule in css/styles.css, shared with
+      // .app-banner, so the bar follows the theme instead of being a fixed
+      // dark-mode brown on the light themes.
       banner.style.cssText =
-        'display:flex;background:#1a0f0a;border-bottom:1px solid #4a2010;' +
-        'padding:10px 24px;font-size:13px;color:#e0a040;align-items:center;gap:12px';
+        'display:flex;padding:10px 24px;font-size:13px;align-items:center;gap:12px';
 
       var msg = document.createElement('span');
       msg.textContent = '⚠️ Heads up: Psycle’s data looks different than ' +
@@ -408,7 +409,7 @@
       details.type = 'button';
       details.textContent = 'Details';
       details.style.cssText =
-        'background:none;border:none;color:#e0a040;font-weight:700;cursor:pointer;' +
+        'background:none;border:none;color:inherit;font-weight:700;cursor:pointer;' +
         'font-size:13px;text-decoration:underline;padding:0';
       details.onclick = function () { openDiagnostics(); };
       banner.appendChild(details);
@@ -418,7 +419,7 @@
       dismiss.setAttribute('aria-label', 'Dismiss');
       dismiss.textContent = '×';
       dismiss.style.cssText =
-        'margin-left:auto;background:none;border:none;color:#666;cursor:pointer;' +
+        'margin-left:auto;background:none;border:none;color:inherit;cursor:pointer;' +
         'font-size:16px;line-height:1';
       dismiss.onclick = function () { removeBanner(); };
       banner.appendChild(dismiss);

@@ -56,10 +56,12 @@ catch (e) { document.documentElement.style.display = 'none'; }
   </div>
 </header>
 
-<div id="sessionBanner" style="display:none;background:#1a0f0a;border-bottom:1px solid #4a2010;padding:10px 24px;font-size:13px;color:#e07040;align-items:center;gap:12px">
+<!-- Colours/layout live in .app-banner (css/styles.css) so the banner follows the
+     theme; only `display` stays inline because JS toggles it ('flex'/'none'). -->
+<div id="sessionBanner" class="app-banner" style="display:none">
   <span>⚠️ Your session has expired.</span>
-  <a href="#" onclick="event.preventDefault();openLoginPopup()" style="color:#e94560;font-weight:700;text-decoration:none">Sign in again →</a>
-  <button onclick="document.getElementById('sessionBanner').style.display='none'" style="margin-left:auto;background:none;border:none;color:#666;cursor:pointer;font-size:16px;line-height:1">×</button>
+  <a href="#" onclick="event.preventDefault();openLoginPopup()" class="app-banner-action">Sign in again →</a>
+  <button onclick="document.getElementById('sessionBanner').style.display='none'" class="app-banner-close">×</button>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -83,13 +85,13 @@ catch (e) { document.documentElement.style.display = 'none'; }
               Connect Psycle account →
             </a>
           </div>
-          <div style="margin-top:8px;font-size:11px;color:#555">Works on iPhone and desktop.</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">Works on iPhone and desktop.</div>
         </div>
       </div>
     </div>
 
-    <div style="margin:16px 0;border-top:1px solid #1e1e1e;padding-top:16px">
-      <div style="font-size:11px;color:#555;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Or paste token manually</div>
+    <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Or paste token manually</div>
       <input id="tokenInput" class="token-input" placeholder="Paste token from psyclelondon.com console…" oninput="validateToken()">
     </div>
 
@@ -112,7 +114,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
     <div class="bike-legend">
       <span><i style="background:var(--bg-input,#1a1a1a);border:1px solid var(--border-light,#444)"></i> Available</span>
       <span><i style="background:var(--bg-deep,#2a0a0a);border:1px solid var(--border,#4a1a1a)"></i> Taken</span>
-      <span><i style="background:#e94560"></i> Your pick</span>
+      <span><i style="background:var(--accent)"></i> Your pick</span>
     </div>
     <div class="bike-map-wrap">
       <svg id="bikeSvg" width="600" height="300"></svg>
@@ -125,9 +127,9 @@ catch (e) { document.documentElement.style.display = 'none'; }
   </div>
 </div>
 
-<div id="corsBanner" style="display:none; background:#2a0f0f; border-bottom:1px solid #4a1a1a; padding:12px 24px; font-size:12px; color:#e94560;">
+<div id="corsBanner" class="app-banner app-banner-danger" style="display:none">
   <strong>Security warning:</strong> Running via <code>file://</code> — API requests are routed through a third-party CORS proxy (corsproxy.io). <strong>Your auth token is visible to this proxy.</strong>
-  For secure access, serve locally: <code style="background:#111;padding:2px 6px;border-radius:4px;color:#4a9eff">npx serve -l 8080</code> then open <code style="background:#111;padding:2px 6px;border-radius:4px;color:#4a9eff">http://localhost:8080</code>
+  For secure access, serve locally: <code>npx serve -l 8080</code> then open <code>http://localhost:8080</code>
 </div>
 
 <div class="controls" id="controlsPanel">
@@ -140,11 +142,11 @@ catch (e) { document.documentElement.style.display = 'none'; }
   <div class="control-group">
     <label>Date</label>
     <div class="date-presets">
+      <button class="date-quick-btn date-pick" id="pickDateBtn" onclick="toggleDatePicker()" aria-label="Pick a date" title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg></button>
       <button class="date-quick-btn" onclick="setDateQuick('today')">Today</button>
       <button class="date-quick-btn" onclick="setDateQuick('tomorrow')">Tomorrow</button>
       <button class="date-quick-btn" onclick="setDateQuick('week')">7 days</button>
       <button class="date-quick-btn" onclick="setDateQuick('2week')">14 days</button>
-      <button class="date-quick-btn date-pick" id="pickDateBtn" onclick="toggleDatePicker()" aria-label="Pick a date" title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg></button>
     </div>
     <div id="datePicker" class="date-picker" style="display:none"></div>
     <div style="display:none">
@@ -154,15 +156,15 @@ catch (e) { document.documentElement.style.display = 'none'; }
   </div>
 
   <div class="control-group">
-    <label>Location <span id="locationHint" style="color:#555;font-weight:400;text-transform:none;letter-spacing:0"></span></label>
+    <label>Location <span id="locationHint" class="label-hint"></span></label>
     <div id="locationChips" class="location-chips"></div>
   </div>
 
   <div class="control-group" style="position:relative">
     <label>Class Type</label>
     <div id="categoryPills" style="min-height:36px"></div>
-    <div id="strengthSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center"></div>
-    <div id="reformerSubPills" style="display:none;gap:6px;flex-wrap:wrap;align-items:center"></div>
+    <div id="strengthSubPills" style="display:none"></div>
+    <div id="reformerSubPills" style="display:none"></div>
   </div>
 
   <div class="control-group" style="position:relative">

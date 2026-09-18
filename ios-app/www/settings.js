@@ -142,6 +142,11 @@
     PsycleEvents.on('booking:complete', function () { updatePill(); });
     PsycleEvents.on('booking:cancelled', function () { updatePill(); });
     PsycleEvents.on('seat:cancelled', function () { updatePill(); });
+    // Sign-out empties _myBookings without a bookings:loaded (an empty map
+    // there would tell the calendar sync "the server confirmed none"), so the
+    // pill needs its own cue or it keeps counting down to the previous
+    // account's class. Nothing to clear if it was never created.
+    PsycleEvents.on('auth:changed', function () { if (_pillEl) updatePill(); });
   } else {
     // Fallback: poll for bookings
     var _pollPill = setInterval(function () {
@@ -183,10 +188,12 @@
             '<select class="bike-pref-studio-select" id="bikePrefStudio" onchange="renderBikePrefGrid()">' +
               '<option value="">Select a studio…</option>' +
             '</select>' +
+            // Swatches mirror .bike-pref-svg-slot in css/settings.css (same
+            // tokens, avoid dashed) so the legend matches the map in every theme.
             '<div class="bike-pref-legend">' +
-              '<span><i style="background:#1a1a1a;border:1px solid #333"></i> Neutral</span>' +
-              '<span><i style="background:#0a2a1a;border:1px solid #5dba5d"></i> Prefer</span>' +
-              '<span><i style="background:#2a0a0a;border:1px solid #e94560"></i> Avoid</span>' +
+              '<span><i style="background:var(--bg-input);border:1px solid var(--border-light)"></i> Neutral</span>' +
+              '<span><i style="background:var(--badge-highlight-bg);border:1px solid var(--badge-highlight-text)"></i> Prefer</span>' +
+              '<span><i style="background:var(--badge-full-bg);border:1px dashed var(--badge-full-text)"></i> Avoid</span>' +
             '</div>' +
             '<div id="bikePrefGrid" class="bike-pref-grid" style="display:none"></div>' +
           '</div>' +
@@ -200,7 +207,7 @@
             '<div class="app-advanced">' +
               '<button class="app-advanced-btn" onclick="exportSettings()">Export settings</button>' +
               '<button class="app-advanced-btn" onclick="document.getElementById(\'settingsImportFile\')?.click()">Import settings</button>' +
-              '<input type="file" id="settingsImportFile" accept=".json" style="display:none" onchange="importSettings(this)">' +
+              '<input type="file" id="settingsImportFile" accept=".json,.txt,application/json,text/plain" style="display:none" onchange="importSettings(this)">' +
               '<button class="app-advanced-btn" onclick="downloadBugReport()">Bug report</button>' +
             '</div>' +
           '</div>' +
@@ -555,7 +562,7 @@
 
     var studio = (_studioMap || {})[Number(studioId)];
     if (!studio || !studio.layout || !studio.layout.slots) {
-      grid.innerHTML = '<div style="color:#555;font-size:13px">No layout available for this studio</div>';
+      grid.innerHTML = '<div style="color:var(--text-dim);font-size:13px">No layout available for this studio</div>';
       return;
     }
 
@@ -582,8 +589,10 @@
 
     // Objects (instructor podium etc.)
     inner += objects.map(function (obj) {
-      return '<rect x="' + sx(obj.x) + '" y="' + sy(obj.y) + '" width="' + SLOT + '" height="' + SLOT + '"' +
-        ' rx="4" fill="#1a1a0a" stroke="#333" stroke-dasharray="3,3"/>';
+      // Colours come from .bike-pref-svg-object (css/settings.css) so the
+      // podium follows the theme instead of staying a near-black tile.
+      return '<rect class="bike-pref-svg-object" x="' + sx(obj.x) + '" y="' + sy(obj.y) + '" width="' + SLOT + '" height="' + SLOT + '"' +
+        ' rx="4" stroke-dasharray="3,3"/>';
     }).join('');
 
     // Slots
@@ -737,17 +746,73 @@
     data._exported_at = new Date().toISOString();
     data._version = 1;
 
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var json = JSON.stringify(data, null, 2);
+    var fileName = 'psycle-settings-' + new Date().toISOString().split('T')[0] + '.json';
+    // Logged here: reliability.js's export hook looks for this function
+    // before this file has loaded, so it never installs.
+    if (typeof window.pushAction === 'function') window.pushAction('settings:export');
+
+    // iOS app: <a download> blob clicks are dead in WKWebView (same as the bug
+    // report below), so the only backup of tiers/favourites/bike prefs saved
+    // nothing while claiming success. Hand the file to the share sheet instead
+    // (Save to Files / AirDrop / Mail).
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+      _shareSettingsExport(json, fileName);
+      return;
+    }
+
+    var blob = new Blob([json], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'psycle-settings-' + new Date().toISOString().split('T')[0] + '.json';
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast('Settings exported', 'success');
   };
+
+  // ── pure:settings-export:start
+  // Native export. navigator.share() has to run in the SAME task as the tap —
+  // WebKit only opens the share sheet under a live user gesture — so nothing
+  // is awaited before it. Every toast reports what actually happened.
+  // (Self-contained so tests/suites/ios-bridge.js can drive it with a fake
+  // navigator / toast / nativeShare.)
+  function _shareSettingsExport(json, fileName) {
+    // Fallback: share the JSON as text through the Capacitor Share plugin
+    // (needs no gesture). "Save to Files" stores that as .txt, which is why
+    // the import picker accepts .txt as well.
+    var shareAsText = function () {
+      if (typeof window.nativeShare !== 'function') {
+        toast("Couldn't export on this device", 'error');
+        return;
+      }
+      window.nativeShare('Psync settings backup', json, null).then(function (shared) {
+        // false usually means the share sheet was dismissed — never claim success.
+        toast(shared ? 'Settings exported' : 'Export cancelled', shared ? 'success' : 'info');
+      }, function () {
+        toast("Couldn't export on this device", 'error');
+      });
+    };
+
+    var file = null;
+    try {
+      file = new File([json], fileName, { type: 'application/json' });
+      if (!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }))) file = null;
+    } catch (e) { file = null; }
+    if (!file) { shareAsText(); return; }
+
+    var pending;
+    try { pending = navigator.share({ files: [file] }); } catch (e) { shareAsText(); return; }
+    Promise.resolve(pending).then(function () {
+      toast('Settings exported', 'success');
+    }, function (err) {
+      if (err && err.name === 'AbortError') { toast('Export cancelled', 'info'); return; }
+      shareAsText(); // file sharing refused (type / gesture) — the text route still works
+    });
+  }
+  // ── pure:settings-export:end
 
   window.importSettings = function (input) {
     var status = document.getElementById('importStatus');

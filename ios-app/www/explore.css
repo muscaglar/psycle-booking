@@ -171,7 +171,7 @@
 
 .explore-sync-btn {
   background: var(--accent, #e94560);
-  color: var(--text-heading, #fff);
+  color: var(--accent-ink, #fff);
   border: none;
   border-radius: var(--radius-lg);
   padding: var(--space-3) var(--space-7);

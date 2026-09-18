@@ -41,6 +41,66 @@ function parsePsycleDate(v) {
   return v ? new Date(String(v).replace(' ', 'T')) : null;
 }
 
+// ── pure:gym-time:start ── (DOM-free; tests/suites/bookings-card.js evaluates this block)
+// Psycle is a UK gym: a naive 'YYYY-MM-DD HH:MM[:SS]' from the API is London
+// wall clock, whatever zone the device is in. The 12h late-cancel cutoff
+// (_cancelDeadline) and waitlist accept-by times (_waitlistTimeMs) need the
+// REAL instant: parsed device-locally, a member abroad on the web app / PWA was
+// promised "Free cancel until…" inside Psycle's charge window. This is the iOS
+// bridge's resolver (ios-app/www/native-bridge.js), kept here as well because
+// the web build never loads the bridge; in the app the bridge loads later and
+// re-exports its own copy — tests/suites/bookings-card.js holds the two to the
+// same answers. Only those two callers read it: card times, the calendar
+// export, reminders and the widget still parse start_at device-locally.
+let _gymWallFmt = null; // lazy: reports London wall clock for an instant
+
+// UTC ms for a London wall-clock reading (DST-correct, device zone irrelevant).
+// Starts from the same reading taken as UTC, then corrects by the offset London
+// reports there — looped, because the correction can itself cross a clock
+// change. Throws when the engine has no Europe/London data.
+function _gymWallToUtcMs(y, mo, d, h, mi, s) {
+  if (!_gymWallFmt) {
+    _gymWallFmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  }
+  const target = Date.UTC(y, mo - 1, d, h, mi, s || 0); // the clock reading, as if UTC
+  let guess = target;
+  for (let k = 0; k < 3; k++) {
+    const wall = {};
+    _gymWallFmt.formatToParts(new Date(guess)).forEach(p => { if (p.type !== 'literal') wall[p.type] = Number(p.value); });
+    // London wall clock at `guess`, re-read as a UTC epoch, minus what we want.
+    const deltaMs = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second) - target;
+    if (deltaMs === 0) break;
+    guess -= deltaMs;
+  }
+  return guess;
+}
+
+// Absolute UTC ms of an API class time. Only the naive shape is London wall
+// clock; an epoch number or a string carrying its own Z / ±hh:mm offset is
+// already an instant and goes to the engine's parser. NaN when nothing parses.
+function _gymClassStartMs(startAt) {
+  if (typeof startAt === 'number') return isFinite(startAt) ? startAt : NaN;
+  const s = String(startAt == null ? '' : startAt).trim();
+  if (!s) return NaN;
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(s);
+  if (m) {
+    try {
+      return _gymWallToUtcMs(+m[1], +m[2], +m[3], +m[4], +m[5], +(m[6] || 0));
+    } catch (e) {
+      // No Europe/London data in this engine: the device-local parse below is
+      // still right on a UK device.
+    }
+  }
+  const t = Date.parse(s.replace(' ', 'T'));
+  return isNaN(t) ? Date.parse(s) : t; // e.g. "YYYY-MM-DD HH:MM:SS +01:00"
+}
+if (typeof window !== 'undefined') window._psycleClassStartMs = _gymClassStartMs;
+// ── pure:gym-time:end ──
+
 function apiUrl(path) {
   return IS_FILE
     ? PROXY + encodeURIComponent(DIRECT_API + path)
@@ -177,9 +237,9 @@ function instrLink(name, instrId) {
 
 // ── Strength sub-filter ──────────────────────────────────────────
 const STRENGTH_SUBS = [
-  { key: 'UPPER', label: 'Upper', match: 'Upper Body', color: '#4a9eff' },
-  { key: 'LOWER', label: 'Lower', match: 'Lower Body', color: '#4a9eff' },
-  { key: 'FULL',  label: 'Full Body', match: 'Full Body',  color: '#4a9eff' },
+  { key: 'UPPER', label: 'Upper', match: 'Upper Body' },
+  { key: 'LOWER', label: 'Lower', match: 'Lower Body' },
+  { key: 'FULL',  label: 'Full Body', match: 'Full Body' },
 ];
 // selectedStrengthSubs is managed by state.js (default: all selected)
 
@@ -188,8 +248,8 @@ const STRENGTH_SUBS = [
 // variant word in the type name ("REFORMER: Signature 55" / "REFORMER:
 // Strength 50"). A class matching neither sub always shows.
 const REFORMER_SUBS = [
-  { key: 'SIGNATURE', label: 'Signature', match: 'Signature', color: '#27ae60' },
-  { key: 'STRENGTH',  label: 'Strength',  match: 'Strength',  color: '#27ae60' },
+  { key: 'SIGNATURE', label: 'Signature', match: 'Signature' },
+  { key: 'STRENGTH',  label: 'Strength',  match: 'Strength' },
 ];
 // selectedReformerSubs is managed by state.js (default: all selected)
 
@@ -201,8 +261,9 @@ function renderReformerSubPills() {
   if (!pilatesActive) return;
   container.innerHTML = REFORMER_SUBS.map(s => {
     const active = selectedReformerSubs.has(s.key);
+    // No inline colours (here or on the strength pills): an inline style beats
+    // the stylesheet, and .sub-pill in redesign.css is themed per token.
     return `<button class="sub-pill${active ? ' active' : ''}"
-      style="color:${s.color};border-color:${s.color};${active ? `background:${s.color}` : ''}"
       onclick="toggleReformerSub('${s.key}')">${s.label}</button>`;
   }).join('');
 }
@@ -228,7 +289,6 @@ function renderStrengthSubPills() {
   container.innerHTML = STRENGTH_SUBS.map(s => {
     const active = selectedStrengthSubs.has(s.key);
     return `<button class="sub-pill${active ? ' active' : ''}"
-      style="color:${s.color};border-color:${s.color};${active ? `background:${s.color}` : ''}"
       onclick="toggleStrengthSub('${s.key}')">${s.label}</button>`;
   }).join('');
 }
@@ -267,6 +327,22 @@ function _parseSlots(raw) {
 // NEWEST call may rebuild _myBookings — a slow, stale response landing after
 // a fresh booking would otherwise wipe that booking from local state.
 let _bookingsSeq = 0;
+
+// An empty _myBookings alone can't tell "nothing booked" from "couldn't ask".
+// 'failed' = this session's list has never loaded and the last /bookings
+// attempt failed: My Bookings then offers Retry instead of the confirmed-empty
+// "Nothing booked" hero. Once 'loaded', a failed REFRESH keeps the last good
+// list — empty or not — like every other failed refresh here.
+let _bookingsLoadState = 'pending'; // 'pending' | 'loaded' | 'failed'
+
+// A /bookings attempt failed (never called for a superseded one — the newer
+// call owns the screen). A 401 has already ended the session by the time it
+// gets here: that is showSessionExpired's repaint, not a load failure.
+function _noteBookingsLoadFailed() {
+  if (_bookingsLoadState === 'loaded' || !getBearerToken()) return;
+  _bookingsLoadState = 'failed';
+  if (!Object.keys(_myBookings).length) renderMyBookings();
+}
 
 // Local writes to _myBookings (book / join / leave / cancel / claim). A fetch
 // that STARTED before the last write is working from a stale server snapshot:
@@ -429,6 +505,7 @@ async function fetchMyBookings() {
   const startedAt = Date.now();
   if (!getBearerToken()) {
     _myBookings = {};
+    _bookingsLoadState = 'pending'; // whoever signs in next starts from the server's answer
     renderMyBookings(); // still render — the signed-out empty state lives there
     return true;
   }
@@ -437,7 +514,7 @@ async function fetchMyBookings() {
     const waitlistsPromise = fetchMyWaitlists(startedAt).catch(() => null);
     const res = await apiFetch('/bookings?limit=200');
     if (mySeq !== _bookingsSeq) return false; // a newer fetch superseded this one
-    if (!res.ok) return false;
+    if (!res.ok) { _noteBookingsLoadFailed(); return false; }
     const data = await res.json();
     if (mySeq !== _bookingsSeq) return false;
     const list = Array.isArray(data) ? data : (data.data || []);
@@ -520,6 +597,7 @@ async function fetchMyBookings() {
     // re-run below, which reads fresh data.
     const racedLocalWrite = _bookingsLocalWriteAt > startedAt;
     _myBookings = next;
+    _bookingsLoadState = 'loaded';
     if (diff && !racedLocalWrite) {
       if (diff.newlyAllocated.length) _announceAllocations(diff.newlyAllocated, diff);
       else _persistPlacesNow(diff.allocated);
@@ -566,13 +644,43 @@ async function fetchMyBookings() {
       }).catch(() => {});
     }
     return true;
-  } catch (e) { console.warn('[psycle] fetchMyBookings failed:', e); return false; }
+  } catch (e) {
+    console.warn('[psycle] fetchMyBookings failed:', e);
+    if (mySeq === _bookingsSeq) _noteBookingsLoadFailed();
+    return false;
+  }
 }
 let _waitlistsUnavailable = false; // last pass couldn't read /waitlists at all (My Bookings shows a note)
 
+// The Retry button on My Bookings' "Couldn't load your bookings" hero. Success
+// and failure both repaint the tab, so the button only needs restoring when
+// it is still on screen (this call was superseded and the newer one is slow).
+async function retryBookingsLoad(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+  let applied = false, mySeq = 0;
+  try {
+    const attempt = fetchMyBookings();
+    mySeq = _bookingsSeq; // the number that call just took (synchronously)
+    applied = await attempt;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+  }
+  // Superseded is not failed: the newer call may be about to succeed.
+  const stillFailed = !applied && mySeq === _bookingsSeq && _bookingsLoadState === 'failed';
+  // The list loaded, but not one of its classes did (see renderMyBookings): the
+  // same hero is back up under a 'loaded' state, and a silent Retry looks dead.
+  const held = Object.keys(_myBookings);
+  const stillUndrawn = applied && held.length > 0 && !held.some(id => _eventCache[id]);
+  if (stillFailed || stillUndrawn) toast("Still can't load your bookings — check your connection", 'error');
+}
+
 // Refresh bookings when the page becomes visible after being hidden
 document.addEventListener('visibilitychange', function () {
-  if (!document.hidden && getBearerToken()) fetchMyBookings();
+  if (document.hidden || !getBearerToken()) return;
+  fetchMyBookings();
+  // Plan usage / credits may have moved on another device (throttled). An
+  // unverified session is _healAuth's job, not a numbers refresh.
+  if (currentUser) refreshProfile();
 });
 
 // Toast (toastTimer managed by state.js)
@@ -586,7 +694,10 @@ function toast(msg, type = 'info') {
 
 // ── Discover empty state: signed-out users get one clear action ───
 function updateDiscoverEmptyState() {
-  const signedIn = !!currentUser;
+  // A stored token means signed in until Psycle says otherwise: a pending or
+  // failed /profile check must not swap the quick actions for a Sign-in CTA
+  // (the timetable loads with the kept token either way).
+  const signedIn = !!currentUser || !!getBearerToken();
   const qa = document.getElementById('discoverQuickWrap');
   const si = document.getElementById('discoverSignin');
   if (qa) qa.style.display = signedIn ? '' : 'none';
@@ -596,81 +707,366 @@ function updateDiscoverEmptyState() {
   if (fav) fav.style.display = favouriteInstructors && favouriteInstructors.size > 0 ? '' : 'none';
 }
 
+// ── pure:session:start ── (DOM-free helpers; tests/suites/session.js evaluates this block)
+
+// What one /profile attempt says about the session. `status` is the HTTP
+// status, or 0 when the request never completed (offline / timeout). Only 401
+// means the token is dead — the same rule as apiFetch. A 403 is a denial (a
+// business rule, a WAF or rate limiter in front of Psycle) with a perfectly
+// valid token, and this runs on every foreground / 'online' / Retry while
+// Psycle is misbehaving, so reading it as expiry would sign members out.
+// Any other failure with a stored token is 'unverified' — still signed in as
+// far as we know — so the token is kept and the UI offers Retry, never Sign in.
+function _sessionStateFor(hasToken, status) {
+  if (!hasToken) return 'signed-out';
+  if (status >= 200 && status < 300) return 'signed-in';
+  if (status === 401) return 'expired';
+  return 'unverified';
+}
+
+// Which hero a tab shows while there is no currentUser:
+//   'signin'    no token — signing in is the one action that matters
+//   'retry'     token kept, but the last /profile check couldn't reach Psycle
+//   'checking'  token present and the first check hasn't settled yet
+function _authGateViewFor(hasToken, unverified) {
+  if (!hasToken) return 'signin';
+  return unverified ? 'retry' : 'checking';
+}
+
+// The subscription behind the usage bar / Membership card: prefer a capped
+// plan (max_bookings), fall back to any active one with a billing period
+// (unlimited plan).
+function _pickActiveSubscription(subs) {
+  const list = Array.isArray(subs) ? subs : [];
+  return list.find(s => s && s.status === 'active' && s.max_bookings > 0)
+    || list.find(s => s && s.status === 'active' && s.period_start)
+    || null;
+}
+
+// The first-run "sync my history" prompt is an offer, not a nag: never again
+// after a completed sync, an explicit dismissal, or once real history exists.
+function _shouldOfferHistorySync(s) {
+  return !!(s && s.hasToken && !s.synced && !s.dismissed && !(s.historyCount > 10));
+}
+// ── pure:session:end ──
+
 // Auth check
-async function checkAuth() {
-  const pill = document.getElementById('authPill');
-  const gear = document.getElementById('settingsGear');
-  if (!getBearerToken()) {
-    currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
-    if (gear) gear.hidden = true;
-    updateDiscoverEmptyState();
-    return;
-  }
-  if (gear) gear.hidden = false;
-  try {
-    const res = await fetch(apiUrl('/profile'), {
-      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${getBearerToken()}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      currentUser = data.data || data;
-      // Extract active subscription info — prefer one with max_bookings (capped plan),
-      // fall back to any active subscription (unlimited plan)
-      const subs = currentUser.subscriptions || [];
-      _activeSubscription = subs.find(s => s.status === 'active' && s.max_bookings > 0)
-        || subs.find(s => s.status === 'active' && s.period_start)
-        || null;
-      const name = currentUser.first_name || currentUser.email || 'You';
-      const initial = (name.trim()[0] || '?').toUpperCase();
-      // Redesign: the header avatar shows the rider's initials.
-      if (gear) {
-        const _fn = (currentUser.first_name || '').trim();
-        const _ln = (currentUser.last_name || '').trim();
-        const inits = ((_fn[0] || name.trim()[0] || '?') + (_ln[0] || '')).toUpperCase();
-        gear.innerHTML = '<span>' + escapeHTML(inits) + '</span>';
+//
+// ONE event tells every module the session changed:
+//   PsycleEvents.emit('auth:changed', { signedIn, initial, unverified })
+//     signedIn    a /profile check succeeded — currentUser is set
+//     initial     true only for the first outcome of this page load; listeners
+//                 that start work the launch path already does (search()) skip it
+//     unverified  a token is stored but Psycle couldn't be reached: NOT signed
+//                 out — show Retry (authGateHTML), never a Sign-in CTA
+// Emitted by checkAuth (every outcome), clearToken and showSessionExpired.
+// 'profile:updated' (currentUser) fires whenever a /profile body was applied —
+// plan usage, credits and the plan itself may have moved.
+let _authInFlight = null;     // { token, promise } — see checkAuth
+let _lastProfileId = null;    // customer id of the last applied /profile — see _applyProfile
+let _authUnverified = false;  // token kept, last /profile check couldn't reach Psycle
+let _authSettledOnce = false; // the first auth:changed of a page load carries initial:true
+let _gearIconHTML = null;     // header avatar's default icon, restored when no profile is known
+
+function _emitAuthChanged(signedIn) {
+  const initial = !_authSettledOnce;
+  _authSettledOnce = true;
+  PsycleEvents.emit('auth:changed', { signedIn: !!signedIn, initial, unverified: _authUnverified });
+}
+
+// Apply a GET /profile body to app state. Shared by checkAuth and
+// refreshProfile so both pick the subscription the same way. Returns false
+// (state untouched) for a body that isn't a profile.
+function _applyProfile(data) {
+  const user = data && (data.data || data);
+  if (!user || typeof user !== 'object') return false;
+  _authUnverified = false;
+  // A DIFFERENT customer than the last one on this page. Session expiry keeps
+  // _myBookings on purpose (same member: the cards and widget stay true until
+  // they sign back in) — but signing in as someone else must never paint those
+  // under the new account: profile:updated below re-renders a non-empty map,
+  // and a failed /bookings would leave them up with live Cancel buttons.
+  // Repainted BEFORE currentUser is set, so the tab reads "Checking your
+  // Psycle account…" rather than a "Nothing booked" nobody has confirmed.
+  if (user.id != null) {
+    if (_lastProfileId != null && String(_lastProfileId) !== String(user.id)) {
+      const hadBookings = Object.keys(_myBookings).length > 0;
+      _myBookings = {};
+      _lastWaitlistEntries = null;
+      _bookingsLoadState = 'pending'; // this customer's list has not loaded yet
+      if (hadBookings) {
+        renderMyBookings();
+        _resyncDiscoverButtons(true);
       }
-      // Top bar shows only the avatar when signed in — sign-out lives in the
-      // Membership tab now.
-      pill.innerHTML = '';
-      updateDiscoverEmptyState();
-      fetchMyBookings();
-      // After first login, offer to sync booking history
-      setTimeout(function () { showHistorySyncPrompt(); }, 1500);
-    } else if (res.status === 401 || res.status === 403) {
-      showSessionExpired();
-    } else {
-      // Transient server trouble (5xx / 429) is NOT an expired session —
-      // never destroy the stored token for it. Show signed-out UI for now;
-      // the next visibility change / launch re-checks with the kept token.
-      currentUser = null;
-      pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
-      toast(`Psycle is unreachable right now (${res.status}) — your session has been kept`, 'info');
-      updateDiscoverEmptyState();
     }
-  } catch {
-    currentUser = null;
-    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
-    updateDiscoverEmptyState();
+    _lastProfileId = user.id;
+  }
+  currentUser = user;
+  _activeSubscription = _pickActiveSubscription(user.subscriptions);
+  // Redesign: the header avatar shows the rider's initials.
+  const gear = document.getElementById('settingsGear');
+  if (gear) {
+    const name = user.first_name || user.email || 'You';
+    const _fn = (user.first_name || '').trim();
+    const _ln = (user.last_name || '').trim();
+    const inits = ((_fn[0] || name.trim()[0] || '?') + (_ln[0] || '')).toUpperCase();
+    gear.innerHTML = '<span>' + escapeHTML(inits) + '</span>';
+  }
+  PsycleEvents.emit('profile:updated', currentUser);
+  return true;
+}
+
+// Single-flight per token: 'online' and visibilitychange fire together on
+// resume, and bookClass awaits this too — they all share one /profile request.
+// A call made under a DIFFERENT token (sign-in / sign-out while a check is in
+// flight) starts afresh, and the older run drops its answer.
+async function checkAuth() {
+  const token = getBearerToken();
+  if (_authInFlight && _authInFlight.token === token) return _authInFlight.promise;
+  let settle;
+  const run = { token, promise: new Promise(r => { settle = r; }) };
+  _authInFlight = run;
+  try {
+    await _checkAuthOnce(token);
+  } finally {
+    if (_authInFlight === run) _authInFlight = null;
+    settle();
   }
 }
 
+async function _checkAuthOnce(token) {
+  const pill = document.getElementById('authPill');
+  const gear = document.getElementById('settingsGear');
+  if (gear && _gearIconHTML === null) _gearIconHTML = gear.innerHTML;
+  if (!token) {
+    currentUser = null;
+    _authUnverified = false;
+    pill.innerHTML = `<a href="#" onclick="event.preventDefault();openLoginPopup()" class="signin-pill">Sign in</a>`;
+    if (gear) gear.hidden = true;
+    updateDiscoverEmptyState();
+    _emitAuthChanged(false);
+    return;
+  }
+  if (gear) gear.hidden = false;
+  // A stored token means signed in until Psycle says otherwise — no Sign-in
+  // pill while we check (it only comes back if the session really is dead).
+  // Signed in, the top bar shows only the avatar; sign-out lives in Membership.
+  pill.innerHTML = '';
+  // 15s cap: on a dead connection fetch() can hang for minutes, and everything
+  // awaiting this (bookClass, Retry) would hang with it.
+  let status = 0, data = null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(apiUrl('/profile'), {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${token}` },
+      signal: ctrl.signal,
+    });
+    status = res.status;
+    if (res.ok) data = await res.json();
+  } catch { status = 0; }
+  clearTimeout(timer);
+  // Signed out / signed in as someone else while we waited: this answer is
+  // about a session that no longer exists — the newer run owns the UI.
+  if (getBearerToken() !== token) return;
+
+  let state = _sessionStateFor(true, status);
+  // A 200 whose body isn't a profile proves nothing either way.
+  if (state === 'signed-in' && !_applyProfile(data)) { state = 'unverified'; status = 0; }
+  if (state === 'signed-in') {
+    // A sign-in also answers the "session expired" banner (only a deliberate
+    // sign-out used to hide it, so it outlived a popup re-login).
+    const banner = document.getElementById('sessionBanner');
+    if (banner) banner.style.display = 'none';
+    updateDiscoverEmptyState();
+    // (A failed load repaints My Bookings itself — see _noteBookingsLoadFailed;
+    // a superseded one leaves the screen to the newer call.)
+    fetchMyBookings();
+    // After first login, offer to sync booking history
+    setTimeout(function () { showHistorySyncPrompt(); }, 1500);
+    _emitAuthChanged(true);
+  } else if (state === 'expired') {
+    showSessionExpired();
+  } else {
+    // Offline, a timeout, server trouble (5xx / 429) or a 403 denial is NOT an
+    // expired session — never destroy the stored token for it, and never tell
+    // a member to sign in. The tabs offer Retry; 'online' and the next
+    // foreground re-check by themselves (see _healAuth).
+    const firstFailure = !_authUnverified;
+    currentUser = null;
+    _activeSubscription = null;
+    _authUnverified = true;
+    if (gear && _gearIconHTML !== null) gear.innerHTML = _gearIconHTML; // not a previous account's initials
+    if (firstFailure && status) toast(`Psycle is unreachable right now (${status}) — your session has been kept`, 'info');
+    updateDiscoverEmptyState();
+    // As showSessionExpired: an empty tab now shows the "Can't reach Psycle"
+    // hero, which only a repaint takes down once the check heals.
+    if (!Object.keys(_myBookings).length) _bookingsLoadState = 'pending';
+    renderMyBookings();
+    _emitAuthChanged(false);
+  }
+}
+
+// Plan usage ("7 of 12 classes"), credits and cost-per-class all come from
+// /profile, which used to be read once at launch — so they stayed wrong after
+// every booking or cancel until the app was reopened. Re-read it when the app
+// returns to the foreground, comes back online, or a booking / seat / waitlist
+// change may have moved the numbers. Goes through apiFetch (timeout, retries,
+// and the one global 401 path); any other failure keeps the last good profile
+// and NEVER touches the token.
+const PROFILE_REFRESH_MIN_GAP_MS = 30000;
+let _profileRefreshAt = 0;
+let _profileRefreshInFlight = null;
+let _profileRefreshQueued = false;
+let _profileRefreshTimer = null;
+
+// force = something just changed, so the 30s throttle doesn't apply.
+function refreshProfile(force) {
+  const token = getBearerToken();
+  if (!token) return Promise.resolve(false);
+  // Not verified yet this session: that needs the whole sign-in path (avatar,
+  // bookings, banner), not just fresh numbers.
+  if (!currentUser) return checkAuth().then(() => !!currentUser);
+  if (_profileRefreshInFlight) {
+    // An answer already on its way may predate the change — go again after it.
+    if (force) _profileRefreshQueued = true;
+    return _profileRefreshInFlight;
+  }
+  if (!force && Date.now() - _profileRefreshAt < PROFILE_REFRESH_MIN_GAP_MS) return Promise.resolve(false);
+  const run = (async () => {
+    try {
+      const res = await apiFetch('/profile');
+      if (!res.ok) return false;
+      const data = await res.json();
+      // Signed out or switched account mid-flight: not this session's profile.
+      if (getBearerToken() !== token || !currentUser) return false;
+      const applied = _applyProfile(data);
+      // Only a refresh that LANDED counts toward the throttle: stamped before
+      // the request, a resume with no signal (all retries fail in ~8s) then
+      // swallowed the 'online' catch-up that follows. No bursts either way —
+      // the single-flight check above comes first.
+      if (applied) _profileRefreshAt = Date.now();
+      return applied;
+    } catch { return false; }
+  })();
+  _profileRefreshInFlight = run;
+  run.then(() => {
+    if (_profileRefreshInFlight === run) _profileRefreshInFlight = null;
+    if (_profileRefreshQueued) { _profileRefreshQueued = false; refreshProfile(true); }
+  });
+  return run;
+}
+
+// ~1s after a change: lets Psycle settle the count, and folds a burst of
+// events (a booking emits several) into one request.
+function _refreshProfileSoon() {
+  clearTimeout(_profileRefreshTimer);
+  _profileRefreshTimer = setTimeout(() => refreshProfile(true), 1000);
+}
+
+if (typeof PsycleEvents !== 'undefined') {
+  ['booking:complete', 'booking:cancelled', 'seat:cancelled', 'waitlist:claimed', 'waitlist:allocated'].forEach(evt => {
+    PsycleEvents.on(evt, _refreshProfileSoon);
+  });
+  PsycleEvents.on('profile:updated', () => {
+    // The usage bar lives inside the bookings list. With nothing booked there
+    // is no bar to refresh — and re-rendering then would flash "Nothing
+    // booked" at sign-in, before the first /bookings answer lands.
+    if (Object.keys(_myBookings).length) renderMyBookings();
+  });
+  PsycleEvents.on('auth:changed', s => {
+    // (Discover's presets repaint via the updateDiscoverEmptyState wrapper.)
+    try { renderRebookHint(); } catch {}
+    // A sign-in AFTER launch (login popup, token dialog, a healed connection)
+    // has no timetable yet: the launch path only searches when a token already
+    // existed. `initial` is skipped because that launch search is already
+    // running — a second one would double-fetch or flash "No classes found".
+    if (s && s.signedIn && !s.initial && !window._windowEvents && locations.length) {
+      try { search(); } catch {}
+    }
+  });
+}
+
+// Hero for a tab that looks signed out although a token is still stored
+// (My Bookings, Membership). '' when there is genuinely no session — the
+// caller then shows its own Sign-in CTA.
+function authGateHTML() {
+  const view = _authGateViewFor(!!getBearerToken(), _authUnverified);
+  if (view === 'signin') return '';
+  if (view === 'checking') {
+    return `<div class="tab-empty-title">One moment</div>
+           <div class="tab-empty-sub">Checking your Psycle account…</div>`;
+  }
+  return `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10.5 10.5 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0M12 20h.01M3 3l18 18"/></svg></div>
+           <div class="tab-empty-title">Can't reach<br>Psycle</div>
+           <div class="tab-empty-sub">You're still signed in — we just couldn't confirm your account. Check your connection and try again.</div>
+           <button class="tab-empty-btn" onclick="retryAuth(this)">Retry</button>`;
+}
+
+// The Retry button on that hero. A settled check re-renders the hero, so the
+// button only needs restoring for the case where it is still on screen.
+async function retryAuth(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+  try {
+    await checkAuth();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+  }
+  if (!currentUser && getBearerToken()) toast("Still can't reach Psycle — check your connection", 'error');
+}
+
+// Skip / × / backdrop all mean "not now, and don't ask again". Without a
+// remembered answer the prompt re-armed 1.5s after EVERY launch for anyone
+// with little local history; Explore's banner keeps a "Sync now" entry point,
+// so a permanent dismissal loses nothing. (Mirrored to Preferences on iOS.)
+const HISTORY_PROMPT_DISMISSED_KEY = 'psycle_history_prompt_dismissed';
+let _syncPromptTimer = null;
+let _syncPromptDefers = 0;
+
+function _dismissSyncPrompt() {
+  try { localStorage.setItem(HISTORY_PROMPT_DISMISSED_KEY, '1'); } catch (e) {}
+  document.getElementById('syncPromptOverlay')?.remove();
+  toast('No problem — you can sync your history any time from the Stats tab', 'info');
+}
+
 function showHistorySyncPrompt() {
-  // Only show if history hasn't been synced and we have a token
-  if (localStorage.getItem('psycle_history_synced')) return;
-  if (!getBearerToken()) return;
+  // Only show if history hasn't been synced (or the offer declined) and we have a token
   var history = [];
   try { history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch (e) {}
-  if (history.length > 10) return; // already has substantial history
+  if (!_shouldOfferHistorySync({
+    hasToken: !!getBearerToken(),
+    synced: !!localStorage.getItem('psycle_history_synced'),
+    dismissed: !!localStorage.getItem(HISTORY_PROMPT_DISMISSED_KEY),
+    historyCount: Array.isArray(history) ? history.length : 0,
+  })) return;
 
-  // Remove any existing prompt
-  document.getElementById('syncPromptOverlay')?.remove();
+  // Already up (every successful checkAuth arms this) — rebuilding it would
+  // reset a sync that is in progress.
+  if (document.getElementById('syncPromptOverlay')) return;
+
+  // Never stack on another dialog, the class sheet, the "Booked!" sheet or the
+  // first-run tour (not finished until its key is set) — come back when it's
+  // gone. Bounded, so a stuck overlay can't keep this polling all session.
+  var busy = _dialogOpen() || document.getElementById('classDetailOverlay') ||
+    document.getElementById('bookingConfirmation') ||
+    document.getElementById('onboardOverlay') || !localStorage.getItem(ONBOARDING_KEY);
+  clearTimeout(_syncPromptTimer);
+  if (busy) {
+    if (_syncPromptDefers++ < 40) _syncPromptTimer = setTimeout(showHistorySyncPrompt, 3000);
+    return;
+  }
+  _syncPromptDefers = 0;
 
   var overlay = document.createElement('div');
   overlay.id = 'syncPromptOverlay';
   overlay.className = 'modal-overlay';
   overlay.style.display = 'flex';
-  overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+  // A stray backdrop tap mid-sync must not throw the progress away.
+  overlay.onclick = function (e) {
+    if (e.target !== overlay) return;
+    var syncBtn = document.getElementById('syncPromptBtn');
+    if (!(syncBtn && syncBtn.disabled)) _dismissSyncPrompt();
+  };
 
   var userName = (currentUser && currentUser.first_name) ? currentUser.first_name : '';
 
@@ -681,13 +1077,13 @@ function showHistorySyncPrompt() {
           '<div class="modal-title">Welcome' + (userName ? ', ' + escapeHTML(userName) : '') + '!</div>' +
           '<div class="modal-subtitle">One more step to get the most out of your experience</div>' +
         '</div>' +
-        '<button class="modal-close" onclick="document.getElementById(\'syncPromptOverlay\').remove()">&times;</button>' +
+        '<button class="modal-close" onclick="_dismissSyncPrompt()">&times;</button>' +
       '</div>' +
       '<div style="padding:0 20px 8px;font-size:13px;color:var(--text-muted,#aaa);line-height:1.6">' +
         'Import your full booking history from Psycle to unlock personalised insights, instructor discovery, and class analytics.' +
       '</div>' +
       '<div class="modal-actions" style="gap:8px">' +
-        '<button class="btn btn-ghost" onclick="document.getElementById(\'syncPromptOverlay\').remove()">Skip for now</button>' +
+        '<button class="btn btn-ghost" onclick="_dismissSyncPrompt()">Skip for now</button>' +
         '<button class="btn" id="syncPromptBtn" onclick="startSyncFromPrompt()">Sync my history</button>' +
       '</div>' +
     '</div>';
@@ -698,11 +1094,17 @@ function showHistorySyncPrompt() {
 async function startSyncFromPrompt() {
   var btn = document.getElementById('syncPromptBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing...'; }
-  if (typeof window._explore_syncHistory === 'function') {
-    await window._explore_syncHistory();
+  // explore.js writes its page / detail progress into this button too, so a
+  // long sync isn't a static "Syncing...".
+  try {
+    if (typeof window._explore_syncHistory === 'function') {
+      await window._explore_syncHistory();
+    }
+  } finally {
+    // Whatever happened, never strand the user behind a disabled button.
+    var overlay = document.getElementById('syncPromptOverlay');
+    if (overlay) overlay.remove();
   }
-  var overlay = document.getElementById('syncPromptOverlay');
-  if (overlay) overlay.remove();
 }
 
 function openLoginPopup() {
@@ -745,6 +1147,10 @@ async function saveToken() {
   if (currentUser) {
     toast(`Connected as ${currentUser.first_name || currentUser.email}`, 'success');
     if (typeof scheduleTokenExpiryCheck === 'function') scheduleTokenExpiryCheck();
+  } else if (getBearerToken()) {
+    // Still stored = Psycle couldn't be reached, not a rejected token (a 401
+    // clears it). It's re-checked on Retry / when the connection returns.
+    toast("Can't reach Psycle to check that token — it's been kept", 'error');
   } else toast('Token not recognised — try again', 'error');
 }
 
@@ -757,14 +1163,41 @@ function clearToken() {
   if (window._secureTokenStore) window._secureTokenStore.clear();
   else localStorage.removeItem('psycle_bearer_token');
   currentUser = null;
+  _activeSubscription = null; // or Membership keeps the previous account's plan card
   // Never carry one account's waitlist memory into the next.
   _lastWaitlistEntries = null;
   try { localStorage.removeItem(WAITLIST_PLACES_KEY); } catch (e) {}
+  // Empty the previous account's bookings at the source. With the token gone,
+  // fetchMyBookings takes its no-token branch: it bumps _bookingsSeq (a
+  // /bookings answer still in flight can't put them back), clears the map and
+  // re-renders — synchronously, so native-bridge's clearToken wrapper then
+  // blanks the widget and cancels the T-90 reminders from a truly empty map.
+  // It emits nothing, on purpose: 'bookings:loaded' with an empty map means
+  // "the server confirmed no bookings" to the calendar sync, which would then
+  // delete every synced event. The badge, planner, pill and Membership hear
+  // about it through auth:changed instead (checkAuth's no-token branch).
+  fetchMyBookings();
+  _resyncDiscoverButtons(true);
   checkAuth();
+}
+
+// Sign-out sits one stray tap away from a full email + password login, so the
+// Membership button asks first.
+async function confirmSignOut() {
+  const ok = await confirmModal({
+    title: 'Sign out?',
+    body: "You'll need your Psycle email and password to sign back in. Your bookings stay safe with Psycle.",
+    confirmText: 'Sign out',
+    cancelText: 'Stay signed in',
+    danger: true,
+  });
+  if (ok) clearToken();
 }
 
 function showSessionExpired() {
   currentUser = null;
+  _activeSubscription = null; // Membership must not keep showing the plan card
+  _authUnverified = false;
   _lastWaitlistEntries = null; // whoever signs in next starts from the server's list
   if (typeof cancelTokenExpiryCheck === 'function') cancelTokenExpiryCheck();
   if (window._secureTokenStore) window._secureTokenStore.clear();
@@ -775,6 +1208,14 @@ function showSessionExpired() {
   const gear = document.getElementById('settingsGear');
   if (gear) gear.hidden = true;
   updateDiscoverEmptyState();
+  // _myBookings is deliberately kept (the bookings still exist server-side and
+  // the widget keeps serving them until re-login), so only an EMPTY tab needs
+  // repainting: "Nothing booked" → the Sign-in hero. That hero is no longer the
+  // confirmed-empty list, so the state goes back to 'pending': if the /bookings
+  // that follows a re-login fails, _noteBookingsLoadFailed must repaint (Retry)
+  // — left 'loaded' it bails, and a signed-in member keeps a Sign-in CTA.
+  if (!Object.keys(_myBookings).length) { _bookingsLoadState = 'pending'; renderMyBookings(); }
+  _emitAuthChanged(false);
 }
 
 // Token from login is now received via postMessage (security.js).
@@ -786,19 +1227,29 @@ function showSessionExpired() {
   }
 })();
 
-// Re-check auth when tab becomes visible — handles the case where the login
-// popup stored a token in localStorage but postMessage was lost because this
-// tab was suspended by the OS (common on mobile).
-document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState !== 'visible' || currentUser) return;
+// Re-check auth when there is no verified session. Two cases:
+//  - the login popup stored a token in localStorage but postMessage was lost
+//    because this tab was suspended by the OS (common on mobile);
+//  - a token is stored but /profile couldn't be reached (launched offline, or
+//    a Psycle blip). security.js removes the plaintext key on every normal
+//    save, so waiting for THAT key meant a member who launched on the Tube
+//    stayed half signed-out until they killed the app.
+function _healAuth() {
+  if (currentUser) return;
   var legacy = localStorage.getItem('psycle_bearer_token');
-  if (legacy) {
-    if (window._secureTokenStore) {
-      window._secureTokenStore.set(legacy).then(function() { checkAuth(); });
-    } else {
-      checkAuth();
-    }
+  if (legacy && window._secureTokenStore) {
+    window._secureTokenStore.set(legacy).then(function() { checkAuth(); });
+  } else if (legacy || getBearerToken()) {
+    checkAuth();
   }
+}
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') _healAuth();
+});
+// Signal is back: heal an unverified session, or catch the numbers up.
+window.addEventListener('online', function() {
+  if (currentUser) refreshProfile();
+  else _healAuth();
 });
 
 // Init — wait for security module to decrypt stored token
@@ -834,16 +1285,17 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 
   renderInstrDropdown();
 
-  // Pre-select favourites if any saved — but only when there's no saved
-  // instructor filter to restore. interactions.js restores
-  // psycle_saved_filters on its own timer; racing it and ADDING favourites
-  // on top would corrupt the user's last-used selection.
-  let _hasSavedInstrFilter = false;
-  try {
-    const _sf = JSON.parse(localStorage.getItem('psycle_saved_filters') || 'null');
-    _hasSavedInstrFilter = !!(_sf && Array.isArray(_sf.instructorIds) && _sf.instructorIds.length > 0);
-  } catch (e) {}
-  if (favouriteInstructors.size > 0 && !_hasSavedInstrFilter) {
+  // Pre-select favourites — on a first run only, i.e. while no filter state
+  // has ever been saved. After that psycle_saved_filters is the authority
+  // (interactions.js restores it on its own timer; racing it and ADDING
+  // favourites on top would corrupt the last-used selection), and that
+  // includes a saved EMPTY instructor list: "Clear filters" and removing the
+  // last chip are persisted, so cleared has to mean cleared on the next launch
+  // too. The ★ Favs button stays one tap away.
+  let _sf = null;
+  try { _sf = JSON.parse(localStorage.getItem('psycle_saved_filters') || 'null'); } catch (e) {}
+  const _hasSavedFilters = !!_sf && typeof _sf === 'object';
+  if (favouriteInstructors.size > 0 && !_hasSavedFilters) {
     favouriteInstructors.forEach(id => {
       if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
     });
@@ -856,12 +1308,19 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   renderCategoryPills();
   renderStrengthSubPills();
   renderReformerSubPills();
-  document.getElementById('startDate').value = today;
-  document.getElementById('daysAhead').value = 7;
-  // Mark "7 days" as the default active quick button
-  document.querySelectorAll('.date-quick-btn').forEach(b => {
-    if (b.textContent.trim() === '7 days') b.classList.add('active');
-  });
+  // The date row comes from the saved filters as well, not a blanket today/7.
+  // On a cache-warm launch restoreFilters (interactions.js) can run BEFORE
+  // this point — it only waits for instructors/locations, which performance.js
+  // pre-fills while we are still awaiting securityReady (slow on iOS). Writing
+  // today/7 here and lighting "7 days" by hand, with _dateQuickMode left
+  // alone, then lost the saved range and left no pill lit. Deriving the same
+  // state restoreFilters does makes the order irrelevant; nothing saved is
+  // week / today / 7, as before.
+  const _ds = _restoredDateState(_sf, localDateStr());
+  _dateQuickMode = _ds.mode;
+  document.getElementById('startDate').value = _ds.startDate;
+  document.getElementById('daysAhead').value = _ds.daysAhead;
+  _syncDatePills();
 
   updateDiscoverEmptyState();
   updateFiltersSummary();
@@ -873,7 +1332,12 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
   // a fresh session with no last-results.
   if (getBearerToken()) {
     const shown = restoreLastResults();
-    setTimeout(() => { try { search(); } catch {} }, shown ? 800 : 200);
+    // restoreFilters' debounced search can beat the 800ms path; a second
+    // search() then would tear the fresh list down and build it again. Only a
+    // search that could load counts (_loadableSearchStarted): one tapped while
+    // /locations was still loading had no studios to fetch ("No classes
+    // found"), and skipping the launch search for it left Discover there.
+    setTimeout(() => { if (_loadableSearchStarted) return; try { search(); } catch {} }, shown ? 800 : 200);
   } else {
     restoreLastResults();
   }
@@ -939,32 +1403,111 @@ function updateFiltersSummary() {
   el.textContent = parts.join(' · ');
 }
 
-function setDateQuick(mode) {
-  const now = new Date();
-  const todayStr = localDateStr(now);
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = localDateStr(tomorrow);
+// ── pure:filters:start ── (DOM-free date-range helpers; tests/suites/filters.js evaluates this block)
+// 'YYYY-MM-DD' plus n days. Split by hand and built in LOCAL time so the day
+// never shifts through UTC — the device is not always on UK time.
+function _addDaysStr(ds, n) {
+  const [y, m, d] = String(ds).split('-').map(Number);
+  const t = new Date(y, m - 1, d + n);
+  return [t.getFullYear(), String(t.getMonth() + 1).padStart(2, '0'), String(t.getDate()).padStart(2, '0')].join('-');
+}
 
-  _dateQuickMode = mode;
-  document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+// What each date preset means today. null for anything that is not a preset
+// (the mode also arrives from localStorage, so it is matched as an own key).
+function _dateModeWindow(mode, todayStr) {
+  const labels = { today: 'Today', tomorrow: 'Tomorrow', week: '7 days', '2week': '14 days' };
+  if (!Object.prototype.hasOwnProperty.call(labels, mode)) return null;
+  return {
+    startDate: mode === 'tomorrow' ? _addDaysStr(todayStr, 1) : todayStr,
+    daysAhead: mode === '2week' ? 14 : mode === 'week' ? 7 : 1,
+    label: labels[mode],
+  };
+}
 
-  const daysGroup = document.getElementById('daysAheadGroup');
+// Last day of the fetch window. A one-day range ends on its own start day
+// however it was chosen (Today/Tomorrow, the calendar, the planner, rebook),
+// so a picked Saturday does not bleed into Sunday. The rule reads the INPUTS
+// only: every Today/Tomorrow writer also sets daysAhead=1, and a mode left
+// stale by a flow that moved the inputs (Find similar asks for 7–8 days) must
+// not shrink that range to one day. `mode` stays in the signature for the two
+// callers, which have to keep producing the same window key.
+function _windowEndDate(startDate, days, mode) {
+  return days <= 1 ? startDate : _addDaysStr(startDate, days);
+}
 
-  if (mode === 'today') {
-    document.getElementById('startDate').value = todayStr;
-    document.getElementById('daysAhead').value = 1;
-  } else if (mode === 'tomorrow') {
-    document.getElementById('startDate').value = tomorrowStr;
-    document.getElementById('daysAhead').value = 1;
-  } else if (mode === '2week') {
-    document.getElementById('startDate').value = todayStr;
-    document.getElementById('daysAhead').value = 14;
-  } else {
-    document.getElementById('startDate').value = todayStr;
-    document.getElementById('daysAhead').value = 7;
+// What the date row should show: the preset pill to light and, for a single
+// chosen day, the date to print on the calendar button. A preset only counts
+// while the inputs still ARE its window — the planner and rebook flows move
+// the date without touching the mode, and "7 days" must not stay lit over one day.
+function _datePillState(mode, startDate, daysAhead, todayStr) {
+  const days = parseInt(daysAhead, 10);
+  const w = _dateModeWindow(mode, todayStr);
+  if (w && w.startDate === startDate && w.daysAhead === days) return { label: w.label, picked: null };
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(String(startDate || ''));
+  return { label: null, picked: (isDate && days === 1) ? startDate : null };
+}
+
+// Saved date filter → the state to restore. Presets are re-derived from today
+// (they shift daily). A picked date only survives while it is still ahead:
+// render() drops started classes, so restoring last Saturday would open the
+// app on "No classes found" with nothing lit — that falls back to the week.
+function _restoredDateState(saved, todayStr) {
+  const s = saved || {};
+  const w = _dateModeWindow(s.dateQuickMode, todayStr);
+  if (w) return { mode: s.dateQuickMode, startDate: w.startDate, daysAhead: w.daysAhead };
+  const start = String(s.startDate || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(start) && start >= todayStr) {
+    const days = parseInt(s.daysAhead, 10);
+    return { mode: null, startDate: start, daysAhead: days > 0 ? days : 7 };
   }
+  const week = _dateModeWindow('week', todayStr);
+  return { mode: 'week', startDate: week.startDate, daysAhead: week.daysAhead };
+}
+// ── pure:filters:end ──
+
+// Paint the date row from state (mode + the two inputs), never from whichever
+// element was tapped: the empty-state shortcuts, presets, saved searches and
+// the planner all change the range without a pill click.
+let _pickDateBtnIdle = null; // the calendar button's own icon nodes + name, to put back
+function _syncDatePills() {
+  const st = _datePillState(_dateQuickMode, document.getElementById('startDate')?.value || '',
+    document.getElementById('daysAhead')?.value, localDateStr());
+  const btn = document.getElementById('pickDateBtn');
+  document.querySelectorAll('.date-quick-btn').forEach(b => {
+    if (b !== btn) b.classList.toggle('active', !!st.label && b.textContent.trim() === st.label);
+  });
+  if (!btn) return;
+  if (!_pickDateBtnIdle) {
+    _pickDateBtnIdle = { nodes: Array.from(btn.childNodes), name: btn.getAttribute('aria-label') || 'Pick a date', labelled: false };
+  }
+  if (st.picked) {
+    // Text replaces the icon: the pill is a plain (non-flex) button, so an
+    // icon + label pair would wrap onto two lines inside it.
+    const [y, m, d] = st.picked.split('-').map(Number);
+    const label = new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    btn.textContent = label;
+    btn.setAttribute('aria-label', _pickDateBtnIdle.name + ' (showing ' + label + ')');
+    _pickDateBtnIdle.labelled = true;
+  } else if (_pickDateBtnIdle.labelled) {
+    btn.textContent = '';
+    _pickDateBtnIdle.nodes.forEach(n => btn.appendChild(n));
+    btn.setAttribute('aria-label', _pickDateBtnIdle.name);
+    _pickDateBtnIdle.labelled = false;
+  }
+  // Lit while it carries a date, and while its calendar is open.
+  const picker = document.getElementById('datePicker');
+  btn.classList.toggle('active', !!st.picked || (!!picker && picker.style.display !== 'none'));
+}
+
+function setDateQuick(mode) {
+  // An unknown mode behaves as the default week view.
+  const todayStr = localDateStr();
+  if (!_dateModeWindow(mode, todayStr)) mode = 'week';
+  const w = _dateModeWindow(mode, todayStr);
+  _dateQuickMode = mode;
+  document.getElementById('startDate').value = w.startDate;
+  document.getElementById('daysAhead').value = w.daysAhead;
+  _syncDatePills();
   triggerAutoSearch();
 }
 
@@ -996,13 +1539,9 @@ function toggleFilters() {
 applyFiltersCollapsedState();
 
 function clearFilters() {
+  // Cleared means cleared: favourites are NOT re-selected here (the Favs
+  // button is one tap away) — re-adding them left "Clear" still filtering.
   selectedInstructors.clear();
-  // Re-apply favourites if any saved
-  if (favouriteInstructors.size > 0) {
-    favouriteInstructors.forEach(id => {
-      if (instructors.some(i => String(i.id) === id)) selectedInstructors.add(id);
-    });
-  }
   document.getElementById('instrSearch').value = '';
   selectedLocations.clear();
   selectedCategories.clear();
@@ -1013,15 +1552,41 @@ function clearFilters() {
   renderInstrChips();
   renderStrengthSubPills();
   renderReformerSubPills();
+  // The date goes back to the default week as a whole — mode, inputs and
+  // pills together. Resetting only the inputs left "Tomorrow" lit over
+  // today's classes, and that mismatch is what saveFilters then persisted.
+  const week = _dateModeWindow('week', localDateStr());
+  _dateQuickMode = 'week';
+  document.getElementById('startDate').value = week.startDate;
+  document.getElementById('daysAhead').value = week.daysAhead;
+  const picker = document.getElementById('datePicker');
+  if (picker) picker.style.display = 'none';
+  _syncDatePills();
   refreshFacetCounts(); // re-renders the instructor dropdown, studio chips, and class-type pills
-  document.getElementById('startDate').value = localDateStr();
-  document.getElementById('daysAhead').value = 7;
-  document.getElementById('results').innerHTML = '<div class="status">Pick an instructor, studio, or date to search.</div>';
+  // Show every class again. There is no Search button to press, so the old
+  // static "Pick an instructor…" line just left the list blank (and wiped
+  // the sign-in prompt); triggerAutoSearch stays inert while signed out.
+  triggerAutoSearch();
 }
 
 function setStatus(html) {
   document.getElementById('results').innerHTML = `<div class="status">${html}</div>`;
 }
+
+// ── pure:filters:start ── (events paging; tests/suites/filters.js evaluates this block)
+// `start` for the next /events page: ONE SECOND BEFORE the last class on the
+// full page just read. Stepping forward (+1s) skipped any class sharing that
+// last start time but cut off by the page limit; stepping back re-reads the
+// boundary second instead, and seenIds drops the overlap. Epoch arithmetic on
+// purpose: start_at is a naive wall-clock string parsed as UTC, and
+// setSeconds() works in DEVICE-local time, which jumps an hour across a DST
+// gap (New York, 07:00 on spring-forward day: "-1s" landed on 07:59:59).
+function _nextEventsPageStart(batch) {
+  const lastTs = batch.map(e => e.start_at).sort().pop();
+  const next = new Date(Date.parse(String(lastTs).replace(' ', 'T') + 'Z') - 1000);
+  return next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+}
+// ── pure:filters:end ──
 
 async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds, isStale) {
   const limit = 200;
@@ -1044,16 +1609,19 @@ async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds, isS
     if (!locRelations) locRelations = res.relations;
     else mergeRelations(locRelations, res.relations);
     if (batch.length < limit) break;
-    // Advance start to 1 second after the last event to get the next page
-    const sorted = batch.map(e => e.start_at).sort(); const lastTs = sorted[sorted.length - 1];
-    const next = new Date(lastTs.replace(' ', 'T') + 'Z');
-    next.setSeconds(next.getSeconds() + 1);
-    windowStart = next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+    // Next page overlaps this one by a second; seenIds drops the repeats and
+    // a page with nothing new ends the loop above.
+    windowStart = _nextEventsPageStart(batch);
   }
   return { events: locEvents, relations: locRelations };
 }
 
 let _searchSeq = 0;
+// A search has started that could actually load a timetable: a token AND
+// studios to fetch. Before the init IIFE has them (a tap during a cold launch,
+// or before the stored token is decrypted) search() finds nothing — the launch
+// search must still run after one of those, and only those.
+let _loadableSearchStarted = false;
 
 // ── Pre-loaded timetable window + stale-while-revalidate cache ───────
 // On launch we hydrate the full all-studios window from localStorage
@@ -1068,14 +1636,7 @@ const WINDOW_CACHE_TTL = 24 * 60 * 60 * 1000;
 function currentWindowDates() {
   const startDate = document.getElementById('startDate').value;
   const days = parseInt(document.getElementById('daysAhead').value) || 14;
-  let endDateStr;
-  if (_dateQuickMode === 'today' || _dateQuickMode === 'tomorrow') {
-    endDateStr = startDate;
-  } else {
-    const [y, m, d] = startDate.split('-').map(Number);
-    const end = new Date(y, m - 1, d + days);
-    endDateStr = [end.getFullYear(), String(end.getMonth() + 1).padStart(2, '0'), String(end.getDate()).padStart(2, '0')].join('-');
-  }
+  const endDateStr = _windowEndDate(startDate, days, _dateQuickMode);
   return { startDate, endDateStr, windowKey: startDate + '|' + endDateStr };
 }
 
@@ -1161,7 +1722,10 @@ function toggleDatePicker() {
   const el = document.getElementById('datePicker');
   const btn = document.getElementById('pickDateBtn');
   if (!el) return;
-  const willOpen = el.style.display === 'none' || !el.style.display;
+  // Closed is exactly display:none. Opening sets display to '' — the old
+  // `|| !el.style.display` read that as closed too, so a second tap on the
+  // button re-opened the calendar and the close branch below never ran.
+  const willOpen = el.style.display === 'none';
   if (willOpen) {
     if (!_calMonth) { const d = new Date(); _calMonth = { y: d.getFullYear(), m: d.getMonth() }; }
     renderCalendar();
@@ -1169,7 +1733,7 @@ function toggleDatePicker() {
     if (btn) btn.classList.add('active');
   } else {
     el.style.display = 'none';
-    if (btn) btn.classList.remove('active');
+    _syncDatePills(); // stays lit if it is carrying a picked date
   }
 }
 function calStep(dir) {
@@ -1182,11 +1746,12 @@ function pickCalDate(ds) {
   document.getElementById('startDate').value = ds;
   document.getElementById('daysAhead').value = 1;
   _dateQuickMode = null;
-  document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
   const el = document.getElementById('datePicker'); if (el) el.style.display = 'none';
-  const btn = document.getElementById('pickDateBtn'); if (btn) btn.classList.remove('active');
   if (typeof onDateInputChange === 'function') onDateInputChange();
   else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
+  // Last: onDateInputChange un-lights every pill, the calendar button included.
+  // The chosen day is printed on that button — it was shown nowhere before.
+  _syncDatePills();
 }
 // Days (YYYY-MM-DD) that have classes in the cached window — drives the dots.
 function _classDays() {
@@ -1291,6 +1856,13 @@ async function refreshWindow() {
 }
 
 async function search(opts) {
+  // This run already reads the latest filter state, so a debounced search
+  // still pending (restoreFilters arms one at launch) is redundant: left
+  // alone it rebuilt the whole list ~600ms after the first paint.
+  clearTimeout(_autoSearchTimer); _autoSearchTimer = null;
+  // Every date change funnels through here, including the planner / rebook
+  // flows that move the inputs without a pill tap — keep the date row honest.
+  _syncDatePills();
   opts = opts || {};
   const force = !!opts.force;
   const instructorId = [...selectedInstructors];
@@ -1303,21 +1875,11 @@ async function search(opts) {
   // stale fetch loops stop fetching/rendering as soon as the seq moves on.
   const mySeq = ++_searchSeq;
   const stale = () => window._searchAborted || mySeq !== _searchSeq;
+  if (getBearerToken() && locations.length) _loadableSearchStarted = true;
 
-  // For today/tomorrow quick picks, end = same day (don't bleed into next day)
-  let endDateStr;
-  if (_dateQuickMode === 'today' || _dateQuickMode === 'tomorrow') {
-    endDateStr = startDate;
-  } else {
-    // Parse YYYY-MM-DD manually to avoid UTC/local timezone shift
-    const [y, m, d] = startDate.split('-').map(Number);
-    const endDate = new Date(y, m - 1, d + days);
-    endDateStr = [
-      endDate.getFullYear(),
-      String(endDate.getMonth() + 1).padStart(2, '0'),
-      String(endDate.getDate()).padStart(2, '0')
-    ].join('-');
-  }
+  // Same rule as currentWindowDates() — a one-day range ends on its start day
+  // — so this key always matches the one triggerAutoSearch compares against.
+  const endDateStr = _windowEndDate(startDate, days, _dateQuickMode);
 
   const windowKey = startDate + '|' + endDateStr;
   const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs), reformerSubs: new Set(selectedReformerSubs) };
@@ -1394,10 +1956,7 @@ async function search(opts) {
           if (stale()) break;
           render(allEvents, relations, filters, done);
           if (done) break;
-          const sorted = batch.map(e => e.start_at).sort(); const lastTs = sorted[sorted.length - 1];
-          const next = new Date(lastTs.replace(' ', 'T') + 'Z');
-          next.setSeconds(next.getSeconds() + 1);
-          windowStart = next.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+          windowStart = _nextEventsPageStart(batch); // overlaps by 1s; seenIds drops the repeats
         }
       })();
     } else {
@@ -1512,12 +2071,94 @@ function mergeRelations(base, incoming) {
 // ── Booking ──────────────────────────────────────────────────────
 const MAX_SEATS = 2;
 // _bookingContext and _selectedSlots managed by state.js
+// The usual bike the picker auto-selected, until the first tap: that tap
+// REPLACES it (it was our guess, not the member's choice) rather than adding
+// a second seat — and a second credit — to the booking.
+let _usualPreselected = null;
+
+// A token but no profile means the launch /profile call failed or hasn't
+// landed — not that the member is signed out. One shared re-check for every
+// Book tap that finds that state; /profile has no timeout of its own, so a
+// deadline keeps the tap from hanging on '…'.
+let _bookAuthRecheck = null;
+function _recheckAuthForBooking() {
+  if (!_bookAuthRecheck) {
+    _bookAuthRecheck = Promise.resolve().then(() => checkAuth()).catch(() => {}).then(() => { _bookAuthRecheck = null; });
+  }
+  return Promise.race([_bookAuthRecheck, new Promise(r => setTimeout(r, 8000))]);
+}
+
+// The '…' busy label. A Discover card wraps its action by WIDTH (.cc-action in
+// css/redesign.css), so swapping "Join Waitlist" for '…' and back un-wraps and
+// re-wraps the card — every card below it jumps, up to four times per join.
+// Hold the pill at the width it has until some other label is written. The
+// exits that write one are many (and spread over the wrappers), so an observer
+// releases the hold instead of each of them. Anything that is not a live card
+// button — a detached one, My Bookings, a test stub — just gets the label.
+function _busyLabel(btn) {
+  const hold = !!btn.style && !btn.style.minWidth && typeof btn.closest === 'function' &&
+    typeof MutationObserver === 'function' && !!btn.closest('.cc-action');
+  if (hold) btn.style.minWidth = btn.offsetWidth + 'px';
+  btn.textContent = '…';
+  if (!hold) return;
+  const mo = new MutationObserver(() => {
+    if (btn.textContent === '…') return;
+    btn.style.minWidth = '';
+    mo.disconnect();
+  });
+  mo.observe(btn, { childList: true, characterData: true, subtree: true });
+}
 
 async function bookClass(eventId, btn, studioId) {
-  if (!currentUser) {
-    toast('Connect your Psycle account first', 'error');
-    showTokenDialog();
-    return;
+  // Not only an unverified session: until a /bookings snapshot has been applied
+  // ('pending' at launch, 'failed' after it) every card reads "Book", held
+  // classes included — and that stays true on the retry the toast below asks for.
+  if (!currentUser || _bookingsLoadState !== 'loaded') {
+    // Signed out: a member-facing prompt. (The token-paste dialog this used to
+    // open is a developer tool and reads like one.)
+    if (!getBearerToken()) {
+      const signIn = await confirmModal({
+        title: 'Sign in to book',
+        body: 'Sign in with your Psycle account to book this class.',
+        confirmText: 'Sign in',
+        cancelText: 'Not now',
+      });
+      if (signIn) openLoginPopup();
+      return;
+    }
+    if (btn.dataset.busy === '1') return;
+    btn.dataset.busy = '1';
+    const idleLabel = btn.textContent;
+    const heldBefore = !!_myBookings[String(eventId)];
+    btn.disabled = true;
+    _busyLabel(btn);
+    // A healed check only STARTS the bookings fetch (checkAuth doesn't await
+    // it), and an unverified session never loaded them — so every card reads
+    // "Book", held classes included. Carrying on now would offer a class the
+    // member already holds as a fresh booking: a second, chargeable seat. Wait
+    // for a /bookings snapshot that was really applied, still on '…'.
+    let bookingsLoaded = false;
+    try {
+      if (!currentUser) await _recheckAuthForBooking();
+      if (currentUser) bookingsLoaded = await _rereadBookingsForVerify();
+    } finally { delete btn.dataset.busy; btn.disabled = false; btn.textContent = idleLabel; }
+    if (!currentUser) {
+      // No token left = checkAuth just expired the session and said so itself.
+      if (getBearerToken()) toast("Can't reach Psycle right now — try again", 'error');
+      return;
+    }
+    if (!bookingsLoaded) {
+      if (getBearerToken()) toast("Couldn't load your bookings — try again", 'error');
+      return;
+    }
+    // The tap was on a card that didn't know about this booking: show it rather
+    // than walking a stale "Book" into a booking flow. Tapping again manages it.
+    const heldNow = _myBookings[String(eventId)];
+    if (heldNow && !heldBefore) {
+      applyBookedState(btn, eventId, heldNow);
+      toast(heldNow.waitlisted ? "You're already on the waitlist for this class" : "You're already booked into this class", 'info');
+      return;
+    }
   }
 
   // Feature: token-expiry guard. Warn BEFORE the event fetch / booking so the
@@ -1549,9 +2190,12 @@ async function bookClass(eventId, btn, studioId) {
   }
 
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
 
   try {
+    // An earlier attempt on this class may have booked without us hearing back:
+    // find out BEFORE offering the picker again (submitBooking re-checks too).
+    if (!(await _clearUnverifiedBooking(eventId, btn))) return;
     const res = await apiFetch(`/events/${eventId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const detail = await res.json();
@@ -1597,7 +2241,9 @@ async function bookClass(eventId, btn, studioId) {
       const ok = await confirmModal({
         title: 'Book this spot?',
         body: `Only ${SL} ${slotN} is left — book it?`,
+        warn: "Psycle's normal 12-hour cancellation policy applies.",
         confirmText: 'Book it',
+        cancelText: 'Not now',
       });
       if (ok) {
         await submitBooking(eventId, [onlySlotId], btn);
@@ -1665,6 +2311,7 @@ async function bookClass(eventId, btn, studioId) {
 function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studioName) {
   _bookingContext = { eventId, btn };
   _selectedSlots = [];
+  _usualPreselected = null;
 
   const hasMySlots = mySlotIds.size > 0;
   const _sl = slotLabelForEvent(eventId).toLowerCase();
@@ -1691,7 +2338,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   }
 
   document.getElementById('modalHint').textContent = hasMySlots
-    ? `Your ${pluralizeSlotLabel(_sl)} shown in green — click to cancel. Select another to book.`
+    ? `Your ${pluralizeSlotLabel(_sl)} highlighted — tap to cancel. Select another to book.`
     : `Select up to ${MAX_SEATS} ${pluralizeSlotLabel(_sl)}`;
   // Fully reset the confirm button on every open — changeSpot() overrides the
   // label and handler for swap mode, and without this reset those overrides
@@ -1719,12 +2366,18 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   svg.setAttribute('width', svgW);
   svg.setAttribute('height', h);
   svg.setAttribute('viewBox', `0 0 ${svgW} ${h}`);
+  // Scale with the sheet instead of forcing a fixed 580px into a ~290px phone
+  // box (the viewBox keeps the geometry, so settings.js's pref dots still
+  // land). max-width stops a small studio upscaling on desktop; min-width
+  // keeps slots tappable — past that the wrap scrolls (centred below).
+  svg.style.cssText = `width:100%;height:auto;max-width:${svgW}px;min-width:${Math.min(svgW, 420)}px`;
 
+  // Podium/object colours come from theme tokens (.bike-object in styles.css).
   let inner = objects.map(obj =>
-    `<rect x="${sx(obj.x)}" y="${sy(obj.y)}" width="${SLOT}" height="${SLOT}"
-      rx="4" fill="#1a1a0a" stroke="#333" stroke-dasharray="3,3"/>
-    <text x="${sx(obj.x)+SLOT/2}" y="${sy(obj.y)+SLOT/2+4}" text-anchor="middle"
-      fill="#555" font-size="9" font-family="sans-serif">★</text>`
+    `<rect class="bike-object" x="${sx(obj.x)}" y="${sy(obj.y)}" width="${SLOT}" height="${SLOT}"
+      rx="4" stroke-dasharray="3,3"/>
+    <text class="bike-object-mark" x="${sx(obj.x)+SLOT/2}" y="${sy(obj.y)+SLOT/2+4}" text-anchor="middle"
+      font-size="9" font-family="sans-serif">★</text>`
   ).join('');
 
   // Feature: pre-select the user's "usual" slot for this studio+instructor.
@@ -1755,15 +2408,38 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   svg.innerHTML = inner;
   document.getElementById('bikeModal').style.display = 'flex';
 
+  // Where the map still overflows (small phones), open on the seat that
+  // matters — the usual bike, a seat already held, else the first free one —
+  // not on the left edge with no sign there is more. Measured after display.
+  const wrap = svg.parentElement;
+  if (wrap && wrap.scrollWidth > wrap.clientWidth) {
+    const focusId = usualAvailable ? Number(usualSlot) : hasMySlots ? [...mySlotIds][0] : [...availableSlotIds][0];
+    const focus = slots.find(s => Number(s.id) === Number(focusId));
+    const box = svg.getBoundingClientRect();
+    const cx = focus ? (sx(focus.x) + SLOT / 2) * (box.width / svgW) : box.width / 2;
+    wrap.scrollLeft = (box.left - wrap.getBoundingClientRect().left + wrap.scrollLeft) + cx - wrap.clientWidth / 2;
+  }
+
   // Pre-select the usual slot so Confirm is enabled (without auto-confirming).
   if (usualAvailable) {
     _selectedSlots = [Number(usualSlot)];
+    _usualPreselected = Number(usualSlot);
     const _slU = slotLabelForEvent(eventId);
     document.getElementById('modalHint').textContent =
-      `${_slU} ${usualSlot} is your usual — selected. Confirm or pick another.`;
+      `${_slU} ${usualSlot} is your usual — tap another to switch, or confirm.`;
     document.getElementById('confirmBookBtn').disabled = false;
   }
 }
+
+// ── pure:booking:start ── (DOM-free; tests/suites/booking.js evaluates these blocks)
+// True when a tap should REPLACE the picker's auto-selected usual bike rather
+// than add to it: the only selection is still the one WE made, so the member
+// is switching bikes — not asking for a second (chargeable) seat.
+function _tapReplacesUsual(selected, usualPreselected, tappedId, swapMode) {
+  return !swapMode && usualPreselected != null && tappedId !== usualPreselected &&
+    selected.length === 1 && selected[0] === usualPreselected;
+}
+// ── pure:booking:end ──
 
 function selectBike(slotId) {
   const id = Number(slotId);
@@ -1774,6 +2450,12 @@ function selectBike(slotId) {
     _selectedSlots.splice(idx, 1);
     document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('selected', 'available');
   } else {
+    // The gold `usual` ring stays on the evicted bike, so tapping it again is
+    // a deliberate two-seat booking.
+    if (_tapReplacesUsual(_selectedSlots, _usualPreselected, id, swapMode)) {
+      _selectedSlots.shift();
+      document.querySelector(`.bike-slot[data-slot="${_usualPreselected}"]`)?.classList.replace('selected', 'available');
+    }
     // A swap replaces exactly one seat, so swap mode is single-select.
     const maxSel = swapMode ? 1 : MAX_SEATS;
     while (_selectedSlots.length >= maxSel) {
@@ -1783,6 +2465,8 @@ function selectBike(slotId) {
     _selectedSlots.push(id);
     document.querySelector(`.bike-slot[data-slot="${id}"]`)?.classList.replace('available', 'selected');
   }
+  // Any manual tap ends the auto-selection: from here the picks are the member's.
+  _usualPreselected = null;
   if (swapMode) {
     // Keep the change-spot chips + swap hint instead of the generic booking hint.
     renderChangeSpotHint();
@@ -1802,6 +2486,7 @@ function closeBikePicker() {
   document.getElementById('bikeModal').style.display = 'none';
   _bookingContext = null;
   _selectedSlots = [];
+  _usualPreselected = null;
   // Abandoning a swap must not leave its context or button overrides behind —
   // a stale context would make the next booking's confirm cancel the wrong class.
   window._changeSpotContext = null;
@@ -2175,11 +2860,15 @@ function _afterCardCancel(btn, eventId) {
 // Booking ids to DELETE for an event's real seats: per-slot ids when known,
 // else the entry/explicit booking id. (slotBookings is {} — truthy — for
 // seatless entries, so it can't be used as the sole discriminator.)
+// Each id ONCE: seats booked in one POST share the id it returned until
+// /bookings is re-read, and a second DELETE of it 404s — which every caller
+// counts as "gone", i.e. as if the other seat had been cancelled too.
 function _bookingIdsFor(booking, explicitId) {
-  const perSlot = booking?.slotBookings ? Object.values(booking.slotBookings).filter(Boolean) : [];
+  const once = ids => ids.filter((id, i) => id && ids.findIndex(x => String(x) === String(id)) === i);
+  const perSlot = booking?.slotBookings ? once(Object.values(booking.slotBookings)) : [];
   if (perSlot.length) return perSlot;
   // Slot-less (no-layout) bookings: every record id we read for the event.
-  const all = Array.isArray(booking?.bookingIds) ? booking.bookingIds.filter(Boolean) : [];
+  const all = Array.isArray(booking?.bookingIds) ? once(booking.bookingIds) : [];
   if (all.length) return all;
   if (explicitId) return [explicitId];
   return booking?.bookingId ? [booking.bookingId] : [];
@@ -2346,7 +3035,7 @@ async function joinWaitlist(eventId, btn, opts = {}) {
   }
   const origText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
   const fail = (label, msg, type) => {
     btn.disabled = false;
     btn.textContent = label;
@@ -2466,7 +3155,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
   }
   const origText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
   try {
     let entryId = booking?.waitlist?.id || null;
     if (!entryId) {
@@ -2567,7 +3256,7 @@ async function claimWaitlistSpot(eventId, btn) {
   if (!navigator.onLine) { toast("You're offline — try again once you're back online", 'info'); return false; }
   const origText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
   const restore = () => { btn.disabled = false; btn.textContent = origText; };
   try {
     if (!entryId) {
@@ -2633,7 +3322,7 @@ async function claimWaitlistSpot(eventId, btn) {
       cancelText: 'Not now',
     });
     if (!ok) { restore(); return false; }
-    btn.textContent = '…';
+    _busyLabel(btn);
     let post;
     try {
       post = await apiFetch(`/waitlist/${Number(entryId)}`, {
@@ -2754,6 +3443,267 @@ function _usualSlotForEvent(eventId) {
   return bestCount > 0 ? bestSlot : null;
 }
 
+// ── pure:booking:start ── (DOM-free; tests/suites/booking.js evaluates these blocks)
+// A real seat — as opposed to a seatless waitlist place, or nothing.
+function _isRealSeat(entry) {
+  return !!(entry && !entry.waitlisted &&
+    (entry.bookingId || (entry.slots || []).length || (entry.bookingIds || []).length));
+}
+
+// Every booking-record id an entry knows of (deduped, order kept).
+function _knownBookingIds(entry) {
+  const ids = [];
+  const add = id => { if (id != null && id !== '' && !ids.some(x => String(x) === String(id))) ids.push(id); };
+  if (!entry) return ids;
+  (Array.isArray(entry.bookingIds) ? entry.bookingIds : []).forEach(add);
+  Object.keys(entry.slotBookings || {}).forEach(k => add(entry.slotBookings[k]));
+  add(entry.bookingId);
+  return ids;
+}
+
+// The entry for an event after booking `newSlots` (record id `bookingId`; null
+// while unknown) ON TOP OF whatever seat was already held there. "+ Add spot"
+// adds to a booking — Psycle keeps one record per seat — so the seats and
+// record ids already held must survive, or the app forgets a seat that stays
+// booked (and chargeable) and a whole cancel removes only half of it.
+// Idempotent: the optimistic entry is seeded with it, then the confirmed write
+// runs it again over that seed.
+function _mergeBookedSeats(prevEntry, newSlots, bookingId) {
+  const prev = _isRealSeat(prevEntry) ? prevEntry : null;
+  const slots = prev ? (prev.slots || []).map(Number) : [];
+  const slotBookings = Object.assign({}, prev ? prev.slotBookings : null);
+  (newSlots || []).map(Number).forEach(s => {
+    if (!slots.includes(s)) slots.push(s);
+    // One POST returns ONE id however many seats it booked, so new seats can
+    // share it until /bookings is re-read — _seatCancelId never trusts that.
+    if (bookingId != null) slotBookings[s] = bookingId;
+  });
+  const bookingIds = _knownBookingIds(prev);
+  if (bookingId != null && !bookingIds.some(x => String(x) === String(bookingId))) bookingIds.push(bookingId);
+  const entry = { bookingId: bookingId || (prev && prev.bookingId) || null, bookingIds, slots, slotBookings, waitlisted: false };
+  if (prev && prev.fromWaitlist) entry.fromWaitlist = true;
+  return entry;
+}
+
+// `entry` without seat `slotId` and its record `recordId` — what is left of a
+// booking once Change spot has released that seat (null: nothing). Another
+// seat still mapped to the dead id loses it, so _seatCancelId sends that seat's
+// next action to /bookings rather than at a 404. Never mutates `entry`.
+function _withoutSeat(entry, slotId, recordId) {
+  if (!_isRealSeat(entry)) return null;
+  const dead = id => recordId != null && id != null && String(id) === String(recordId);
+  const slots = (entry.slots || []).map(Number).filter(s => s !== Number(slotId));
+  const slotBookings = {};
+  Object.keys(entry.slotBookings || {}).forEach(k => {
+    if (Number(k) !== Number(slotId) && !dead(entry.slotBookings[k])) slotBookings[k] = entry.slotBookings[k];
+  });
+  const bookingIds = _knownBookingIds({ bookingIds: entry.bookingIds, slotBookings, bookingId: entry.bookingId }).filter(id => !dead(id));
+  if (!slots.length && !bookingIds.length) return null;
+  const keepsId = bookingIds.some(id => String(id) === String(entry.bookingId));
+  const left = { bookingId: keepsId ? entry.bookingId : (bookingIds[0] || null), bookingIds, slots, slotBookings, waitlisted: false };
+  if (entry.fromWaitlist) left.fromWaitlist = true;
+  return left;
+}
+
+// The booking-record id that is provably seat `slotId`'s OWN, or null when
+// local state can't say: no id yet, or an id shared with another seat (see
+// above). A per-seat cancel must re-read /bookings on null — falling back to
+// the entry's id can DELETE the other seat's record.
+function _seatCancelId(booking, slotId) {
+  if (!_isRealSeat(booking)) return null;
+  const sb = booking.slotBookings || {};
+  const own = sb[slotId];
+  if (own != null && own !== '') {
+    const shared = Object.keys(sb).some(k => String(k) !== String(slotId) && sb[k] != null && String(sb[k]) === String(own));
+    return shared ? null : own;
+  }
+  // No per-seat id: the entry id is only this seat's when it is the ONLY seat
+  // and the only record.
+  const slots = (booking.slots || []).map(Number);
+  const only = slots.length === 1 && slots[0] === Number(slotId) && _knownBookingIds(booking).length === 1;
+  return only ? booking.bookingId || null : null;
+}
+
+// A booking entry that can't list all its records yet: fewer record ids than
+// seats (two seats sharing the one id their POST returned, or a new seat whose
+// 2xx carried none) — or no id at all. A whole cancel built from it DELETEs
+// part of the booking (or falls back to an event-wide DELETE), then reports
+// all of it cancelled — the rest stays booked, and chargeable.
+function _recordIdsIncomplete(entry) {
+  if (!entry || entry.waitlisted) return false;
+  const known = _knownBookingIds(entry).length;
+  return known === 0 || known < (entry.slots || []).length;
+}
+
+// What a re-read of /bookings says about a POST whose own answer couldn't be
+// trusted. `applied`: the re-read really was applied (not failed / late /
+// superseded). `entry`: the event's entry afterwards. `requested`: slot ids
+// asked for ([] = a no-layout count body). `idsBefore`: records held going in.
+//   booked  — everything asked for is there
+//   partial — a seat is held in this class, but not (all of) what was asked for
+//   none    — no seat in this class
+//   unknown — couldn't tell. NEVER present this as booked or as failed.
+function _bookingOutcome(applied, entry, requested, idsBefore) {
+  const want = (requested || []).map(Number);
+  if (applied !== true) return { kind: 'unknown', landed: [], missing: [] };
+  if (!_isRealSeat(entry)) return { kind: 'none', landed: [], missing: want };
+  if (want.length) {
+    const have = (entry.slots || []).map(Number);
+    const landed = want.filter(s => have.includes(s));
+    const missing = want.filter(s => !have.includes(s));
+    return { kind: missing.length ? 'partial' : 'booked', landed, missing };
+  }
+  // Count body: it landed if there is one more record than before.
+  const grew = _knownBookingIds(entry).length > (Number(idsBefore) || 0);
+  return { kind: grew ? 'booked' : 'partial', landed: [], missing: [] };
+}
+// ── pure:booking:end ──
+
+// One trailing refetch shared by every POST outcome. /bookings is the only
+// source of per-seat record ids, so what we write locally after a POST is
+// provisional until it has been re-read.
+let _bookingsRefetchTimer = null;
+function _scheduleBookingsRefetch(delayMs) {
+  clearTimeout(_bookingsRefetchTimer);
+  // Token gone by then (session expired meanwhile): fetchMyBookings' no-token
+  // branch would empty the bookings an expiry deliberately keeps.
+  _bookingsRefetchTimer = setTimeout(() => { _bookingsRefetchTimer = null; if (getBearerToken()) fetchMyBookings(); }, delayMs || 400);
+}
+
+// Classes whose last POST /bookings ended with no verifiable outcome — it MAY
+// have booked. No further POST for that class goes out until /bookings has
+// been re-read: a blind retry is how a second seat gets booked and charged.
+const _unverifiedBookings = {};
+const BOOKING_VERIFY_DEADLINE_MS = 10000; // GET retries can run past a minute; a tap must settle sooner
+
+// fetchMyBookings under a deadline. True only when a fresh /bookings snapshot
+// was really applied (it resolves false when superseded by a concurrent fetch,
+// so that gets one more go while the answer still matters).
+// No token = nothing can be read: fetchMyBookings' signed-out branch answers
+// true for an EMPTIED map, which would pass here as a verified "no seat" (the
+// first go can 401 and expire the session, so the second checks again).
+async function _rereadBookingsForVerify() {
+  const t0 = Date.now();
+  const attempt = async () => {
+    if (!getBearerToken()) return false;
+    if ((await fetchMyBookings()) === true) return true;
+    if (!getBearerToken()) return false;
+    return Date.now() - t0 < BOOKING_VERIFY_DEADLINE_MS && (await fetchMyBookings()) === true;
+  };
+  try {
+    return (await Promise.race([attempt(), new Promise(r => setTimeout(() => r(false), BOOKING_VERIFY_DEADLINE_MS))])) === true;
+  } catch (e) { return false; }
+}
+
+// A seat /bookings has confirmed: button from the server's entry, then the
+// same announcements the plain success path makes.
+function _announceVerifiedSeats(eventId, btn, entry, landed) {
+  applyBookedState(btn, eventId, entry);
+  if (landed.length) _recordBikeHistory(eventId, landed);
+  showBookingConfirmation(eventId, landed);
+  PsycleEvents.emit('booking:complete', eventId, landed, btn);
+}
+
+// A POST /bookings whose own answer can't be trusted: a timeout/5xx may have
+// booked server-side; a 409/"already" means "you hold it" OR "someone else
+// took it". Guessing is costly both ways (a wrong "failed" invites a second,
+// chargeable POST; a wrong "booked" is a phantom seat) — so re-read /bookings
+// and announce only what it shows. `conflict`: the server refused, as opposed
+// to never answering. Never throws.
+//
+// Label contract (reliability.js, theme.js and _bookEventHeadless all read
+// it): ✓ + .booked ONLY when /bookings shows a seat in this class. _myBookings
+// is then the server's own snapshot and the optimistic wrapper leaves it be;
+// every other outcome carries neither, so the wrapper drops its optimistic entry.
+//
+// `serverMsg`: once a re-read has shown NO seat, the server's own reason is
+// the most truthful thing to say (this API answers some business refusals
+// with a 500) — except an "already booked", which the re-read just disproved.
+async function _settleUnverifiedBooking(eventId, slots, btn, idsBefore, conflict, serverMsg) {
+  const key = String(eventId);
+  const requested = slots ? slots.map(Number) : [];
+  const applied = await _rereadBookingsForVerify();
+  const entry = _myBookings[key];
+  const outcome = _bookingOutcome(applied, entry, requested, idsBefore);
+  try {
+    const SL = slotLabelForEvent(eventId);
+    if (outcome.kind === 'booked') {
+      delete _unverifiedBookings[key];
+      _announceVerifiedSeats(eventId, btn, entry, requested);
+      return;
+    }
+    // Anything short of "booked" after a POST that never answered may still
+    // land: hold the next POST for this class until a re-read clears it.
+    // Seats that DID land are announced below, once: only the missing ones stay
+    // in question, or the next tap announces (and counts) them all over again.
+    // ('unknown' and count bodies have no missing list — they keep `requested`.)
+    if (conflict) delete _unverifiedBookings[key];
+    else _unverifiedBookings[key] = { slots: (outcome.kind === 'partial' && requested.length) ? outcome.missing : requested, idsBefore };
+    // What we show next is provisional (and without a ✓ the optimistic wrapper
+    // restores its pre-POST entry) — let the server correct it shortly.
+    _scheduleBookingsRefetch(3000);
+    if (outcome.kind === 'partial') {
+      // Still holding a seat here, just not (all of) what was asked for.
+      if (outcome.landed.length) _announceVerifiedSeats(eventId, btn, entry, outcome.landed);
+      else applyBookedState(btn, eventId, entry);
+      const many = outcome.missing.length > 1;
+      const what = requested.length ? formatSlots(SL, outcome.missing) : 'The extra space';
+      // Nothing new landed after a 5xx that gave a reason ("Not enough
+      // credits"): say it, as the 'none' branch does — or every retry re-opens
+      // the picker and fails the same way. The subject stays: the button still
+      // reads as booked (the seat held before), so a bare reason would not.
+      const said = (!conflict && !outcome.landed.length && typeof serverMsg === 'string' && serverMsg && !/already/i.test(serverMsg)) ? serverMsg : '';
+      const notShowing = `${what} ${many ? "aren't" : "isn't"} showing as booked`;
+      toast(conflict
+        ? (requested.length ? `${what} ${many ? 'were' : 'was'} just taken — pick another` : "Psycle didn't add another space — you already hold one in this class")
+        : (said ? `${notShowing} — Psycle said: ${said}` : `${notShowing} — check My Bookings before trying again`),
+        conflict ? 'info' : 'error');
+      return;
+    }
+    btn.className = 'book-btn';
+    btn.disabled = false;
+    if (outcome.kind === 'none') {
+      const said = (typeof serverMsg === 'string' && serverMsg && !/already/i.test(serverMsg)) ? serverMsg : '';
+      btn.textContent = conflict ? 'Book' : 'Failed — retry';
+      toast(said || (conflict
+        ? (requested.length ? `That ${SL.toLowerCase()} was just taken — pick another` : "Psycle wouldn't take that booking — the class may have just filled up")
+        : "Psycle didn't confirm that booking and it isn't showing in My Bookings — try again"),
+        conflict ? 'info' : 'error');
+    } else {
+      btn.textContent = 'Unconfirmed — retry';
+      toast("Couldn't confirm that booking with Psycle — check My Bookings before trying again", 'error');
+    }
+  } catch (e) { console.warn('[psycle] settling an unverified booking failed:', e); }
+}
+
+// Before another POST for a class whose last one is unverified: settle the
+// old one first. Resolves true when it is safe to carry on booking.
+async function _clearUnverifiedBooking(eventId, btn) {
+  const key = String(eventId);
+  const pending = _unverifiedBookings[key];
+  if (!pending) return true;
+  const applied = await _rereadBookingsForVerify();
+  const entry = _myBookings[key];
+  const outcome = _bookingOutcome(applied, entry, pending.slots, pending.idsBefore);
+  const landed = outcome.kind === 'booked' ? pending.slots : outcome.landed;
+  if (outcome.kind !== 'unknown') delete _unverifiedBookings[key];
+  if (outcome.kind !== 'unknown' && outcome.kind !== 'booked' && !landed.length) return true; // it never landed — book normally
+  // From here the answer is "do NOT send another POST" — a hiccup while saying
+  // so must not turn into a thrown "Booking failed" further up.
+  try {
+    if (outcome.kind === 'unknown') {
+      btn.className = 'book-btn';
+      btn.disabled = false;
+      btn.textContent = 'Unconfirmed — retry';
+      toast("Still can't confirm your last booking attempt with Psycle — check My Bookings before booking again", 'error');
+    } else {
+      _announceVerifiedSeats(eventId, btn, entry, landed);
+      toast("Your earlier booking went through — you're in", 'success');
+    }
+  } catch (e) { console.warn('[psycle] settling an earlier booking failed:', e); }
+  return false;
+}
+
 // Real seats only (POST /bookings). Waitlist places are a different resource —
 // see joinWaitlist(). `opts` stays in the signature because every wrapper in
 // the monkey-patch chain forwards four arguments; a legacy {waitlist:true}
@@ -2765,7 +3715,14 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
   // server rejects a body without slots ("Booking slot required").
   if (opts && opts.waitlist) return joinWaitlist(eventId, btn);
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
+  // The one choke point every booking path shares (picker, last-seat confirm,
+  // no-layout, weekly template): an earlier POST for this class that may have
+  // landed is settled before another goes out.
+  if (!(await _clearUnverifiedBooking(eventId, btn))) return;
+  // Records held going in — how a count body is judged if this POST's own
+  // answer can't be trusted.
+  const idsBefore = _knownBookingIds(_isRealSeat(_myBookings[String(eventId)]) ? _myBookings[String(eventId)] : null).length;
   try {
     const body = { event_id: eventId };
     if (slots && slots.length) body.slots = slots.map(Number);
@@ -2785,21 +3742,22 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       btn.dataset.eventId = eventId;
       // Update local bookings state
       const slotsArr = slots ? slots.map(Number) : [];
-      const slotBookings = {};
-      // The API creates one booking per slot; after a fresh book we only know the
-      // returned bookingId — map all slots to it (fetchMyBookings will correct later)
-      slotsArr.forEach(s => { slotBookings[s] = bookingId; });
       // A place we held on the waitlist for this class is superseded by the seat
       // (kept attached; forgotten as a "held place" so it can't later be
       // mistaken for a Psycle allocation).
       const prevEntry = _myBookings[String(eventId)];
       const prevPlace = prevEntry?.waitlist;
-      // Keep every record id we know of (a no-layout "one more space" adds a
-      // record next to the existing one) so a whole cancel removes them all.
-      const prevIds = (!slotsArr.length && prevEntry && !prevEntry.waitlisted && !(prevEntry.slots || []).length) ? _bookingIdsFor(prevEntry) : [];
-      const bookingIds = [...prevIds, ...(bookingId != null && !prevIds.includes(bookingId) ? [bookingId] : [])];
-      _myBookings[String(eventId)] = { bookingId: bookingId || prevEntry?.bookingId || null, bookingIds, slots: slotsArr, slotBookings, waitlisted: false };
+      // The new seat(s) JOIN whatever was already held here ("+ Add spot", or a
+      // no-layout "one more space"): keep every seat and record id, so the card
+      // shows them all and a cancel removes the right records. The API creates
+      // one booking per slot but returns one id — new slots all map to it until
+      // the refetch below corrects them.
+      _myBookings[String(eventId)] = _mergeBookedSeats(prevEntry, slotsArr, bookingId);
+      if (_myBookings[String(eventId)].slots.length > slotsArr.length) {
+        btn.textContent = `${formatSlots(slotLabelForEvent(eventId), _myBookings[String(eventId)].slots)} ✓`;
+      }
       if (prevPlace) { _myBookings[String(eventId)].waitlist = prevPlace; _rememberPlace(eventId, null); }
+      delete _unverifiedBookings[String(eventId)];
       _noteLocalBookingWrite();
       // Remember the booked slot(s) per studio+instructor for next time.
       if (slotsArr.length) _recordBikeHistory(eventId, slotsArr);
@@ -2807,11 +3765,12 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       showBookingConfirmation(eventId, slotsArr);
       refreshUpcomingPanel();
       PsycleEvents.emit('booking:complete', eventId, slotsArr, btn);
-    } else if (res.status === 409 || (data.message || '').toLowerCase().includes('already')) {
-      btn.textContent = 'Already booked ✓';
-      btn.className = 'book-btn booked';
-      btn.disabled = true;
-      toast("You're already in this class", 'info');
+      // Swap the provisional entry for the server's (real per-seat record ids).
+      _scheduleBookingsRefetch();
+    } else if (res.status === 409 || res.status >= 500 || (data.message || '').toLowerCase().includes('already')) {
+      // Neither says what happened: a 409/"already" is "you hold it" OR "someone
+      // else took it", and a 5xx can follow a booking that did land.
+      await _settleUnverifiedBooking(eventId, slots, btn, idsBefore, res.status < 500, data.message || data.error);
     } else if (res.status !== 401) {
       // 401 is handled globally by apiFetch → showSessionExpired(). Every
       // other failure — including 403 business-rule denials (plan doesn't
@@ -2824,9 +3783,11 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       btn.disabled = false;
     }
   } catch (e) {
-    btn.textContent = 'Failed — retry';
-    btn.disabled = false;
-    toast(e.message, 'error');
+    // Timeout / dropped connection: the POST may have booked server-side (it is
+    // never auto-retried), so "Failed" would be a guess that invites a second,
+    // chargeable attempt. Ask /bookings instead of surfacing a raw "Load failed".
+    console.warn('[psycle] POST /bookings gave no answer:', e);
+    await _settleUnverifiedBooking(eventId, slots, btn, idsBefore, false);
   }
 }
 
@@ -2853,6 +3814,12 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
     dateTimeStr = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}, ${h12}:${String(m).padStart(2,'0')}${ampm}`;
   }
 
+  // Seats only (a waitlist place has nothing to late-cancel): say up front
+  // when cancelling stops being free — same helper as the card and the dialog.
+  const deadline = (!opts.waitlist && evt?.start_at) ? _cancelDeadline(evt.start_at) : null;
+  const cancelLine = !deadline ? ''
+    : (deadline.insideWindow ? 'Inside the 12-hour late-cancel window' : `Free cancel until ${deadline.label}`);
+
   // Build slot label
   const slotStr = formatSlots(_SL, slotsArr);
 
@@ -2869,6 +3836,7 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
         <div class="bc-title">${opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist!') : 'Booked!'}</div>
         <div class="bc-detail">${escapeHTML(classLine)}</div>
         ${dateTimeStr ? `<div class="bc-detail bc-dim">${escapeHTML(dateTimeStr)}</div>` : ''}
+        ${cancelLine ? `<div class="bc-detail bc-dim">${escapeHTML(cancelLine)}</div>` : ''}
         ${opts.waitlist ? `<div class="bc-detail bc-dim">Psycle books you in automatically if a spot frees up — keep a credit free</div>` : ''}
         ${slotStr ? `<div class="bc-slot">${slotStr}</div>` : ''}
       </div>
@@ -3034,6 +4002,79 @@ function describeCancelError(failedResponse, data, err) {
   return 'Cancel failed';
 }
 
+// ── pure:bookings-card:start ── (DOM-free; tests/suites/bookings-card.js evaluates this block)
+// Psycle charges for cancelling inside 12 hours of class, and the API carries
+// no deadline field — so the rule lives in this ONE helper and the booking
+// card, the confirmation sheet and the cancel dialog can never disagree.
+//
+// `start_at` is the gym's UK wall clock with no offset, and Psycle counts the
+// 12 hours from the REAL start. window._psycleClassStartMs — the Europe/London
+// resolver (pure:gym-time above on the web, the bridge's copy in the iOS app;
+// the one _waitlistTimeMs uses) — gives that instant, so a device that is
+// abroad neither promises a free cancel inside the charge window nor holds
+// back the Late-cancel badge; the deadline is then printed as London wall
+// clock, like the class time beside it. Only when the resolver is missing or
+// can't answer is the string parsed the way the card parses it — naive →
+// device-local — which is right on a UK device.
+// Returns null when the start can't be read.
+let _londonPartsFmt = null; // lazy: every booking card asks, on every render
+function _cancelDeadline(startAt, nowMs) {
+  if (startAt == null || startAt === '') return null;
+  const raw = typeof startAt === 'string' ? startAt.trim() : startAt;
+  let startMs = NaN;
+  let london = false;
+  if (typeof raw === 'string' && typeof window !== 'undefined' && typeof window._psycleClassStartMs === 'function') {
+    startMs = window._psycleClassStartMs(raw);
+    london = !isNaN(startMs);
+  }
+  if (isNaN(startMs)) startMs = new Date(typeof raw === 'string' ? raw.replace(' ', 'T') : raw).getTime();
+  if (isNaN(startMs) && typeof raw === 'string') startMs = new Date(raw).getTime();
+  if (isNaN(startMs)) return null;
+  const now = nowMs == null ? Date.now() : nowMs;
+  const deadlineMs = startMs - 12 * 3600000;
+  const d = new Date(deadlineMs);
+  let dow = d.getDay(), h = d.getHours(), min = d.getMinutes();
+  if (london) {
+    // Numeric parts only, the weekday derived from the date: weekday and am/pm
+    // TEXT from Intl varies between engines. No Europe/London data in the
+    // engine → the bridge fell back to a device-local parse too, so the local
+    // getters above already match.
+    try {
+      if (!_londonPartsFmt) {
+        _londonPartsFmt = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/London', hourCycle: 'h23',
+          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+        });
+      }
+      const p = {};
+      _londonPartsFmt.formatToParts(d).forEach(x => { if (x.type !== 'literal') p[x.type] = Number(x.value); });
+      if ([p.year, p.month, p.day, p.hour, p.minute].every(n => !isNaN(n))) {
+        dow = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+        h = p.hour % 24; // some engines print midnight as 24
+        min = p.minute;
+      }
+    } catch (e) { /* keep the device-local digits */ }
+  }
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow];
+  return {
+    deadlineMs,
+    hoursUntil: (startMs - now) / 3600000,
+    // AT the cutoff counts as inside — never promise a free cancel we can't be sure of.
+    insideWindow: now >= deadlineMs,
+    label: `${day} ${h % 12 || 12}:${String(min).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`,
+  };
+}
+
+// Time left before class as whole hours + minutes, rounded ONCE on the total.
+// Flooring the hour and rounding the leftover separately printed "9h 60m" at
+// 9h59m40s — on the card's countdown chip AND in the cancel dialog's
+// late-charge warning. Both read this, so the two can't drift apart again.
+function _hoursMinsLeft(hoursUntil) {
+  const total = Math.max(0, Math.round(hoursUntil * 60));
+  return { hrs: Math.floor(total / 60), mins: total % 60 };
+}
+// ── pure:bookings-card:end ──
+
 /**
  * Ask the user to confirm cancelling a booking. When the class is inside
  * Psycle's 12-hour late-cancel window the modal surfaces a warning about
@@ -3043,13 +4084,15 @@ function confirmCancelWithPolicy(eventId, base) {
   // (Waitlist places never reach this gate: confirmUnbook/upcomingCancel hand
   // them to leaveWaitlist, which owns its own dialog.)
   const evt = _eventCache[String(eventId)];
-  const msUntil = evt ? (new Date(evt.start_at).getTime() - Date.now()) : Infinity;
-  const hoursUntil = msUntil / 3600000;
-  if (isFinite(hoursUntil) && hoursUntil < 12 && hoursUntil > -0.5) {
+  // Same cutoff the booking card prints as "Free cancel until …".
+  const deadline = evt ? _cancelDeadline(evt.start_at) : null;
+  const hoursUntil = deadline ? deadline.hoursUntil : Infinity;
+  if (deadline && deadline.insideWindow && hoursUntil > -0.5) {
+    const left = _hoursMinsLeft(hoursUntil);
     let remaining;
     if (hoursUntil < 0) remaining = 'has already started';
-    else if (hoursUntil < 1) remaining = `starts in ${Math.max(1, Math.round(hoursUntil * 60))} min`;
-    else remaining = `starts in ${Math.floor(hoursUntil)}h ${Math.round((hoursUntil % 1) * 60)}m`;
+    else if (left.hrs === 0) remaining = `starts in ${Math.max(1, left.mins)} min`;
+    else remaining = `starts in ${left.hrs}h ${left.mins}m`;
     return confirmModal({
       title: base,
       warn: `This class ${remaining}. Cancellations inside 12 hours are usually charged by Psycle.`,
@@ -3066,16 +4109,43 @@ function confirmCancelWithPolicy(eventId, base) {
   });
 }
 
+// Before a whole-booking cancel reads its record ids (call it AFTER the confirm
+// dialog, then re-read the entry: an applied fetch swaps the whole map). An
+// entry that can't list every record it holds is refreshed from /bookings first.
+// Resolves false — and says so — when it still can't: send nothing. Offline
+// included: a queued cancel we KNOW is incomplete would replay as "cancelled".
+async function _readyForWholeCancel(eventId) {
+  if (!_recordIdsIncomplete(_myBookings[String(eventId)])) return true;
+  if (navigator.onLine && (await _rereadBookingsForVerify())) return true;
+  toast("Couldn't load this booking's seats from Psycle — nothing was cancelled. Try again in a moment.", 'error');
+  return false;
+}
+
 async function cancelBikeSlot(slotId, eventId) {
-  const booking = _myBookings[String(eventId)];
   const _sl3 = slotLabelForEvent(eventId);
   if (!(await confirmCancelWithPolicy(eventId, `Cancel your ${_sl3} ${slotId} booking?`))) return;
   // update hint immediately
   document.getElementById('modalHint').textContent = 'Cancelling…';
   try {
-    const resolvedId = booking?.slotBookings?.[slotId] || booking?.bookingId;
-    const path = resolvedId ? `/bookings/${resolvedId}` : `/bookings?event_id=${eventId}`;
-    const res = await apiFetch(path, { method: 'DELETE' });
+    // Read AFTER the dialog: a fetch that landed meanwhile swapped the whole map.
+    let booking = _myBookings[String(eventId)];
+    // Only ever DELETE a record that is provably THIS seat's. Right after a
+    // booking the seats can share one id (or have none yet) — the entry id may
+    // be the other seat's record — so re-read /bookings rather than guess.
+    let resolvedId = _seatCancelId(booking, slotId);
+    if (!resolvedId) {
+      // Bounded (GET retries can run past a minute); if it isn't applied the
+      // stale entry still resolves to null below and nothing is sent.
+      await _rereadBookingsForVerify();
+      booking = _myBookings[String(eventId)];
+      resolvedId = _seatCancelId(booking, slotId);
+    }
+    if (!resolvedId) {
+      document.getElementById('modalHint').textContent = 'Nothing was cancelled — try again';
+      toast(`Couldn't match ${_sl3} ${slotId} to a booking — nothing was cancelled. Pull to refresh and try again.`, 'error');
+      return;
+    }
+    const res = await apiFetch(`/bookings/${resolvedId}`, { method: 'DELETE' });
     if (res.ok || res.status === 204 || res.status === 200) {
       // Remove this slot from local state
       if (booking) {
@@ -3116,9 +4186,18 @@ async function confirmUnbook(bookingId, eventId, btn) {
   // "cancelled" while the place survives server-side).
   if (_myBookings[String(eventId)]?.waitlisted) return leaveWaitlist(eventId, btn);
   if (!(await confirmCancelWithPolicy(eventId, 'Cancel this booking?'))) return;
+  const idleLabel = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
+  const ready = await _readyForWholeCancel(eventId);
   const booking = _myBookings[String(eventId)];
+  if (!ready || booking?.waitlisted) {
+    // Nothing is sent. (A seat that turned into just a waitlist place while
+    // the dialog was up is left through /waitlists, never DELETE /bookings.)
+    btn.disabled = false;
+    if (booking) applyBookedState(btn, eventId, booking); else btn.textContent = idleLabel;
+    return;
+  }
 
   const bookingIds = _bookingIdsFor(booking, bookingId);
 
@@ -3148,6 +4227,9 @@ async function confirmUnbook(bookingId, eventId, btn) {
       refreshUpcomingPanel();
       toast('Booking cancelled', 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
+      // A record local state never knew of (a no-layout space whose 2xx
+      // carried no id) is still booked: let /bookings put it back on show.
+      _scheduleBookingsRefetch();
     } else {
       const failed = results.find(r => !isOk(r));
       const data = await failed.json().catch(() => ({}));
@@ -3350,9 +4432,11 @@ function render(events, relations, filters, done) {
       const cat = getCategory(typeName);
       if (!filters.categoryKeys.has(cat.key)) return false;
     }
-    // Strength sub-filter — only applies when this is a strength class
-    // and not all subs are selected (all = no filtering)
-    if (filters.strengthSubs && filters.strengthSubs.size < 3) {
+    // Strength sub-filter — only applies while Strength is a SELECTED category
+    // (its sub-pills are hidden otherwise, so an old "Upper only" choice was
+    // silently dropping Lower/Full Body from the all-classes list), and only
+    // when not all subs are selected (all = no filtering)
+    if (filters.strengthSubs && filters.categoryKeys && filters.categoryKeys.has('STRENGTH') && filters.strengthSubs.size < STRENGTH_SUBS.length) {
       const cat = getCategory(typeName);
       if (cat.key === 'STRENGTH') {
         const matchedSub = STRENGTH_SUBS.find(s => typeName.includes(s.match));
@@ -3360,7 +4444,7 @@ function render(events, relations, filters, done) {
       }
     }
     // Reformer sub-filter — same semantics for Pilates variants
-    if (filters.reformerSubs && filters.reformerSubs.size < REFORMER_SUBS.length) {
+    if (filters.reformerSubs && filters.categoryKeys && filters.categoryKeys.has('PILATES') && filters.reformerSubs.size < REFORMER_SUBS.length) {
       const cat = getCategory(typeName);
       if (cat.key === 'PILATES') {
         const matchedSub = REFORMER_SUBS.find(s => typeName.includes(s.match));
@@ -3395,7 +4479,7 @@ function render(events, relations, filters, done) {
   // Group by day
   const byDay = {};
   filtered.forEach(e => {
-    const day = e.start_at.split('T')[0];
+    const day = String(e.start_at).slice(0, 10); // 'YYYY-MM-DD' of the T- and the space-form alike
     if (!byDay[day]) byDay[day] = [];
     byDay[day].push(e);
   });
@@ -3552,7 +4636,7 @@ function toggleLocation(id) {
 function updateLocationHint() {
   const hint = document.getElementById('locationHint');
   if (!hint) return;
-  hint.textContent = selectedLocations.size === 0 ? '— all studios (slower)' : '';
+  hint.textContent = selectedLocations.size === 0 ? '— all studios' : '';
 }
 
 // Feature 7 removed — "Today at Psycle" auto-load was noisy.
@@ -3675,7 +4759,7 @@ function renderInstrDropdown() {
             onmousedown="event.preventDefault();toggleFavourite('${i.id}',event)">★</span>
         </div>`;
       }).join('')
-    : '<div class="instr-option" style="color:#555;cursor:default">No matches</div>';
+    : '<div class="instr-option" style="color:var(--text-dim);cursor:default">No matches</div>';
 }
 
 function toggleInstructor(id) {
@@ -3826,8 +4910,7 @@ function getCountdownText(eventDate, now) {
   const tomorrowStr = localDateStr(tomorrow);
 
   if (eventDayStr === todayStr) {
-    const hrs = Math.floor(diffHours);
-    const mins = Math.round((diffHours - hrs) * 60);
+    const { hrs, mins } = _hoursMinsLeft(diffHours);
     if (hrs === 0) return `In ${mins}min`;
     if (mins === 0) return `In ${hrs}h`;
     return `In ${hrs}h ${mins}m`;
@@ -3874,9 +4957,33 @@ function renderMyBookings() {
   if (upcoming.length === 0 && past.length === 0) {
     panel.style.display = 'none';
     if (histBtn) histBtn.style.display = (currentUser && histCount > 0) ? '' : 'none';
+    // Signed in but /bookings never answered: "Nothing booked" would be a
+    // guess (and its cards would say Book over classes already held). Just as
+    // much a guess when it DID answer but no held class could be drawn — a
+    // cold launch where every GET /events/{id} failed leaves `all` empty over
+    // a map that is not.
+    const unhydrated = currentUser && Object.keys(_myBookings).some(id => !_eventCache[id]);
+    // …and while the first /bookings is still on its way: currentUser is set
+    // the moment /profile lands, seconds before the list does (~10s when it
+    // ends in a failure, retries included), and tabs.js's first paint — or any
+    // repaint in between — read "Nothing booked — yet". Loading, not a verdict:
+    // fetchMyBookings / _noteBookingsLoadFailed repaint whichever way it settles.
+    if (currentUser && _bookingsLoadState === 'pending' && !unhydrated) {
+      if (emptyEl) emptyEl.style.display = 'none';
+      showBookingSkeleton(2);
+      return;
+    }
     if (emptyEl) {
       emptyEl.style.display = '';
-      emptyEl.innerHTML = currentUser
+      // A token that is still stored but unconfirmed (offline launch, Psycle
+      // blip) gets Retry — telling a signed-in member to "Sign in" is wrong.
+      const gate = currentUser ? '' : authGateHTML();
+      emptyEl.innerHTML = gate ? gate : ((currentUser && _bookingsLoadState === 'failed') || unhydrated)
+        ? `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10.5 10.5 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0M12 20h.01M3 3l18 18"/></svg></div>
+           <div class="tab-empty-title">Couldn't load<br>your bookings</div>
+           <div class="tab-empty-sub">Psycle didn't answer just now. Anything you've booked is safe — check your connection and try again.</div>
+           <button class="tab-empty-btn" onclick="retryBookingsLoad(this)">Retry</button>`
+        : currentUser
         ? `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
            <div class="tab-empty-title">Nothing booked<br>— yet</div>
            <div class="tab-empty-sub">Find your next ride, lift, or flow and it'll show up here.</div>
@@ -3897,7 +5004,7 @@ function renderMyBookings() {
   // Group by day
   const byDay = {};
   items.forEach(item => {
-    const day = item.evt.start_at.split('T')[0];
+    const day = String(item.evt.start_at).slice(0, 10); // 'YYYY-MM-DD' of the T- and the space-form alike
     if (!byDay[day]) byDay[day] = [];
     byDay[day].push(item);
   });
@@ -4074,12 +5181,16 @@ function renderMyBookings() {
       const place = booking.waitlist || null;            // {id,status,expiresAt,offer?} when on the waitlist
       const spotFree = !!(place && place.offer && place.offer.available);   // a probe saw a claimable spot
       const offerOpen = !!place && (spotFree || _waitlistOfferPending(place, now.getTime()));
+      // Seats only, upcoming only: ONE 12h cutoff drives the badge, the
+      // "Free cancel until" line and whether Change spot is offered.
+      const deadline = (!eventPast && !isPlace) ? _cancelDeadline(evt.start_at, now.getTime()) : null;
 
       let badges = `<span class="badge">${evt.duration}min</span>`;
       if (isPlace) badges += `<span class="badge waitlist">${offerOpen ? (spotFree ? 'Spot available' : 'Spot offered') : 'Waitlisted'}</span>`;
       if (booking.fromWaitlist && !isPlace) badges += `<span class="badge waitlist">From waitlist</span>`;
       if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
       if (eventPast && !isPlace) badges += `<span class="badge attended">Attended</span>`;
+      if (deadline && deadline.insideWindow) badges += `<span class="badge">Late-cancel window</span>`;
 
       // Countdown badge for the next 2 upcoming classes you hold a seat in
       if (!eventPast && !isPlace && _countdownShown < 2) {
@@ -4096,13 +5207,12 @@ function renderMyBookings() {
         const _slUp = slotLabelForEvent(evtId);
         const chips = slots.map(slot => {
           if (eventPast) return `<span class="up-seat-chip" style="opacity:0.5">${_slUp} ${slot}</span>`;
+          // The per-seat × only earns its place when there's another seat to
+          // keep; a single seat is cancelled with the full-width button below.
+          if (slots.length < 2) return `<span class="up-seat-chip">${_slUp} ${slot}</span>`;
           return `<span class="up-seat-chip">${_slUp} ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel ${_slUp} ${slot}">&times;</button></span>`;
         }).join('');
-        seatHtml = `<div class="up-seats" style="margin-top:8px">${chips}`;
-        if (!eventPast && slots.length > 1) {
-          seatHtml += `<button class="up-cancel-all" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">Cancel All</button>`;
-        }
-        seatHtml += `</div>`;
+        seatHtml = `<div class="up-seats" style="margin-top:8px">${chips}</div>`;
       } else if (!isPlace && (booking.bookingIds || []).length > 1) {
         // No-layout studio with more than one space held (each is a record).
         seatHtml = `<div class="up-seats" style="margin-top:8px"><span class="up-seat-chip">${(booking.bookingIds || []).length} spaces</span></div>`;
@@ -4134,23 +5244,31 @@ function renderMyBookings() {
         }
       }
 
-      // Primary button for seatless entries: Cancel (no-layout seat) / Leave or Claim (place)
+      // Primary button: Cancel (every seat booking — the chip × alone was a
+      // ~10px target and the only way out of a one-seat booking) / Leave or
+      // Claim (place). upcomingCancel drops every seat or space held.
       let cancelBtn = '';
-      if (!eventPast && slots.length === 0) {
+      if (!eventPast) {
         if (isPlace && offerOpen) {
           cancelBtn = `<button class="book-btn mb-primary-btn" onclick="event.stopPropagation();claimWaitlistSpot(${evtId}, this)">Claim spot</button>`;
         } else if (isPlace) {
           cancelBtn = `<button class="book-btn booked mb-primary-btn" onclick="event.stopPropagation();leaveWaitlist(${evtId}, this)">Leave waitlist</button>`;
         } else {
-          cancelBtn = `<button class="book-btn booked mb-primary-btn" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">Cancel booking</button>`;
+          const held = slots.length || (booking.bookingIds || []).length;
+          cancelBtn = `<button class="book-btn booked mb-primary-btn" onclick="event.stopPropagation();upcomingCancel(${evtId}, this)">${held > 1 ? `Cancel all ${held}` : 'Cancel booking'}</button>`;
         }
       }
+
+      // Until the cutoff, say when cancelling stops being free (after it the
+      // "Late-cancel window" badge above takes over).
+      const deadlineHtml = (deadline && !deadline.insideWindow)
+        ? `<div class="mb-cancel-deadline">Free cancel until ${deadline.label}</div>`
+        : '';
 
       // Action buttons (upcoming only)
       let rebookBtn = '';
       if (!eventPast) {
-        const hoursUntil = (dt - now) / 3600000;
-        const canChange = hoursUntil > 12;
+        const canChange = !!deadline && !deadline.insideWindow;
 
         rebookBtn = `<div class="booking-actions">`;
 
@@ -4173,15 +5291,20 @@ function renderMyBookings() {
           }
         }
 
-        rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
+        // find-similar-btn is the hook findSimilar() anchors its popup to.
+        rebookBtn += `<button class="booking-action-btn find-similar-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
         if (evt._locAddress || evt._locFullName || evt._locName) {
           rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();openMapForBooking(${evtId})" title="Open the studio in Maps">📍 Map</button>`;
+        }
+        // Seats only — "I'm going to…" is untrue for a waitlist place.
+        if (!isPlace) {
+          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();shareClass(${evtId})" title="Invite a friend to this class">Share</button>`;
         }
         rebookBtn += `</div>`;
       }
 
       html += `<div class="class-card ${isPlace ? 'is-waitlisted' : 'is-booked'} my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
-        onclick="scrollToClass(${evtId}, event)" style="cursor:pointer" title="Jump to class in search results">
+        onclick="openClassDetail(${evtId})" style="cursor:pointer">
         <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
         <div class="class-info">
           <div class="class-type">${escapeHTML(typeName)}</div>
@@ -4190,6 +5313,7 @@ function renderMyBookings() {
           <div class="class-meta">${badges}</div>
           ${seatHtml}
           ${placeHtml}
+          ${deadlineHtml}
           ${cancelBtn}
           ${rebookBtn}
         </div>
@@ -4211,26 +5335,11 @@ function renderMyBookings() {
   list.innerHTML = html;
 }
 
-function scrollToClass(eventId, e) {
-  // Don't fire if any cancel/seat-chip/rebook/similar/share button was clicked
-  if (e.target.classList.contains('up-cancel') ||
-      e.target.classList.contains('up-cancel-all') ||
-      e.target.classList.contains('rebook-btn') ||
-      e.target.classList.contains('find-similar-btn') ||
-      e.target.classList.contains('share-class-btn') ||
-      e.target.closest('.up-seat-chip') ||
-      e.target.closest('.find-similar-popup')) return;
-  const card = document.querySelector(`.class-card[data-id="${eventId}"]`);
-  if (!card) {
-    toast('Run a search first to see the class in results', 'info');
-    return;
-  }
-  // Scroll card into view
-  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  // Flash highlight
-  card.style.transition = 'box-shadow 0.15s';
-  card.style.boxShadow = '0 0 0 2px #5dba5d, 0 0 16px rgba(93,186,93,0.4)';
-  setTimeout(() => { card.style.boxShadow = ''; }, 1800);
+// A seat cancelled inside the bike picker changes these cards too, and the
+// picker (reachable from here through the class sheet or "+ Add spot") only
+// resyncs the Discover buttons — without this the card kept the dead seat.
+if (typeof PsycleEvents !== 'undefined') {
+  try { PsycleEvents.on('seat:cancelled', () => { try { refreshUpcomingPanel(); } catch {} }); } catch {}
 }
 
 // ── Open a booking's studio in the maps app ──────────────────────
@@ -4247,6 +5356,32 @@ window.openMapForBooking = function (eventId) {
     : 'https://www.google.com/maps/search/?api=1&query=' + q;
   window.open(url, '_blank', 'noopener');
 };
+
+// ── pure:bookings-card:start ──
+// _eventCache entry for one /events row, carrying the display names render()
+// derives from the response's relations. Merged over `existing` so richer
+// fields written by detail fetches survive, and a relation the response
+// happens to omit never blanks a name we already had.
+function _eventCacheEntry(e, relations, existing) {
+  const rel = relations || {};
+  const prev = existing || {};
+  const pick = (list, id) => (list || []).find(x => String(x.id) === String(id)) || null;
+  const type = pick(rel.event_types, e.event_type_id);
+  const instr = pick(rel.instructors, e.instructor_id);
+  const studio = pick(rel.studios, e.studio_id);
+  const loc = studio ? pick(rel.locations, studio.location_id) : null;
+  return {
+    ...prev,
+    ...e,
+    _typeName: type?.name || prev._typeName || 'Class',
+    _instrName: instr?.full_name || prev._instrName || '',
+    _locName: loc ? loc.name.replace('Psycle ', '') : (prev._locName || ''),
+    _locFullName: loc ? loc.name : (prev._locFullName || ''),
+    _locAddress: loc ? (loc.address || '') : (prev._locAddress || ''),
+    _studioName: studio ? studio.name : (prev._studioName || ''),
+  };
+}
+// ── pure:bookings-card:end ──
 
 async function rebookNextWeek(eventId) {
   const evt = _eventCache[String(eventId)];
@@ -4306,6 +5441,13 @@ async function rebookNextWeek(eventId) {
   );
 
   if (exact) {
+    // Next week's class is usually outside the loaded search window. Without
+    // its studio and cache entry the picker opens with no header, the
+    // confirmation reads a bare "Class" and renderMyBookings skips the new
+    // booking until the next refetch — so seed both before booking.
+    (data.relations?.studios || []).forEach(s => { _studioMap[s.id] = s; });
+    _eventCache[String(exact.id)] = _eventCacheEntry(exact, data.relations, _eventCache[String(exact.id)]);
+
     // Found exact match — go straight to booking
     const btn = document.createElement('button');
     btn.className = 'book-btn';
@@ -4323,9 +5465,30 @@ async function rebookNextWeek(eventId) {
   );
 
   if (similar.length > 0) {
-    // Show alternatives — set date filters and trigger search
+    // Show alternatives: that one day, on Discover. The member is on My
+    // Bookings, so without the tab switch the search fills a hidden panel and
+    // the toast points at nothing. The alternatives are by definition other
+    // instructors at this class's location — a filter left on either would
+    // hide them again.
+    selectedInstructors.clear();
+    if (selectedLocations.size && locationId) selectedLocations.add(String(locationId));
+    // They are also all this class's TYPE: a class-type filter that lacks its
+    // category ("Strength" on, rebooking a Ride), or a sub-type narrowed to
+    // another variant, drops every one of them in render(). The name comes
+    // from the response render() will read too — the cached one can be the
+    // 'Class' placeholder, which says nothing about the category.
+    const typeName = (data.relations?.event_types || []).find(t => String(t.id) === String(evt.event_type_id))?.name
+      || (evt._typeName !== 'Class' ? evt._typeName : '');
+    if (selectedCategories.size && typeName) selectedCategories.add(getCategory(typeName).key);
+    selectedStrengthSubs.clear();
+    ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
+    selectedReformerSubs.clear();
+    REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
+    _dateQuickMode = null;
     document.getElementById('startDate').value = dayStr;
     document.getElementById('daysAhead').value = 1;
+    if (typeof _syncFilterUI === 'function') _syncFilterUI();
+    if (typeof switchTab === 'function') switchTab('discover');
     search();
     toast('No exact match — showing alternatives for ' + dayStr, 'info');
   } else {
@@ -4339,30 +5502,28 @@ window.changeSpot = async function(eventId) {
   // A fresh multi-seat booking maps every seat to the single returned booking
   // id until fetchMyBookings corrects it — swapping off that stale map would
   // cancel the wrong seat. Refresh ONLY when the local record looks
-  // suspicious (optimistic null id, or seats sharing one booking id), and
-  // retry once if a concurrent fetch superseded ours without applying.
-  const _mapLooksStale = (b) => {
-    if (!b) return true;
-    if (b.bookingId === null) return true;
-    if ((b.slots || []).length > 1) {
-      const distinct = new Set(Object.values(b.slotBookings || {}).map(String));
-      return distinct.size < b.slots.length;
-    }
-    return false;
-  };
-  if (_mapLooksStale(_myBookings[String(eventId)])) {
-    try {
-      const applied = await fetchMyBookings();
-      if (!applied) await fetchMyBookings();
-    } catch (e) { /* fall back to local state */ }
-  }
+  // suspicious (a seat whose OWN record id isn't known — see _seatCancelId);
+  // bounded, and retried once if a concurrent fetch superseded ours.
+  const _mapLooksStale = (b) => !b || (b.slots || []).some(s => !_seatCancelId(b, s));
+  if (_mapLooksStale(_myBookings[String(eventId)])) await _rereadBookingsForVerify();
   const booking = _myBookings[String(eventId)];
   const evt = _eventCache[String(eventId)];
   if (!booking || !evt) return;
 
-  const hoursUntil = (new Date(evt.start_at) - new Date()) / 3600000;
-  if (hoursUntil <= 12) {
+  // Same cutoff as the card that offered "Change spot" — a second clock here
+  // could refuse a swap the card still advertises as free.
+  const deadline = _cancelDeadline(evt.start_at);
+  if (deadline && deadline.insideWindow) {
     toast('Cannot change spot within 12 hours of class (incurs a fee)', 'error');
+    return;
+  }
+
+  // The refresh didn't land: there is no "fall back to local state" for a
+  // swap — its first step is a DELETE, and the entry id (or an event-wide
+  // DELETE) can release a seat the member meant to keep.
+  const slotToChange = (booking.slots || []).find(s => _seatCancelId(booking, s));
+  if (slotToChange == null) {
+    toast("Couldn't load this booking's seats from Psycle — nothing was changed. Try again in a moment.", 'error');
     return;
   }
 
@@ -4386,14 +5547,13 @@ window.changeSpot = async function(eventId) {
       return;
     }
 
-    // Default to the first booked slot. If the user has multiple, the
-    // modalHint renders chips so they can pick which one to swap without
-    // leaving the map view.
-    const slotToChange = booking.slots[0];
+    // Default to the first booked slot (whose own record is known — above). If
+    // the user has multiple, the modalHint renders chips so they can pick
+    // which one to swap without leaving the map view.
     window._changeSpotContext = {
       eventId: eventId,
       slotToChange: slotToChange,
-      bookingId: booking.slotBookings?.[slotToChange] || booking.bookingId,
+      bookingId: _seatCancelId(booking, slotToChange),
       booking: booking,
     };
 
@@ -4449,8 +5609,15 @@ window.setChangeSpotTarget = function (slot) {
   if (!ctx) return;
   slot = Number(slot);
   if (!ctx.booking.slots.includes(slot)) return;
+  // Only a seat whose OWN record is known can be the one released — the entry
+  // id may be the other seat's. Otherwise the target stays where it was.
+  const ownId = _seatCancelId(ctx.booking, slot);
+  if (!ownId) {
+    toast(`Couldn't match ${slotLabelForEvent(ctx.eventId)} ${slot} to a booking — close this and try again in a moment`, 'error');
+    return;
+  }
   ctx.slotToChange = slot;
-  ctx.bookingId = ctx.booking.slotBookings?.[slot] || ctx.booking.bookingId;
+  ctx.bookingId = ownId;
   renderChangeSpotHint();
 };
 
@@ -4492,23 +5659,50 @@ async function executeSpotSwap() {
   };
 
   try {
+    const key = String(ctx.eventId);
+    // Can't tell which seat (if any) is held now — no blind retry from here.
+    const closeUnconfirmed = (why) => {
+      toast('Swap failed: ' + why + " — couldn't confirm which " + low + ' you hold now. Check My Bookings.', 'error');
+      closeBikePicker();
+      _scheduleBookingsRefetch(3000);
+    };
+
     // Step 1: cancel the old seat (skipped if a previous attempt already did).
     if (!ctx.cancelDone) {
-      const cancelPath = ctx.bookingId ? '/bookings/' + ctx.bookingId : '/bookings?event_id=' + ctx.eventId;
+      // Only ever the seat's own record — never an event-wide DELETE, which
+      // would release every seat held in this class to move one of them.
+      if (!ctx.bookingId) {
+        failRetryable("Swap failed: couldn't match your current " + low + ' to a booking — nothing was changed. Close this and try again.');
+        return;
+      }
       let cancelRes;
       try {
-        cancelRes = await apiFetch(cancelPath, { method: 'DELETE' });
+        cancelRes = await apiFetch('/bookings/' + ctx.bookingId, { method: 'DELETE' });
       } catch (e) {
         // Nothing cancelled yet — fully safe to retry.
         failRetryable('Swap failed: ' + e.message);
         return;
       }
-      // 404 = the booking is already gone (e.g. an earlier attempt landed
-      // server-side) — treat as cancelled rather than a dead end.
       if (!cancelRes.ok && cancelRes.status !== 204 && cancelRes.status !== 404) {
         const cErr = await cancelRes.json().catch(() => ({}));
         failRetryable('Swap failed: ' + (cErr.message || 'could not release your current ' + low));
         return;
+      }
+      // 404 = that record is already gone. Either an earlier attempt's DELETE
+      // landed without us hearing — or the entry is stale and the seat has
+      // already moved (a swap whose refetch never landed, another device), so
+      // the POST below would ADD a seat. Only /bookings can say which: carry on
+      // only when it holds exactly the seats this swap expects to be left.
+      if (cancelRes.status === 404) {
+        const applied = await _rereadBookingsForVerify();
+        if (!applied) { closeUnconfirmed('that ' + low + "'s booking is no longer there"); return; }
+        const fresh = _isRealSeat(_myBookings[key]) ? (_myBookings[key].slots || []).map(Number) : [];
+        const expected = (ctx.booking.slots || []).map(Number).filter(s => s !== Number(ctx.slotToChange));
+        if (fresh.length !== expected.length || !expected.every(s => fresh.includes(s))) {
+          toast('This booking changed since you opened it — nothing more was changed. Check My Bookings and try again.', 'error');
+          closeBikePicker();
+          return;
+        }
       }
       ctx.cancelDone = true;
     }
@@ -4526,41 +5720,86 @@ async function executeSpotSwap() {
     let bookRes = null, bookErr = null;
     try { bookRes = await postSeat(newSlot); } catch (e) { bookErr = e; }
 
-    if (bookRes && (bookRes.ok || bookRes.status === 201)) {
+    const announceSwap = () => {
       toast(label + ' changed: ' + ctx.slotToChange + ' → ' + newSlot, 'success');
       _adjustBikeHistoryForSwap(ctx.eventId, ctx.slotToChange, newSlot);
       closeBikePicker(); // resets the confirm button and clears the swap context
-      fetchMyBookings();
+      refreshUpcomingPanel();
       PsycleEvents.emit('booking:complete', ctx.eventId, [newSlot]);
+    };
+    const holds = (entry, slot) => _isRealSeat(entry) && (entry.slots || []).map(Number).includes(Number(slot));
+
+    if (bookRes && (bookRes.ok || bookRes.status === 201)) {
+      // Record the move locally: /bookings is only re-read afterwards, and that
+      // read can fail or land late. Left on the old seat and its deleted record,
+      // a second Change spot 404s that DELETE ("already gone") and books an
+      // EXTRA seat, and Cancel reports a booking cancelled that is still held.
+      const data = await bookRes.json().catch(() => ({}));
+      const live = _myBookings[key];
+      const moved = _mergeBookedSeats(_withoutSeat(live, ctx.slotToChange, ctx.bookingId), [newSlot], data?.data?.id || data?.id);
+      if (live && live.fromWaitlist) moved.fromWaitlist = true;
+      if (live && live.waitlist) moved.waitlist = live.waitlist;
+      _myBookings[key] = moved;
+      _noteLocalBookingWrite();
+      announceSwap();
+      _scheduleBookingsRefetch(); // swap the provisional entry for the server's
       return;
+    }
+
+    const bErr = bookRes ? await bookRes.json().catch(() => ({})) : {};
+    const reason = bookErr ? bookErr.message : (bErr.message || 'could not book ' + low + ' ' + newSlot);
+
+    // No answer, or a 5xx: the new seat MAY have booked server-side (as in
+    // submitBooking). Winning the old seat back on top of that leaves BOTH held
+    // — and charged — under a "Swap failed", and every retry loops the same
+    // way. Ask /bookings before sending anything else; a 4xx is a refusal and
+    // goes straight to the recovery below.
+    if (bookErr || bookRes.status >= 500) {
+      if (!(await _rereadBookingsForVerify())) { closeUnconfirmed(reason); return; }
+      if (holds(_myBookings[key], newSlot)) { announceSwap(); return; }
     }
 
     // Booking the new seat failed — try to win the original seat back, then
     // let the SERVER say whether we actually hold it (a 409 on the recovery
     // POST is ambiguous: "you already have it" vs "someone else took it").
-    const bErr = bookRes ? await bookRes.json().catch(() => ({})) : {};
-    const reason = bookErr ? bookErr.message : (bErr.message || 'could not book ' + low + ' ' + newSlot);
     try { await postSeat(ctx.slotToChange); } catch (e) { /* judged by the refetch below */ }
 
-    let recovered = false;
+    // Only an APPLIED re-read says what is held now. The stale entry still
+    // lists the old seat under its old, deleted record: a retried swap would
+    // 404 that DELETE ("already gone") and then book a SECOND seat.
+    let recovered = false, known = false, held = false, gotNew = false;
     try {
-      await fetchMyBookings();
-      const after = _myBookings[String(ctx.eventId)];
-      recovered = !!after && (after.slots || []).map(Number).includes(Number(ctx.slotToChange));
+      known = await _rereadBookingsForVerify();
+      const after = known ? _myBookings[key] : null;
+      held = holds(after, ctx.slotToChange);
+      gotNew = holds(after, newSlot); // the "failed" POST landed after all
+      const backId = held ? _seatCancelId(after, ctx.slotToChange) : null;
+      recovered = !!backId;
+      if (held && !backId) known = false; // held, but not under a record we can name
       if (recovered) {
         // Retarget the context at the CURRENT booking record for that seat so
         // a retried swap cancels the right one.
         ctx.booking = after;
-        ctx.bookingId = after.slotBookings?.[ctx.slotToChange] || after.bookingId;
+        ctx.bookingId = backId;
         ctx.cancelDone = false;
       }
-    } catch (e) { /* recovered stays false */ }
+    } catch (e) { known = false; }
 
-    if (recovered) {
+    if (gotNew && !held) {
+      announceSwap();
+    } else if (gotNew) {
+      // Both seats are held now — a retry would release one and hit a 409 on
+      // the other, for ever. The member picks which to keep.
+      toast('Swap went wrong: you now hold both ' + label + ' ' + ctx.slotToChange + ' and ' + label + ' ' + newSlot +
+        " — cancel the one you don't want in My Bookings.", 'error');
+      closeBikePicker();
+    } else if (recovered) {
       failRetryable('Swap failed: ' + reason + ' — kept ' + label + ' ' + ctx.slotToChange + '. Tap Swap to retry.');
-    } else {
+    } else if (known) {
       failRetryable('Swap failed: ' + reason + ' — and ' + label + ' ' + ctx.slotToChange +
         ' could not be restored. Check My Bookings and rebook.');
+    } else {
+      closeUnconfirmed(reason);
     }
   } finally {
     _swapInFlight = false;
@@ -4614,8 +5853,29 @@ window.findSimilar = function(eventId) {
   triggerBtn.parentElement.style.position = 'relative';
   triggerBtn.parentElement.appendChild(popup);
 
+  // The popup floats ABOVE the buttons (below, the next card — its own
+  // stacking context — would paint over it), but the bookings list sits in
+  // overflow:hidden panels: with too little room above, the top options were
+  // clipped away. Then lay it out in the flow under the buttons instead.
+  // Measured on the next frame — before first paint, and after the "book
+  // again" wrapper below has added its option.
+  requestAnimationFrame(function() {
+    if (!popup.isConnected) return;
+    const anchorTop = popup.parentElement.getBoundingClientRect().top;
+    const clipper = popup.closest('.mb-period-section, .upcoming-panel');
+    // The tab bar is sticky at the top on desktop (it would cover the popup);
+    // on phones it is fixed at the bottom, i.e. below the anchor — ignored.
+    const bar = document.querySelector('.tab-bar');
+    const barBottom = bar ? bar.getBoundingClientRect().bottom : 0;
+    const roomTop = Math.max(0, clipper ? clipper.getBoundingClientRect().top : 0, barBottom <= anchorTop ? barBottom : 0);
+    if (anchorTop - popup.offsetHeight - 8 < roomTop) popup.classList.add('is-inline');
+  });
+
   // Handle option clicks
   popup.addEventListener('click', function(e) {
+    // The card itself is tappable (opens the class sheet) — a tap anywhere in
+    // the popup must not reach it.
+    e.stopPropagation();
     const option = e.target.closest('.find-similar-option');
     if (!option) return;
     const action = option.dataset.action;
@@ -4633,6 +5893,11 @@ window.findSimilar = function(eventId) {
       const todayStr = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
       document.getElementById('startDate').value = todayStr;
       document.getElementById('daysAhead').value = 7;
+      // Today + 7 IS the week preset. Say so, or a mode left over from an
+      // earlier Today/Tomorrow tap stays in force: nothing lit on the date row,
+      // and saveFilters / the recents would record this search as "Today".
+      _dateQuickMode = 'week';
+      updateFiltersSummary();
       switchTab('discover');
       search();
       toast('Showing classes with ' + instrName, 'info');
@@ -4653,6 +5918,8 @@ window.findSimilar = function(eventId) {
       // Also show the week after
       document.getElementById('startDate').value = targetStr;
       document.getElementById('daysAhead').value = 8;
+      _dateQuickMode = null; // a custom range — no preset describes it
+      updateFiltersSummary();
       switchTab('discover');
       search();
       toast('Showing ' + dayName + ' classes around ' + timeLabel, 'info');
@@ -4661,9 +5928,21 @@ window.findSimilar = function(eventId) {
 
   // Dismiss when clicking outside
   function dismissPopup(e) {
-    if (!popup.contains(e.target) && e.target !== triggerBtn) {
-      popup.remove();
-      document.removeEventListener('click', dismissPopup, true);
+    if (popup.contains(e.target) || e.target === triggerBtn) return;
+    document.removeEventListener('click', dismissPopup, true);
+    // Already closed (an option was picked, or the list re-rendered): this tap
+    // is not a dismissal, so it must go through untouched.
+    if (!popup.isConnected) return;
+    popup.remove();
+    // The list under the popup is all tap targets now — the card opens the
+    // class sheet, its buttons cancel / swap — so the tap that closes the popup
+    // must do nothing else there. Caught in capture, before any inline onclick.
+    // Another card's Similar button goes through (it opens that card's popup),
+    // and so does a tap outside the cards, e.g. the tab bar.
+    const t = e.target;
+    if (t && typeof t.closest === 'function' && t.closest('.my-booking-card') && !t.closest('.find-similar-btn')) {
+      e.stopPropagation();
+      e.preventDefault();
     }
   }
   // Delay listener to avoid immediate dismiss from the triggering click
@@ -4695,6 +5974,14 @@ window.shareClass = function(eventId) {
 
   const message = `I'm going to ${typeName}${instrPart} on ${dayName} ${dayNum} ${monthName} at ${timeLabel}${locPart}. Book a spot! https://psyclelondon.com/pages/timetable`;
 
+  // ONE share path, picked by capability. In the iOS app that is the native
+  // sheet, and it resolves false when the user cancels — an answer, not a
+  // failure, so never fall through to a second sheet or a clipboard toast.
+  if (typeof window.nativeShare === 'function') {
+    Promise.resolve(window.nativeShare('Psycle class', message, null)).catch(function() {});
+    return;
+  }
+
   if (navigator.share) {
     navigator.share({ text: message }).catch(function() {});
   } else if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -4718,14 +6005,32 @@ window.shareClass = function(eventId) {
 };
 
 async function upcomingCancel(eventId, btn) {
-  const booking = _myBookings[String(eventId)];
-  if (!booking) return;
+  const shown = _myBookings[String(eventId)];
+  if (!shown) return;
   // Waitlist places are left via /waitlists — never DELETE /bookings (a 404
   // there would read as "cancelled" while the place survives server-side).
-  if (booking.waitlisted) return leaveWaitlist(eventId, btn);
+  if (shown.waitlisted) return leaveWaitlist(eventId, btn);
   if (!(await confirmCancelWithPolicy(eventId, 'Cancel this booking?'))) return;
+  // A failed cancel puts the button back as it was ("Cancel booking" /
+  // "Cancel all 2"), not a generic "Cancel".
+  const origLabel = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '…';
+  _busyLabel(btn);
+
+  // The entry as it is NOW — a fetch that landed while the dialog was up
+  // swapped the whole map — and only once every seat's record can be listed.
+  const ready = await _readyForWholeCancel(eventId);
+  const booking = _myBookings[String(eventId)];
+  if (!ready || !booking || booking.waitlisted) {
+    btn.disabled = false;
+    btn.textContent = origLabel;
+    if (ready) {
+      // The seat went while the dialog was up (cancelled elsewhere).
+      refreshUpcomingPanel();
+      toast("That booking isn't showing with Psycle any more — nothing was cancelled", 'info');
+    }
+    return;
+  }
 
   const bookingIds = _bookingIdsFor(booking);
 
@@ -4757,9 +6062,10 @@ async function upcomingCancel(eventId, btn) {
       refreshUpcomingPanel();
       toast('Booking cancelled', 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
+      _scheduleBookingsRefetch(); // as confirmUnbook: a record we never knew of must reappear
     } else {
       btn.disabled = false;
-      btn.textContent = 'Cancel';
+      btn.textContent = origLabel;
       const failed = results.find(r => !isOk(r));
       const data = await failed.json().catch(() => ({}));
       toast(describeCancelError(failed, data), 'error');
@@ -4778,29 +6084,46 @@ async function upcomingCancel(eventId, btn) {
       return;
     }
     btn.disabled = false;
-    btn.textContent = 'Cancel';
+    btn.textContent = origLabel;
     toast(describeCancelError(null, null, e), 'error');
   }
 }
 
 async function upcomingSeatCancel(eventId, slotId, btn) {
-  const booking = _myBookings[String(eventId)];
-  if (!booking) return;
+  if (!_myBookings[String(eventId)]) return;
   const _sl4 = slotLabelForEvent(eventId);
   if (!(await confirmCancelWithPolicy(eventId, `Cancel ${_sl4} ${slotId}?`))) return;
   btn.disabled = true;
   const chip = btn.closest('.up-seat-chip');
   if (chip) chip.style.opacity = '0.5';
-  // Use the per-slot booking ID for precise cancellation
-  const slotBookingId = booking.slotBookings?.[slotId] || booking.bookingId;
   try {
-    const path = slotBookingId ? `/bookings/${slotBookingId}` : `/bookings?event_id=${eventId}`;
-    const res = await apiFetch(path, { method: 'DELETE' });
-    if (res.ok || res.status === 204 || res.status === 200) {
-      // Remove this slot from local state
-      booking.slots = booking.slots.filter(s => s !== Number(slotId));
-      if (booking.slotBookings) delete booking.slotBookings[slotId];
-      if (booking.slots.length === 0) _dropBookingKeepPlace(eventId);
+    // Same rule as cancelBikeSlot. Read AFTER the dialog (a fetch that landed
+    // meanwhile swapped the whole map), and only ever DELETE the record that is
+    // provably THIS seat's: right after a booking the seats can share one id or
+    // have none, and the entry id — or an event-wide DELETE — is the OTHER
+    // seat's record too. Re-read /bookings rather than guess.
+    let resolvedId = _seatCancelId(_myBookings[String(eventId)], slotId);
+    if (!resolvedId && navigator.onLine) {
+      await _rereadBookingsForVerify();
+      resolvedId = _seatCancelId(_myBookings[String(eventId)], slotId);
+    }
+    if (!resolvedId) {
+      btn.disabled = false;
+      if (chip) chip.style.opacity = '';
+      toast(`Couldn't match ${_sl4} ${slotId} to a booking — nothing was cancelled. Pull to refresh and try again.`, 'error');
+      return;
+    }
+    const res = await apiFetch(`/bookings/${resolvedId}`, { method: 'DELETE' });
+    // 404 = that seat's own record is already gone.
+    if (res.ok || res.status === 204 || res.status === 200 || res.status === 404) {
+      // Remove this slot from local state — the LIVE entry, not a snapshot
+      // taken before an await (the map may have been swapped again).
+      const booking = _myBookings[String(eventId)];
+      if (booking && !booking.waitlisted) {
+        booking.slots = (booking.slots || []).filter(s => s !== Number(slotId));
+        if (booking.slotBookings) delete booking.slotBookings[slotId];
+        if (booking.slots.length === 0) _dropBookingKeepPlace(eventId);
+      }
       _noteLocalBookingWrite();
       _markSeatFreed(eventId);
       // Update the corresponding class card in results if rendered
@@ -4808,6 +6131,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
       refreshUpcomingPanel();
       toast(`${_sl4} ${slotId} cancelled`, 'info');
       PsycleEvents.emit('seat:cancelled', eventId, slotId);
+      _scheduleBookingsRefetch();
     } else {
       btn.disabled = false;
       if (chip) chip.style.opacity = '';
@@ -4824,6 +6148,42 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
 // _eventCache managed by state.js
 
 // ── Class Detail Sheet ──────────────────────────────────────────
+// The sheet's Book / booked button. Prefer the rendered Discover card button
+// (its label stays in sync). Opened from My Bookings there often is none, so
+// act through a detached button with eventCard's own routing: a seat at a
+// layout studio re-opens the picker (view/cancel a seat, add one); a booking
+// without a known layout goes to the cancel dialog — bookClass there would
+// offer "Book another space?", the opposite of what tapping a booking means.
+//
+// The sheet is already gone by now, and the '…' lives on a button nobody can
+// see (detached — or a card on the hidden Discover tab when opened from My
+// Bookings) while GET /events/{id} runs, retries included: say something. And
+// bookClass's double-tap guard is per BUTTON — a fresh detached one per tap
+// would walk straight past it and open the picker twice — so guard per class.
+const _sheetActionBusy = {};
+async function _classDetailBookAction(eventId) {
+  const id = Number(eventId) || 0;
+  const studioId = Number(_eventCache[String(id)]?.studio_id) || 0;
+  const booking = _myBookings[String(id)];
+  // A place, or a booking without a known layout, opens its dialog at once
+  // (as does signed-out): only the event fetch is worth a "Loading".
+  const instant = !getBearerToken() || (!!booking && (booking.waitlisted || !_studioMap[studioId]?.has_layout));
+  const cardBtn = document.querySelector('.class-card:not(.my-booking-card) .book-btn[data-event-id="' + id + '"]');
+  if (cardBtn) {
+    if (!instant && cardBtn.offsetParent === null && cardBtn.dataset.busy !== '1') toast('Loading class…', 'info');
+    cardBtn.click();
+    return;
+  }
+  const btn = document.createElement('button');
+  if (booking && !booking.waitlisted && !_studioMap[studioId]?.has_layout) {
+    return confirmUnbook(booking.bookingId || null, id, btn);
+  }
+  if (_sheetActionBusy[id]) return;
+  _sheetActionBusy[id] = true;
+  if (!instant) toast('Loading class…', 'info');
+  try { await bookClass(id, btn, studioId); } finally { delete _sheetActionBusy[id]; }
+}
+
 window.openClassDetail = function (eventId) {
   const evt = _eventCache[String(eventId)];
   if (!evt) return;
@@ -4868,26 +6228,34 @@ window.openClassDetail = function (eventId) {
   } else if (duration) {
     availHtml = '<span class="cds-avail">' + escapeHTML(String(duration)) + ' min</span>';
   }
+  // My Bookings can open the sheet for a class that has already run (past
+  // bookings shown): "12 spots available" means nothing for a finished class.
+  const isPast = dt <= new Date();
+  if (isPast) availHtml = '';
 
   // Booking state
   const myBooking = _myBookings[String(eventId)];
   const safeEventId = Number(eventId) || 0;
-  const safeStudioId = Number(evt.studio_id) || 0;
   let bookBtnHtml;
   if (myBooking && myBooking.waitlisted) {
     // A waitlist place: manage it directly (no Discover card needed in the DOM).
     bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();leaveWaitlist(' + safeEventId + ', null);">Waitlisted ✓</button>';
   } else if (myBooking) {
-    const bookedLabel = (myBooking.slots || []).length ? formatSlots(slotLabelForEvent(eventId), myBooking.slots) + ' ✓' : 'Booked ✓';
-    bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">' + escapeHTML(bookedLabel) + '</button>';
+    const seats = (myBooking.slots || []).length ? formatSlots(slotLabelForEvent(eventId), myBooking.slots) : '';
+    const bookedLabel = seats ? seats + ' ✓' : 'Booked ✓';
+    // A class that has run has nothing left to manage: no tick (that is the
+    // live, tappable state), and the card's own word for it.
+    bookBtnHtml = isPast
+      ? '<button class="cds-book-btn booked" disabled>' + escapeHTML(seats ? 'Attended · ' + seats : 'Attended') + '</button>'
+      : '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">' + escapeHTML(bookedLabel) + '</button>';
   } else if (evt.is_fully_booked && !evt.is_waitlistable) {
     bookBtnHtml = '<button class="cds-book-btn" disabled>Full</button>';
   } else if (evt.is_fully_booked && evt.is_waitlistable) {
-    // Prefer the rendered card button (keeps its label in sync); otherwise
-    // join directly with a detached button.
-    bookBtnHtml = '<button class="cds-book-btn waitlist" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.class-card:not(.my-booking-card) .book-btn[data-event-id=\\x22' + safeEventId + '\\x22]\');if(b){b.click();}else{bookClass(' + safeEventId + ', document.createElement(\'button\'), ' + safeStudioId + ');}">Join Waitlist</button>';
+    // Same routing as Book (card button if rendered, else a detached one) —
+    // and the same per-class double-tap guard.
+    bookBtnHtml = '<button class="cds-book-btn waitlist" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Join Waitlist</button>';
   } else {
-    bookBtnHtml = '<button class="cds-book-btn" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();var b=document.querySelector(\'.book-btn[data-event-id=\\x22' + eventId + '\\x22]\');if(b)b.click();">Book</button>';
+    bookBtnHtml = '<button class="cds-book-btn" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Book</button>';
   }
 
   // Keywords tags
@@ -5038,7 +6406,10 @@ async function _bookEventHeadless(eventId, studioId) {
     } else {
       await submitBooking(eventId, null, btn, studio && studio.has_layout === false ? { spaces: 1 } : {});
     }
-    return btn.classList.contains('booked') ? 'booked' : 'failed';
+    // The ✓ label contract plus a seat in state — never the CSS class alone
+    // (the optimistic wrapper sets .booked BEFORE the POST is answered).
+    const held = _myBookings[String(eventId)];
+    return (btn.textContent.indexOf('✓') !== -1 && held && !held.waitlisted) ? 'booked' : 'failed';
   } catch (e) {
     console.warn('[psycle] headless book failed:', eventId, e);
     return 'failed';
@@ -5069,6 +6440,10 @@ async function _bookWeeklyTemplateInner(counts) {
   const template = loadWeeklyTemplate();
   if (!template.length) return counts;
   if (!currentUser) { counts.failed = template.length; return counts; }
+  // Both "already booked" skips below read _myBookings. With no /bookings
+  // snapshot applied yet (as bookClass) every entry looks unbooked, and the
+  // sweep would book — and charge — each class already held a second time.
+  if (_bookingsLoadState !== 'loaded' && !(await _rereadBookingsForVerify())) { counts.failed = template.length; return counts; }
 
   const TOLERANCE_MIN = 20;
 
@@ -5359,6 +6734,7 @@ function _syncFilterUI() {
   if (typeof renderCategoryPills === 'function') renderCategoryPills();
   if (typeof renderStrengthSubPills === 'function') renderStrengthSubPills();
   if (typeof renderReformerSubPills === 'function') renderReformerSubPills();
+  _syncDatePills();
   if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
 }
 
@@ -5379,13 +6755,13 @@ function applySavedSearch(obj) {
   ((obj.reformerSubs && obj.reformerSubs.length) ? obj.reformerSubs : REFORMER_SUBS.map(s => s.key))
     .forEach(k => selectedReformerSubs.add(k));
 
-  _dateQuickMode = obj.dateMode || null;
-  if (obj.startDate) document.getElementById('startDate').value = obj.startDate;
-  if (obj.daysAhead) document.getElementById('daysAhead').value = obj.daysAhead;
-  const modeLabels = { today: 'Today', tomorrow: 'Tomorrow', week: '7 days', '2week': '14 days' };
-  document.querySelectorAll('.date-quick-btn').forEach(b => {
-    b.classList.toggle('active', !!_dateQuickMode && b.textContent.trim() === modeLabels[_dateQuickMode]);
-  });
+  // Same rule as restoreFilters: a preset is re-derived from TODAY (a "Today"
+  // recorded yesterday is not yesterday's date) and a picked date already
+  // behind us falls back to the week. _syncFilterUI paints the date row.
+  const d = _restoredDateState({ dateQuickMode: obj.dateMode, startDate: obj.startDate, daysAhead: obj.daysAhead }, localDateStr());
+  _dateQuickMode = d.mode;
+  document.getElementById('startDate').value = d.startDate;
+  document.getElementById('daysAhead').value = d.daysAhead;
 
   _syncFilterUI();
   if (typeof switchTab === 'function') switchTab('discover');
@@ -5502,9 +6878,17 @@ function _onboardKey(e) {
   else if (e.key === 'ArrowLeft' && _onboardIdx > 0) { _onboardIdx--; _onboardRender(); }
 }
 
+// Signed out = no session at all. A stored token whose /profile check is still
+// pending (the tour opens ~2s after launch) or couldn't reach Psycle is a
+// member who HAS signed in — same rule as updateDiscoverEmptyState — so the
+// last step must not say "Sign in" or open the login page for them.
+function _onboardSignedOut() {
+  return !currentUser && !getBearerToken();
+}
+
 function _onboardAdvance() {
   if (_onboardIdx >= ONBOARDING_STEPS.length - 1) {
-    _onboardFinish(!currentUser); // last step → finish, opening sign-in if signed out
+    _onboardFinish(_onboardSignedOut()); // last step → finish, opening sign-in if signed out
     return;
   }
   _onboardIdx++;
@@ -5516,7 +6900,7 @@ function _onboardRender() {
   if (!card) return;
   const step = ONBOARDING_STEPS[_onboardIdx];
   const isLast = _onboardIdx === ONBOARDING_STEPS.length - 1;
-  const cta = isLast ? (currentUser ? 'Get started' : 'Sign in') : 'Next';
+  const cta = isLast ? (_onboardSignedOut() ? 'Sign in' : 'Get started') : 'Next';
   card.innerHTML =
     '<button class="onboard-skip" data-onboard="skip">Skip</button>' +
     `<div class="onboard-icon">${step.icon}</div>` +

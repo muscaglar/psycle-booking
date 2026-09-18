@@ -27,6 +27,10 @@
   // Pure helpers, deliberately BEFORE the Capacitor guard: they need nothing
   // native, and tests/unit.js evaluates this file without Capacitor to
   // exercise the DST math via window._psycleClassStartMs.
+  // js/app.js (pure:gym-time) carries the same pair for the web build, which
+  // never loads this file; this copy stays because unit.js runs the bridge
+  // alone, and it is the one in play in the app (it loads last). Change both —
+  // tests/suites/bookings-card.js fails if their answers drift apart.
 
   var GYM_TZ = 'Europe/London';
   var _gymWallFmt = null; // lazy: Intl formatter reporting London wall clock for an instant
@@ -164,6 +168,9 @@
     'psycle_waitlist_places', 'psycle_weekly_template',
     'psycle_bike_history', 'psycle_recent_searches', 'psycle_onboarded_v1',
     'psycle_weekly_reminder', 'psycle_class_reminders',
+    // One-time answers (the first-booking reminder ask below; the web layer's
+    // history-sync prompt) — without the mirror a storage purge asks again.
+    'psycle_class_reminder_asked', 'psycle_history_prompt_dismissed',
     // Calendar integration state — must survive iOS storage purges
     // or duplicates are created on the next full sync.
     'psycle_native_cal_events', 'psycle_native_cal_id',
@@ -171,21 +178,28 @@
     'psycle_calendar_enabled', 'psycle_calendar_owned_ack',
   ];
 
-  // On startup: restore from native storage to localStorage
+  // On startup: restore from native storage to localStorage.
+  // security.js holds sign-in state (and with it every first API call) until
+  // this settles, so it must not cost a bridge round-trip per key in series:
+  // restore only ever FILLS a missing key, so keys localStorage already has
+  // are skipped without asking, and the rest are read together.
   async function restoreFromNative() {
-    for (var i = 0; i < SYNC_KEYS.length; i++) {
-      var key = SYNC_KEYS[i];
+    await Promise.all(SYNC_KEYS.map(async function (key) {
+      // Per-key guard: one rejected read must not settle the batch early (that
+      // would release the handshake while other keys are still in flight).
       try {
+        if (localStorage.getItem(key)) return;
         var result = await Preferences.get({ key: key });
-        if (result.value !== null && result.value !== undefined) {
-          var current = localStorage.getItem(key);
-          if (!current) {
-            localStorage.setItem(key, result.value);
-            console.log('[native] restored:', key);
-          }
-        }
+        if (result.value === null || result.value === undefined) return;
+        // Re-check after the await — anything written while the read was in
+        // flight (a fresh sign-in) is newer than the mirrored copy.
+        if (localStorage.getItem(key)) return;
+        // Raw write: the patched setItem below would only echo the value
+        // straight back into Preferences.
+        _origSetItem(key, result.value);
+        console.log('[native] restored:', key);
       } catch (e) {}
-    }
+    }));
   }
 
   // Sync localStorage changes to native storage
@@ -950,9 +964,66 @@
     }).catch(function () {});
   }
 
-  // Route a tapped action button to the right web-app flow. The web layer
-  // owns booking/cancel (auth + slot picker), so we surface the eventId and
-  // let app.js handle it; SNOOZE re-schedules a one-off reminder natively.
+  // Land a tapped notification on what it was about. A class reminder carries
+  // extra.eventId → My Bookings + that class's sheet; the weekly "new booking
+  // week" reminder carries none → Discover. Nothing here books or cancels:
+  // the web layer owns that (auth + slot picker) behind the sheet's buttons.
+  var TAP_ROUTE_WAIT_MS = 10000;
+  var _cancelTapRoute = null; // only the latest tap may still open a sheet
+
+  function _routeNotificationTap(eventId) {
+    if (typeof window.switchTab !== 'function') return;
+    if (_cancelTapRoute) _cancelTapRoute();
+    if (eventId === null || eventId === undefined || eventId === '') {
+      window.switchTab('discover');
+      return;
+    }
+    var key = String(eventId);
+    window.switchTab('bookings');
+    var openSheet = function () {
+      if (typeof window.openClassDetail !== 'function' || !(_eventCache || {})[key]) return false;
+      // A delivered banner outlives the booking (cancel() only removes PENDING
+      // requests), and a cancelled class stays in _eventCache — its sheet would
+      // offer a live "Book" for the class the user just dropped. No held seat
+      // → My Bookings is the whole answer.
+      var held = (_myBookings || {})[key];
+      if (!held || held.waitlisted) return false;
+      window.openClassDetail(key);
+      return true;
+    };
+    if (openSheet()) return;
+    if (typeof PsycleEvents === 'undefined' || !PsycleEvents || typeof PsycleEvents.on !== 'function') return;
+
+    // Cold start: the tap arrives before bookings (and their event details)
+    // have loaded. Wait for ONE bookings:loaded, and give up after a few
+    // seconds — a sheet that pops up long after the tap is worse than none.
+    var done = false, off = null, timer = null;
+    var startedAt = Date.now();
+    var finish = function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      _cancelTapRoute = null;
+      // Unsubscribe on a later tick: emit() walks the live handler array, so
+      // removing ourselves mid-emit would make it skip the next listener.
+      setTimeout(function () { if (off) off(); }, 0);
+    };
+    off = PsycleEvents.on('bookings:loaded', function () {
+      if (done) return;
+      finish();
+      // The give-up timer freezes while the app is suspended, so also judge by
+      // the clock — bookings that land long after the tap must not pop a sheet.
+      if (Date.now() - startedAt > TAP_ROUTE_WAIT_MS) return;
+      // Only if the user is still where the tap put them.
+      var panel = document.querySelector('.tab-panel.active');
+      if (!panel || panel.id === 'tab-bookings') openSheet();
+    });
+    timer = setTimeout(finish, TAP_ROUTE_WAIT_MS);
+    _cancelTapRoute = finish;
+  }
+
+  // Route a tapped notification / action button. SNOOZE re-schedules a one-off
+  // reminder natively; everything else is routed inside the web app.
   function handleNotificationAction(notification) {
     try {
       var actionId = notification.actionId;
@@ -974,16 +1045,10 @@
         } catch (e) {}
         return;
       }
-      // BOOK / CANCEL / default tap → hand off to the web app if it exposes
-      // a handler; otherwise just deep-link by stashing the intent.
-      if (typeof window.handleNotificationIntent === 'function') {
-        window.handleNotificationIntent(actionId || 'TAP', eventId, data);
-      } else {
-        try {
-          sessionStorage.setItem('psycle_pending_notification_action',
-            JSON.stringify({ actionId: actionId || 'TAP', eventId: eventId, data: data }));
-        } catch (e) {}
-      }
+      // BOOK / CANCEL / default tap → open the class (or the new week). The
+      // old hand-off called a handler no module defines and stashed the
+      // intent under a key nothing read, so a tap went nowhere.
+      _routeNotificationTap(eventId);
     } catch (e) {
       try { console.warn('[native-notif] action handling failed:', e); } catch (_) {}
     }
@@ -1188,10 +1253,11 @@
   // These notifications close that gap: fire at start-90min, tap → app
   // opens → didBecomeActive + snapshot nudge start the card.
   //
-  // Permission-gated (never prompts on its own — the toggle's enable()
-  // prompts) and idempotent per snapshot pass: stale reminders (cancelled
-  // or moved classes) are cancelled, missing ones scheduled. IDs live in
-  // the 8000–8899 range (weekly reminder owns 9992–9999).
+  // Permission-gated (scheduling never prompts — the toggle's enable() and
+  // the first-booking ask below do) and idempotent per snapshot pass: stale
+  // reminders (cancelled or moved classes) are cancelled, missing ones
+  // scheduled. IDs live in the 8000–8899 range (weekly reminder owns
+  // 9992–9999).
 
   var CLASS_REMINDER_PREF = 'psycle_class_reminders'; // 'off' disables; default ON
   var CLASS_REMINDER_MAP = 'psycle_class_reminder_map'; // {eventId: {id, startAt}}
@@ -1250,6 +1316,11 @@
       });
       if (toCancel.length) {
         try { await LocalNotifications.cancel({ notifications: toCancel }); } catch (e) {}
+        // cancel() only removes PENDING requests — a banner already delivered
+        // for a class since cancelled would sit in Notification Center.
+        if (typeof LocalNotifications.removeDeliveredNotifications === 'function') {
+          try { await LocalNotifications.removeDeliveredNotifications({ notifications: toCancel }); } catch (e) {}
+        }
       }
 
       // Schedule new ones where T-90 is still in the future.
@@ -1309,6 +1380,103 @@
       _saveReminderMap({});
     },
   };
+
+  // ── First-booking ask ────────────────────────────────────────────
+  // The pref defaults ON, but only the Settings switch ever requested
+  // notification permission — and it looked on already, so nobody tapped it
+  // and the reminders never armed. Ask in-app ONCE, right after a booking
+  // (when "remind me before class" means something), never at launch. iOS
+  // shows its own prompt a single time, so it only follows an in-app yes.
+  var CLASS_REMINDER_ASKED = 'psycle_class_reminder_asked'; // '1' once answered (mirrored via SYNC_KEYS)
+  var ASK_POLL_MS = 1000;
+  var ASK_GIVE_UP_MS = 40000;
+  var _reminderAskBusy = false; // "book my week" emits booking:complete in bursts
+  var _reminderAskVoid = 0; // bumped by a waitlist join — drops an ask still waiting its turn
+
+  // Anything the ask would land on top of. The "Booked!" sheet or a confirm
+  // dialog (confirmModal is single-instance, so opening ours would cancel the
+  // one on screen) — and every other overlay: the ask sits above them all, so
+  // it would interrupt a seat being picked, or a history sync mid-run. These
+  // are built on open and removed on close, so presence = showing.
+  var ASK_BLOCKING_IDS = [
+    'bookingConfirmation', 'psycleConfirmOverlay', 'classDetailOverlay',
+    'syncPromptOverlay', 'onboardOverlay', 'instructorModalOverlay',
+    'historyModalOverlay', 'settingsOverlay', 'diagOverlay', 'yearReviewOverlay',
+  ];
+  function _askBlocked() {
+    for (var i = 0; i < ASK_BLOCKING_IDS.length; i++) {
+      if (document.getElementById(ASK_BLOCKING_IDS[i])) return true;
+    }
+    // The bike picker is static markup toggled by display — judge by that.
+    var bike = document.getElementById('bikeModal');
+    return !!(bike && bike.style && bike.style.display && bike.style.display !== 'none');
+  }
+
+  function _askStillWanted() {
+    return _classRemindersEnabled() && !localStorage.getItem(CLASS_REMINDER_ASKED);
+  }
+
+  async function _maybeAskClassReminders() {
+    if (_reminderAskBusy || !LocalNotifications || typeof window.confirmModal !== 'function') return;
+    if (!_askStillWanted()) return;
+    _reminderAskBusy = true;
+    try {
+      var perm = await LocalNotifications.checkPermissions();
+      // 'granted' needs no ask; 'denied' can't be prompted again (the switch
+      // in Settings explains). Neither counts as an answer to THIS question.
+      if (perm.display !== 'prompt') return;
+
+      // Never look synchronously: some flows emit booking:complete BEFORE
+      // they show the sheet. Wait until the UI has been clear for two polls
+      // running, so we don't land in the gap between a sheet closing and the
+      // next one (or a dialog) opening.
+      var startedAt = Date.now();
+      var voidAt = _reminderAskVoid;
+      var clearPolls = 0;
+      while (clearPolls < 2) {
+        await new Promise(function (resolve) { setTimeout(resolve, ASK_POLL_MS); });
+        // Timers freeze while the app is backgrounded, so also judge by the
+        // clock: long after the booking the moment has passed — try again
+        // after a later one rather than popping up out of nowhere.
+        if (Date.now() - startedAt > ASK_GIVE_UP_MS) return;
+        if (voidAt !== _reminderAskVoid) return;
+        clearPolls = _askBlocked() ? 0 : clearPolls + 1;
+      }
+      if (document.visibilityState === 'hidden' || !_askStillWanted()) return;
+
+      var displaced = false;
+      var yes = await window.confirmModal({
+        title: 'Remind you 90 min before class?',
+        body: 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.',
+        confirmText: 'Remind me',
+        cancelText: 'Not now',
+        onReplaced: function () { displaced = true; },
+      });
+      // Pushed aside by another dialog is not an answer — ask after a later booking.
+      if (displaced) return;
+      localStorage.setItem(CLASS_REMINDER_ASKED, '1');
+      if (yes) {
+        var armed = await window._nativeClassReminders.enable(); // the iOS prompt
+        if (armed && typeof window.toast === 'function') {
+          window.toast('Class reminders on — 90 minutes before each class', 'success');
+        }
+      }
+      // Keep the Settings switch honest if the panel happens to be open.
+      if (typeof window.renderReminderRow === 'function') window.renderReminderRow();
+    } catch (e) {
+      /* best-effort — never let the ask disturb a booking */
+    } finally {
+      _reminderAskBusy = false;
+    }
+  }
+
+  if (typeof PsycleEvents !== 'undefined' && PsycleEvents && typeof PsycleEvents.on === 'function') {
+    try { PsycleEvents.on('booking:complete', function () { _maybeAskClassReminders(); }); } catch (e) {}
+    // A waitlist place is not a seat and gets no reminder. An ask still waiting
+    // for the UI to clear would open right after "On the waitlist!" and read as
+    // being about THAT class — drop it; the next real booking asks again.
+    try { PsycleEvents.on('waitlist:joined', function () { _reminderAskVoid++; }); } catch (e) {}
+  }
 
   // Deliberate sign-out must blank the snapshot and cancel pending class
   // reminders — otherwise the previous account's classes stay on the widget
@@ -1405,10 +1573,14 @@
         if (reg[i].id === themeId) { base = reg[i].base || 'dark'; break; }
       }
     }
+    // The plugin's Style enum names the BACKGROUND it is meant for, not the
+    // glyph colour (definitions.d.ts): 'LIGHT' = "Dark text for light
+    // backgrounds", 'DARK' = "Light text for dark backgrounds". Reading them
+    // the other way round left the clock/battery invisible in every theme.
     if (base === 'light') {
-      StatusBar.setStyle({ style: 'DARK' }).catch(function () {}); // dark text on light bg
+      StatusBar.setStyle({ style: 'LIGHT' }).catch(function () {}); // dark glyphs on a light theme
     } else {
-      StatusBar.setStyle({ style: 'LIGHT' }).catch(function () {}); // light text on dark bg
+      StatusBar.setStyle({ style: 'DARK' }).catch(function () {}); // light glyphs on a dark theme
     }
   }
 

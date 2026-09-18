@@ -225,18 +225,24 @@
   --border-subtle: #e1dfd8;
   --text: #17181c;
   --text-heading: #0e0f12;
+  /* muted → ghost all carry real copy (meta lines, hints, chart labels),
+     so every step holds ≥4.5:1 on BOTH --bg and --bg-panel; the ladder is
+     evenly spaced so the tiers still read as tiers. --text-off is
+     decorative/disabled only (≥3:1 on the panel for control outlines). */
   --text-muted: #5c5e63;
-  --text-dim: #6c6e73;
-  --text-faint: #86888c;
-  --text-ghost: #9a9c9f;
-  --text-off: #b6b8bb;
+  --text-dim: #606267;
+  --text-faint: #65676c;
+  --text-ghost: #6a6c71;
+  --text-off: #8e9094;
   --accent: #1f6f5c;
   --accent-hover: #195c4c;
   --accent-ink: #ffffff;
   --accent-soft: #e2ede7;
-  --badge-bg: #f0efe9; --badge-border: #e0ded6; --badge-text: #6c6e73;
-  --badge-full-bg: #fde8ec; --badge-full-text: #c73650; --badge-full-border: #f5b3bf;
-  --badge-waitlist-bg: #fef6e3; --badge-waitlist-text: #9a7a0a; --badge-waitlist-border: #f0dda0;
+  /* Badge inks also colour the class sheet's availability line, which sits
+     on --bg-deep — each is ≥4.5:1 there as well as on its own chip. */
+  --badge-bg: #f0efe9; --badge-border: #e0ded6; --badge-text: #606267;
+  --badge-full-bg: #fde8ec; --badge-full-text: #b82d46; --badge-full-border: #f5b3bf;
+  --badge-waitlist-bg: #fef6e3; --badge-waitlist-text: #7a5f03; --badge-waitlist-border: #f0dda0;
   --badge-highlight-bg: #e3eef0; --badge-highlight-text: #1f6f5c; --badge-highlight-border: #b9d6cd;
   --booked-bg: #ffffff; --booked-border: #1f6f5c;
   --spinner-track: #dad8d0;
@@ -262,19 +268,21 @@
   --border-subtle: #ddd3c2;
   --text: #2a2521;
   --text-heading: #1d1916;
-  --text-muted: #6b6358;
-  --text-dim: #7d756a;
-  --text-faint: #998f7e;
-  --text-ghost: #a89e8e;
-  --text-off: #c2b8a6;
+  /* Same contrast ladder as Cloud (≥4.5:1 on --bg and --bg-panel). The sand
+     --bg is darker than Cloud's, so the whole scale sits a step lower. */
+  --text-muted: #5e574d;
+  --text-dim: #625a4f;
+  --text-faint: #665e53;
+  --text-ghost: #6b6358;
+  --text-off: #91877a;
   --accent: #b5573c;
   --accent-hover: #9c4831;
   --accent-ink: #fff9f4;
   --accent-soft: #f1e1d7;
-  --badge-bg: #efe8db; --badge-border: #ddd3c2; --badge-text: #7d756a;
-  --badge-full-bg: #f7e1dc; --badge-full-text: #b5573c; --badge-full-border: #e6bcb0;
-  --badge-waitlist-bg: #f6edd6; --badge-waitlist-text: #8a6a12; --badge-waitlist-border: #e6d3a0;
-  --badge-highlight-bg: #e7ede7; --badge-highlight-text: #5c7a52; --badge-highlight-border: #cdd9c5;
+  --badge-bg: #efe8db; --badge-border: #ddd3c2; --badge-text: #625a4f;
+  --badge-full-bg: #f7e1dc; --badge-full-text: #96442d; --badge-full-border: #e6bcb0;
+  --badge-waitlist-bg: #f6edd6; --badge-waitlist-text: #73580b; --badge-waitlist-border: #e6d3a0;
+  --badge-highlight-bg: #e7ede7; --badge-highlight-text: #46623f; --badge-highlight-border: #cdd9c5;
   --booked-bg: #fbf8f2; --booked-border: #b5573c;
   --spinner-track: #d3c8b5;
   --modal-overlay: rgba(42,37,33,0.42);
@@ -299,10 +307,12 @@
   --border-subtle: #33373f;
   --text: #ececea;
   --text-heading: #ffffff;
+  /* dim → ghost sit one step lighter than a naive dark ramp so each holds
+     ≥4.5:1 on --bg AND the lighter --bg-panel cards. */
   --text-muted: #9da0a8;
-  --text-dim: #82858d;
-  --text-faint: #6b6e76;
-  --text-ghost: #62656d;
+  --text-dim: #93969d;
+  --text-faint: #8b8e95;
+  --text-ghost: #83858c;
   --text-off: #494c54;
   --accent: #7fc2a6;
   --accent-hover: #6aae92;
@@ -393,7 +403,9 @@ select:focus, input:focus { border-color: var(--accent); }
 
 .btn { background: var(--accent); }
 .btn:hover { background: var(--accent-hover); }
-.btn:disabled { background: var(--text-off); }
+/* --accent-ink is tuned for the accent fill, not this grey one (dark ink on
+   Graphite's dark grey would be ~2:1), so a disabled label uses body text. */
+.btn:disabled { background: var(--text-off); color: var(--text); }
 
 .btn-ghost {
   /* background must be restated: the .btn rule above is in this same
@@ -591,10 +603,6 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--border);
   color: var(--text-muted);
 }
-.up-cancel-all {
-  border-color: var(--border);
-  color: var(--text-dim);
-}
 .up-cancel { border-color: var(--border); color: var(--text-dim); }
 
 /* Stats cards */
@@ -622,8 +630,8 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--border);
 }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .sub-bar { color: var(--text); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .sub-progress-fill { background: #e94560; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .sub-progress { background: #e0e0e0; }
+/* .sub-progress / .sub-progress-fill are tokenised at source (styles.css):
+   the old pink fill override here outlived the jade/terracotta accents. */
 
 /* Heatmap */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-0 { background: #ebedf0; }
@@ -671,11 +679,13 @@ select:focus, input:focus { border-color: var(--accent); }
   border-left: 3px solid var(--accent);
 }
 
-/* Countdown badge */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-countdown {
-  background: #fde8ec;
-  color: #c73650;
-}
+/* Accent-on-accent-soft chips are tokenised at source (styles.css). Linen is
+   the one theme where that pair misses AA for small text (terracotta #b5573c
+   on #f1e1d7 = 3.75:1); its darker terracotta is 4.87:1 and still reads as
+   the accent, so the brand --accent itself stays as designed. */
+[data-theme="linen"] .mb-countdown,
+[data-theme="linen"] .cds-duration-badge,
+[data-theme="linen"] .bc-slot { color: var(--accent-hover); }
 
 /* Skeleton in light mode */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-skeleton {
@@ -1043,13 +1053,15 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* ── settings.css: Tier System ───────────────────────────────────── */
 
+/* Ink comes from the text tokens (#999 was 2.85:1 on the white panel); only
+   the outline needs a light-base value. */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .tier-btn {
   border-color: #ccc;
-  color: #999;
+  color: var(--text-ghost);
 }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .tier-btn:hover {
   border-color: #aaa;
-  color: #666;
+  color: var(--text-muted);
 }
 
 /* ── settings.css: Bike Preferences extras ───────────────────────── */
@@ -1057,6 +1069,11 @@ select:focus, input:focus { border-color: var(--accent); }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-pref-legend {
   color: var(--text-dim);
 }
+
+/* ── settings.css: Diagnostics ───────────────────────────────────── */
+
+/* "OK" rows: the dark-base green is 2.4:1 on a white panel */
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .diag-ok { color: #1a7a1a; }
 
 /* ── styles.css: Pull-to-Refresh ─────────────────────────────────── */
 
@@ -1089,12 +1106,17 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--border-light);
 }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .fav-btn {
+  /* #f5a623 is 1.9:1 on this cream chip; dark amber keeps the gold read */
+  color: #8a6a12;
   border-color: #e0c860;
   background: #fef9e7;
 }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .fav-btn:hover {
   background: #fdf3cd;
 }
+
+/* "Booked!" tick: the bright green is 2.0:1 on its own tint over a light toast */
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bc-check { color: #1a7a1a; }
 
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-past .class-card {
   border-left-color: var(--border-light);
@@ -1113,9 +1135,8 @@ select:focus, input:focus { border-color: var(--accent); }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken rect { fill: #e8e8e8; stroke: #ddd; cursor: not-allowed; }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken text { fill: #bbb; }
 
-/* Your pick: bold red fill */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.selected rect { fill: #e94560; stroke: #c73650; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.selected text { fill: #fff; }
+/* Your pick: accent fill + --accent-ink, tokenised at source (styles.css)
+   so it matches the legend swatch in every theme. */
 
 /* Your existing booking: solid red */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.mine rect { fill: #e94560; stroke: #c73650; }
@@ -1127,12 +1148,6 @@ select:focus, input:focus { border-color: var(--accent); }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.pref-avoid text { fill: #c73650 !important; }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken.pref-prefer text { fill: #8ac08a !important; }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken.pref-avoid text { fill: #e0a0a0 !important; }
-
-/* ── styles.css: Swipe cancel background ─────────────────────────── */
-
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .swipe-cancel-bg {
-  background: #e74c3c;
-}
 
 /* ── styles.css: Subscription bar extras ─────────────────────────── */
 
@@ -1152,18 +1167,16 @@ select:focus, input:focus { border-color: var(--accent); }
 /* ── styles.css: Upcoming panel extras ───────────────────────────── */
 
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .upcoming-header h2 { color: var(--text-muted); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .upcoming-count { background: var(--accent); color: #fff; }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-cancel:hover { background: #f5f5f5; }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-seat-chip button { color: rgba(233,69,96,0.7); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-cancel-all { border-color: #f5b3bf; color: #c73650; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-cancel-all:hover { background: #fde8ec; }
 
-/* ── tabs.css: Tab badge ─────────────────────────────────────────── */
+/* ── tabs.css: Membership status ─────────────────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .tab-badge {
-  background: var(--accent);
-  color: #fff;
-}
+/* .tab-badge / .upcoming-count need no light patch any more: every accent
+   fill takes its label from --accent-ink at source. The "Active" status is a
+   fixed success green (NOT --accent, which is pink/terracotta in some
+   themes); the dark-base #5dba5d is 2.4:1 on a white panel. */
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .membership-status { color: #1a7a1a; }
 
 /* ── settings.css: Floating pill green text ──────────────────────── */
 
@@ -1333,18 +1346,20 @@ select:focus, input:focus { border-color: var(--accent); }
   --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
 }
 
-/* Lime CTAs need dark text */
-[data-theme="gameboy"] .auth-pill a.signin-pill,
-[data-theme="gameboy"] .tab-empty-btn,
-[data-theme="gameboy"] .btn,
-[data-theme="gameboy"] .bc-btn-primary,
-[data-theme="gameboy"] .tab-badge,
-[data-theme="gameboy"] .week-event-social { color: #0f380f; }
+/* Lime CTAs need dark text: that is --accent-ink above, which every accent
+   fill reads at source. (The old per-selector patch here also outranked
+   .btn-ghost, painting Cancel buttons dark-on-dark.) */
 [data-theme="gameboy"] .hm-level-0 { background: var(--bg-input); }
 [data-theme="gameboy"] .hm-level-1 { background: #306230; }
 [data-theme="gameboy"] .hm-level-2 { background: #79991c; }
 [data-theme="gameboy"] .hm-level-3 { background: #8bac0f; }
 [data-theme="gameboy"] .hm-level-4 { background: #9bbc0f; }
+/* The session / safe-mode banner borrows the waitlist chip's colours, and
+   here that ink is the body lime: 3.85:1 on the banner for a 13px line. The
+   heading lime is 5.66:1. Scoped rather than re-tokenised — a lighter
+   --badge-waitlist-text would make Waitlist and Full identical chips. */
+[data-theme="gameboy"] .app-banner:not(.app-banner-danger),
+[data-theme="gameboy"] .safe-mode-banner { color: var(--text-heading); }
 
 /* ── Blueprint: engineering drawing ───────────────────────────── */
 [data-theme="blueprint"] {
@@ -1382,11 +1397,6 @@ select:focus, input:focus { border-color: var(--accent); }
     linear-gradient(90deg, rgba(56, 189, 248, 0.045) 1px, transparent 1px);
   background-size: 28px 28px;
 }
-[data-theme="blueprint"] .auth-pill a.signin-pill,
-[data-theme="blueprint"] .tab-empty-btn,
-[data-theme="blueprint"] .btn,
-[data-theme="blueprint"] .bc-btn-primary,
-[data-theme="blueprint"] .tab-badge { color: #06283f; }
 [data-theme="blueprint"] .hm-level-0 { background: var(--bg-input); }
 [data-theme="blueprint"] .hm-level-1 { background: rgba(56, 189, 248, 0.25); }
 [data-theme="blueprint"] .hm-level-2 { background: rgba(56, 189, 248, 0.45); }

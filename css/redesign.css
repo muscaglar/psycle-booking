@@ -154,12 +154,14 @@ header .theme-toggle {
   padding: 0 0 2px;
   max-width: 100%;
 }
-/* strength sub-pills: a nested, indented row directly under the Class Type
-   pills, with a left connector so they clearly belong to the selected type
-   (scroll WHEN shown — JS toggles display). */
-#tab-discover #strengthSubPills {
+/* strength / reformer sub-pills: a nested, indented row directly under the
+   Class Type pills, with a left connector so they clearly belong to the
+   selected type (scroll WHEN shown — JS toggles display between none and
+   flex, so the row layout lives here and never in an inline style). */
+#tab-discover #strengthSubPills,
+#tab-discover #reformerSubPills {
   flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; gap: 7px;
+  scrollbar-width: none; gap: 7px; align-items: center;
   margin: 8px 0 0 4px;
   padding: 0 0 2px 12px;
   border-top: none;
@@ -176,6 +178,8 @@ header .theme-toggle {
   color: var(--ink-2, #5c5e63);
   font: 600 12px/1 var(--font-body);
   white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
 .sub-pill.active {
   background: var(--accent, #1f6f5c);
@@ -185,12 +189,16 @@ header .theme-toggle {
 #tab-discover .location-chips::-webkit-scrollbar,
 #tab-discover #categoryPills::-webkit-scrollbar,
 #tab-discover #strengthSubPills::-webkit-scrollbar,
+#tab-discover #reformerSubPills::-webkit-scrollbar,
 #tab-discover .date-presets::-webkit-scrollbar,
 #tab-discover .instr-matches::-webkit-scrollbar { display: none; }
 /* pills never shrink inside the scroll row */
 .loc-chip, .cat-pill, .date-quick-btn, .sub-pill { flex: none; }
-/* icon-only "pick a date" pill at the end of the date row */
-.date-pick { padding: 0 11px; flex: none; }
+/* icon-only "pick a date" pill — FIRST in the date row so the calendar is on
+   screen at every phone width (the row is wider than a 390px window; what
+   clips now is the labelled "14 days" pill, which reads as "scroll for more").
+   Two classes so the padding beats the later .date-quick-btn rule. */
+.date-quick-btn.date-pick { padding: 0 11px; flex: none; }
 .date-pick svg { display: block; }
 
 /* Filter rows + Instructor box: full-width, left-aligned (fixes the centred /
@@ -310,7 +318,11 @@ header .theme-toggle {
 .cc-dur { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
 .cc-rule { width: 1px; flex: none; background: var(--line, #e7e5df); }
 
-.cc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* 100px basis, not 0: it is the width below which the card wraps its action
+   (see .cc-action). 100px still fits the second half of a class name on one
+   line ("Signature 55" 98px, "Full Body 45" 94px, "Strength 50" 92px at 16px
+   display), so an inline card never breaks a name into three lines. */
+.cc-info { flex: 1 1 100px; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .cc-name {
   font: 600 16px/1.1 var(--font-display);
   color: var(--ink, #17181c);
@@ -321,9 +333,21 @@ header .theme-toggle {
 .cc-spots.low { color: var(--accent, #1f6f5c); }
 .cc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1px; }
 
-.cc-action { flex: none; align-self: center; display: flex; }
+/* The action wraps by WIDTH, not by breakpoint: when a long label ("Join
+   Waitlist", "Bikes 12 & 15 ✓", any label in the mono themes) would squeeze
+   .cc-info under its 100px basis, the pill drops onto its own right-aligned
+   row instead of crushing the text or painting over it (320px). Discover
+   cards only — My Bookings cards are a different, column-stacked layout. */
+.class-card:not(.my-booking-card) { flex-wrap: wrap; }
+.cc-action { flex: none; align-self: center; display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+/* the "notify me" bell sits beside a Full pill; its base top margin would
+   push it off the pill's centre line now the pill has none */
+.cc-action .notify-btn { margin-top: 0; }
 .cc-action .book-btn {
-  height: 36px; padding: 0 16px; width: auto;
+  height: 36px; padding: 0 14px; width: auto;
+  /* `font:` doesn't reset these — the base .book-btn is tracked uppercase,
+     which made "JOIN WAITLIST" a 136px pill; same reset as the other pills */
+  margin-top: 0; letter-spacing: 0; text-transform: none; white-space: nowrap;
   border-radius: 99px;
   font: 600 13px/1 var(--font-body);
   background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
@@ -437,12 +461,21 @@ header .theme-toggle {
 }
 
 /* Appearance: theme cards */
+/* minmax(0, 1fr), not 1fr: a bare 1fr track can't go below its content's
+   min-content width, so three long names pushed the grid to 374px inside a
+   346px column (390px phone) and the third column was clipped. */
 #tab-membership .theme-chips {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+}
+/* 320px phones: a third of the row leaves ~58px for a name, which would
+   ellipsis half of them — two columns keep every name whole. */
+@media (max-width: 340px) {
+  #tab-membership .theme-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 #tab-membership .theme-chip {
   display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
-  padding: 15px 14px;
+  min-width: 0;
+  padding: 15px 12px;
   background: var(--surface, #fff);
   border: 1.5px solid var(--line, #e7e5df);
   border-radius: 16px;
@@ -457,7 +490,16 @@ header .theme-toggle {
   width: 22px; height: 22px; border-radius: 50%; display: block;
   border: 1px solid rgba(0,0,0,.10);
 }
-#tab-membership .theme-chip-name { font: 700 15px/1 var(--font-body); color: var(--ink, #17181c); }
+/* Sentence case, no tracking: `font:` doesn't reset the base chip name's
+   uppercase + .05em, which is what made the names too wide. The ellipsis is
+   only a backstop (mono themes on a 375px phone); line-height stays ≥1.2 so
+   overflow:hidden can't shave the descenders in Graphite / Synthwave. */
+#tab-membership .theme-chip-name {
+  font: 700 14px/1.25 var(--font-body);
+  text-transform: none; letter-spacing: 0;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink, #17181c);
+}
 
 /* Settings list */
 .ms-list {

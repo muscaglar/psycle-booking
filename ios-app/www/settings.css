@@ -61,15 +61,6 @@
   white-space: nowrap;
 }
 
-/* Light mode */
-[data-theme="light"] .next-class-pill {
-  background: #fff;
-  border-color: #a0d0a0;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-}
-[data-theme="light"] .ncp-class { color: #1a1a1a; }
-[data-theme="light"] .ncp-detail { color: #888; }
-
 /* ═══════════════════════════════════════════════════════════════════
    Settings Modal
    ═══════════════════════════════════════════════════════════════════ */
@@ -77,7 +68,7 @@
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.75);
+  background: var(--modal-overlay, rgba(0,0,0,0.75));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: 300;
@@ -166,12 +157,9 @@
   margin-bottom: var(--space-6);
 }
 
-/* Light mode */
-[data-theme="light"] .settings-overlay { background: rgba(0,0,0,0.45); }
-[data-theme="light"] .settings-panel { background: #fff; border-color: #ddd; }
-[data-theme="light"] .settings-header { background: #fff; border-bottom-color: #eee; }
-[data-theme="light"] .settings-title { color: #1a1a1a; }
-[data-theme="light"] .settings-section { border-bottom-color: #f0f0f0; }
+/* No light-mode block: the panel rules above read the theme tokens. (The old
+   [data-theme="light"] overrides in this file never matched — "light" is not
+   a registered theme id — and would have forced #fff panels onto Linen.) */
 
 /* Mobile: full-screen sheet, no wasted margin, respects home indicator. */
 @media (max-width: 640px) {
@@ -213,7 +201,6 @@
 }
 
 .tier-search:focus { border-color: var(--accent, #e94560); }
-[data-theme="light"] .tier-search { background: #f5f5f5; border-color: #ddd; color: #1a1a1a; }
 
 .tier-list {
   display: flex;
@@ -263,8 +250,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-[data-theme="light"] .tier-name { color: var(--text); }
 
 .tier-fav {
   width: 24px;
@@ -347,8 +332,6 @@
   cursor: pointer;
 }
 
-[data-theme="light"] .bike-pref-studio-select { background: #f5f5f5; border-color: #ddd; color: #1a1a1a; }
-
 .bike-pref-legend {
   display: flex;
   gap: var(--space-6);
@@ -374,35 +357,32 @@
   overflow-x: auto;
 }
 
-[data-theme="light"] .bike-pref-grid { background: #f8f8f8; border-color: #ddd; }
-
-/* SVG-based spatial layout (matches actual studio) */
+/* SVG-based spatial layout (matches actual studio).
+   Fully tokenised — the map used to be near-black tiles on the light themes
+   because its only light values sat behind a [data-theme="light"] selector
+   that never matches. Prefer/avoid reuse the status-badge inks (tuned per
+   theme); avoid is also dashed so the two never differ by colour alone
+   (Handheld's four-shade palette gives both the same ink). The legend
+   swatches in settings.js mirror these values. */
 .bike-pref-svg-slot rect {
-  fill: #1a1a1a;
-  stroke: #333;
+  fill: var(--bg-input, #1a1a1a);
+  stroke: var(--border-light, #333);
   transition: all var(--transition-fast);
 }
 .bike-pref-svg-slot text {
-  fill: #666;
+  fill: var(--text-dim, #666);
   font-weight: var(--weight-semibold);
   pointer-events: none;
 }
-.bike-pref-svg-slot:hover rect { stroke: #888; }
-.bike-pref-svg-slot:hover text { fill: #fff; }
+.bike-pref-svg-slot:hover rect { stroke: var(--text-dim, #888); }
+.bike-pref-svg-slot:hover text { fill: var(--text-heading, #fff); }
+/* Studio objects (podium etc.) */
+.bike-pref-svg-object { fill: var(--bg-panel, #1a1a0a); stroke: var(--border-light, #333); }
 
-.bike-pref-svg-slot.pref-avoid rect { fill: #2a0a0a; stroke: #e94560; }
-.bike-pref-svg-slot.pref-avoid text { fill: #e94560; }
-.bike-pref-svg-slot.pref-prefer rect { fill: #0a2a1a; stroke: #5dba5d; }
-.bike-pref-svg-slot.pref-prefer text { fill: #5dba5d; }
-
-[data-theme="light"] .bike-pref-svg-slot rect { fill: #fff; stroke: #ccc; }
-[data-theme="light"] .bike-pref-svg-slot text { fill: #888; }
-[data-theme="light"] .bike-pref-svg-slot:hover rect { stroke: #999; }
-[data-theme="light"] .bike-pref-svg-slot:hover text { fill: #333; }
-[data-theme="light"] .bike-pref-svg-slot.pref-avoid rect { fill: #fff0f0; stroke: #e94560; }
-[data-theme="light"] .bike-pref-svg-slot.pref-avoid text { fill: #e94560; }
-[data-theme="light"] .bike-pref-svg-slot.pref-prefer rect { fill: #f0fff0; stroke: #3a9a3a; }
-[data-theme="light"] .bike-pref-svg-slot.pref-prefer text { fill: #3a9a3a; }
+.bike-pref-svg-slot.pref-avoid rect { fill: var(--badge-full-bg, #2a0a0a); stroke: var(--badge-full-text, #e94560); stroke-dasharray: 4 2; }
+.bike-pref-svg-slot.pref-avoid text { fill: var(--badge-full-text, #e94560); }
+.bike-pref-svg-slot.pref-prefer rect { fill: var(--badge-highlight-bg, #0a2a1a); stroke: var(--badge-highlight-text, #5dba5d); }
+.bike-pref-svg-slot.pref-prefer text { fill: var(--badge-highlight-text, #5dba5d); }
 
 /* Bike picker: preferences shown via text color only.
    Rect fill/stroke stays controlled by booking state (available/taken/selected/mine). */
@@ -411,8 +391,10 @@
 /* Taken slots: dim the preference text */
 .bike-slot.taken.pref-prefer text { fill: #2a5a2a !important; }
 .bike-slot.taken.pref-avoid text { fill: #5a1a2a !important; }
-/* Selected or mine: white text always wins */
-.bike-slot.selected.pref-prefer text, .bike-slot.selected.pref-avoid text,
+/* Selected or mine: the state's own label ink always wins. A selected slot
+   is accent-filled, so its ink is --accent-ink (white is ~2:1 on the pale
+   Graphite/Handheld/Blueprint accents); "mine" is a fixed red/maroon tile. */
+.bike-slot.selected.pref-prefer text, .bike-slot.selected.pref-avoid text { fill: var(--accent-ink, #fff) !important; }
 .bike-slot.mine.pref-prefer text, .bike-slot.mine.pref-avoid text { fill: #fff !important; }
 
 
@@ -626,14 +608,3 @@
   font-size: var(--text-sm);
   margin-top: var(--space-3);
 }
-
-/* Light mode */
-[data-theme="light"] .diag-finding,
-[data-theme="light"] .diag-log {
-  background: #f7f7f7;
-  border-color: #e2e2e2;
-}
-[data-theme="light"] .diag-finding-kind,
-[data-theme="light"] .diag-log-msg,
-[data-theme="light"] .diag-v { color: #1a1a1a; }
-[data-theme="light"] .diag-log-row { border-bottom-color: #ececec; }

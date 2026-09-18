@@ -327,6 +327,15 @@
         slotBookings: {},
         waitlisted: false,
       };
+      // "+ Add spot" on a class we already hold a seat in: the new seat JOINS
+      // that booking. Seed the entry with the seats + record ids already held —
+      // the original builds its confirmed entry from THIS one, so anything
+      // dropped here stays dropped (the card shows only the new bike and a
+      // cancel misses the first seat, which stays booked at Psycle). Failure
+      // paths still restore prevBooking as before.
+      if (prevBooking && !prevBooking.waitlisted && slots && slots.length && typeof _mergeBookedSeats === 'function') {
+        _myBookings[String(eventId)] = _mergeBookedSeats(prevBooking, slots.map(Number), null);
+      }
       if (prevBooking && prevBooking.waitlist) _myBookings[String(eventId)].waitlist = prevBooking.waitlist;
       // A no-layout "one more space": keep the record ids already held so the
       // original can merge the new id in (a whole cancel must remove them all).
@@ -339,14 +348,25 @@
       try {
         await _originalSubmitBooking(eventId, slots, btn, opts);
         // The original never throws \u2014 it handles failures in-band (4xx/5xx,
-        // timeouts, session expiry) by setting a non-\u2713 button label. Any
-        // outcome without \u2713 therefore means the booking did NOT happen, and
+        // timeouts, session expiry) by setting a non-\u2713 button label. It only
+        // sets \u2713 once the seat is certain (its own 2xx, or a /bookings re-read
+        // showing it), so any outcome without \u2713 means the booking did NOT
+        // happen or could not be confirmed \u2014 either way
         // the optimistic _myBookings entry must go, or a phantom "Booked"
         // class haunts My Bookings, history and re-rendered cards.
         if (btn.textContent.indexOf('\u2713') === -1) {
           // Keep whatever failure label/handler the original set \u2014 only the
-          // state entry is reverted.
+          // state entry is reverted\u2026
           revertBookingEntry();
+          // \u2026and OUR optimistic class. A definitive refusal (4xx / 401) rewrites
+          // just the label, and a leftover .booked reads as success to theme.js's
+          // haptic, the booked pill style and "Book my week". Back to the class
+          // the button came in with ('book-btn', "+ Add spot"'s own, or .booked
+          // while a seat is still held); an unverified outcome set its own.
+          if (btn.className === 'book-btn booked') {
+            const kept = _myBookings[String(eventId)];
+            btn.className = (origClass === 'book-btn booked' && !(kept && !kept.waitlisted)) ? 'book-btn' : origClass;
+          }
         }
       } catch (err) {
         // 4. Revert on failure
@@ -429,6 +449,7 @@
     var skipped = 0;
     var failed = 0;
     var unsure = 0;
+    var taken = 0;
     var remaining = [];
 
     for (var i = 0; i < queue.length; i++) {
@@ -481,7 +502,8 @@
 
         // Slot bodies: retries:3 — replay fires on the 'online' event, exactly
         // when the radio is flakiest, and a duplicate lands as 409/"already
-        // booked" (same seat), which the handler below counts as success.
+        // booked" (same seat), which the handler below checks against
+        // /bookings before calling it booked.
         // COUNT bodies are never auto-retried: a re-send after a lost response
         // would book (and charge) another space.
         var res;
@@ -524,10 +546,21 @@
             waitlisted: false,
           };
         } else if (res.status === 409 || (data.message || '').toLowerCase().indexOf('already') !== -1) {
-          // Already booked server-side — the booking exists, so this replay
-          // achieved its goal. Count it as success and clear it from the
-          // queue; fetchMyBookings below reconciles the exact slot state.
-          bookedOk++;
+          // "You already hold it" (a retried POST whose first go landed) OR
+          // "someone else took that spot while you were offline" — only
+          // /bookings can say which, and calling the second one "confirmed"
+          // sends a member to a class they have no seat in. Either way the
+          // server has answered, so the item leaves the queue.
+          var outcome = null;
+          if (typeof _rereadBookingsForVerify === 'function' && typeof _bookingOutcome === 'function') {
+            var applied = await _rereadBookingsForVerify();
+            outcome = _bookingOutcome(applied, _myBookings[String(item.eventId)], item.slots || [], 0);
+          }
+          // (A count body can't be told from a space already held before it
+          // was queued — that one stays "check My Bookings".)
+          if (outcome && outcome.kind === 'booked' && bySlot) bookedOk++;
+          else if (outcome && (outcome.kind === 'none' || (outcome.kind === 'partial' && !outcome.landed.length))) taken++;
+          else unsure++;
         } else if (res.status >= 400 && res.status < 500) {
           failed++;
         } else {
@@ -568,6 +601,13 @@
       toast(remaining.length + ' queued action' + (remaining.length !== 1 ? 's' : '') + ' still pending', 'info');
     } else if (failed > 0) {
       toast(failed + ' queued action' + (failed !== 1 ? 's' : '') + ' could not be completed', 'error');
+    }
+    // Last, so it is the toast left on screen: the one outcome the member has
+    // to act on (they believed this class was taken care of).
+    if (taken > 0) {
+      toast(taken === 1
+        ? "A queued booking couldn't be made — that spot was taken while you were offline"
+        : taken + " queued bookings couldn't be made — those spots were taken while you were offline", 'error');
     }
   }
   window.processOfflineQueue = processOfflineQueue;

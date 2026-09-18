@@ -171,7 +171,7 @@
         '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Data &amp; privacy</span><span class="ms-row-sub">Export · import · clear local data</span></span><span class="ms-row-chev">›</span></button>' +
       '</div>' +
       // Sign out (signed-in only — toggled in renderMembershipInfo)
-      '<button id="signOutRow" class="ms-signout" onclick="if(typeof clearToken===\'function\')clearToken()" style="display:none">Sign out</button>' +
+      '<button id="signOutRow" class="ms-signout" onclick="if(typeof confirmSignOut===\'function\')confirmSignOut();else if(typeof clearToken===\'function\')clearToken()" style="display:none">Sign out</button>' +
       '<div class="insights-section">' +
         '<div class="insights-title">Instructor Rankings & Favourites</div>' +
         '<div class="tier-group-label">Ranked</div>' +
@@ -239,9 +239,14 @@
     panels.forEach(function (p) {
       p.classList.toggle('active', p.id === 'tab-' + tab);
     });
-    // Panels share the document scroller — a scroll position retained from
-    // a taller tab leaves a shorter one stuck past the top (iOS overshoot).
+    // All four panels share ONE scroller, so an offset kept from a taller tab
+    // opens the next one mid-page, or clamped to its very bottom. Which
+    // scroller depends on width: at <=640px the body is overflow:hidden and
+    // .tab-content scrolls (window.scrollTo alone did nothing on iPhone);
+    // wider, it is the document and .tab-content's scrollTop is already 0.
     window.scrollTo(0, 0);
+    var tabScroller = document.querySelector('.tab-content');
+    if (tabScroller) tabScroller.scrollTop = 0;
     if (!noHash) {
       history.replaceState(null, '', '#' + tab);
     }
@@ -305,6 +310,27 @@
     ['waitlist:joined', 'waitlist:left'].forEach(function (evt) {
       PsycleEvents.on(evt, function () { updateTabBadge(); renderWeekView(); });
     });
+    // Session changes (popup sign-in, sign-out, expiry, can't-reach-Psycle) and
+    // fresh /profile numbers. Membership's renderers are private to this IIFE
+    // and only ran inside switchTab, so the tab kept its sign-in hero after a
+    // sign-in — and the previous account's plan card after a sign-out. Sign-out
+    // also empties _myBookings WITHOUT a bookings:loaded (see clearToken), so
+    // the badge and planner need this cue too.
+    var _repaintMembership = function () {
+      if (_currentTab !== 'membership') return;
+      renderMembershipInfo();
+      renderCostTracker();
+    };
+    PsycleEvents.on('auth:changed', function () {
+      updateTabBadge();
+      renderWeekView();
+      _repaintMembership();
+      if (_currentTab === 'membership' && typeof filterTierList === 'function') filterTierList();
+      // Stats' hero follows the session too, and a sign-out has no
+      // bookings:loaded to repaint it.
+      if (_currentTab === 'stats') renderInsights();
+    });
+    PsycleEvents.on('profile:updated', _repaintMembership);
   }
 
   // Also update badge when renderMyBookings is called directly
@@ -348,6 +374,9 @@
           '<div class="tab-empty-title">Your training<br>story starts here</div>' +
           '<div class="tab-empty-sub">Sign in and sync your booking history to unlock stats, heatmaps, and instructor insights.</div>' +
           '<button class="tab-empty-btn" onclick="openLoginPopup()">Sign in</button>';
+        // Token still stored but /profile unconfirmed: Retry, never "Sign in".
+        var _gate = (typeof authGateHTML === 'function') ? authGateHTML() : '';
+        if (_gate) statsEmpty.innerHTML = _gate;
       } else {
         statsEmpty.style.display = 'none';
       }
@@ -498,6 +527,10 @@
     var daysAheadEl = document.getElementById('daysAhead');
     if (startDateEl) startDateEl.value = dateStr;
     if (daysAheadEl) daysAheadEl.value = 1;
+    // A picked day is no preset. Left alone, the mode from the last pill tap
+    // is what saveFilters and the recent searches record for this date.
+    if (typeof window._dateQuickMode !== 'undefined') window._dateQuickMode = null;
+    if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
     switchTab('discover');
     if (typeof search === 'function') search();
   };
@@ -781,7 +814,7 @@
         '<div class="reco-badge">' + dayCapital + 's at ' + p.timeAmPm + '</div>' +
         '<div class="reco-class">' + escapeHTML(p.type) + '</div>' +
         '<div class="reco-detail">' + instrLink(p.instr) + (p.loc ? ' · ' + escapeHTML(p.loc) : '') + '</div>' +
-        '<div class="reco-detail" style="color:#555">' + p.count + 'x booked</div>' +
+        '<div class="reco-detail">' + p.count + 'x booked</div>' +
       '</div>';
     });
     html += '</div>';
@@ -880,7 +913,11 @@
     var daysAheadEl = document.getElementById('daysAhead');
     if (startDateEl) startDateEl.value = dateStr;
     if (daysAheadEl) daysAheadEl.value = 1;
-    if (typeof window._dateQuickMode !== 'undefined') window._dateQuickMode = 'today';
+    // The date is this week's usual day, rarely today: 'today' here labelled
+    // the saved filters and the recent search "Today" over another date. (It
+    // was only ever set to get a one-day window, which daysAhead=1 now gives.)
+    if (typeof window._dateQuickMode !== 'undefined') window._dateQuickMode = null;
+    if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
     switchTab('discover');
     if (typeof search === 'function') search();
   });
@@ -1081,7 +1118,11 @@
     // Appearance picker + Sign-out live in the Membership tab now.
     if (typeof renderThemePicker === 'function') renderThemePicker();
     var _signOut = document.getElementById('signOutRow');
-    if (_signOut) _signOut.style.display = (typeof currentUser !== 'undefined' && currentUser) ? '' : 'none';
+    // A kept-but-unconfirmed token (can't reach Psycle) is still a session the
+    // member must be able to end.
+    var _hasSession = (typeof currentUser !== 'undefined' && currentUser) ||
+      (typeof getBearerToken === 'function' && !!getBearerToken());
+    if (_signOut) _signOut.style.display = _hasSession ? '' : 'none';
 
     var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
     var user = (typeof currentUser !== 'undefined') ? currentUser : null;
@@ -1090,6 +1131,10 @@
       container.style.display = 'none';
       if (signinEl) {
         signinEl.style.display = '';
+        // Token still stored but /profile unconfirmed (offline launch, Psycle
+        // blip): app.js supplies a Retry hero — never "Sign in" for a member.
+        var gate = (typeof authGateHTML === 'function') ? authGateHTML() : '';
+        if (gate) { signinEl.innerHTML = gate; return; }
         signinEl.innerHTML =
           '<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg></div>' +
           '<div class="tab-empty-title">Membership</div>' +
@@ -1375,10 +1420,52 @@
 
   // ── Weekly reminder row (iOS app only — needs the native bridge) ──
 
+  // Last known answer to "may Psync send notifications?" for the class
+  // switch. null = not resolved yet this session (first paint goes by the
+  // pref alone, then corrects itself below).
+  var _classReminderGranted = null;
+
+  // ── pure:reminder-row:start
+  // What the class-reminder switch shows. The pref defaults ON, but nothing
+  // is scheduled without notification permission — a switch that reads on
+  // while nothing is armed invites no tap. So it is on only when it really
+  // is, and the detail line says what a tap will do. (Detail strings are
+  // literals — they go into innerHTML unescaped.)
+  function _classReminderSwitch(prefOn, granted) {
+    var blocked = !!prefOn && granted === false;
+    return {
+      on: !!prefOn && !blocked,
+      detail: blocked ? 'Tap to allow notifications' : '90 minutes before each class — opens the live countdown',
+    };
+  }
+  // ── pure:reminder-row:end
+
   function renderReminderRow() {
     var row = document.getElementById('reminderRow');
     if (!row) return;
     if (!window._nativeReminder) { row.innerHTML = ''; return; }
+    _paintReminderRow(row);
+    var api = window._nativeClassReminders;
+    if (!api || typeof api.hasPermission !== 'function') return;
+    api.hasPermission().then(function (granted) {
+      granted = !!granted;
+      if (granted === _classReminderGranted) return;
+      _classReminderGranted = granted;
+      // Repaint whatever row is live NOW (the panel may have been rebuilt
+      // or closed while the bridge call was in flight).
+      var live = document.getElementById('reminderRow');
+      if (live && window._nativeReminder) _paintReminderRow(live);
+    }, function () {});
+  }
+
+  // Back from iOS Settings — where a blocked row sends people — nothing else
+  // repaints it, so it would keep showing the old answer. (No-op unless the
+  // Settings panel is open.)
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') renderReminderRow();
+  });
+
+  function _paintReminderRow(row) {
     var on = window._nativeReminder.isOn();
     var html =
       '<button class="app-row" onclick="window._toggleReminder()">' +
@@ -1387,12 +1474,12 @@
         '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
       '</button>';
     if (window._nativeClassReminders) {
-      var cOn = window._nativeClassReminders.isOn();
+      var cls = _classReminderSwitch(window._nativeClassReminders.isOn(), _classReminderGranted);
       html +=
         '<button class="app-row" onclick="window._toggleClassReminders()">' +
           '<span class="app-row-text"><span class="app-row-label">Class reminders</span>' +
-          '<span class="app-row-detail">90 minutes before each class — opens the live countdown</span></span>' +
-          '<span class="app-row-switch' + (cOn ? ' on' : '') + '" aria-hidden="true"></span>' +
+          '<span class="app-row-detail">' + cls.detail + '</span></span>' +
+          '<span class="app-row-switch' + (cls.on ? ' on' : '') + '" aria-hidden="true"></span>' +
         '</button>';
     }
     row.innerHTML = html;
@@ -1406,8 +1493,12 @@
       // silently flip to off (the opposite of what the user wants).
       var hasPerm = window._nativeClassReminders.hasPermission
         ? await window._nativeClassReminders.hasPermission() : true;
-      if (!hasPerm) {
+      // Go by what the row SHOWS as well: permission granted in iOS Settings
+      // since the last paint leaves it reading "Tap to allow notifications" —
+      // that tap means on, never "turn them off".
+      if (!hasPerm || _classReminderGranted === false) {
         var granted = await window._nativeClassReminders.enable();
+        _classReminderGranted = !!granted; // known now — don't repaint from the stale answer
         toast(granted ? 'Class reminders on — 90 minutes before each class' : 'Enable notifications for Psync in iOS Settings first', granted ? 'success' : 'error');
       } else {
         await window._nativeClassReminders.disable();
@@ -1415,6 +1506,7 @@
       }
     } else {
       var ok = await window._nativeClassReminders.enable();
+      if (ok) _classReminderGranted = true; // enable() only succeeds once permission is granted
       toast(ok ? 'Class reminders on — 90 minutes before each class' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
     }
     renderReminderRow();

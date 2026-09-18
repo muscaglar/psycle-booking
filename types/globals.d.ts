@@ -136,6 +136,12 @@ declare global {
   function isTokenExpiringSoon(...args: any[]): boolean;
   function scheduleTokenExpiryCheck(...args: any[]): any;
   function showSessionExpired(...args: any[]): any;
+  // Session lifecycle (app.js). checkAuth is single-flight per token and never
+  // drops the token on a network/5xx failure; both emit via PsycleEvents
+  // ('auth:changed' {signedIn, initial, unverified}, 'profile:updated').
+  function checkAuth(...args: any[]): Promise<any>;
+  function refreshProfile(...args: any[]): Promise<any>;
+  function authGateHTML(...args: any[]): string;
 
   // Search / filtering (app.js, interactions.js)
   function search(...args: any[]): any;
@@ -162,6 +168,7 @@ declare global {
   function findSimilar(...args: any[]): any;
   function shareClass(...args: any[]): any;
   function showBikePicker(...args: any[]): any;
+  function _mergeBookedSeats(prevEntry: any, newSlots: number[], bookingId: any): any; // app.js pure:booking — reliability.js seeds its optimistic entry with it
 
   // Waitlists (app.js — separate /waitlists resource; places live on _myBookings entries)
   function fetchMyWaitlists(): Promise<any[] | null>;
@@ -186,7 +193,6 @@ declare global {
   function switchTab(...args: any[]): any;
   function weekNav(...args: any[]): any;
   function planDay(...args: any[]): any;
-  function scrollToClass(...args: any[]): any;
 
   // Insights / rendering (tabs.js, explore.js, features.js)
   function renderMyBookings(...args: any[]): any;

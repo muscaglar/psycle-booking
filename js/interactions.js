@@ -3,7 +3,7 @@
  *
  * Loaded AFTER app.js. Self-contained IIFE that adds:
  *   A. Pull-to-refresh (calls window.search on threshold)
- *   B. Swipe-to-cancel on upcoming booking items
+ *   B. Swipe-to-cancel on My Bookings cards (left swipe → the card's own Cancel / Leave button)
  *   C. Filter persistence (save/restore to localStorage)
  *
  * Depends on: app.js (search, selectedInstructors, selectedCategories, etc.)
@@ -87,10 +87,20 @@
     return null;
   }
 
+  // At <=640px the body is overflow:hidden and .tab-content is the scroller,
+  // so window.scrollY is always 0 on iPhone and guarding on it alone armed the
+  // pull on any downward drag mid-list. `> 0`, not `!== 0`: iOS rubber-banding
+  // reports a NEGATIVE scrollTop at the top, which is exactly when to arm.
+  let pullScroller = null;
+  function pullScrolledDown() {
+    return window.scrollY > 0 || (!!pullScroller && pullScroller.scrollTop > 0);
+  }
+
   document.addEventListener('touchstart', function (e) {
     pullArmed = false;
     isPulling = false;
-    if (window.scrollY !== 0) return;
+    pullScroller = e.target.closest ? e.target.closest('.tab-content') : null;
+    if (pullScrolledDown()) return;
     // Don't capture inside overlays, scrollable widgets, or interactive elements.
     if (e.target.closest(
       '.modal-overlay, .modal, .tab-bar, button, input, select, textarea, ' +
@@ -104,7 +114,7 @@
 
   document.addEventListener('touchmove', function (e) {
     if (!pullArmed) return;
-    if (window.scrollY > 0) {
+    if (pullScrolledDown()) {
       pullArmed = false;
       isPulling = false;
       resetPullIndicator();
@@ -177,10 +187,35 @@
 
 
   // ═══════════════════════════════════════════════════════════════════
-  // B. Swipe-to-Cancel on Upcoming Items
+  // B. Swipe-to-Cancel on My Bookings cards
+  // A left swipe is a shortcut to the card's own primary button, so it goes
+  // through the same confirm (late-cancel warning / Leave waitlist) as a tap.
   // ═══════════════════════════════════════════════════════════════════
 
+  // ── pure:swipe-cancel:start ── (DOM-free; tests/suites/bookings-card.js evaluates this block)
   const SWIPE_CANCEL_THRESHOLD = 0.4; // 40% of width
+  // The card markup (renderMyBookings in app.js) this gesture hangs off. Named
+  // here, not inline: the gesture once outlived the classes it looked for and
+  // was silently dead — the suite checks these against what app.js really emits.
+  const SWIPE_CARD_SELECTOR = '.my-booking-card';
+  // Only a button that cancels or leaves (.booked): "Claim spot" BOOKS a seat,
+  // a past class has no button, and a disabled one is already mid-request.
+  const SWIPE_BUTTON_SELECTOR = '.mb-primary-btn.booked:not(:disabled)';
+  // Touches that start on the card's own controls belong to those controls.
+  const SWIPE_IGNORE_SELECTOR = '.booking-actions, .up-seat-chip, .mb-primary-btn, .find-similar-popup';
+
+  // 'scroll' = vertical intent, give the touch back; null = too early to say.
+  function swipeDirection(dx, dy) {
+    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return null;
+    return Math.abs(dy) > Math.abs(dx) ? 'scroll' : 'swipe';
+  }
+
+  // Far enough (and leftwards) to mean it? A zero-width card never qualifies.
+  function swipeShouldCancel(deltaX, width) {
+    return width > 0 && deltaX < 0 && Math.abs(deltaX) / width >= SWIPE_CANCEL_THRESHOLD;
+  }
+  // ── pure:swipe-cancel:end ──
+
   let swipeTarget = null;
   let swipeStartX = 0;
   let swipeStartY = 0;
@@ -188,30 +223,77 @@
   let swipeLocked = false; // once direction is determined
 
   function getUpcomingItem(el) {
-    return el.closest('.upcoming-item');
+    if (!el || typeof el.closest !== 'function' || el.closest(SWIPE_IGNORE_SELECTOR)) return null;
+    const card = el.closest(SWIPE_CARD_SELECTOR);
+    return card && card.querySelector(SWIPE_BUTTON_SELECTOR) ? card : null;
   }
 
   function ensureSwipeBg(item) {
     if (item.querySelector('.swipe-cancel-bg')) return;
     const bg = document.createElement('div');
     bg.className = 'swipe-cancel-bg';
-    bg.innerHTML = '<span>Cancel</span>';
+    bg.setAttribute('aria-hidden', 'true'); // decoration: the real control is the card's button
+    const label = document.createElement('span');
+    label.textContent = item.classList.contains('is-waitlisted') ? 'Leave' : 'Cancel';
+    bg.appendChild(label);
     item.insertBefore(bg, item.firstChild);
   }
 
+  function resetSwipeStyles(item) {
+    item.style.transition = '';
+    item.style.transform = '';
+    item.style.opacity = '';
+  }
+
+  function endSwipe(cancelled) {
+    if (!swipeTarget) return;
+    const item = swipeTarget;
+    const locked = swipeLocked;
+    const deltaX = swipeDeltaX;
+    swipeTarget = null;
+    swipeDeltaX = 0;
+    swipeLocked = false;
+    if (!locked) return; // a tap or a scroll: the card was never touched
+
+    const width = item.offsetWidth;
+    const cancelBtn = item.querySelector(SWIPE_BUTTON_SELECTOR);
+    item.style.transition = 'transform 0.25s ease';
+
+    if (!cancelled && cancelBtn && swipeShouldCancel(deltaX, width)) {
+      // Slide fully off screen, then hand over to the card's own button
+      item.style.transform = `translateX(-${width}px)`;
+      item.style.opacity = '0';
+      setTimeout(function () {
+        // A refresh may have re-rendered the list meanwhile: never act through
+        // a button that is no longer on the page.
+        if (cancelBtn.isConnected) cancelBtn.click();
+        // Back in place behind the confirm dialog — declining leaves the card as it was
+        setTimeout(function () { resetSwipeStyles(item); }, 300);
+      }, 250);
+    } else {
+      // Snap back
+      item.style.transform = '';
+      setTimeout(function () { item.style.transition = ''; }, 250);
+    }
+
+    // Reset cancel bg
+    const bg = item.querySelector('.swipe-cancel-bg');
+    if (bg) {
+      setTimeout(function () { bg.style.opacity = ''; }, 250);
+    }
+  }
+
   document.addEventListener('touchstart', function (e) {
-    const item = getUpcomingItem(e.target);
+    // A second finger landing mid-swipe: put that card back first, or it
+    // stays wherever the first finger left it.
+    endSwipe(true);
+    const item = e.touches.length === 1 ? getUpcomingItem(e.target) : null;
     if (!item) return;
-    // Don't start swipe on cancel buttons themselves
-    if (e.target.closest('.up-cancel') || e.target.closest('.up-cancel-all') || e.target.closest('.up-seat-chip')) return;
     swipeTarget = item;
     swipeStartX = e.touches[0].clientX;
     swipeStartY = e.touches[0].clientY;
     swipeDeltaX = 0;
     swipeLocked = false;
-    ensureSwipeBg(item);
-    // Remove transition during drag
-    item.style.transition = 'none';
   }, { passive: true });
 
   document.addEventListener('touchmove', function (e) {
@@ -221,14 +303,22 @@
 
     // Determine direction once we have enough movement
     if (!swipeLocked) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return; // too little movement
+      const direction = swipeDirection(dx, dy);
+      if (!direction) return; // too little movement
       // If vertical movement dominates, this is a scroll, not a swipe
-      if (Math.abs(dy) > Math.abs(dx)) {
-        swipeTarget.style.transition = '';
+      if (direction === 'scroll') {
         swipeTarget = null;
         return;
       }
       swipeLocked = true;
+      ensureSwipeBg(swipeTarget);
+      // Remove transition during drag
+      swipeTarget.style.transition = 'none';
+      // .class-card's entry animation (cardEnter, fill-mode both) keeps holding
+      // transform + opacity after it ends, and an animation outranks inline
+      // style — the card would not move. Never restored: putting it back would
+      // replay the entry, and the next render rebuilds the card anyway.
+      swipeTarget.style.animation = 'none';
     }
 
     swipeDeltaX = Math.min(0, dx); // only allow left swipe
@@ -243,51 +333,10 @@
     }
   }, { passive: true });
 
-  document.addEventListener('touchend', function () {
-    if (!swipeTarget) return;
-    const item = swipeTarget;
-    const width = item.offsetWidth;
-    const swipeRatio = Math.abs(swipeDeltaX) / width;
-
-    item.style.transition = 'transform 0.25s ease';
-
-    if (swipeRatio >= SWIPE_CANCEL_THRESHOLD) {
-      // Slide fully off screen, then trigger cancel
-      item.style.transform = `translateX(-${width}px)`;
-      item.style.opacity = '0';
-
-      // Find the event ID from the item's onclick or cancel button
-      const cancelBtn = item.querySelector('.up-cancel') || item.querySelector('.up-cancel-all');
-      if (cancelBtn) {
-        setTimeout(function () {
-          cancelBtn.click();
-          // Reset after cancel completes
-          setTimeout(function () {
-            item.style.transition = '';
-            item.style.transform = '';
-            item.style.opacity = '';
-          }, 300);
-        }, 250);
-      } else {
-        // No cancel button, snap back
-        item.style.transform = '';
-        item.style.opacity = '';
-      }
-    } else {
-      // Snap back
-      item.style.transform = '';
-    }
-
-    // Reset cancel bg
-    const bg = item.querySelector('.swipe-cancel-bg');
-    if (bg) {
-      setTimeout(function () { bg.style.opacity = ''; }, 250);
-    }
-
-    swipeTarget = null;
-    swipeDeltaX = 0;
-    swipeLocked = false;
-  }, { passive: true });
+  document.addEventListener('touchend', function () { endSwipe(false); }, { passive: true });
+  // The system took the touch (scroll, notification, app switch): snap back,
+  // never cancel on a gesture the member did not finish.
+  document.addEventListener('touchcancel', function () { endSwipe(true); }, { passive: true });
 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -374,55 +423,20 @@
         }
       }
 
-      // Restore date quick mode and date fields
-      if (filters.dateQuickMode) {
-        if (typeof _dateQuickMode !== 'undefined') {
-          window._dateQuickMode = filters.dateQuickMode;
-        }
-        // Highlight the correct quick-pick button
-        document.querySelectorAll('.date-quick-btn').forEach(function (b) {
-          b.classList.remove('active');
-          var modeMap = { 'today': 'Today', 'tomorrow': 'Tomorrow', 'week': '7 days' };
-          if (b.textContent.trim() === modeMap[filters.dateQuickMode]) {
-            b.classList.add('active');
-          }
-        });
-        // For today/tomorrow, recalculate the actual date (it shifts daily).
-        // Local-time formatting — toISOString() shifts the day in the evening
-        // for timezones west of UTC.
-        var fmtLocal = function (d) {
-          return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
-        };
-        var todayDate = new Date();
-        var todayStr = fmtLocal(todayDate);
-        if (filters.dateQuickMode === 'today') {
-          document.getElementById('startDate').value = todayStr;
-          document.getElementById('daysAhead').value = 1;
-          var daysGroup = document.getElementById('daysAheadGroup');
-          if (daysGroup) daysGroup.style.display = 'none';
-        } else if (filters.dateQuickMode === 'tomorrow') {
-          var tmrw = new Date(todayDate);
-          tmrw.setDate(tmrw.getDate() + 1);
-          document.getElementById('startDate').value = fmtLocal(tmrw);
-          document.getElementById('daysAhead').value = 1;
-          var daysGroup2 = document.getElementById('daysAheadGroup');
-          if (daysGroup2) daysGroup2.style.display = 'none';
-        } else if (filters.dateQuickMode === 'week') {
-          document.getElementById('startDate').value = todayStr;
-          document.getElementById('daysAhead').value = 7;
-        }
-      } else {
-        // Restore raw date values when no quick mode
-        if (filters.startDate) {
-          document.getElementById('startDate').value = filters.startDate;
-        }
-        if (filters.daysAhead) {
-          document.getElementById('daysAhead').value = filters.daysAhead;
-        }
-        // Clear quick-pick buttons
-        document.querySelectorAll('.date-quick-btn').forEach(function (b) {
-          b.classList.remove('active');
-        });
+      // Restore the date range. app.js's _restoredDateState() decides what
+      // comes back: presets (now incl. '14 days') are re-derived from today,
+      // a picked date is kept only while it is still ahead, and anything else
+      // falls back to the week view. The mode is ALWAYS written — the old
+      // no-mode branch left the default 'week' in place over a picked date.
+      // "Today" is app.js's localDateStr(): local time, because toISOString()
+      // shifts the day in the evening for timezones west of UTC.
+      if (typeof _restoredDateState === 'function' && typeof localDateStr === 'function') {
+        var dateState = _restoredDateState(filters, localDateStr());
+        window._dateQuickMode = dateState.mode;
+        document.getElementById('startDate').value = dateState.startDate;
+        document.getElementById('daysAhead').value = dateState.daysAhead;
+        // Pills + the calendar button's date label are painted from that state.
+        if (typeof _syncDatePills === 'function') _syncDatePills();
       }
 
       if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
@@ -468,6 +482,10 @@
 
   // Hook studio chip toggles
   wrapGlobal('toggleLocation', saveFilters);
+
+  // "Clear filters" is a filter change too — unsaved, the cleared studio or
+  // class type simply came back on the next launch.
+  wrapGlobal('clearFilters', saveFilters);
 
   // ── Wait for init IIFE to complete, then restore filters ────────
   // The init IIFE in app.js is an async function that fetches instructors,

@@ -311,27 +311,30 @@ function renderCalendarActions() {
   if (document.getElementById('calendarPanelStyles')) return;
   const style = document.createElement('style');
   style.id = 'calendarPanelStyles';
+  // This <style> is appended after every stylesheet <link>, so it wins the
+  // cascade over css/theme.css's .cal-btn rules — colours therefore have to
+  // be theme tokens HERE (the old fixed greens were 2.4:1 on Cloud's white).
   style.textContent = `
     .cal-actions {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
       padding: 8px 4px 4px;
-      border-top: 1px solid #1a3a1a;
+      border-top: 1px solid var(--border, #222);
       margin-top: 12px;
     }
     .cal-btn {
       font-size: 11px;
       padding: 4px 10px;
       border-radius: 5px;
-      border: 1px solid #3a5a3a;
+      border: 1px solid var(--border, #333);
       background: transparent;
-      color: #5dba5d;
+      color: var(--text-dim, #888);
       cursor: pointer;
       white-space: nowrap;
       transition: background 0.15s;
     }
-    .cal-btn:hover { background: #1a3a1a; }
+    .cal-btn:hover { background: var(--bg-input, #1a1a1a); }
   `;
   document.head.appendChild(style);
 })();

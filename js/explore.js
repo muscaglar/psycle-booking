@@ -862,7 +862,16 @@
       btn.textContent = 'Syncing...';
     }
 
+    // The first-run welcome prompt (app.js) has its own button — progress goes
+    // to whichever of the two is on screen, so neither sits on "Syncing...".
+    var promptBtn = document.getElementById('syncPromptBtn');
+    var setLabel = function (text) {
+      if (btn) btn.textContent = text;
+      if (promptBtn) promptBtn.textContent = text;
+    };
+
     var allBookings = [];
+    var _confirmedEmpty = false;   // Psycle answered 200 with an empty list — a complete (empty) history
     var _syncIncomplete = false;   // a pagination page failed — data missing
     var _syncFailedDetails = 0;    // event-detail fetches that were dropped
 
@@ -890,7 +899,7 @@
               var baseUrl = strategies[s];
               for (var pg = currentPage + 1; pg <= totalPages && pg <= 100; pg++) {
                 var sep = baseUrl.includes('?') ? '&' : '?';
-                if (btn) btn.textContent = 'Fetching page ' + pg + ' of ' + totalPages + '...';
+                setLabel('Fetching page ' + pg + ' of ' + totalPages + '...');
                 var pgRes = await apiFetch(baseUrl + sep + 'page=' + pg);
                 if (!pgRes.ok) { _syncIncomplete = true; break; } // partial sync — don't mark as fully synced
                 var pgData = await pgRes.json();
@@ -901,6 +910,9 @@
             }
             break;
           }
+          // A well-formed EMPTY list is an answer (a new member) — unlike the
+          // failed or thrown requests that also end up at "nothing found" below.
+          if (Array.isArray(data) || Array.isArray(data.data)) _confirmedEmpty = true;
         } catch (e) { /* try next strategy */ }
       }
 
@@ -925,14 +937,24 @@
         } catch (e) { /* date-range fallback failed */ }
       }
       if (allBookings.length === 0) {
-        if (typeof toast === 'function') toast('No past bookings found from the API. Your current history is up to date.', 'info');
+        // This branch is also where an offline / 5xx sync lands (every request
+        // above failed or threw). Only Psycle actually saying "none" counts as
+        // a finished sync — then it IS complete, and recording it stops the
+        // first-run prompt re-arming on every launch for a brand-new member.
+        if (_confirmedEmpty) {
+          localStorage.setItem(SYNC_KEY, new Date().toISOString());
+          if (typeof toast === 'function') toast('No past bookings on your Psycle account yet — your history is up to date.', 'info');
+          markDirtyAndMaybeRender(); // the banner flips to its "synced" state
+        } else if (typeof toast === 'function') {
+          toast("Couldn't reach Psycle to sync your history — try again in a moment.", 'error');
+        }
         _syncing = false;
         if (btn) { btn.disabled = false; btn.textContent = 'Sync now'; }
         return;
       }
 
       // Update button with progress
-      if (btn) btn.textContent = 'Fetching details (' + allBookings.length + ' bookings)...';
+      setLabel('Fetching details (' + allBookings.length + ' bookings)...');
 
       // Fetch event details for each booking to get instructor/type/location
       var existing = getHistory();
@@ -952,7 +974,7 @@
       // Fetch event details in batches
       for (var i = 0; i < uniqueBookings.length; i += batchSize) {
         var batch = uniqueBookings.slice(i, i + batchSize);
-        if (btn) btn.textContent = 'Fetching details (' + (i + 1) + '/' + uniqueBookings.length + ')...';
+        setLabel('Fetching details (' + (i + 1) + '/' + uniqueBookings.length + ')...');
 
         await Promise.all(batch.map(async function (booking) {
           var evtId = String(booking.event_id);
