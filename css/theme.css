@@ -165,55 +165,6 @@
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
 }
 
-/* ── Light theme ──────────────────────────────────────────────── */
-[data-theme="light"] {
-  --bg: #f7f7f8;
-  --bg-panel: #ffffff;
-  --bg-input: #ededf0;
-  --bg-deep: #e6e6ea;
-  --border: #dddde2;
-  --border-light: #ccccd4;
-  --border-subtle: #d8d8e0;
-  --text: #1a1a1a;
-  --text-heading: #111;
-  /* One step darker than the naive inversion — #888/#999 fell below
-     comfortable contrast at the app's small label sizes on white. */
-  --text-muted: #4d4d55;
-  --text-dim: #5b5b63;
-  --text-faint: #71717a;
-  --text-ghost: #84848e;
-  --text-off: #a6a6b0;
-  --accent: #e94560;
-  --accent-hover: #c73650;
-  --badge-bg: #f0f0f0;
-  --badge-border: #ddd;
-  --badge-text: #666;
-  --badge-full-bg: #fde8ec;
-  --badge-full-text: #c73650;
-  --badge-full-border: #f5b3bf;
-  --badge-waitlist-bg: #fef9e7;
-  --badge-waitlist-text: #9a7a0a;
-  --badge-waitlist-border: #f0dda0;
-  --badge-highlight-bg: #e6f0ff;
-  --badge-highlight-text: #2a6abf;
-  --badge-highlight-border: #a0c4f0;
-  --booked-bg: #fff;
-  --booked-border: #e94560;
-  --spinner-track: #ddd;
-  --modal-overlay: rgba(0,0,0,0.45);
-  --toast-bg: #fff;
-  --toast-border: #ddd;
-  --skeleton-base: #e0e0e0;
-  --skeleton-shine: #f0f0f0;
-  --section-border: #e8e8e8;
-  --upcoming-bg: #fff;
-  --upcoming-border: #e0e0e0;
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.08), 0 12px 40px rgba(0,0,0,0.12);
-  --shadow-overlay: rgba(0,0,0,0.15);
-}
-
 /* ═══════════════════════════════════════════════════════════════════
    Psync premium themes — Cloud (default), Linen, Graphite.
    Cloud is applied via <html data-theme="cloud"> + theme.js default.

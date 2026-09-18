@@ -641,7 +641,9 @@ module.exports = async function (t) {
   // ── Background re-renders do not replay the card entrance ────────────────
   t.section('Discover: a background re-render is quiet');
   const rfwStart = appSrc.indexOf('function renderFromWindow(filters, quiet) {');
-  const rfwEnd = appSrc.indexOf('// Unified Discover search', rfwStart);
+  // Ends at the block AFTER renderFromWindow, not at the date picker: what sits
+  // between them registers a PsycleEvents listener this bare context lacks.
+  const rfwEnd = appSrc.indexOf('// "Available only" never hides the member\'s own class', rfwStart);
   t.ok(rfwStart !== -1 && rfwEnd > rfwStart, 'renderFromWindow can be sliced (anchors moved? update tests/suites/window.js)');
   if (rfwStart !== -1 && rfwEnd > rfwStart) {
     const paint = (o) => {

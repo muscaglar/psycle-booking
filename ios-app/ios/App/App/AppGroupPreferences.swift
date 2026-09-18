@@ -66,6 +66,86 @@ public class PsycleLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
+/// Hands a widget tap (psync://bookings?event=<id>, minted by
+/// PsycleWidget.swift) to the web layer, which routes it like a reminder tap.
+/// The event is RETAINED until native-bridge.js attaches its listener: a
+/// widget tap usually cold-launches the app, so the URL arrives long before
+/// any script has run — a plain window event fired now would simply be lost.
+/// (@capacitor/app would do this too, but it is not a dependency here.)
+/// A tap that lands while only a DEAD page's listener is registered is
+/// replayed to the next page that attaches — see forward().
+@objc(PsycleDeepLinkPlugin)
+public class PsycleDeepLinkPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "PsycleDeepLinkPlugin"
+    public let jsName = "PsycleDeepLink"
+    public let pluginMethods: [CAPPluginMethod] = []
+
+    override public func load() {
+        // AppDelegate already forwards application(_:open:) to Capacitor's
+        // proxy, which posts this notification.
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleOpenURL(_:)),
+                                               name: .capacitorOpenURL,
+                                               object: nil)
+        // The launch URL can be delivered before this plugin is registered
+        // (capacitorDidLoad) — its notification is then long gone, but the
+        // proxy keeps the last URL. load() runs once per process, so this can
+        // only ever be the launch URL and never double-fires with the observer.
+        if let url = ApplicationDelegateProxy.shared.lastURL {
+            forward(url)
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleOpenURL(_ notification: Notification) {
+        guard let object = notification.object as? [String: Any],
+              let url = object["url"] as? URL else { return }
+        forward(url)
+    }
+
+    /// A tap that went out to listeners which may all be DEAD — see forward().
+    /// Main queue only.
+    private var pendingTap: (data: [String: Any], at: Date)?
+    /// As the web layer's own give-up: a sheet that pops up long after the tap
+    /// is worse than none.
+    private static let pendingTapWindow: TimeInterval = 10
+
+    private func forward(_ url: URL) {
+        // Only our own links; the web layer validates the rest.
+        guard url.scheme?.lowercased() == "psync" else { return }
+        let data: [String: Any] = ["url": url.absoluteString]
+        // Capacitor retains an event only while NO listener is registered, and
+        // it never drops a plugin's listeners when their page goes away. Once
+        // iOS has killed the WebView's content process (the app resumed after
+        // hours in the background; Capacitor reloads the page) the only
+        // "listener" is the dead page's: the tap is delivered to a callback
+        // nobody holds, is NOT retained, and the reloaded page never hears of
+        // it. So a tap handed to existing listeners is also kept, briefly, for
+        // the next page that attaches (addListener below). Retained and pending
+        // exclude each other (no listeners / some), so a page gets a tap once.
+        if hasListeners("openURL") {
+            pendingTap = (data, Date())
+        }
+        notifyListeners("openURL", data: data, retainUntilConsumed: true)
+    }
+
+    /// Called on the bridge's queue; forward() and pendingTap live on main.
+    @objc override public func addListener(_ call: CAPPluginCall) {
+        super.addListener(call)
+        guard call.getString("eventName") == "openURL" else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let tap = self.pendingTap else { return }
+            self.pendingTap = nil
+            guard Date().timeIntervalSince(tap.at) < PsycleDeepLinkPlugin.pendingTapWindow else { return }
+            // Un-retained: the listener that has just attached is there to hear it.
+            self.notifyListeners("openURL", data: tap.data)
+        }
+    }
+}
+
 @objc(AppGroupPreferencesPlugin)
 public class AppGroupPreferencesPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "AppGroupPreferencesPlugin"

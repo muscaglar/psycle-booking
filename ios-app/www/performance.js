@@ -2,8 +2,11 @@
  * performance.js — Performance enhancements for Psycle Booking PWA
  *
  * A. Debounced instructor search (200ms)
- * B. Virtual scrolling with IntersectionObserver for large result sets (50+ cards)
  * C. Stale-while-revalidate API response caching for static lists
+ *
+ * (B, placeholder-based virtual scrolling, is gone: it had been switched off
+ * since the redesign — the placeholder→card swap read as the list "refreshing"
+ * — yet still wrapped eventCard() and render() on every call.)
  *
  * Loaded after app.js and reliability.js. Monkey-patches globals defined there.
  */
@@ -50,100 +53,6 @@ function debounce(fn, ms) {
   } else {
     patchInputElement();
   }
-})();
-
-
-// ── B. Virtual Scrolling with IntersectionObserver ─────────────────
-
-/**
- * Observe `.class-card-placeholder` elements and render their actual content
- * when they scroll into the viewport (with a 200px prefetch margin).
- */
-const _virtualScrollObserver = (typeof IntersectionObserver !== 'undefined')
-  ? new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (!entry.isIntersecting) return;
-          const placeholder = entry.target;
-          _virtualScrollObserver.unobserve(placeholder);
-          _hydrateCard(placeholder);
-        });
-      },
-      { rootMargin: '200px 0px' }
-    )
-  : null;
-
-/**
- * Hydrate a placeholder div by injecting its real card HTML (stored in a data attribute).
- */
-function _hydrateCard(placeholder) {
-  const html = placeholder.dataset.cardHtml;
-  if (!html) return;
-  const temp = document.createElement('div');
-  temp.innerHTML = html;
-  const card = temp.firstElementChild;
-  if (card) {
-    placeholder.replaceWith(card);
-  }
-}
-
-/**
- * Call after rendering placeholders to start observing them.
- * Observes all `.class-card-placeholder` elements currently in the DOM.
- */
-function initVirtualScroll() {
-  if (!_virtualScrollObserver) return;
-  const placeholders = document.querySelectorAll('.class-card-placeholder');
-  placeholders.forEach(el => _virtualScrollObserver.observe(el));
-}
-
-/**
- * Create a placeholder div that has the same approximate height as a real card
- * but defers actual content rendering until scrolled into view.
- *
- * @param {string} cardHtml - Full HTML string of the real card
- * @param {string} eventId  - The event ID for keying
- * @returns {string} Placeholder HTML string
- */
-function _makePlaceholder(cardHtml, eventId) {
-  // Escape the HTML for safe embedding in a data attribute
-  const escaped = cardHtml
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return `<div class="class-card-placeholder" data-id="${eventId}" data-card-html="${escaped}" style="min-height:110px;"></div>`;
-}
-
-// Monkey-patch render() and eventCard() to use virtual scrolling when event count > 50.
-(function patchRenderForVirtualScroll() {
-  if (typeof render !== 'function' || typeof eventCard !== 'function') {
-    console.warn('[perf] render/eventCard not found — skipping virtual scroll patch');
-    return;
-  }
-
-  const _origRender = render;
-  const _origEventCard = eventCard;
-  let _virtualMode = false;
-
-  // Wrap eventCard to return placeholders in virtual mode
-  window.eventCard = function (evt, instrMap, studioMap, locationMap, typeMap) {
-    const realHtml = _origEventCard(evt, instrMap, studioMap, locationMap, typeMap);
-    if (_virtualMode) {
-      return _makePlaceholder(realHtml, evt.id);
-    }
-    return realHtml;
-  };
-
-  window.render = function (events, relations, filters, done) {
-    // Virtual scrolling disabled: the redesign pre-loads the full all-studios
-    // window, so events.length is almost always > 50 — which made the
-    // placeholder→card swap fire constantly while scrolling (looked like the
-    // list "refreshing"). The redesign's cards are light enough to render in
-    // full, so we render real cards directly.
-    _virtualMode = false;
-    _origRender(events, relations, filters, done);
-  };
 })();
 
 

@@ -2,13 +2,12 @@
  * calendar.js — Calendar sync and ICS export for Psycle Booking PWA
  *
  * Generates iCalendar (RFC 5545) content from booked classes.
- * Provides webcal:// subscription, .ics download, and Google Calendar integration.
- * Responds to service worker requests for calendar data via MessageChannel.
+ * Provides .ics download / share and Google Calendar integration.
  *
  * Depends on: app.js (_myBookings, _eventCache, toast), state.js (PsycleEvents)
  * Exposes on window (as bare globals):
  *   syncCalendarData, generateICS, downloadICS, openICSInCalendar,
- *   addToGoogleCalendar, getCalendarSubscriptionURL, renderCalendarActions
+ *   addToGoogleCalendar, renderCalendarActions
  */
 
 const CALENDAR_DATA_KEY = 'psycle_calendar_data';
@@ -34,8 +33,8 @@ function _lookupGeo(locName) {
 }
 
 /**
- * Persist current bookings + event metadata to localStorage so the
- * service worker can generate the .ics without access to page globals.
+ * Persist current bookings + event metadata to localStorage: generateICS()
+ * and addToGoogleCalendar() build from this snapshot, not from page globals.
  */
 function syncCalendarData() {
   const entries = [];
@@ -204,6 +203,14 @@ function generateICS(entriesArg) {
 function downloadICS() {
   syncCalendarData();
   const ics = generateICS();
+  // iOS app: WKWebView has no download manager, so the <a download> blob click
+  // below does nothing there — while the toast still claimed a download (the
+  // same defect the settings export had). Hand the file to the share sheet
+  // instead (Calendar / Save to Files / AirDrop).
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    _shareICS(ics, 'psycle-classes.ics');
+    return;
+  }
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -216,17 +223,46 @@ function downloadICS() {
   toast('Calendar file downloaded', 'success');
 }
 
-/**
- * Return the webcal:// subscription URL.
- * NOTE: This only works when a server (or SW within the browser)
- * can serve the .ics file. On static hosts like GitHub Pages,
- * external calendar apps cannot reach the SW — use downloadICS()
- * or addToGoogleCalendar() instead.
- */
-function getCalendarSubscriptionURL() {
-  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
-  return 'webcal://' + (base + 'psycle-calendar.ics').replace(/^https?:\/\//, '');
+// ── pure:ics-share:start
+// Native .ics export — the same route as _shareSettingsExport in settings.js.
+// navigator.share() has to run in the SAME task as the tap — WebKit only opens
+// the share sheet under a live user gesture — so nothing is awaited before it.
+// Every toast reports what actually happened.
+// (Self-contained so tests/suites/4f-cleanup-pwa.js can drive it with a fake
+// navigator / toast / nativeShare.)
+function _shareICS(ics, fileName) {
+  // Fallback: the calendar as text through the Capacitor Share plugin (needs
+  // no gesture).
+  const shareAsText = () => {
+    if (typeof window.nativeShare !== 'function') {
+      toast("Couldn't export the calendar on this device", 'error');
+      return;
+    }
+    window.nativeShare('Psycle classes', ics, null).then((shared) => {
+      // false usually means the share sheet was dismissed — never claim success.
+      toast(shared ? 'Calendar shared' : 'Export cancelled', shared ? 'success' : 'info');
+    }, () => {
+      toast("Couldn't export the calendar on this device", 'error');
+    });
+  };
+
+  let file = null;
+  try {
+    file = new File([ics], fileName, { type: 'text/calendar' });
+    if (!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }))) file = null;
+  } catch (e) { file = null; }
+  if (!file) { shareAsText(); return; }
+
+  let pending;
+  try { pending = navigator.share({ files: [file] }); } catch (e) { shareAsText(); return; }
+  Promise.resolve(pending).then(() => {
+    toast('Calendar file shared', 'success');
+  }, (err) => {
+    if (err && err.name === 'AbortError') { toast('Export cancelled', 'info'); return; }
+    shareAsText(); // file sharing refused (type / gesture) — the text route still works
+  });
 }
+// ── pure:ics-share:end
 
 /**
  * Open the .ics file directly in the browser so the OS offers to
@@ -346,19 +382,3 @@ if (typeof PsycleEvents !== 'undefined') {
   PsycleEvents.on('seat:cancelled', syncCalendarData);
   PsycleEvents.on('bookings:loaded', syncCalendarData);
 }
-
-// ── Respond to service worker requests for calendar data ────────
-// The SW sends a MessageChannel port asking for localStorage data
-// since it cannot access localStorage directly.
-navigator.serviceWorker?.addEventListener('message', evt => {
-  if (evt.data && evt.data.type === 'GET_CALENDAR_DATA') {
-    // Make sure data is fresh
-    syncCalendarData();
-    const data = localStorage.getItem(CALENDAR_DATA_KEY) || '[]';
-    // Reply on the transferred port
-    if (evt.ports && evt.ports[0]) {
-      evt.ports[0].postMessage(data);
-    }
-  }
-});
-

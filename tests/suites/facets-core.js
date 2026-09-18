@@ -197,4 +197,8 @@ module.exports = function (t) {
   sig({ instructors: picks });
   eq(picks, ['44', '31'], "the saved search's own arrays are not re-ordered");
   eq(sig({}), sig({ instructors: [], locations: [], categories: [], dateMode: null, startDate: '', daysAhead: '' }), 'an older saved search with fields missing still gets a signature');
+  ok(sig(with_({ timeBands: ['evening'] })) !== sig(base) && sig(with_({ availableOnly: true })) !== sig(base), 'the Time row counts: "After 5" or "Available only" is another search');
+  eq(sig(with_({ timeBands: ['evening', 'early'] })), sig(with_({ timeBands: ['early', 'evening'] })), '…whatever order its bands were tapped in');
+  eq(sig(with_({ timeBands: [], availableOnly: false })), sig(base), 'an entry saved before the Time row existed is the same search as one saved with the row off');
+  ok(sig(with_({ timeBands: ['early'] })) !== sig(with_({ availableOnly: true })), 'a band is not "Available only"');
 };

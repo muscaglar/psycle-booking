@@ -656,6 +656,19 @@
   color: var(--text-heading, #fff);
 }
 
+/* ── Offline changes waiting to sync (js/reliability.js) ──────────────
+   A line at the top of the My Bookings tab; side margins follow
+   .upcoming-panel so it lines up with the panel below it. */
+.mb-queue-status {
+  margin: var(--space-5) var(--space-9) 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-muted, #aaa);
+}
+@media (max-width: 640px) {
+  .mb-queue-status { margin: var(--space-5) var(--space-7) 0; }
+}
+
 /* ── Share Button ─────────────────────────────────────────────────── */
 
 .share-insights-btn {

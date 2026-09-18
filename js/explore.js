@@ -857,11 +857,25 @@
     if (typeof toast === 'function') toast('Sync flag cleared — you can sync again', 'info');
   };
 
-  window._explore_syncHistory = async function () {
-    if (_syncing) return;
+  // opts.silent — the weekly top-up below: the same sync, with nothing said and
+  // nothing repainted unless it actually found a class. The buttons (no
+  // arguments) are unchanged.
+  // A top-up is for the odd class booked elsewhere. More unknown classes than
+  // this is not a top-up — a different account on this device, or a history
+  // that was wiped — and that many requests stay the member's own Re-sync tap.
+  var TOPUP_MAX_NEW = 60;
+  window._explore_syncHistory = async function (opts) {
+    var silent = !!(opts && opts.silent);
+    if (_syncing) {
+      // A tap that lands while a top-up is running would otherwise do nothing, silently.
+      if (!silent && typeof toast === 'function') toast('Already syncing your history…', 'info');
+      return;
+    }
     _syncing = true;
 
-    var btn = document.getElementById('syncHistoryBtn');
+    // A top-up never drives the banner button: it would come back reading
+    // "Sync now" on a banner that is not repainted when nothing was found.
+    var btn = silent ? null : document.getElementById('syncHistoryBtn');
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Syncing...';
@@ -948,9 +962,9 @@
         // first-run prompt re-arming on every launch for a brand-new member.
         if (_confirmedEmpty) {
           localStorage.setItem(SYNC_KEY, new Date().toISOString());
-          if (typeof toast === 'function') toast('No past bookings on your Psycle account yet — your history is up to date.', 'info');
+          if (!silent && typeof toast === 'function') toast('No past bookings on your Psycle account yet — your history is up to date.', 'info');
           markDirtyAndMaybeRender(); // the banner flips to its "synced" state
-        } else if (typeof toast === 'function') {
+        } else if (!silent && typeof toast === 'function') {
           toast("Couldn't reach Psycle to sync your history — try again in a moment.", 'error');
         }
         _syncing = false;
@@ -975,6 +989,11 @@
         seenEvents.add(eid);
         return true;
       });
+
+      if (silent && uniqueBookings.length > TOPUP_MAX_NEW) {
+        _syncing = false;
+        return;
+      }
 
       // Fetch event details in batches
       for (var i = 0; i < uniqueBookings.length; i += batchSize) {
@@ -1032,8 +1051,12 @@
         }));
       }
 
-      // Merge with existing history (new entries at the end, sorted by date)
-      var merged = existing.concat(newEntries);
+      // Merge with existing history (new entries at the end, sorted by date).
+      // Read again NOW, not the copy from before the detail fetches: a booking,
+      // a cancel or features.js's reconcile may have written history while
+      // those were in flight, and writing the old copy back would undo it —
+      // likelier now that a sync can start without the member tapping anything.
+      var merged = getHistory().concat(newEntries);
       merged.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
       // Deduplicate by eventId (keep first occurrence, which is most recent)
       var seen = new Set();
@@ -1056,7 +1079,7 @@
         localStorage.setItem(SYNC_KEY, new Date().toISOString());
       }
 
-      if (typeof toast === 'function') {
+      if (!silent && typeof toast === 'function') {
         if (partial) {
           toast('Synced ' + newEntries.length + ' booking' + (newEntries.length !== 1 ? 's' : '') +
             ' — ' + (_syncFailedDetails || 'some') + ' could not be fetched. Tap Sync again to retry the rest.', 'info');
@@ -1065,21 +1088,76 @@
         }
       }
 
-      // Re-render all tabs that use history
-      markDirtyAndMaybeRender();
-      // Also re-render Insights if it has been rendered
-      if (typeof renderInsights === 'function') renderInsights();
-      // Emit event so any other listeners can react
-      if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('history:synced');
+      // A top-up that found nothing has nothing to show: repainting Stats or
+      // Discover under the member's thumb for no change is only a flicker.
+      if (!silent || newEntries.length > 0) {
+        // Re-render all tabs that use history
+        markDirtyAndMaybeRender();
+        // Also re-render Insights if it has been rendered
+        if (typeof renderInsights === 'function') renderInsights();
+        // Emit event so any other listeners can react
+        if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('history:synced');
+      }
 
     } catch (e) {
       console.error('[explore] sync failed:', e);
-      if (typeof toast === 'function') toast('Sync failed: ' + e.message, 'error');
+      if (!silent && typeof toast === 'function') toast('Sync failed: ' + e.message, 'error');
     }
 
     _syncing = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Sync now'; }
   };
+
+  // ── Silent weekly top-up ───────────────────────────────────────────
+  // features.js adds every UPCOMING seat to history on each bookings fetch, but
+  // a class booked elsewhere AND attended between two openings of the app only
+  // exists in /bookings?type=previous — and the full sync is a button most
+  // people press once. So, at most once per session and only when the last
+  // sync is over a week old, run that same sync quietly. It walks every page
+  // (so it does not depend on which way Psycle orders them) but only fetches
+  // detail for classes history does not hold: a handful of GETs for a week.
+  var TOPUP_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+  var TOPUP_RETRY_MS = 24 * 60 * 60 * 1000;
+  var TOPUP_DELAY_MS = 8000; // let launch traffic (bookings, timetable, profile) finish first
+  // When a top-up last STARTED (device-local; not exported or mirrored). A sync
+  // that comes back partial leaves SYNC_KEY untouched, and without this a
+  // persistently partial one would page the whole history on every launch —
+  // quietly, against someone else's booking system.
+  var TOPUP_AT_KEY = 'psycle_history_topup_at';
+  var _topUpTried = false;
+
+  function maybeTopUpHistory() {
+    try {
+      if (_topUpTried || _syncing) return;
+      if (typeof getBearerToken !== 'function' || !getBearerToken() || navigator.onLine === false) return;
+      // Another member's history on this install (features.js owns the stamp):
+      // up to 60 of THIS account's past classes would be merged into it, with
+      // no tap and for good. Before the flag below — an unverified session
+      // (nobody to ask for yet) must not use up the session's one attempt.
+      if (typeof window._historyIsMine === 'function' && !window._historyIsMine()) return;
+      _topUpTried = true;
+      var now = Date.now();
+      var last = Date.parse(localStorage.getItem(SYNC_KEY) || '');
+      // Never synced (or an unreadable stamp): the FIRST sync can mean hundreds
+      // of requests, so it stays the member's own tap — never started for them.
+      if (isNaN(last) || now - last < TOPUP_AFTER_MS) return;
+      var tried = Date.parse(localStorage.getItem(TOPUP_AT_KEY) || '');
+      if (!isNaN(tried) && now - tried < TOPUP_RETRY_MS) return;
+      setTimeout(function () {
+        try {
+          if (_syncing || !getBearerToken() || navigator.onLine === false) return;
+          // Eight seconds on: still the same member's history?
+          if (typeof window._historyIsMine === 'function' && !window._historyIsMine()) return;
+          // Stamped before it runs, so a run the app is closed on still counts.
+          localStorage.setItem(TOPUP_AT_KEY, new Date().toISOString());
+          window._explore_syncHistory({ silent: true });
+        } catch (e) {}
+      }, TOPUP_DELAY_MS);
+    } catch (e) { /* a nicety: never let it disturb the bookings load that triggered it */ }
+  }
+
+  // bookings:loaded only ever fires for a signed-in fetch Psycle answered.
+  if (typeof PsycleEvents !== 'undefined') PsycleEvents.on('bookings:loaded', maybeTopUpHistory);
 
   // ═══════════════════════════════════════════════════════════════════
   // MASTER RENDER

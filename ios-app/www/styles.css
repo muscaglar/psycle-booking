@@ -2537,6 +2537,218 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 .rebook-hint-btn:hover { filter: brightness(1.08); }
 .rebook-hint-btn:active { transform: scale(0.96); }
 
+/* ── Your usual week (weekly template) — sits right under the rebook hint.
+   Lines up with .upcoming-panel below it; theme tokens only, so every theme
+   (light, terminal, gameboy…) colours it. Buttons reuse .week-template-btn. ── */
+.usual-week {
+  margin: var(--space-7) var(--space-9) 0;
+}
+
+.usual-week.has-template {
+  padding: var(--space-5) var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+
+.usual-week-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.usual-week-eyebrow {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+}
+
+/* Small text here is --text-muted, not --text-dim: dim falls under AA on the
+   Handheld theme's panel. */
+.usual-week-count {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.usual-week-list,
+.usual-week-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.usual-week-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--tap-min);
+  border-top: 1px solid var(--line);
+  font-size: var(--text-md);
+}
+
+.usual-week-when {
+  flex-shrink: 0;
+  min-width: calc(var(--space-12) + var(--space-10));
+  font-weight: var(--weight-semibold);
+  color: var(--text-heading);
+}
+
+.usual-week-what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.usual-week-where { color: var(--text-muted); }
+
+.usual-week-remove {
+  flex-shrink: 0;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-2xl);
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.usual-week-remove:hover { color: var(--text-heading); background: var(--surface-2); }
+
+.usual-week-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.usual-week .week-template-btn { min-height: var(--tap-min); }
+
+.usual-week-invite {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.usual-week-invite-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-base);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.usual-week-invite .week-template-btn { flex-shrink: 0; }
+
+/* The sheet: a confirm dialog with a list in it. One step UNDER the toast
+   (999), so Psycle's own reason for a refused booking stays readable. */
+.usual-week-overlay { z-index: 998; }
+
+.usual-week-dialog {
+  max-width: 460px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.usual-week-sheet-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.usual-week-switch {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.usual-week-switch-btn {
+  flex: 1;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.usual-week-switch-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-heading);
+}
+
+.usual-week-plan {
+  overflow-y: auto;
+  min-height: 0;
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.usual-week-row { border-top: 1px solid var(--line); }
+
+.usual-week-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-height: var(--tap-min);
+  padding: var(--space-3) 0;
+}
+
+label.usual-week-pick { cursor: pointer; }
+
+.usual-week-pick input {
+  flex-shrink: 0;
+  width: var(--space-8);
+  height: var(--space-8);
+  margin: var(--space-1) 0 0;
+  accent-color: var(--accent);
+}
+
+.usual-week-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.usual-week-row-main {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-heading);
+}
+
+.usual-week-row-sub,
+.usual-week-row-note {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.usual-week-row-note:empty { display: none; }
+.usual-week-row-note.is-warn { color: var(--badge-waitlist-text); }
+.usual-week-row-note.is-ok { color: var(--text-heading); font-weight: var(--weight-semibold); }
+
+@media (max-width: 640px) {
+  .usual-week { margin: var(--space-5) var(--space-7) 0; }
+  .usual-week-invite { flex-direction: column; align-items: stretch; }
+}
+
 .find-similar-predicted {
   border-top: 1px solid var(--border, #333);
 }

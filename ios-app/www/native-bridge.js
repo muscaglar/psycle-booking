@@ -158,6 +158,9 @@
     'psycle_fav_instructors', 'psycle_saved_filters',
     'psycle_instructor_tiers', 'psycle_bike_prefs',
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
+    // Whose history that is (features.js): restored WITH it, or a storage
+    // purge would hand the restored history to whoever is signed in next.
+    'psycle_class_history_owner',
     'psycle_notify_watchlist', 'psycle_calendar_data',
     'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
     // (psycle_waitlisted_events retired: waitlist places come from GET
@@ -1061,6 +1064,52 @@
     } catch (e) {}
   }
 
+  // ── pure:widget-link:start
+  // A Home/Lock Screen widget tap opens psync://bookings?event=<id> (minted in
+  // PsycleWidget.swift). Parsed by hand rather than with URL(): WebKit has
+  // changed how it reads the host of a custom scheme between iOS versions, and
+  // this one shape is all that is ever minted. Anything else → null.
+  function _parseWidgetLink(url) {
+    var m = /^psync:\/\/bookings\/?(?:\?([^#]*))?(?:#.*)?$/i.exec(String(url || ''));
+    if (!m) return null;
+    var found = /(?:^|&)event=([^&]*)/.exec(m[1] || '');
+    var eventId = null;
+    if (found && found[1]) {
+      try { eventId = decodeURIComponent(found[1]); } catch (e) { eventId = null; }
+    }
+    // Event ids are numeric. The router only ever opens the sheet of a class
+    // the user already holds, but there is still no reason to pass it a
+    // string nothing in this app could have produced.
+    if (eventId !== null && !/^\d+$/.test(eventId)) eventId = null;
+    return { eventId: eventId };
+  }
+
+  // Same landing as a class-reminder tap: My Bookings, then that class's sheet
+  // (only while the seat is still held). With no id it is My Bookings alone —
+  // NOT the router's own "no id" case, which is the weekly reminder → Discover.
+  function handleWidgetURL(info) {
+    try {
+      var link = _parseWidgetLink(info && info.url);
+      if (!link) return;
+      if (link.eventId) { _routeNotificationTap(link.eventId); return; }
+      if (typeof window.switchTab === 'function') window.switchTab('bookings');
+    } catch (e) {
+      try { console.warn('[native-widget] link handling failed:', e); } catch (_) {}
+    }
+  }
+  // ── pure:widget-link:end
+
+  // The in-app PsycleDeepLink plugin RETAINS the URL until this listener
+  // attaches — a widget tap usually cold-launches the app. This script is the
+  // last deferred one, so switchTab/openClassDetail already exist when the
+  // retained tap is replayed here.
+  var PsycleDeepLink = Capacitor.Plugins.PsycleDeepLink;
+  if (PsycleDeepLink && typeof PsycleDeepLink.addListener === 'function') {
+    try {
+      PsycleDeepLink.addListener('openURL', handleWidgetURL);
+    } catch (e) {}
+  }
+
 
   // ── Widget / Live Activity / Siri Snapshot ─────────────────────
   // Compute a compact "next class" + "this week" snapshot from the app
@@ -1631,6 +1680,14 @@
     var sections = [];
     sections.push('=== Psycle iOS Diagnostic Report ===');
     sections.push('Generated: ' + new Date().toISOString());
+    // Which build, on what: neither the Device nor the App plugin below is
+    // installed, so without these two lines a tester's report named no build,
+    // device or iOS version. settings.js works the build id out of the
+    // bundled sw.js (getAppVersion, capped at 2s).
+    var build = null;
+    try { if (typeof window.getAppVersion === 'function') build = await window.getAppVersion(); } catch (e) {}
+    sections.push('Build: ' + (build || window.APP_VERSION || 'unknown'));
+    sections.push('User Agent: ' + navigator.userAgent);
     sections.push('');
 
     // Device info via Capacitor Device plugin (if available)

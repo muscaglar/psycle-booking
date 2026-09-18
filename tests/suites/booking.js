@@ -916,21 +916,21 @@ module.exports = async function (t) {
     eq([w2.log.reads, w2.log.pickers], [0, [[]]], 'bookings loaded → a tap books straight away, as before');
   }
 
-  t.section('"Book my week" never sweeps before the member\'s bookings have loaded');
+  t.section('"Book my usual week" never runs before the member\'s bookings have loaded');
   {
-    // Its "already booked" skips read _myBookings: over an unloaded map every
-    // template class — held or not — would be booked (again).
+    // Its "already booked" skip reads _myBookings: over an unloaded map every
+    // ticked class — held or not — would be booked (again). The run takes the
+    // picks the member confirmed in the sheet (tests/suites/weekly-template.js
+    // covers that contract); here: one ticked class, event 77.
     const templateWorld = (state, serverMap) => {
-      const log = { reads: 0, dayFetches: 0, headless: [] };
+      const log = { reads: 0, seats: [] };
       const ctx = t.loadPure('js/app.js', 'booking', {
-        _myBookings: {}, currentUser: { id: 1 }, _studioMap: {},
-        _eventCache: { 77: { start_at: '2099-01-05 07:00:00', event_type_id: 7, instructor_id: 31 } },
-        console: { log() {}, warn() {}, error: console.error }, URLSearchParams,
-        loadWeeklyTemplate: () => [{ dayOfWeek: 1, hour: 7, minute: 0, locationId: 2, eventTypeId: 7, instructorId: 31 }],
-        _upcomingWeekdayDate: () => '2099-01-05', _resolveTemplateLocationId: id => id,
-        localDateStr: d => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'),
-        apiFetch: async () => { log.dayFetches++; return { ok: true, status: 200, json: async () => ({ data: [{ id: 77, event_type_id: 7, instructor_id: 31, studio_id: 4, start_at: '2099-01-05 07:00:00' }], relations: {} }) }; },
-        _bookEventHeadless: async id => { log.headless.push(id); return 'booked'; },
+        _myBookings: {}, currentUser: { id: 1 },
+        console: { log() {}, warn() {}, error: console.error },
+        navigator: { onLine: true }, getBearerToken: () => 'tok',
+        dismissBookingConfirmation: () => {},
+        _bookTemplateSeat: async id => { log.seats.push(id); ctx._myBookings[String(id)] = { bookingId: 1, slots: [3], waitlisted: false }; return 'booked'; },
+        joinWaitlist: async () => { throw new Error('a class ticked without the waitlist option never joins a waitlist'); },
         fetchMyBookings: async () => true,
       });
       ctx._rereadBookingsForVerify = async () => {
@@ -941,16 +941,19 @@ module.exports = async function (t) {
         return true;
       };
       t.vm.runInContext('var _bookingsLoadState = ' + JSON.stringify(state) + ';\n' + grab(appSrc, 'async function _bookWeeklyTemplateInner(', '}'), ctx);
-      return { log, run: () => ctx._bookWeeklyTemplateInner({ booked: 0, waitlisted: 0, failed: 0, skipped: 0 }) };
+      return { log, run: () => ctx._bookWeeklyTemplateInner({ booked: 0, waitlisted: 0, failed: 0, skipped: 0 }, [{ eventId: 77, studioId: 4 }]) };
     };
+    const tally = c => ({ booked: c.booked, waitlisted: c.waitlisted, failed: c.failed, skipped: c.skipped });
     let w = templateWorld('failed', null);
-    eq([await w.run(), w.log.dayFetches, w.log.headless], [{ booked: 0, waitlisted: 0, failed: 1, skipped: 0 }, 0, []],
-      'bookings never loaded and still unreadable → the sweep does not start (nothing fetched, nothing booked)');
+    let c = await w.run();
+    eq([tally(c), c.stopped, w.log.seats], [{ booked: 0, waitlisted: 0, failed: 1, skipped: 0 }, 'bookings', []],
+      'bookings never loaded and still unreadable → the run does not start (nothing booked)');
     w = templateWorld('pending', holds7);
-    eq([await w.run(), w.log.reads, w.log.headless], [{ booked: 0, waitlisted: 0, failed: 0, skipped: 1 }, 1, []],
+    c = await w.run();
+    eq([tally(c), w.log.reads, w.log.seats, c.results[0].result], [{ booked: 0, waitlisted: 0, failed: 0, skipped: 1 }, 1, [], 'already'],
       'bookings read first → the class already held is skipped, not booked a second time');
     w = templateWorld('loaded', null);
-    eq([(await w.run()).booked, w.log.reads, w.log.headless], [1, 0, [77]], 'bookings already loaded → no extra read, the sweep books as before');
+    eq([(await w.run()).booked, w.log.reads, w.log.seats], [1, 0, [77]], 'bookings already loaded → no extra read, the ticked class is booked');
   }
 
   t.section('Class sheet: Book / booked through a detached button');
@@ -976,6 +979,33 @@ module.exports = async function (t) {
     ctx._classDetailBookAction(77);
     eq(log.bookClass, 2, 'once it settles the button works again');
   }
+  {
+    // With a Discover card the sheet acts through ITS button. The sheet can be
+    // fresher than the card (a watched class just re-read as open): the card is
+    // then still a disabled "Full", and click() on a disabled button is a no-op.
+    const cardWorld = (card) => {
+      const log = { synced: [], clicks: 0, toasts: [] };
+      card.click = () => { if (!card.disabled) log.clicks++; };
+      const ctx = t.loadPure('js/app.js', 'booking', {
+        _myBookings: {}, _eventCache: { 77: { studio_id: 4, is_fully_booked: false } }, _studioMap: { 4: { has_layout: true } },
+        document: { querySelector: () => card, createElement: () => { throw new Error('the card button is used, not a detached one'); } },
+        getBearerToken: () => 'tok',
+        toast: (msg, type) => log.toasts.push({ msg, type }),
+        _syncCardButtonsForEvent: (id) => { log.synced.push(id); card.disabled = false; card.textContent = 'Book'; },
+      });
+      t.vm.runInContext('var _sheetActionBusy = {};\n' + grab(appSrc, 'async function _classDetailBookAction(', '}'), ctx);
+      return { log, tap: () => ctx._classDetailBookAction(77) };
+    };
+    let w = cardWorld({ disabled: true, textContent: 'Full', dataset: {}, offsetParent: {} });
+    await w.tap();
+    eq([w.log.synced, w.log.clicks], [[77], 1], 'a card still reading a disabled "Full" is re-synced from state first, so the tap reaches bookClass (it used to do nothing)');
+    w = cardWorld({ disabled: true, textContent: '…', dataset: { busy: '1' }, offsetParent: {} });
+    await w.tap();
+    eq([w.log.synced, w.log.clicks], [[], 0], 'a button bookClass itself disabled (mid-flight) is left alone — re-enabling it would start a second flow');
+    w = cardWorld({ disabled: false, textContent: 'Book', dataset: {}, offsetParent: {} });
+    await w.tap();
+    eq([w.log.synced, w.log.clicks], [[], 1], 'an enabled button is simply clicked, as before');
+  }
 
   // ── Wiring: offline-queue replay ─────────────────────────────────────────
   const queueSrc = grab(relSrc, '  async function _processOfflineQueueInner() {', '  }');
@@ -991,6 +1021,9 @@ module.exports = async function (t) {
       refreshUpcomingPanel: () => {},
       getOfflineQueue: () => clone(queue),
       saveOfflineQueue: q => { queue = clone(q); },
+      // WHETHER an item may be replayed has its own suite (offline-queue.js);
+      // every scenario here is the reconnect replay of something just queued.
+      _offlineQueueVerdict: () => 'send',
       apiFetch: async (path, opts) => {
         if (path === '/events/77' && !opts) return { ok: true, status: 200, json: async () => ({ data: { start_at: '2099-01-01 10:00:00' } }) };
         if (path !== '/bookings' || !opts || opts.method !== 'POST') throw new Error('unexpected call ' + path);

@@ -442,6 +442,10 @@
     }
     saveTiers(tiers);
     renderTierList();
+    // Discover's S/A quick filter only exists while someone is ranked S or A,
+    // and it learns that inside renderInstrChips (the instructor modal ranks
+    // through here too).
+    if (typeof window.renderInstrChips === 'function') window.renderInstrChips();
   };
 
 
@@ -906,6 +910,8 @@
     var status = document.getElementById('importStatus');
     var file = input.files && input.files[0];
     if (!file) return;
+    // Logged here for the same reason as the export above.
+    if (typeof window.pushAction === 'function') window.pushAction('settings:import');
 
     var reader = new FileReader();
     reader.onload = function (e) {
@@ -943,12 +949,87 @@
   // Bug Report
   // ═══════════════════════════════════════════════════════════════════
 
+  // ── pure:build-id:start ── (tests/suites/owner-tools.js evaluates this block against stub globals)
+  // ── Build id (window.APP_VERSION) ──────────────────────────────
+  // Nothing stamps a version into the page, so every report said "App
+  // version: unknown". ios-app/build.js does stamp a content hash into sw.js's
+  // cache name ('psycle-<8 hex>'), and that is the build id. Worked out on
+  // first need (diagnostics panel, bug report) — never at startup.
+  //   Web: the Cache Storage name the worker precached this build into.
+  //   iOS: the bridge switches the worker off, and Cache Storage can still
+  //        hold a cache an OLDER build made — read the bundled sw.js instead.
+  var BUILD_ID_RE = /^psycle-[0-9a-f]{8}$/;
+  var _appVersionPending = null;
+
+  // A worker that takes over mid-session deletes the old cache while the page
+  // keeps running the previous build's scripts, so the only name left to read
+  // may belong to the NEXT build — the report has to say so. (No controller
+  // at load = a first install, nothing stale: the same rule as the update
+  // script in psycle-finder.html's head.)
+  var _swSwappedSinceLoad = false;
+  try {
+    var _swContainer = navigator.serviceWorker;
+    if (_swContainer && typeof _swContainer.addEventListener === 'function' && _swContainer.controller) {
+      _swContainer.addEventListener('controllerchange', function () { _swSwappedSinceLoad = true; });
+    }
+  } catch (e) {}
+
+  function _buildIdsFromCaches() {
+    try {
+      if (typeof caches === 'undefined' || !caches || typeof caches.keys !== 'function') return Promise.resolve([]);
+      return caches.keys().then(function (names) {
+        return (names || []).filter(function (n) { return BUILD_ID_RE.test(n); });
+      }, function () { return []; });
+    } catch (e) { return Promise.resolve([]); }
+  }
+
+  // Same-origin file (the app bundle on iOS). Only the matched id is kept.
+  function _buildIdFromSwFile() {
+    try {
+      if (typeof fetch !== 'function') return Promise.resolve([]);
+      return fetch('sw.js').then(function (res) {
+        return (res && res.ok) ? res.text() : '';
+      }).then(function (text) {
+        var m = /const\s+CACHE\s*=\s*['"](psycle-[0-9a-f]{8})['"]/.exec(text || '');
+        return m ? [m[1]] : [];
+      }, function () { return []; });
+    } catch (e) { return Promise.resolve([]); }
+  }
+
+  /** Resolves to the build id (also left on window.APP_VERSION), or null. */
+  function resolveAppVersion() {
+    if (window.APP_VERSION) return Promise.resolve(String(window.APP_VERSION));
+    if (!_appVersionPending) {
+      var native = false;
+      try { native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+      _appVersionPending = (native ? Promise.resolve([]) : _buildIdsFromCaches()).then(function (ids) {
+        return ids.length ? ids : _buildIdFromSwFile();
+      }).then(function (ids) {
+        _appVersionPending = null;
+        // Not remembered when nothing was found (offline first visit): the
+        // next report tries again. Two names = an update is mid-install.
+        if (!ids.length) return null;
+        window.APP_VERSION = ids.join(' + ') +
+          (_swSwappedSinceLoad ? ' (worker updated since load — reload pending)' : '');
+        return window.APP_VERSION;
+      }, function () { _appVersionPending = null; return null; });
+    }
+    // A report must never hang on a stalled request for its "Build:" line.
+    return Promise.race([_appVersionPending, new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, 2000);
+    })]);
+  }
+  // native-bridge's getDiagnosticReport awaits this for its own "Build:" line.
+  window.getAppVersion = resolveAppVersion;
+  // ── pure:build-id:end ──
+
   function buildBugReport() {
     var sections = [];
 
     // Header
     sections.push('=== Psycle Bug Report ===');
     sections.push('Generated: ' + new Date().toISOString());
+    sections.push('Build: ' + (window.APP_VERSION || 'unknown'));
     sections.push('');
 
     // Device info
@@ -995,6 +1076,8 @@
   }
 
   window.downloadBugReport = async function () {
+    // The report's "Build:" line reads window.APP_VERSION (capped at 2s).
+    try { await resolveAppVersion(); } catch (e) {}
     var report = buildBugReport();
     var date = new Date().toISOString().split('T')[0];
 
@@ -1013,8 +1096,9 @@
       var shared = await window.nativeShare('Psync bug report ' + date, fullReport, null);
       if (shared) { toast('Bug report ready to send', 'success'); return; }
       // false usually means the user CANCELLED the share sheet — don't
-      // clobber their clipboard or claim success; just point at the option.
-      toast('Share cancelled — use "Copy" if you want it on the clipboard', 'info');
+      // clobber their clipboard or claim success. (The old copy pointed at a
+      // "Copy" button this panel never had; the share sheet has its own.)
+      toast('Share cancelled — the report was not sent', 'info');
       return;
     }
 
@@ -1050,7 +1134,10 @@
     }
   };
 
-  function _fallbackCopy(text, status) {
+  // Returns whether the text really reached the clipboard, so a caller with
+  // its own status line (copyDiagnostics) never announces a copy that failed.
+  function _fallbackCopy(text, status, what) {
+    var ok = false;
     var ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -1058,14 +1145,16 @@
     document.body.appendChild(ta);
     ta.select();
     try {
-      document.execCommand('copy');
+      // A refused copy (no user gesture left) returns false; it does not throw.
+      if (document.execCommand('copy') === false) throw new Error('copy refused');
+      ok = true;
       if (status) {
         status.style.display = '';
         status.style.color = '#5dba5d';
         status.textContent = 'Copied to clipboard!';
         setTimeout(function () { status.style.display = 'none'; }, 3000);
       }
-      toast('Bug report copied to clipboard', 'success');
+      toast((what || 'Bug report') + ' copied to clipboard', 'success');
     } catch (e) {
       if (status) {
         status.style.display = '';
@@ -1075,6 +1164,7 @@
       toast('Copy failed', 'error');
     }
     document.body.removeChild(ta);
+    return ok;
   }
 
 
@@ -1228,6 +1318,29 @@
       kv('Stored actions', String(actionCount));
   }
 
+  // The iOS bridge's getDiagnosticReport() is async, but "Copy diagnostics" has
+  // to stay synchronous: awaiting inside the tap spends WebKit's user gesture
+  // before clipboard.writeText runs. So the panel fetches the report when it
+  // opens (and again after "Clear logs") and the tap embeds what has landed.
+  var _diagReportText = null;
+  var _diagReportSeq = 0;
+
+  function diagPrefetchReport() {
+    // Only the newest fetch may land: one started before "Clear logs" still
+    // carries the entries that were just cleared.
+    var seq = ++_diagReportSeq;
+    _diagReportText = null;
+    if (typeof window.getDiagnosticReport !== 'function') return;
+    try {
+      Promise.resolve(window.getDiagnosticReport()).then(function (text) {
+        if (seq === _diagReportSeq && typeof text === 'string') _diagReportText = text;
+      }, function () {
+        // It will never land: say that, not "still loading".
+        if (seq === _diagReportSeq) _diagReportText = '(native report unavailable)';
+      });
+    } catch (e) { _diagReportText = '(native report unavailable)'; }
+  }
+
   /**
    * Assemble the JSON blob copied by "Copy diagnostics". Prefers a native /
    * existing report (getDiagnosticReport / getFullLog) when present, else
@@ -1261,10 +1374,12 @@
       }
     } catch (e) {}
 
-    // A richer native diagnostic report, if the iOS bridge exposed one.
+    // A richer native diagnostic report, if the iOS bridge exposed one. It is
+    // async, and this runs inside the Copy tap, so it embeds the text the panel
+    // fetched on open (the un-awaited promise used to serialise as {}).
     try {
       if (typeof window.getDiagnosticReport === 'function') {
-        blob.diagnosticReport = window.getDiagnosticReport();
+        blob.diagnosticReport = _diagReportText || '(still loading — copy again in a moment)';
       }
     } catch (e) {}
 
@@ -1331,6 +1446,14 @@
     if (copyBtn) copyBtn.addEventListener('click', copyDiagnostics);
     var clearBtn = document.getElementById('diagClearBtn');
     if (clearBtn) clearBtn.addEventListener('click', clearDiagnosticLogs);
+
+    // Both land a moment after the panel paints: the native report waits for
+    // the Copy tap, the build id replaces "App version: unknown" in place.
+    diagPrefetchReport();
+    resolveAppVersion().then(function (version) {
+      var blocks = document.querySelectorAll('#diagOverlay .diag-block');
+      if (version && blocks[1]) blocks[1].innerHTML = diagEnvironmentHTML(diagGetDiagnostics());
+    }, function () {});
   };
 
   window.closeDiagnostics = function () {
@@ -1354,13 +1477,17 @@
         diagStatus('Diagnostics copied to clipboard', true);
         if (typeof toast === 'function') toast('Diagnostics copied', 'success');
       }).catch(function () {
-        _fallbackCopy(blob, null);
-        diagStatus('Diagnostics copied to clipboard', true);
+        copyDiagnosticsFallback(blob);
       });
     } else {
-      _fallbackCopy(blob, null);
-      diagStatus('Diagnostics copied to clipboard', true);
+      copyDiagnosticsFallback(blob);
     }
+  }
+
+  // The status line used to say "copied" whatever the fallback did.
+  function copyDiagnosticsFallback(blob) {
+    var ok = _fallbackCopy(blob, null, 'Diagnostics');
+    diagStatus(ok ? 'Diagnostics copied to clipboard' : 'Copy failed — try again', ok);
   }
 
   function clearDiagnosticLogs() {
@@ -1376,6 +1503,7 @@
     }
     var envBlocks = document.querySelectorAll('#diagOverlay .diag-block');
     if (envBlocks && envBlocks[1]) envBlocks[1].innerHTML = diagEnvironmentHTML(diag);
+    diagPrefetchReport(); // the fetched native report still lists what was just cleared
     diagStatus('Logs cleared', true);
     if (typeof toast === 'function') toast('Logs cleared', 'success');
   }

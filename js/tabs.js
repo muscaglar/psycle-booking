@@ -11,7 +11,8 @@
  *             explore.js (renderExplore), state.js (PsycleEvents)
  * Exposes on window:
  *   switchTab, renderInsights, weekNav, shareInsights, planDay,
- *   openYearReview, shareYearReview, saveWeekAsTemplate, bookTemplateWeek
+ *   openYearReview, shareYearReview, saveWeekAsTemplate, bookTemplateWeek,
+ *   clearUsualWeek, removeUsualWeekEntry, renderUsualWeekCard
  */
 (function () {
   'use strict';
@@ -120,6 +121,15 @@
     bookingsEmpty.style.display = 'none';
     bookingsPanel.appendChild(bookingsEmpty);
 
+    // "Your usual week" (weekly template). Its own container, filled by
+    // renderUsualWeekCard — which also keeps it right after #rebookHint, a
+    // node app.js removes and re-creates in front of #upcomingPanel.
+    var usualWeekCard = document.createElement('div');
+    usualWeekCard.id = 'usualWeekCard';
+    usualWeekCard.className = 'usual-week';
+    usualWeekCard.style.display = 'none';
+    bookingsPanel.appendChild(usualWeekCard);
+
     if (upcomingPanel) {
       bookingsPanel.appendChild(upcomingPanel);
     }
@@ -227,6 +237,7 @@
     // already run and skipped it because these elements didn't exist yet)
     updateTabBadge();
     if (typeof renderMyBookings === 'function') renderMyBookings();
+    renderUsualWeekCard();
   }
 
   window.switchTab = function (tab, noHash) {
@@ -263,6 +274,9 @@
     window.scrollTo(0, 0);
     var tabScroller = document.querySelector('.tab-content');
     if (tabScroller) tabScroller.scrollTop = 0;
+    // Bug-report trail. Logged here: reliability.js's switchTab hook looked
+    // for this function before this file had loaded, so it never installed.
+    if (typeof window.pushAction === 'function') window.pushAction('tab:switch to=' + tab);
     if (!noHash) {
       history.replaceState(null, '', '#' + tab);
     }
@@ -541,7 +555,6 @@
   // ── Weekly Calendar View ───────────────────────────────────────
 
   var _weekOffset = 0;
-  var _displayedMonday = null; // start of the week currently shown (for templates)
 
   window.weekNav = function (dir) {
     if (dir === 0) _weekOffset = 0; // "Today" button
@@ -578,7 +591,6 @@
     var monday = new Date(now);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) + (_weekOffset * 7));
     monday.setHours(0, 0, 0, 0);
-    _displayedMonday = new Date(monday); // remember for "Save this week as template"
 
     var days = [];
     for (var i = 0; i < 7; i++) {
@@ -590,20 +602,8 @@
     var weekLabel = days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) +
       ' — ' + days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-    // Weekly template buttons (Feature 5). "Book my template week" only
-    // appears when a saved template exists. Booking logic lives in app.js
-    // (window.bookWeeklyTemplate); these are defensive UI hooks.
-    var hasTemplate = false;
-    try {
-      hasTemplate = typeof window.loadWeeklyTemplate === 'function' &&
-        Array.isArray(window.loadWeeklyTemplate()) && window.loadWeeklyTemplate().length > 0;
-    } catch (e) { hasTemplate = false; }
-
-    var templateBtns = '<button class="week-template-btn" onclick="saveWeekAsTemplate()">Save this week as template</button>';
-    if (hasTemplate) {
-      templateBtns += '<button class="week-template-btn week-template-book" onclick="bookTemplateWeek()">Book my template week</button>';
-    }
-
+    // (The weekly-template buttons that used to sit here moved to the "Your
+    // usual week" card in My Bookings — this grid is never mounted.)
     var html = '<div class="week-header">' +
       '<span class="week-title">' + weekLabel + '</span>' +
       '<div class="week-nav">' +
@@ -612,7 +612,6 @@
         '<button onclick="weekNav(1)">›</button>' +
       '</div>' +
     '</div>';
-    html += '<div class="week-template-bar">' + templateBtns + '</div>';
 
     html += '<div class="week-grid">';
     var dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -696,46 +695,65 @@
     container.innerHTML = html;
   }
 
-  // ── Weekly Template (Feature 5 — UI only) ──────────────────────
-  // Save = scrape the displayed week's bookings into a portable template
-  // array; book = hand off to app.js. Both call window.* functions that
-  // live elsewhere, so guard every call and degrade with a friendly toast.
+  // ── Your usual week (weekly template — UI only) ────────────────
+  // A compact card in My Bookings: save the classes ridden every week, then
+  // book them together when the timetable opens. The engine is app.js
+  // (planWeeklyTemplate only reads, bookWeeklyTemplate executes confirmed
+  // picks); both live elsewhere, so guard every call and degrade with a toast.
+  // The ONLY way to a booking from here is the sheet that lists each class.
 
-  // Collect template entries for the currently displayed week from
-  // _myBookings + _eventCache. Each entry is the booking-independent
-  // "shape" of a class: weekday/time + the IDs needed to rebook it.
+  var UW_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  function _uwTime(totalMin) {
+    var h = Math.floor(totalMin / 60), m = totalMin % 60;
+    return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h >= 12 ? 'pm' : 'am');
+  }
+
+  // 'YYYY-MM-DD' → "Mon 21 Sep". The date is London's (app.js works it out
+  // from the digits), so it is formatted as UTC — never shifted by the device.
+  function _uwDateLabel(dateStr) {
+    var p = String(dateStr || '').split('-').map(Number);
+    if (p.length !== 3 || !p[0]) return '';
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2]))
+      .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  }
+
+  function _uwPlural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  function _usualWeekTemplate() {
+    try {
+      var arr = typeof window.loadWeeklyTemplate === 'function' ? window.loadWeeklyTemplate() : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  // Template entries from the REAL seats held over the next 7 days (it used to
+  // read the week shown in the Discover planner, which is no longer mounted).
+  // Each entry is the booking-independent "shape" of a class: weekday/time +
+  // the IDs needed to find it again. The work is app.js's pure helper.
   function _collectDisplayedWeekTemplate() {
-    var monday = _displayedMonday ? new Date(_displayedMonday) : null;
-    if (!monday) return [];
-    var weekStart = new Date(monday); weekStart.setHours(0, 0, 0, 0);
-    var weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+    if (typeof _templateFromSeats !== 'function' || typeof _templateLondonNow !== 'function') return [];
+    return _templateFromSeats(_myBookings || {}, _eventCache || {}, _templateLondonNow(Date.now()),
+      typeof _templateLocationIdFor === 'function' ? _templateLocationIdFor : null);
+  }
 
-    var bookings = _myBookings || {};
-    var cache = _eventCache || {};
-    var entries = [];
-
-    Object.keys(bookings).forEach(function (evtId) {
-      var evt = cache[evtId];
-      if (!evt || !evt.start_at) return;
-      var dt = new Date(String(evt.start_at).replace(' ', 'T'));
-      if (isNaN(dt.getTime())) return;
-      if (dt < weekStart || dt >= weekEnd) return;
-
-      entries.push({
-        dayOfWeek: dt.getDay(),                 // 0=Sun..6=Sat
-        hour: dt.getHours(),
-        minute: dt.getMinutes(),
-        // IDs are what app.js needs to find the equivalent class next week.
-        // _eventCache stores studio_id (not location id) — pass both so the
-        // booking layer can resolve whichever it prefers.
-        locationId: (evt.location_id != null ? evt.location_id : (evt.studio_id != null ? evt.studio_id : null)),
-        eventTypeId: (evt.event_type_id != null ? evt.event_type_id : null),
-        instructorId: (evt.instructor_id != null ? evt.instructor_id : null),
-        label: (evt._typeName || 'Class') + (evt._instrName ? ' · ' + evt._instrName : ''),
+  // Nothing booked this week (a holiday, or the first Monday with the app):
+  // fall back to the slots history shows 2+ times. Only ones that can be found
+  // again — a class type AND a location — and few enough to read at a glance.
+  function _usualWeekFromHistory() {
+    if (typeof window.detectRecurringSlots !== 'function') return [];
+    var out = [];
+    try {
+      window.detectRecurringSlots().forEach(function (c) {
+        if (c.eventTypeId == null || c.locationId == null || out.length >= 6) return;
+        out.push({
+          dayOfWeek: c.dayOfWeek, hour: c.hour, minute: c.minute,
+          locationId: c.locationId, eventTypeId: c.eventTypeId, instructorId: c.instructorId,
+          label: c.label, locName: c.locName || '',
+        });
       });
-    });
-
-    return entries.sort(function (a, b) {
+    } catch (e) { return []; }
+    return out.sort(function (a, b) {
       // Monday-first ordering, then time of day.
       var ai = (a.dayOfWeek + 6) % 7, bi = (b.dayOfWeek + 6) % 7;
       if (ai !== bi) return ai - bi;
@@ -743,51 +761,502 @@
     });
   }
 
-  window.saveWeekAsTemplate = function () {
+  function _uwLog(action) {
+    if (typeof pushAction === 'function') { try { pushAction(action); } catch (e) {} }
+  }
+
+  window.saveWeekAsTemplate = async function () {
     if (typeof window.saveWeeklyTemplate !== 'function') {
       toast('Template saving isn\'t available yet', 'info');
       return;
     }
     var entries = _collectDisplayedWeekTemplate();
+    var fromHistory = false;
     if (entries.length === 0) {
-      toast('No bookings in this week to save', 'info');
+      entries = _usualWeekFromHistory();
+      fromHistory = entries.length > 0;
+    }
+    if (entries.length === 0) {
+      toast('Book your regular classes first, then save them as your usual week', 'info');
       return;
+    }
+    // Saving over a list the member built (and pruned) is not a silent act.
+    var existing = _usualWeekTemplate();
+    if (existing.length && typeof confirmModal === 'function') {
+      var ok = await confirmModal({
+        title: 'Replace your usual week?',
+        body: 'Your saved ' + _uwPlural(existing.length, 'class', 'classes') + ' will be replaced by ' +
+          (fromHistory ? 'the ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' in your history.'
+            : 'the ' + _uwPlural(entries.length, 'class', 'classes') + ' you hold over the next 7 days.'),
+        confirmText: 'Replace',
+        cancelText: 'Keep it',
+      });
+      if (!ok) return;
     }
     try {
       window.saveWeeklyTemplate(entries);
-      toast('Saved ' + entries.length + ' class' + (entries.length === 1 ? '' : 'es') + ' as your template week', 'success');
-      renderWeekView(); // surface the "Book my template week" button
+      _uwLog('usual-week:save');
+      toast(fromHistory
+        ? 'Saved ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' from your history — remove any you no longer ride'
+        : 'Saved ' + _uwPlural(entries.length, 'class', 'classes') + ' as your usual week', 'success');
+      renderUsualWeekCard();
     } catch (e) {
       console.error('[template] save failed:', e);
       toast('Couldn\'t save template', 'error');
     }
   };
 
+  // The card's own handlers (window.clearWeeklyTemplate is app.js's storage call).
+  window.clearUsualWeek = async function () {
+    if (typeof window.clearWeeklyTemplate !== 'function') return;
+    if (typeof confirmModal === 'function') {
+      var ok = await confirmModal({
+        title: 'Clear your usual week?',
+        body: 'This only forgets the saved list. Your bookings are not touched.',
+        confirmText: 'Clear',
+        cancelText: 'Keep it',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    window.clearWeeklyTemplate();
+    _uwLog('usual-week:clear');
+    toast('Usual week cleared', 'info');
+    renderUsualWeekCard();
+  };
+
+  window.removeUsualWeekEntry = function (idx) {
+    if (typeof window.saveWeeklyTemplate !== 'function') return;
+    var list = _usualWeekTemplate();
+    if (!(idx >= 0 && idx < list.length)) return;
+    list.splice(idx, 1);
+    if (list.length) window.saveWeeklyTemplate(list);
+    else if (typeof window.clearWeeklyTemplate === 'function') window.clearWeeklyTemplate();
+    renderUsualWeekCard();
+  };
+
+  // Right after #rebookHint — a node app.js removes and re-creates in front of
+  // #upcomingPanel whenever it likes. And never two "book your regulars" cards:
+  // with a saved week this card is the richer one, so the single-class hint
+  // (which says the same thing again) steps aside.
+  function _placeUsualWeekCard(card) {
+    var hint = document.getElementById('rebookHint');
+    if (!hint || hint.parentNode !== card.parentNode) return;
+    if (hint.nextElementSibling !== card) hint.parentNode.insertBefore(card, hint.nextSibling);
+    hint.style.display = card.classList.contains('has-template') ? 'none' : '';
+  }
+
+  // The hint is re-made outside any event this module hears (first paint), so
+  // watch the tab's own children — not its subtree — and re-seat the card.
+  // Re-seating is idempotent, so the move it causes ends the loop it starts.
+  var _usualWeekWatch = null;
+  function _watchUsualWeekPlacement(card) {
+    if (_usualWeekWatch || typeof MutationObserver !== 'function' || !card.parentNode) return;
+    _usualWeekWatch = new MutationObserver(function () { _placeUsualWeekCard(card); });
+    _usualWeekWatch.observe(card.parentNode, { childList: true });
+  }
+
+  // Which of the card's buttons holds focus (-1: none), and putting it back on
+  // the button in that place once the card has been repainted. Every repaint
+  // replaces the buttons, and the one that had focus takes it to <body> — after
+  // a usual-week run that is a certainty: the sheet hands focus back to "Book my
+  // usual week", and the /bookings re-read behind the run repaints this card
+  // (bookings:loaded) a moment later.
+  function _uwFocusedButton(card, doc) {
+    return Array.prototype.indexOf.call(card.querySelectorAll('button'), doc.activeElement);
+  }
+  function _uwRefocusButton(card, idx) {
+    if (idx < 0) return;
+    var btns = card.querySelectorAll('button');
+    var btn = btns[Math.min(idx, btns.length - 1)]; // an entry was removed: the one now in its place
+    // preventScroll: a background repaint must not move the page.
+    if (btn && typeof btn.focus === 'function') { try { btn.focus({ preventScroll: true }); } catch (e) {} }
+  }
+
+  function renderUsualWeekCard() {
+    var card = document.getElementById('usualWeekCard');
+    if (!card) return;
+    _watchUsualWeekPlacement(card);
+    var signedIn = typeof currentUser !== 'undefined' && !!currentUser;
+    var template = signedIn ? _usualWeekTemplate() : [];
+    card.classList.toggle('has-template', template.length > 0);
+    var focusedIdx = _uwFocusedButton(card, document);
+
+    if (template.length) {
+      var rows = template.map(function (en, i) {
+        var when = (UW_DAYS[Number(en.dayOfWeek)] || '') + ' ' + _uwTime((Number(en.hour) || 0) * 60 + (Number(en.minute) || 0));
+        var label = String(en.label || 'Class');
+        return '<li class="usual-week-entry">' +
+          '<span class="usual-week-when">' + escapeHTML(when) + '</span>' +
+          '<span class="usual-week-what">' + escapeHTML(label) +
+            (en.locName ? '<span class="usual-week-where"> · ' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
+          '<button type="button" class="usual-week-remove" onclick="removeUsualWeekEntry(' + i + ')" aria-label="' +
+            escapeHTML('Remove ' + when + ' ' + label + ' from your usual week') + '">×</button>' +
+        '</li>';
+      }).join('');
+      card.innerHTML =
+        '<div class="usual-week-head">' +
+          '<span class="usual-week-eyebrow">Your usual week</span>' +
+          '<span class="usual-week-count">' + _uwPlural(template.length, 'class', 'classes') + '</span>' +
+        '</div>' +
+        '<ul class="usual-week-list">' + rows + '</ul>' +
+        '<div class="usual-week-actions">' +
+          '<button type="button" class="week-template-btn week-template-book" onclick="bookTemplateWeek()">Book my usual week</button>' +
+          '<button type="button" class="week-template-btn" onclick="saveWeekAsTemplate()">Update from my bookings</button>' +
+          '<button type="button" class="week-template-btn" onclick="clearUsualWeek()">Clear</button>' +
+        '</div>';
+      card.style.display = '';
+    } else if (signedIn && (_collectDisplayedWeekTemplate().length || _usualWeekFromHistory().length)) {
+      // Nothing saved yet: a one-line invitation, not a second card under the hint.
+      card.innerHTML =
+        '<div class="usual-week-invite">' +
+          '<span class="usual-week-invite-text">Ride the same classes every week? Save them once, then book them together when the timetable opens.</span>' +
+          '<button type="button" class="week-template-btn" onclick="saveWeekAsTemplate()">Save my usual week</button>' +
+        '</div>';
+      card.style.display = '';
+    } else {
+      card.innerHTML = '';
+      card.style.display = 'none';
+    }
+    _placeUsualWeekCard(card);
+    _uwRefocusButton(card, focusedIdx); // after placement: moving a node drops its focus too
+  }
+  window.renderUsualWeekCard = renderUsualWeekCard;
+
+  // Same cues as the rebook hint (registered later, so this runs after it has
+  // re-made its node), plus a cancelled seat and the session: the invitation
+  // depends on the seats held, the whole card on being signed in.
+  if (typeof PsycleEvents !== 'undefined') {
+    ['bookings:loaded', 'booking:complete', 'booking:cancelled', 'seat:cancelled', 'auth:changed'].forEach(function (evt) {
+      PsycleEvents.on(evt, function () { try { renderUsualWeekCard(); } catch (e) {} });
+    });
+  }
+
+  // What the sheet says about a planned row (state → copy). `pickable` rows get
+  // a live checkbox; only a plain 'book' with the usual instructor starts ticked
+  // — a waitlist join and a cover instructor are the member's call, every time.
+  function _uwPlanNote(row) {
+    if (row.state === 'book') {
+      if (row.instructorChanged) return { pickable: true, on: false, warn: true, text: 'Different instructor this week — tick to book it anyway' };
+      return { pickable: true, on: true, warn: !!row.clashLine, text: row.clashLine || '' };
+    }
+    if (row.state === 'waitlist') return { pickable: true, on: false, warn: true, text: 'Full — tick to join the waitlist' + (row.clashLine ? '. ' + row.clashLine : '') };
+    if (row.state === 'booked') return { text: 'Already booked' };
+    if (row.state === 'waitlisted') return { text: 'Already on the waitlist' };
+    if (row.state === 'clash') return { warn: true, text: (row.clashLine || 'Clashes with a class you hold') + ' — left out' };
+    if (row.state === 'nolayout') return { text: 'This studio has no spot map, which can\'t be booked from here yet — book it from Discover' };
+    if (row.state === 'full') return { text: 'Full, and no waitlist' };
+    if (row.state === 'error') return { warn: true, text: 'Couldn\'t load that day\'s timetable' };
+    return { text: 'No matching class that day' };
+  }
+
+  // …and about what happened to a ticked row once the run reached it.
+  function _uwResultNote(result) {
+    if (result === 'running') return { text: 'Booking…' };
+    if (result === 'booked') return { ok: true, text: 'Booked ✓' };
+    if (result === 'waitlisted') return { ok: true, text: 'On the waitlist ✓' };
+    if (result === 'already') return { text: 'Already held — left as it is' };
+    if (result === 'clash') return { warn: true, text: 'Clashes with a class you hold — not booked' };
+    if (result === 'full') return { warn: true, text: 'Filled up before we got there — not booked' };
+    if (result === 'nolayout') return { text: 'No spot map at this studio — book it from Discover' };
+    if (result === 'taken') return { warn: true, text: 'That spot was just taken — not booked. Try it from Discover' };
+    if (result === 'queued') return { warn: true, text: 'You went offline — queued to book when you\'re back online' };
+    if (result === 'unconfirmed') return { warn: true, text: 'Couldn\'t confirm with Psycle — check My Bookings before trying again' };
+    if (result === 'joinfailed') return { warn: true, text: 'Still full, and the waitlist couldn\'t be joined — see Psycle\'s message' };
+    if (result === 'failed') return { warn: true, text: 'Psycle didn\'t take this booking — see its message' };
+    return { text: 'Not attempted' };
+  }
+
+  // One row of the sheet. Every name in it is API (or stored) text: escaped.
+  function _uwRowHtml(row, note, checkbox) {
+    var en = row.entry || {};
+    var wall = (row.startAt && typeof _templateWall === 'function') ? _templateWall(row.startAt) : null;
+    var min = wall ? wall.min : (Number(en.hour) || 0) * 60 + (Number(en.minute) || 0);
+    var main = [_uwDateLabel(row.date), _uwTime(min), row.typeName || (row.eventId == null ? String(en.label || 'Class') : 'Class')].filter(Boolean).join(' · ');
+    var sub = [row.instrName, row.locName].filter(Boolean).join(' · ');
+    var text =
+      '<span class="usual-week-row-text">' +
+        '<span class="usual-week-row-main">' + escapeHTML(main) + '</span>' +
+        (sub ? '<span class="usual-week-row-sub">' + escapeHTML(sub) + '</span>' : '') +
+        '<span class="usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '') + '" data-uw-note="' + row.index + '">' + escapeHTML(note.text || '') + '</span>' +
+      '</span>';
+    return '<li class="usual-week-row">' +
+      (checkbox != null
+        ? '<label class="usual-week-pick"><input type="checkbox" data-uw-row="' + row.index + '"' + (checkbox ? ' checked' : '') + '>' + text + '</label>'
+        : '<div class="usual-week-pick">' + text + '</div>') +
+    '</li>';
+  }
+
+  // Where focus goes when the sheet closes: what held it on open, if that is a
+  // real element still in the page — else the card's own button.
+  function _uwFocusBack(prev, doc) {
+    var usable = !!prev && prev !== doc.body && prev !== doc.documentElement && doc.contains(prev);
+    return usable ? prev : doc.querySelector('#usualWeekCard .week-template-book');
+  }
+
+  // The sheet between "Book my usual week" and any booking. It LISTS every
+  // class with its state, books nothing until its button — labelled with the
+  // count — is pressed, then shows what happened to each one. Resolves when it
+  // closes. Own overlay id, so nothing built on the single-instance confirmModal
+  // (#psycleConfirmOverlay) can replace it — and app.js's _dialogOpen() /
+  // _ownKeysOverlayUp() know that id: background dialogs (a waitlist "You're
+  // in", "Spot opened", the offline-booking ask, the sync prompt) wait for this
+  // to close rather than open over a run, and its keys stay its own.
+  function _runUsualWeekSheet() {
+    return new Promise(function (resolve) {
+      var previouslyFocused = document.activeElement;
+      var overlay = document.createElement('div');
+      overlay.id = 'usualWeekSheet';
+      overlay.className = 'confirm-overlay usual-week-overlay';
+      overlay.innerHTML =
+        '<div class="confirm-dialog usual-week-dialog" role="dialog" aria-modal="true" aria-labelledby="usualWeekSheetTitle" tabindex="-1">' +
+          '<div class="confirm-title" id="usualWeekSheetTitle">Book my usual week</div>' +
+          '<div class="usual-week-sheet-body"></div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      requestAnimationFrame(function () { overlay.classList.add('show'); });
+      var dialog = overlay.querySelector('.usual-week-dialog');
+      var body = overlay.querySelector('.usual-week-sheet-body');
+      var st = { closed: false, running: false, stop: false, plan: null, seq: 0, checked: {} };
+
+      function close() {
+        if (st.closed || st.running) return; // a run in flight is never orphaned
+        st.closed = true;
+        overlay.classList.remove('show');
+        setTimeout(function () { overlay.remove(); }, 180);
+        document.removeEventListener('keydown', onKey);
+        // The card re-renders during a run, so the button that opened this may be gone.
+        // <body> / <html> is "no opener", not one to go back to: a finger tap in
+        // iOS WebKit doesn't focus the button, so that is what was recorded — and
+        // document.contains(body) is true, which kept the fallback out of reach.
+        var back = _uwFocusBack(previouslyFocused, document);
+        if (back && typeof back.focus === 'function') { try { back.focus(); } catch (e) {} }
+        resolve();
+      }
+
+      function onKey(e) {
+        // A confirmModal stacked on top owns the keyboard while it is up.
+        if (e.defaultPrevented || document.getElementById('psycleConfirmOverlay')) return;
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key !== 'Tab') return;
+        var items = Array.prototype.slice.call(overlay.querySelectorAll('button, input')).filter(function (el) {
+          return !el.disabled && el.offsetParent !== null;
+        });
+        if (!items.length) { e.preventDefault(); return; }
+        var first = items[0], last = items[items.length - 1], active = document.activeElement;
+        if (e.shiftKey && (active === first || !overlay.contains(active))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (active === last || !overlay.contains(active))) { e.preventDefault(); first.focus(); }
+      }
+      document.addEventListener('keydown', onKey);
+      overlay.onclick = function (e) { if (e.target === overlay) close(); };
+
+      // Every repaint replaces the body — and with it whichever button had
+      // focus, which would otherwise drop to <body>, outside the dialog.
+      function keepFocus() {
+        if (!overlay.contains(document.activeElement)) { try { dialog.focus(); } catch (e) {} }
+      }
+
+      function message(text, isStatus) {
+        body.innerHTML = '<div class="confirm-body"' + (isStatus ? ' role="status"' : '') + '>' + escapeHTML(text) + '</div>' +
+          '<div class="confirm-actions"><button type="button" class="confirm-btn confirm-btn-cancel" data-uw-close>Close</button></div>';
+        body.querySelector('[data-uw-close]').onclick = close;
+        keepFocus();
+      }
+
+      // The two weeks a member can mean: see _templateDefaultStart (app.js).
+      function weekStarts() {
+        var today = _templateLondonNow(Date.now()).date;
+        return { next7: today, nextweek: _templateAddDays(today, ((8 - _templateDow(today)) % 7) || 7) };
+      }
+
+      function load(start) {
+        var seq = ++st.seq;
+        st.plan = null;
+        message('Checking the timetable…', true);
+        window.planWeeklyTemplate(start).then(function (plan) {
+          if (st.closed || seq !== st.seq) return;
+          st.plan = plan || { ok: false, reason: '' };
+          paintPlan();
+        }, function (e) {
+          console.error('[template] plan failed:', e);
+          if (st.closed || seq !== st.seq) return;
+          message('Couldn\'t load the timetable — try again.');
+        });
+      }
+
+      function picked() {
+        var out = [];
+        ((st.plan && st.plan.rows) || []).forEach(function (r) {
+          if (!st.checked[r.index] || !_uwPlanNote(r).pickable || r.eventId == null) return;
+          out.push(r);
+        });
+        return out;
+      }
+
+      function confirmLabel() {
+        var seats = 0, places = 0;
+        picked().forEach(function (r) { if (r.state === 'waitlist') places++; else seats++; });
+        if (!seats && !places) return '';
+        if (!places) return 'Book ' + _uwPlural(seats, 'class', 'classes');
+        if (!seats) return 'Join ' + _uwPlural(places, 'waitlist', 'waitlists');
+        return 'Book ' + seats + ' · join ' + _uwPlural(places, 'waitlist', 'waitlists');
+      }
+
+      function paintPlan() {
+        var plan = st.plan;
+        if (!plan.ok) {
+          message(plan.reason === 'offline' ? 'You\'re offline — connect to book your usual week.'
+            : plan.reason === 'signedout' ? 'Sign in to book your usual week.'
+            : plan.reason === 'bookings' ? 'Couldn\'t load your bookings, so nothing can be checked against them — try again.'
+            : plan.reason === 'empty' ? 'Your usual week is empty — save it from My Bookings first.'
+            : 'Couldn\'t load the timetable — try again.');
+          return;
+        }
+        st.checked = {};
+        var anyWaitlist = false, anyFound = false;
+        var rows = plan.rows.map(function (r) {
+          var note = _uwPlanNote(r);
+          if (r.state === 'waitlist') anyWaitlist = true;
+          if (r.state !== 'nomatch' && r.state !== 'error') anyFound = true;
+          if (note.pickable && r.eventId != null) { st.checked[r.index] = !!note.on; return _uwRowHtml(r, note, !!note.on); }
+          return _uwRowHtml(r, note, null);
+        }).join('');
+        var starts = weekStarts();
+        var sw = function (mode, label) {
+          var active = plan.mode === mode;
+          return '<button type="button" class="usual-week-switch-btn' + (active ? ' active' : '') + '" aria-pressed="' + active + '" data-uw-start="' + starts[mode] + '">' + escapeHTML(label) + '</button>';
+        };
+        body.innerHTML =
+          '<div class="confirm-body">' + escapeHTML(_uwDateLabel(plan.weekStart) + ' – ' + _uwDateLabel(plan.weekEnd)) +
+            '. Nothing is booked until you press the button below.' +
+            // An empty week is usually an unreleased one, not a changed timetable.
+            (anyFound ? '' : ' None of your classes were found — Psycle opens each new week on Monday at 12:00, so these days may not be bookable yet.') +
+          '</div>' +
+          '<div class="usual-week-switch" role="group" aria-label="Which week">' +
+            sw('next7', 'Next 7 days') + sw('nextweek', 'Week of ' + _uwDateLabel(starts.nextweek)) +
+          '</div>' +
+          '<ul class="usual-week-plan">' + rows + '</ul>' +
+          '<div class="confirm-warn">Each class is booked straight away, on your usual spot or the first free one, and uses a class credit or counts towards your plan. ' +
+            'Psycle\'s normal 12-hour cancellation policy applies to every one.' +
+            (anyWaitlist ? ' A ticked waitlist class is booked if a spot has freed up by then; otherwise you join the waitlist and Psycle books you in by itself when one does — chargeable, same policy.' : '') +
+          '</div>' +
+          '<div class="confirm-actions">' +
+            '<button type="button" class="confirm-btn confirm-btn-cancel" data-uw-close>Not now</button>' +
+            '<button type="button" class="confirm-btn confirm-btn-primary" data-uw-go></button>' +
+          '</div>';
+        var go = body.querySelector('[data-uw-go]');
+        var syncGo = function () {
+          var label = confirmLabel();
+          go.textContent = label || 'Nothing selected';
+          go.disabled = !label;
+        };
+        syncGo();
+        body.querySelector('[data-uw-close]').onclick = close;
+        go.onclick = run;
+        Array.prototype.forEach.call(body.querySelectorAll('[data-uw-row]'), function (box) {
+          box.onchange = function () { st.checked[Number(box.dataset.uwRow)] = box.checked; syncGo(); };
+        });
+        Array.prototype.forEach.call(body.querySelectorAll('[data-uw-start]'), function (b) {
+          b.onclick = function () { if (b.getAttribute('aria-pressed') !== 'true') load(b.dataset.uwStart); };
+        });
+        keepFocus();
+      }
+
+      function run() {
+        if (st.running) return;
+        var rows = picked();
+        if (!rows.length) return;
+        var picks = rows.map(function (r) { return { eventId: r.eventId, studioId: r.studioId, joinIfFull: r.state === 'waitlist' }; });
+        st.running = true;
+        st.stop = false;
+        _uwLog('usual-week:book');
+        body.innerHTML =
+          '<div class="confirm-body" role="status" data-uw-progress>Booking 1 of ' + rows.length + '…</div>' +
+          '<ul class="usual-week-plan">' + rows.map(function (r) { return _uwRowHtml(r, _uwResultNote('notrun'), null); }).join('') + '</ul>' +
+          '<div class="confirm-actions"><button type="button" class="confirm-btn confirm-btn-cancel" data-uw-stop>Stop after this class</button></div>';
+        var stopBtn = body.querySelector('[data-uw-stop]');
+        stopBtn.onclick = function () { st.stop = true; stopBtn.disabled = true; stopBtn.textContent = 'Stopping…'; keepFocus(); };
+        keepFocus();
+        var setNote = function (i, result) {
+          var el = body.querySelector('[data-uw-note="' + rows[i].index + '"]');
+          if (!el) return;
+          var note = _uwResultNote(result);
+          el.textContent = note.text;
+          el.className = 'usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '');
+        };
+        var finish = function (counts) {
+          st.running = false;
+          counts = counts || {};
+          (counts.results || []).forEach(function (r, i) { setNote(i, r.result); });
+          var parts = [];
+          if (counts.booked) parts.push(counts.booked + ' booked');
+          if (counts.waitlisted) parts.push(counts.waitlisted + ' on the waitlist');
+          var rest = rows.length - (counts.booked || 0) - (counts.waitlisted || 0);
+          if (rest > 0) parts.push(rest + ' not booked');
+          var why = counts.stopped === 'auth' ? ' Your session expired, so the run stopped — sign in and open this again (classes already booked are skipped).'
+            : counts.stopped === 'failed' ? ' Stopped there, so nothing else was attempted: check Psycle\'s message (credits, plan), then open this again — classes already booked are skipped.'
+            : counts.stopped === 'offline' ? ' You went offline, so the run stopped.'
+            : counts.stopped === 'bookings' ? ' Couldn\'t load your bookings, so nothing was attempted — try again.'
+            : counts.stopped === 'user' ? ' Stopped — the rest were not attempted.' : '';
+          var progress = body.querySelector('[data-uw-progress]');
+          if (progress) progress.textContent = (parts.join(' · ') || 'Nothing was booked') + '.' + why;
+          var actions = body.querySelector('.confirm-actions');
+          actions.innerHTML = '<button type="button" class="confirm-btn confirm-btn-primary" data-uw-close>Done</button>';
+          var done = actions.querySelector('[data-uw-close]');
+          done.onclick = close;
+          try { done.focus(); } catch (e) {}
+          renderUsualWeekCard();
+        };
+        window.bookWeeklyTemplate(picks, {
+          onProgress: function (i, result) {
+            setNote(i, result);
+            var progress = body.querySelector('[data-uw-progress]');
+            if (progress && result === 'running') progress.textContent = 'Booking ' + (i + 1) + ' of ' + rows.length + '…';
+          },
+          shouldStop: function () { return st.stop; },
+        }).then(finish, function (e) {
+          console.error('[template] book failed:', e);
+          finish({ stopped: 'failed' });
+        });
+      }
+
+      try { dialog.focus(); } catch (e) {}
+      load();
+    });
+  }
+
   var _templateWeekRunning = false;
   window.bookTemplateWeek = async function () {
-    if (typeof window.bookWeeklyTemplate !== 'function') {
+    if (typeof window.bookWeeklyTemplate !== 'function' || typeof window.planWeeklyTemplate !== 'function') {
       toast('Template booking isn\'t available yet', 'info');
       return;
     }
-    // Double-tap guard — a second concurrent sweep would double-book.
+    // Double-tap guard — one sheet, and with it one run: a second concurrent
+    // sweep would double-book.
     if (_templateWeekRunning) return;
+    if (!_usualWeekTemplate().length) {
+      toast('Save your usual week first', 'info');
+      return;
+    }
     _templateWeekRunning = true;
-    toast('Booking your template week…', 'info');
     try {
-      var res = await window.bookWeeklyTemplate();
-      res = res || {};
-      var booked = res.booked || 0, waitlisted = res.waitlisted || 0;
-      var failed = res.failed || 0, skipped = res.skipped || 0;
-      var parts = [];
-      parts.push(booked + ' booked');
-      if (waitlisted) parts.push(waitlisted + ' waitlisted');
-      if (skipped) parts.push(skipped + ' skipped');
-      if (failed) parts.push(failed + ' failed');
-      var type = failed > 0 ? 'error' : (booked > 0 || waitlisted > 0 ? 'success' : 'info');
-      toast('Template week: ' + parts.join(' · '), type);
+      // As bookClass: a session about to expire fails part-way through the run.
+      if (typeof isTokenExpiringSoon === 'function' && isTokenExpiringSoon() && typeof confirmModal === 'function') {
+        var reauth = await confirmModal({
+          title: 'Session expiring',
+          body: 'Your Psycle session is about to expire and booking may fail. Sign in again first?',
+          confirmText: 'Sign in',
+          cancelText: 'Carry on',
+        });
+        if (reauth) {
+          if (typeof openLoginPopup === 'function') openLoginPopup();
+          return;
+        }
+      }
+      await _runUsualWeekSheet();
     } catch (e) {
       console.error('[template] book failed:', e);
-      toast('Couldn\'t book your template week', 'error');
+      toast('Couldn\'t open your usual week', 'error');
     } finally {
       _templateWeekRunning = false;
     }

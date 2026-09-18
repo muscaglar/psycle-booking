@@ -376,10 +376,13 @@ let _bookingsLocalWriteAt = 0;
 function _noteLocalBookingWrite() { _bookingsLocalWriteAt = Date.now(); }
 
 // Hydrate _eventCache for the given event ids from GET /events/{id}.
+// One retry, not the default three: My Bookings' first paint can wait on this,
+// and a single hung request (15s x 4 + backoff) held it for over a minute.
+// Every later fetchMyBookings asks again for whatever is still missing.
 async function _hydrateEventDetails(ids) {
   await Promise.all(ids.map(async evtId => {
     try {
-      const r = await apiFetch(`/events/${evtId}`);
+      const r = await apiFetch(`/events/${evtId}`, { retries: 1 });
       if (!r.ok) return;
       const d = await r.json();
       const evt = d.data || d;
@@ -418,6 +421,163 @@ function _seedEventCacheFromEntries(map, entries) {
   });
 }
 
+// ── Saved class details (My Bookings' first paint) ───────────────
+// _eventCache is memory-only, so after a relaunch every held class cost one
+// GET /events/{id} BEFORE My Bookings, the tab badge, the widget and the
+// calendar sync could move. The details of the classes in the last confirmed
+// list are kept in psycle_booked_event_details and stand in — flagged
+// _fromSnapshot — for ids THIS /bookings answer names and nothing else knows
+// yet; fetchMyBookings re-reads them straight after its render. Never a source
+// of bookings: what is held only ever comes from the server's list (the saved
+// copy of My Bookings is the offline story, and stays out of app state).
+
+// ── pure:event-details:start ── (DOM-free; tests/suites/event-details.js evaluates this block)
+const EVENT_DETAILS_MAX_ITEMS = 60;
+const EVENT_DETAILS_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // since a real /events/{id} last confirmed them
+
+// One class → the slim record kept between launches, or null. Used on the way
+// out AND on the way in: storage is not trusted (hand-edited, half-written,
+// another build), and the card renderers interpolate the ids into markup and
+// inline handlers — so everything numeric is coerced, as the waitlist seed does.
+// `id` = the _myBookings key, for a cache entry that carries none of its own.
+function _slimEventDetails(evt, id) {
+  if (!evt || typeof evt !== 'object') return null;
+  const eventId = Number(id != null ? id : evt.id);
+  const start = String(evt.start_at == null ? '' : evt.start_at).trim();
+  if (!(eventId > 0) || !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/.test(start)) return null;
+  const num = v => (Number(v) > 0 ? Number(v) : null);
+  const str = (v, max) => (typeof v === 'string' ? v.slice(0, max || 120) : '');
+  const duration = Number(evt.duration);
+  return {
+    id: eventId,
+    start_at: start,
+    duration: duration > 0 && duration < 600 ? Math.round(duration) : 0,
+    studio_id: num(evt.studio_id),
+    instructor_id: num(evt.instructor_id),
+    event_type_id: num(evt.event_type_id),
+    is_live_stream: !!evt.is_live_stream,
+    _typeName: str(evt._typeName) || 'Class',
+    _instrName: str(evt._instrName),
+    _locName: str(evt._locName),
+    _locFullName: str(evt._locFullName),
+    _locAddress: str(evt._locAddress, 200),
+    _studioName: str(evt._studioName),
+  };
+}
+
+// A stored item → an _eventCache record, or null: malformed, or not confirmed
+// by a real /events/{id} for too long. Availability (full / waitlistable /
+// spots) is deliberately not kept — bookClass and the sheet read it fresh.
+function _eventCacheEntryFromSnapshot(item, nowMs) {
+  const slim = _slimEventDetails(item);
+  const seenAt = Number(item && item.seenAt);
+  if (!slim || !(seenAt > 0) || nowMs - seenAt > EVENT_DETAILS_MAX_AGE_MS) return null;
+  slim._fromSnapshot = true; // provenance: last launch's details — every fetchMyBookings re-reads these
+  slim._snapshotSeenAt = seenAt;
+  return slim;
+}
+
+// What is in storage → { [eventId]: _eventCache record }, or null.
+function _coerceEventDetailsSnapshot(raw, nowMs) {
+  let snap = raw;
+  if (typeof raw === 'string') { try { snap = JSON.parse(raw); } catch (e) { return null; } }
+  if (!snap || typeof snap !== 'object' || snap.v !== 1 || !Array.isArray(snap.items)) return null;
+  const byId = {};
+  snap.items.slice(0, EVENT_DETAILS_MAX_ITEMS).forEach(item => {
+    const entry = _eventCacheEntryFromSnapshot(item, nowMs);
+    if (entry) byId[String(entry.id)] = entry;
+  });
+  return byId;
+}
+
+// The record to store: the classes in `bookings` and no others, so it prunes
+// itself as classes pass or are cancelled. Details still standing in from the
+// last snapshot keep the time they were really confirmed — re-saving them on
+// every launch must not keep them alive for ever.
+function _buildEventDetailsSnapshot(bookings, eventCache, nowMs) {
+  const items = [];
+  Object.keys(bookings || {}).forEach(id => {
+    const evt = (eventCache || {})[id];
+    const slim = _slimEventDetails(evt, id);
+    if (!slim) return;
+    slim.seenAt = evt._fromSnapshot ? (Number(evt._snapshotSeenAt) || 0) : nowMs;
+    items.push(slim);
+  });
+  return { v: 1, items: items.slice(0, EVENT_DETAILS_MAX_ITEMS) };
+}
+
+// Did anything a card, the calendar event or the widget shows about a class
+// move between two records of it? (start_at in one form: the API sends
+// 'YYYY-MM-DD HH:MM:SS', the waitlist seed the T form.)
+function _eventDetailsDiffer(a, b) {
+  if (!a || !b) return !!a !== !!b;
+  const start = e => String(e.start_at || '').replace(' ', 'T').slice(0, 19);
+  if (start(a) !== start(b)) return true;
+  if (['duration', 'studio_id', 'instructor_id', 'event_type_id'].some(k => (Number(a[k]) || 0) !== (Number(b[k]) || 0))) return true;
+  if (['_typeName', '_instrName', '_locName', '_studioName'].some(k => String(a[k] || '') !== String(b[k] || ''))) return true;
+  return !!a.is_live_stream !== !!b.is_live_stream;
+}
+// ── pure:event-details:end ──
+
+const EVENT_DETAILS_KEY = 'psycle_booked_event_details';
+
+// Stand-in details for `ids` — only ever ids the server's list has just named
+// and _eventCache knows nothing about.
+function _seedEventCacheFromSnapshot(ids) {
+  let byId = null;
+  try { byId = _coerceEventDetailsSnapshot(localStorage.getItem(EVENT_DETAILS_KEY), Date.now()); } catch (e) {}
+  if (!byId) return;
+  ids.forEach(id => { if (!_eventCache[id] && byId[id]) _eventCache[id] = byId[id]; });
+}
+
+// Only from a list Psycle confirmed this session (as the saved copy): before
+// that _myBookings can be empty or hold just the class booked a moment ago.
+function _saveEventDetailsSnapshot() {
+  if (_bookingsLoadState !== 'loaded' || !getBearerToken()) return;
+  try {
+    localStorage.setItem(EVENT_DETAILS_KEY, JSON.stringify(_buildEventDetailsSnapshot(_myBookings, _eventCache, Date.now())));
+  } catch (e) {}
+}
+
+// Re-read the classes this pass painted from saved details. It runs AFTER the
+// render, so a slow /events/{id} no longer holds My Bookings back. Repaint and
+// re-announce only when something shown has really moved (a needless
+// bookings:loaded is a calendar reconcile and a widget write; a needless render
+// blinks the list) — and only while this pass's map is still the live one: a
+// newer pass re-reads whatever it still finds flagged.
+function _refreshSeededEventDetails(next, ids) {
+  const seeded = {};
+  ids.forEach(id => { seeded[id] = _eventCache[id]; });
+  _hydrateEventDetails(ids).then(() => {
+    if (_myBookings !== next) return;
+    const reread = ids.filter(id => _eventCache[id] !== seeded[id]);
+    if (!reread.length) return; // Psycle didn't answer for any of them — the next pass asks again
+    const moved = reread.some(id => _eventDetailsDiffer(seeded[id], _eventCache[id]));
+    if (moved) {
+      PsycleEvents.emit('bookings:loaded', _myBookings); // the listener below saves the fresh details
+      renderMyBookings();
+    } else {
+      _saveEventDetailsSnapshot(); // confirmed as they were: their age starts again
+    }
+  }).catch(() => {});
+}
+
+if (typeof PsycleEvents !== 'undefined' && typeof PsycleEvents.on === 'function') {
+  PsycleEvents.on('bookings:loaded', () => _saveEventDetailsSnapshot());
+  // Sign-out and session expiry: the next member starts from the server. A
+  // token that is merely not in memory yet (crypto set-up timed out on a slow
+  // launch — see the saved copy's listener) is not an ending; every real one
+  // removes the stored keys before it emits. A localStorage that throws still
+  // deletes.
+  PsycleEvents.on('auth:changed', () => {
+    if (getBearerToken()) return;
+    try {
+      if (localStorage.getItem('psycle_bearer_token_enc') || localStorage.getItem('psycle_bearer_token')) return;
+    } catch (e) {}
+    try { localStorage.removeItem(EVENT_DETAILS_KEY); } catch (e) {}
+  });
+}
+
 // Re-apply the held state to every rendered Discover button, and release
 // cards whose booking/place no longer exists (unless a local write may have
 // raced this snapshot).
@@ -438,9 +598,12 @@ function _resyncDiscoverButtons(allowRelease) {
 }
 
 // True while a user-facing dialog is up (a background announcement must not
-// replace it — confirmModal is single-instance).
+// replace it — confirmModal is single-instance). The usual-week sheet counts:
+// it has its own id, and a run inside it re-reads /bookings after every seat —
+// each of those used to be a chance for "Spot opened", the offline-booking ask
+// or the sync prompt to open over (or, at a lower z-index, UNDER) the run.
 function _dialogOpen() {
-  if (document.getElementById('psycleConfirmOverlay')) return true;
+  if (document.getElementById('psycleConfirmOverlay') || document.getElementById('usualWeekSheet')) return true;
   const bike = document.getElementById('bikeModal');
   return !!(bike && bike.style.display && bike.style.display !== 'none');
 }
@@ -543,6 +706,8 @@ async function fetchMyBookings() {
     const data = await res.json();
     if (mySeq !== _bookingsSeq) return false;
     const list = Array.isArray(data) ? data : (data.data || []);
+    // (typeof: the suites run this function on its own, without the helper.)
+    if (list.length && typeof _recordShape === 'function') _recordShape('booking', list[0]);
 
     // Build the new map locally and swap it in ONCE (right before emit) so no
     // consumer ever observes a half-built, places-free state.
@@ -609,6 +774,11 @@ async function fetchMyBookings() {
 
     // Fetch event details for any bookings not yet in _eventCache.
     // This makes "My Bookings" self-sufficient — no search required.
+    // Classes the last confirmed list already described are painted from those
+    // saved details (and re-read after the render, below): only ids nothing
+    // knows about still hold the first paint back.
+    const unknown = Object.keys(next).filter(id => !_eventCache[id]);
+    if (unknown.length) _seedEventCacheFromSnapshot(unknown);
     const uncached = Object.keys(next).filter(id => !_eventCache[id] || _eventCache[id]._fromWaitlist);
     if (uncached.length > 0) {
       if (uncached.some(id => !_eventCache[id])) showBookingSkeleton(uncached.length);
@@ -631,6 +801,11 @@ async function fetchMyBookings() {
     renderMyBookings();
     _resyncDiscoverButtons(!racedLocalWrite && waitlistsRead);
     if (racedLocalWrite) setTimeout(() => { if (_myBookings === next) fetchMyBookings(); }, 250);
+
+    // Classes painted from saved details are confirmed with Psycle now that
+    // the list is up (a render() merge keeps the flag, a real re-read drops it).
+    const seededIds = Object.keys(next).filter(id => _eventCache[id] && _eventCache[id]._fromSnapshot);
+    if (seededIds.length) _refreshSeededEventDetails(next, seededIds);
 
     // Close to class time Psycle offers spots by email instead of allocating —
     // ask about places in that window so "Claim spot" shows straight away.
@@ -967,6 +1142,9 @@ async function _checkAuthOnce(token) {
     const banner = document.getElementById('sessionBanner');
     if (banner) banner.style.display = 'none';
     updateDiscoverEmptyState();
+    // Field names only, for API-drift diagnostics. (typeof: the suites run
+    // this function on its own, without the helper.)
+    if (typeof _recordShape === 'function') _recordShape('profile', currentUser);
     // (A failed load repaints My Bookings itself — see _noteBookingsLoadFailed;
     // a superseded one leaves the screen to the newer call.)
     fetchMyBookings();
@@ -1801,6 +1979,8 @@ async function fetchEventsForLocation(locId, startDate, endDateStr, seenIds, isS
       return r.json();
     });
     const batch = res.data || [];
+    // (typeof: the suites run this function on its own, without the helper.)
+    if (batch.length && typeof _recordShape === 'function') _recordShape('event', batch[0]);
     const newEvents = batch.filter(e => !seenIds.has(e.id));
     if (newEvents.length === 0) break;
     newEvents.forEach(e => seenIds.add(e.id));
@@ -2018,18 +2198,6 @@ function renderFromWindow(filters, quiet) {
   render(window._windowEvents, window._windowRelations, filters, true);
   if (typeof refreshFacetCounts === 'function') refreshFacetCounts();
   renderLastUpdated();
-}
-
-// Unified Discover search (instructor / studio / class). Filters the cached
-// window instantly; the per-dimension pill counts stay selection-based.
-function onDiscoverSearch(v) {
-  window._discoverQuery = (v || '').trim().toLowerCase();
-  // Instant path only when the cached window holds the SELECTED range —
-  // renderFromWindow supersedes in-flight fetches, and rendering a stale
-  // range here would strand the fetch for the range the user actually picked.
-  const wd = currentWindowDates();
-  if (_windowCovers(wd.startDate, wd.endDateStr)) { renderFromWindow(currentFilters()); _revalidateIfStale(); }
-  else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
 }
 
 // "Available only" never hides the member's own class — but the launch render
@@ -3787,13 +3955,20 @@ function _bookingIdsFor(booking, explicitId) {
   return booking?.bookingId ? [booking.bookingId] : [];
 }
 
-// Field NAMES of the first entry go to diagnostics (never values) so a shape
-// change in this unofficial resource shows up in bug reports.
-function _recordWaitlistShape(kind, sample) {
+// Field NAMES of one sample go to diagnostics (never values) so a shape change
+// in this unofficial API shows up in bug reports — and, for the fields
+// PsycleAPI.SCHEMAS calls required, as the safe-mode banner. Bookings, events
+// and the profile come through here as well as the waitlist resources, so at
+// most one sample a minute per kind: a search reads /events once per studio,
+// and every record is a localStorage write.
+const _shapeRecordedAt = {};
+function _recordShape(kind, sample) {
   try {
-    if (sample && window.PsycleDiag && typeof window.PsycleDiag.record === 'function') {
-      window.PsycleDiag.record(kind, sample);
-    }
+    if (!sample || !window.PsycleDiag || typeof window.PsycleDiag.record !== 'function') return;
+    const now = Date.now();
+    if (now - (_shapeRecordedAt[kind] || 0) < 60000) return;
+    _shapeRecordedAt[kind] = now;
+    window.PsycleDiag.record(kind, sample);
   } catch (e) { /* diagnostics must never break the flow */ }
 }
 
@@ -3821,7 +3996,7 @@ async function fetchMyWaitlists(startedAt) {
     if (!data) break;
     readAny = true;
     const list = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
-    if (page === 1 && list.length) _recordWaitlistShape('waitlist', list[0]);
+    if (page === 1 && list.length) _recordShape('waitlist', list[0]);
     list.forEach(raw => { const e = _normaliseWaitlistEntry(raw); if (e) all.push(e); });
     const meta = data.meta || {};
     const lastPage = Number(meta.last_page) || 1;
@@ -3993,8 +4168,10 @@ async function joinWaitlist(eventId, btn, opts = {}) {
     const data = await res.json().catch(() => ({}));
     const message = (data && (data.message || data.error)) || '';
     // "Couldn't tell": the PUT may have LANDED (a place Psycle can turn into a
-    // chargeable seat) — never report that as a plain failure.
+    // chargeable seat) — never report that as a plain failure. Flagged on the
+    // caller's opts: the usual-week run has to tell it from a refusal.
     const unsure = () => {
+      opts.unsure = true;
       fail('Join Waitlist', "Couldn't confirm with Psycle whether you joined — check My Bookings in a moment", 'info');
       setTimeout(() => { try { fetchMyBookings(); } catch (err) {} }, 3000);
       return false;
@@ -4003,7 +4180,7 @@ async function joinWaitlist(eventId, btn, opts = {}) {
       return fail('Failed — retry', message || "Psycle didn't add you to the waitlist");
     } else if (res.ok) {
       entry = _waitlistEntryFromResponse(data, eventId);
-      if (data && data.waitlist) _recordWaitlistShape('waitlist-join', data.waitlist);
+      if (data && data.waitlist) _recordShape('waitlist-join', data.waitlist);
     } else if (_isAlreadyOnWaitlistResponse(res.status, message)) {
       already = true;
     } else if (res.status === 401) {
@@ -4025,6 +4202,7 @@ async function joinWaitlist(eventId, btn, opts = {}) {
     } else if (chk.known) {
       return fail('Failed — retry', e.message || "Couldn't join the waitlist");
     } else {
+      opts.unsure = true; // as unsure() above
       fail('Join Waitlist', "Couldn't confirm with Psycle whether you joined — check My Bookings in a moment", 'info');
       setTimeout(() => { try { fetchMyBookings(); } catch (err) {} }, 3000);
       return false;
@@ -4216,7 +4394,7 @@ async function claimWaitlistSpot(eventId, btn) {
       return false;
     }
     const entry = _normaliseWaitlistEntry(data.data || data.waitlist || data, eventId);
-    _recordWaitlistShape('waitlist-offer', data.data || null);
+    _recordShape('waitlist-offer', data.data || null);
     if (entry && (entry.allocatedAt || /^(allocated|booked)$/.test(entry.status))) {
       restore();
       toast("Good news — Psycle already booked you into this class", 'success');
@@ -4980,8 +5158,12 @@ function _overlayIsOpen(el) {
 }
 
 // confirmModal and the tour keep their own focus and keys, above everything.
+// So does the usual-week sheet (js/tabs.js): this handler's Escape would close
+// whatever sits in the stack under it and, by preventDefault, stop the sheet's
+// own handler from ever seeing the key.
 function _ownKeysOverlayUp() {
-  return !!(document.getElementById('psycleConfirmOverlay') || document.querySelector('.onboard-overlay'));
+  return !!(document.getElementById('psycleConfirmOverlay') || document.getElementById('usualWeekSheet') ||
+    document.querySelector('.onboard-overlay'));
 }
 
 // Same rule as confirmModal's trap. (SVG seats have no offsetParent at all —
@@ -6046,6 +6228,44 @@ function applyFavouritesAsFilter() {
   triggerAutoSearch();
 }
 
+// ── pure:tier-filter:start ── (tests/suites/owner-tools.js evaluates this block against stub globals)
+// Ids of the LOADED instructors the member ranked S or A. The tier map is
+// parsed once per call (settings.js's getInstructorTier re-parses it for every
+// id) and only ever compared — it can come from an imported settings file.
+// Ids are taken from `instructors`, so a rank for someone who has left Psycle
+// never becomes a chip that matches nothing.
+function _topTierInstructorIds() {
+  let tiers = null;
+  try { tiers = JSON.parse(localStorage.getItem('psycle_instructor_tiers') || '{}'); } catch {}
+  // An array is an object too, and ["S","A"]["1"] would rank instructor 1.
+  if (!tiers || typeof tiers !== 'object' || Array.isArray(tiers)) return [];
+  return instructors
+    .filter(i => tiers[String(i.id)] === 'S' || tiers[String(i.id)] === 'A')
+    .map(i => String(i.id));
+}
+
+// "S/A" beside "★ Favs": the same one-tap filter, from the tier ranking
+// instead of the stars. interactions.js wraps it with saveFilters, like Favs.
+function applyTierFilter() {
+  const ids = _topTierInstructorIds();
+  // Nothing ranked S/A (any more): the button is stale — take it away rather
+  // than clear the member's current instructors for an empty result.
+  if (ids.length === 0) { _syncTierFilterBtn(ids); return; }
+  selectedInstructors.clear();
+  ids.forEach(id => selectedInstructors.add(id));
+  renderInstrChips();
+  refreshFacetCounts();
+  triggerAutoSearch();
+}
+
+// Shown only while at least one loaded instructor is ranked S or A — "any tier
+// exists" would offer a filter that selects nobody to a member with B–F only.
+function _syncTierFilterBtn(ids) {
+  const btn = document.getElementById('tierBtn');
+  if (btn) btn.style.display = (ids || _topTierInstructorIds()).length ? '' : 'none';
+}
+// ── pure:tier-filter:end ──
+
 function getFilteredInstructors() {
   const q = (document.getElementById('instrSearch')?.value || '').toLowerCase().trim();
   return q ? instructors.filter(i => i.full_name.toLowerCase().includes(q)) : instructors;
@@ -6064,6 +6284,9 @@ function renderInstrChips() {
       <button type="button" onmousedown="event.preventDefault();removeInstructor('${safeId}')" onclick="if(event.detail===0)removeInstructor('${safeId}')" aria-label="Remove ${escapeHTML(name)}" title="Remove">×</button>
     </span>`;
   }).join('');
+  // Every instructor-filter repaint passes through here (launch, chips,
+  // restore, clear), so this is where the S/A button learns about new ranks.
+  _syncTierFilterBtn();
 }
 
 function renderInstrDropdown() {
@@ -7907,6 +8130,13 @@ async function _classDetailBookAction(eventId) {
   const instant = !getBearerToken() || (!!booking && (booking.waitlisted || !_studioMap[studioId]?.has_layout));
   const cardBtn = document.querySelector('.class-card:not(.my-booking-card) .book-btn[data-event-id="' + id + '"]');
   if (cardBtn) {
+    // The sheet can offer Book from fresher availability than the card was
+    // built from (a watched class just re-read): the card is then still a
+    // DISABLED "Full", and click() on a disabled button does nothing at all.
+    // Bring it up to date first — never mid-flight, where bookClass itself has
+    // disabled the button for the length of its request.
+    const midFlight = cardBtn.dataset.busy === '1' || cardBtn.textContent === '…';
+    if (cardBtn.disabled && !midFlight) _syncCardButtonsForEvent(id);
     if (!instant && cardBtn.offsetParent === null && cardBtn.dataset.busy !== '1') toast('Loading class…', 'info');
     cardBtn.click();
     return;
@@ -8066,12 +8296,15 @@ window.openClassDetail = function (eventId) {
 };
 
 // ════════════════════════════════════════════════════════════════
-// Feature: Weekly Template Booking Engine
+// Feature: Weekly Template Booking Engine ("Your usual week")
 // localStorage 'psycle_weekly_template' = array of
 //   { dayOfWeek:0-6 (0=Sun), hour, minute, locationId, eventTypeId,
-//     instructorId, label }
-// The planner UI in tabs.js calls saveWeeklyTemplate/loadWeeklyTemplate/
-// bookWeeklyTemplate; this is the implementation behind those hooks.
+//     instructorId, label, locName? }
+// The "Your usual week" card in tabs.js calls saveWeeklyTemplate /
+// loadWeeklyTemplate / planWeeklyTemplate / bookWeeklyTemplate; this is the
+// implementation behind those hooks. NEVER a one-tap spend: planWeeklyTemplate
+// only reads, and bookWeeklyTemplate books nothing but the classes the member
+// ticked in the sheet that listed them.
 // ════════════════════════════════════════════════════════════════
 const WEEKLY_TEMPLATE_KEY = 'psycle_weekly_template';
 
@@ -8093,6 +8326,159 @@ function clearWeeklyTemplate() {
   catch (e) { console.warn('[psycle] clearWeeklyTemplate failed:', e); }
 }
 
+// ── pure:template:start ── (DOM-free; tests/suites/weekly-template.js evaluates this block)
+// A template entry is a weekday plus a WALL-CLOCK time, and every start_at the
+// API sends is the same naive UK wall clock — so matching reads the DIGITS. Not
+// new Date('YYYY-MM-DD HH:MM:SS') (Invalid Date on iOS WebKit) and not the
+// device zone (abroad, the 7:00 Ride parsed as 2:00 and matched nothing). It
+// also makes a clock-change week a non-event: 7:00 stays 7:00.
+const TEMPLATE_TOLERANCE_MIN = 20;
+
+// { date: 'YYYY-MM-DD', min: minutes past midnight } of a naive API time, or
+// null when it can't be read.
+function _templateWall(startAt) {
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/.exec(String(startAt == null ? '' : startAt).trim());
+  return m ? { date: m[1], min: +m[2] * 60 + +m[3] } : null;
+}
+
+// Calendar arithmetic on 'YYYY-MM-DD' through UTC, where every day has 24 hours
+// (a device-local setDate() walks through 23- and 25-hour days).
+function _templateAddDays(dateStr, n) {
+  const p = String(dateStr).split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
+}
+
+// 0=Sun..6=Sat of a 'YYYY-MM-DD'.
+function _templateDow(dateStr) {
+  const p = String(dateStr).split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay();
+}
+
+// London's calendar date and minutes past midnight at an instant — the clock
+// the timetable (and its Monday-noon release) runs on. Device-local only when
+// the engine has no Europe/London data.
+function _templateLondonNow(nowMs) {
+  const d = new Date(nowMs);
+  try {
+    const w = {};
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    }).formatToParts(d).forEach(p => { if (p.type !== 'literal') w[p.type] = p.value; });
+    if (w.year && w.month && w.day) return { date: `${w.year}-${w.month}-${w.day}`, min: (+w.hour) * 60 + (+w.minute) };
+  } catch (e) {}
+  const pad = n => String(n).padStart(2, '0');
+  return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, min: d.getHours() * 60 + d.getMinutes() };
+}
+
+// Which 7 days "my usual week" means right now. Psycle opens the NEXT week's
+// timetable on Monday at 12:00 London: from then on the week still to book is
+// next Monday–Sunday (this one was booked last Monday). Before it, on Monday
+// morning, next week can't be booked yet — so it is the 7 days from today.
+function _templateDefaultStart(nowMs) {
+  const now = _templateLondonNow(nowMs);
+  const dow = _templateDow(now.date);
+  if (dow === 1 && now.min < 12 * 60) return { mode: 'next7', start: now.date };
+  return { mode: 'nextweek', start: _templateAddDays(now.date, ((8 - dow) % 7) || 7) };
+}
+
+// The date a template entry falls on within the 7 days from `start`. One that
+// lands on London's today but has already started means its NEXT occurrence,
+// not this morning's class.
+function _templateDateFor(entry, start, now) {
+  const date = _templateAddDays(start, (Number(entry.dayOfWeek) - _templateDow(start) + 7) % 7);
+  const min = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
+  return (now && date === now.date && min <= now.min) ? _templateAddDays(date, 7) : date;
+}
+
+// One template entry × one day's /events rows → the class it means and what a
+// tap would do about it. ctx: { date, now ({date,min}, London), bookings
+// (_myBookings), studios (_studioMap), findClash(event), tol? }.
+// Candidates: on that date, not started, the entry's class type, starting
+// within ±TEMPLATE_TOLERANCE_MIN of its time. A seat already held in one of
+// them IS the entry ('booked') — "the 7:00" on top of a held 7:15 is a double.
+// Otherwise the entry's instructor wins; with none of theirs on, the nearest
+// class is offered but flagged (instructorChanged) so the sheet asks instead
+// of assuming a cover is wanted. An entry naming neither a type nor an
+// instructor — or no location AND a different instructor — identifies nothing.
+// States: 'nomatch' | 'booked' | 'waitlisted' | 'clash' (hard overlap with a
+// seat already held) | 'nolayout' (studio not positively known to have a spot
+// map: the {spaces:1} body is unproven live) | 'full' | 'waitlist' | 'book'.
+// "Has a spot map" is the studio's has_layout flag alone: a LIST response's
+// studio record doesn't always carry the map itself (and _fetchTemplateDay
+// replaces a richer cached record with it), and the plan reads nothing but
+// lists. The map is the booking step's business — _bookTemplateSeat takes it
+// from the class detail it reads anyway.
+function _templatePlanRow(entry, events, ctx) {
+  ctx = ctx || {};
+  const row = { entry, date: ctx.date, state: 'nomatch', event: null, instructorChanged: false, clash: null };
+  if (!entry || (entry.eventTypeId == null && entry.instructorId == null)) return row;
+  const tol = ctx.tol == null ? TEMPLATE_TOLERANCE_MIN : ctx.tol;
+  const target = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
+  const same = (a, b) => a != null && b != null && String(a) === String(b);
+  const bookings = ctx.bookings || {};
+  const cands = [];
+  (events || []).forEach(e => {
+    const w = _templateWall(e && e.start_at);
+    if (!w || w.date !== ctx.date) return;
+    if (ctx.now && (w.date < ctx.now.date || (w.date === ctx.now.date && w.min <= ctx.now.min))) return;
+    if (entry.eventTypeId != null && !same(e.event_type_id, entry.eventTypeId)) return;
+    const delta = Math.abs(w.min - target);
+    if (delta > tol) return;
+    cands.push({ e, delta, min: w.min, mine: entry.instructorId == null || same(e.instructor_id, entry.instructorId) });
+  });
+  cands.sort((a, b) => a.delta - b.delta || a.min - b.min || Number(a.e.id) - Number(b.e.id));
+  const seatIn = c => { const h = bookings[String(c.e.id)]; return !!h && !h.waitlisted; };
+  const pick = cands.find(seatIn) || cands.find(c => c.mine) || (entry.locationId != null ? cands[0] : null);
+  if (!pick) return row;
+  row.event = pick.e;
+  row.instructorChanged = !pick.mine;
+  const held = bookings[String(pick.e.id)];
+  if (held) { row.state = held.waitlisted ? 'waitlisted' : 'booked'; return row; }
+  try { row.clash = (typeof ctx.findClash === 'function' && ctx.findClash(pick.e)) || null; } catch (e) { row.clash = null; }
+  if (row.clash && row.clash.kind === 'overlap') { row.state = 'clash'; return row; }
+  const studio = (ctx.studios || {})[pick.e.studio_id];
+  if (!(studio && studio.has_layout === true)) { row.state = 'nolayout'; return row; }
+  if (pick.e.is_fully_booked) { row.state = pick.e.is_waitlistable ? 'waitlist' : 'full'; return row; }
+  row.state = 'book';
+  return row;
+}
+
+// "Save my usual week": the REAL seats (never waitlist places) held over the 7
+// London days from today, as template entries, Monday first. `resolveLocationId`
+// turns a cached class into a real location id (or null) — studio ids are a
+// different id space and must never be stored as one.
+function _templateFromSeats(bookings, cache, now, resolveLocationId) {
+  const last = _templateAddDays(now.date, 6);
+  const seen = {};
+  const entries = [];
+  Object.keys(bookings || {}).forEach(id => {
+    const held = bookings[id];
+    const evt = (cache || {})[id];
+    if (!held || held.waitlisted || !evt) return;
+    const w = _templateWall(evt.start_at);
+    if (!w || w.date < now.date || w.date > last) return;
+    const locId = typeof resolveLocationId === 'function' ? resolveLocationId(evt) : null;
+    const entry = {
+      dayOfWeek: _templateDow(w.date),
+      hour: Math.floor(w.min / 60),
+      minute: w.min % 60,
+      locationId: locId == null ? null : locId,
+      eventTypeId: evt.event_type_id != null ? evt.event_type_id : null,
+      instructorId: evt.instructor_id != null ? evt.instructor_id : null,
+      label: (evt._typeName || 'Class') + (evt._instrName ? ' · ' + evt._instrName : ''),
+      locName: evt._locName || '',
+    };
+    const key = [entry.dayOfWeek, w.min, entry.eventTypeId, entry.instructorId, entry.locationId].join('|');
+    if (seen[key]) return;
+    seen[key] = true;
+    entries.push(entry);
+  });
+  return entries.sort((a, b) => ((a.dayOfWeek + 6) % 7) - ((b.dayOfWeek + 6) % 7) ||
+    (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute));
+}
+// ── pure:template:end ──
+
 // Resolve a template's stored id (which may be a real location id OR a
 // studio_id, since _eventCache only stores studio_id) into a location id
 // suitable for the `/events?location=` query.
@@ -8110,6 +8496,8 @@ function _resolveTemplateLocationId(id) {
 // ── pure:core:start ── (needs localDateStr, from the first pure:core block)
 // Date of the given weekday (0=Sun..6=Sat) within the upcoming 7 days
 // (today counts as day 0). Returns a YYYY-MM-DD string.
+// No caller since the usual-week sheet replaced the old sweep; kept because
+// tests/suites/facets-core.js pins it — delete the two together.
 function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date(), timeMinutes = null) {
   const today0 = new Date(fromDate);
   today0.setHours(0, 0, 0, 0);
@@ -8125,6 +8513,18 @@ function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date(), timeMinutes = nu
   return localDateStr(target);
 }
 // ── pure:core:end ──
+
+// A cached class → the real location id a template entry stores: through its
+// studio, else by the location's display name. null when neither resolves
+// (never the studio id — see _templateFromSeats).
+function _templateLocationIdFor(evt) {
+  const studio = evt && evt.studio_id != null ? _studioMap[evt.studio_id] : null;
+  if (studio && studio.location_id != null) return studio.location_id;
+  const name = String((evt && evt._locName) || '').toLowerCase();
+  const loc = name && typeof locations !== 'undefined'
+    ? locations.find(l => String(l.name || '').replace('Psycle ', '').toLowerCase() === name) : null;
+  return loc ? loc.id : null;
+}
 
 // Headlessly book a single resolved event the way rebookNextWeek does —
 // a detached button drives bookClass(), but we never pop the bike picker:
@@ -8204,13 +8604,86 @@ async function _bookEventHeadless(eventId, studioId) {
   }
 }
 
-// For each template entry: find its date in the upcoming 7 days, fetch that
-// day's events at the entry's location, pick the best match (same type, and
-// same instructor if specified, within ±20 min), skip if already booked,
-// otherwise book it headlessly. One failure never aborts the rest.
-// Resolves to { booked, waitlisted, failed, skipped }.
+// One seat for a class the member ticked in the "usual week" sheet:
+// _bookEventHeadless's seat path WITHOUT its waitlist join. A class that filled
+// up after the sheet was shown must come back 'full' — not as a place Psycle
+// can turn into a charge nobody agreed to (the caller joins only where that
+// box was ticked). Holding the button is also the only way to read
+// submitBooking's label contract, which is where "that seat was just taken"
+// (this class's problem) differs from "Psycle refused / couldn't confirm" (the
+// next POST meets the same wall). _bookEventHeadless answers a bare 'failed'
+// for both. Layout studios only: the {spaces:1} body is unproven live.
+// Resolves 'booked' | 'full' | 'clash' | 'nolayout' | 'taken' | 'queued' |
+// 'unconfirmed' | 'failed'.
+async function _bookTemplateSeat(eventId, studioId) {
+  const btn = document.createElement('button');
+  btn.className = 'book-btn';
+  btn.textContent = 'Book';
+
+  try {
+    const res = await apiFetch(`/events/${eventId}`);
+    if (!res.ok) return 'failed';
+    const detail = await res.json();
+    const availableSlotIds = new Set((detail.slots || []).map(Number));
+    const evtData = detail.data || {};
+    const cached = _eventCache[String(eventId)] || {};
+
+    // A class booked earlier in this same run can overlap this one.
+    let clash = null;
+    try { clash = _clashFor(eventId, evtData); } catch (e) {}
+    if (clash && clash.kind === 'overlap') return 'clash';
+
+    const studio = _studioMap[studioId];
+    if (!(studio && studio.has_layout === true)) return 'nolayout';
+    // Before the map: a FULL class needs none to be reported (or joined).
+    if (evtData.is_fully_booked ?? cached.is_fully_booked) return 'full';
+    // As bookClass / _bookEventHeadless: the plan's own _fetchTemplateDay has
+    // just replaced the studio record with a LIST response's — has_layout, not
+    // always the seat map. The detail just read carries it. (typeof: the suite
+    // slices this function on its own.)
+    let layout = studio.layout;
+    if (!(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
+      layout = _layoutFromEventDetail(detail, studioId);
+      if (layout) studio.layout = layout;
+    }
+    // Still no map: this class only. Never 'failed' — that stops the whole run
+    // and blames Psycle for a booking that was never sent.
+    if (!(layout?.slots?.length > 0)) return 'nolayout';
+    if (availableSlotIds.size === 0) return 'full';
+
+    // Auto-pick, as _bookEventHeadless: the usual slot if free, else the first.
+    const usual = _usualSlotForEvent(eventId);
+    const pick = (usual != null && availableSlotIds.has(Number(usual))) ? Number(usual) : [...availableSlotIds][0];
+    await submitBooking(eventId, [pick], btn);
+    // The ✓ label contract plus a seat in state — never the CSS class alone.
+    const held = _myBookings[String(eventId)];
+    if (btn.textContent.indexOf('✓') !== -1 && held && !held.waitlisted) return 'booked';
+    // No ✓: submitBooking's own failure labels. 'Book' = a refusal that re-read
+    // as "someone else holds it" (or a 401 — the caller checks the session).
+    if (btn.textContent === 'Book') return 'taken';
+    if (btn.textContent === 'Queued') return 'queued';
+    return btn.textContent.indexOf('Unconfirmed') === 0 ? 'unconfirmed' : 'failed';
+  } catch (e) {
+    console.warn('[psycle] template seat failed:', eventId, e);
+    return 'failed';
+  }
+}
+
+// Executes what the member confirmed in the "usual week" sheet — and only that.
+// `picks`: [{ eventId, studioId, joinIfFull }] built from planWeeklyTemplate's
+// rows. There is deliberately NO "book the whole template" default: with no
+// picks nothing happens, so no call can spend a credit on a class that was not
+// listed (with its state) and ticked. Every pick is a seat attempt first
+// (_bookTemplateSeat); a waitlist is joined only for a pick whose box was
+// ticked (joinIfFull) and only while the class is still full. `hooks`:
+// { onProgress(i, result), shouldStop() }.
+// Resolves to { booked, waitlisted, failed, skipped, stopped, results }:
+// results[i].result is 'booked' | 'waitlisted' | 'already' | 'clash' | 'full' |
+// 'nolayout' | 'taken' | 'joinfailed' | 'queued' | 'unconfirmed' (a seat OR a
+// waitlist join Psycle may have taken) | 'failed' | 'notrun'; stopped is '' or
+// why the run ended early ('auth' | 'bookings' | 'offline' | 'failed' | 'user').
 let _templateBookingInFlight = false;
-async function bookWeeklyTemplate() {
+async function bookWeeklyTemplate(picks, hooks) {
   const counts = { booked: 0, waitlisted: 0, failed: 0, skipped: 0 };
   // Re-entrancy guard: a double tap on "Book my week" must not run two
   // concurrent sweeps (both would pass the already-booked checks and
@@ -8218,116 +8691,186 @@ async function bookWeeklyTemplate() {
   if (_templateBookingInFlight) return counts;
   _templateBookingInFlight = true;
   try {
-    return await _bookWeeklyTemplateInner(counts);
+    return await _bookWeeklyTemplateInner(counts, picks, hooks);
   } finally {
     _templateBookingInFlight = false;
   }
 }
 
-async function _bookWeeklyTemplateInner(counts) {
-  const template = loadWeeklyTemplate();
-  if (!template.length) return counts;
-  if (!currentUser) { counts.failed = template.length; return counts; }
-  // Both "already booked" skips below read _myBookings. With no /bookings
-  // snapshot applied yet (as bookClass) every entry looks unbooked, and the
-  // sweep would book — and charge — each class already held a second time.
-  if (_bookingsLoadState !== 'loaded' && !(await _rereadBookingsForVerify())) { counts.failed = template.length; return counts; }
+async function _bookWeeklyTemplateInner(counts, picks, hooks) {
+  picks = Array.isArray(picks) ? picks.filter(p => p && p.eventId != null) : [];
+  hooks = hooks || {};
+  counts.stopped = '';
+  counts.results = picks.map(p => ({ eventId: p.eventId, result: 'notrun' }));
+  if (!picks.length) return counts;
+  if (!currentUser) { counts.failed = picks.length; counts.stopped = 'auth'; return counts; }
+  // The "already booked" skip below reads _myBookings. With no /bookings
+  // snapshot applied yet (as bookClass) every class looks unbooked, and the
+  // run would book — and charge — each class already held a second time.
+  if (_bookingsLoadState !== 'loaded' && !(await _rereadBookingsForVerify())) { counts.failed = picks.length; counts.stopped = 'bookings'; return counts; }
 
-  const TOLERANCE_MIN = 20;
+  // SEQUENTIAL: each POST is settled (and _myBookings updated) before the next
+  // starts, so a refusal can stop the run and a later class sees the seats
+  // this run already took (clash, already booked).
+  for (let i = 0; i < picks.length; i++) {
+    const p = picks[i];
+    if (typeof hooks.shouldStop === 'function' && hooks.shouldStop()) { counts.stopped = 'user'; break; }
+    // Offline, submitBooking's wrapper would QUEUE the booking for later —
+    // a spend at a time nobody chose.
+    if (!navigator.onLine) { counts.stopped = 'offline'; break; }
+    try { if (typeof hooks.onProgress === 'function') hooks.onProgress(i, 'running'); } catch (e) {}
 
-  // Cache per-day event fetches so multiple entries on the same day+location
-  // share one network call.
-  const dayCache = {};
-  const fetchDay = async (dayStr, locId) => {
-    const key = dayStr + '|' + locId;
-    if (dayCache[key]) return dayCache[key];
-    const p = (async () => {
-      const params = new URLSearchParams({
-        start: dayStr + ' 00:00:00',
-        end: dayStr + ' 23:59:59',
-        location: locId,
-        limit: 200,
-      });
-      const res = await apiFetch('/events?' + params);
-      if (!res.ok) return [];
-      const data = await res.json().catch(() => ({}));
-      // Cache event metadata so headless booking + state stay consistent.
-      const rel = data.relations || {};
-      const studioMap = Object.fromEntries((rel.studios || []).map(s => [s.id, s]));
-      const instrMap = Object.fromEntries((rel.instructors || []).map(i => [i.id, i]));
-      const locationMap = Object.fromEntries((rel.locations || []).map(l => [l.id, l]));
-      const typeMap = Object.fromEntries((rel.event_types || []).map(t => [t.id, t]));
-      Object.assign(_studioMap, studioMap);
-      (data.data || []).forEach(e => {
-        // Overwrite, never insert-only — keeps availability fields fresh.
-        const studio = studioMap[e.studio_id];
-        const loc = studio ? locationMap[studio.location_id] : null;
-        _eventCache[String(e.id)] = {
-          ...e,
-          _typeName: typeMap[e.event_type_id]?.name || 'Class',
-          _instrName: instrMap[e.instructor_id]?.full_name || '',
-          _locName: loc ? loc.name.replace('Psycle ', '') : '',
-          _locFullName: loc ? loc.name : '',
-          _locAddress: loc ? (loc.address || '') : '',
-          _studioName: studio ? studio.name : '',
-        };
-      });
-      return data.data || [];
-    })().catch(() => []);
-    dayCache[key] = p;
-    return p;
-  };
-
-  const tasks = template.map(async entry => {
+    let result = 'failed';
     try {
-      const targetMin = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
-      const dayStr = _upcomingWeekdayDate(entry.dayOfWeek, new Date(), targetMin);
-      const locId = _resolveTemplateLocationId(entry.locationId);
-
-      // Already booked something matching this slot? (same type, instructor if
-      // set, on the target day, within tolerance) → skip.
-      const already = Object.keys(_myBookings).some(bookedId => {
-        const be = _eventCache[bookedId];
-        if (!be || !be.start_at) return false;
-        if (localDateStr(new Date(be.start_at)) !== dayStr) return false;
-        if (entry.eventTypeId != null && be.event_type_id !== entry.eventTypeId) return false;
-        if (entry.instructorId != null && be.instructor_id !== entry.instructorId) return false;
-        const bMin = new Date(be.start_at).getHours() * 60 + new Date(be.start_at).getMinutes();
-        return Math.abs(bMin - targetMin) <= TOLERANCE_MIN;
-      });
-      if (already) { counts.skipped++; return; }
-
-      const events = await fetchDay(dayStr, locId);
-      if (!events.length) { counts.failed++; return; }
-
-      // Best match: same type, same instructor (if set), closest time within ±20m.
-      let best = null, bestDelta = Infinity;
-      for (const e of events) {
-        if (entry.eventTypeId != null && e.event_type_id !== entry.eventTypeId) continue;
-        if (entry.instructorId != null && e.instructor_id !== entry.instructorId) continue;
-        const eMin = new Date(e.start_at).getHours() * 60 + new Date(e.start_at).getMinutes();
-        const delta = Math.abs(eMin - targetMin);
-        if (delta <= TOLERANCE_MIN && delta < bestDelta) { best = e; bestDelta = delta; }
+      // The sheet may be minutes old: never re-book what is held by now.
+      if (_myBookings[String(p.eventId)]) result = 'already';
+      else {
+        result = await _bookTemplateSeat(p.eventId, p.studioId);
+        // Still full AND its waitlist box was ticked: the one place a join is
+        // allowed. quiet — the sheet reports it, not a slide-up.
+        if (result === 'full' && p.joinIfFull) {
+          // false is "Psycle said no" and "couldn't tell" alike — the second
+          // (flagged on the opts) may be a place, i.e. a charge to come: never
+          // reported as "couldn't be joined".
+          const joinOpts = { quiet: true };
+          const joined = await joinWaitlist(p.eventId, null, joinOpts);
+          result = joined ? 'waitlisted' : (joinOpts.unsure ? 'unconfirmed' : 'joinfailed');
+        }
       }
-      if (!best) { counts.failed++; return; }
-
-      // Don't double-book the exact event we found.
-      if (_myBookings[String(best.id)]) { counts.skipped++; return; }
-
-      const result = await _bookEventHeadless(best.id, best.studio_id);
-      if (result === 'booked') counts.booked++;
-      else if (result === 'waitlisted') counts.waitlisted++;
-      else if (result === 'skipped') counts.skipped++;
-      else counts.failed++;
     } catch (e) {
-      console.warn('[psycle] template entry failed:', entry, e);
-      counts.failed++;
+      console.warn('[psycle] template pick failed:', p, e);
     }
-  });
+    // The sheet reports every class itself; a slide-up per booking would stack over it.
+    try { dismissBookingConfirmation(); } catch (e) {}
 
-  await Promise.allSettled(tasks);
+    counts.results[i].result = result;
+    if (result === 'booked') counts.booked++;
+    else if (result === 'waitlisted') counts.waitlisted++;
+    else if (result === 'already' || result === 'clash' || result === 'full' || result === 'nolayout') counts.skipped++;
+    else counts.failed++;
+    try { if (typeof hooks.onProgress === 'function') hooks.onProgress(i, result); } catch (e) {}
+
+    // Session gone (a 401 anywhere expires it): nothing after this can book.
+    if (!currentUser || !getBearerToken()) { counts.stopped = 'auth'; break; }
+    if (result === 'queued') { counts.stopped = 'offline'; break; }
+    // Psycle refused a seat (no credits, plan doesn't cover it) or its answer
+    // can't be trusted: stop rather than send the next POST into the same
+    // wall. 'taken' and 'joinfailed' are that class's problem only.
+    if (result === 'failed' || result === 'unconfirmed') { counts.stopped = 'failed'; break; }
+  }
+
   if (typeof fetchMyBookings === 'function') { try { await fetchMyBookings(); } catch {} }
   return counts;
+}
+
+// One day's /events at one location, shared between entries through `dayCache`.
+// Fills _eventCache / _studioMap as a search does (the booking step, the clash
+// check and the sheet's labels all read them). Resolves null — not [] — when
+// the day could not be read, so "no class that day" is never a guess.
+function _fetchTemplateDay(dayStr, locId, dayCache) {
+  const key = dayStr + '|' + locId;
+  if (dayCache[key]) return dayCache[key];
+  const p = (async () => {
+    const params = new URLSearchParams({
+      start: dayStr + ' 00:00:00',
+      end: dayStr + ' 23:59:59',
+      limit: 200,
+    });
+    // An entry with no location (detected from history) reads the whole day.
+    if (locId !== '') params.set('location', locId);
+    const res = await apiFetch('/events?' + params);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}));
+    // Cache event metadata so headless booking + state stay consistent.
+    const rel = data.relations || {};
+    const studioMap = Object.fromEntries((rel.studios || []).map(s => [s.id, s]));
+    const instrMap = Object.fromEntries((rel.instructors || []).map(i => [i.id, i]));
+    const locationMap = Object.fromEntries((rel.locations || []).map(l => [l.id, l]));
+    const typeMap = Object.fromEntries((rel.event_types || []).map(t => [t.id, t]));
+    Object.assign(_studioMap, studioMap);
+    (data.data || []).forEach(e => {
+      // Overwrite, never insert-only — keeps availability fields fresh.
+      const studio = studioMap[e.studio_id];
+      const loc = studio ? locationMap[studio.location_id] : null;
+      _eventCache[String(e.id)] = {
+        ...e,
+        _typeName: typeMap[e.event_type_id]?.name || 'Class',
+        _instrName: instrMap[e.instructor_id]?.full_name || '',
+        _locName: loc ? loc.name.replace('Psycle ', '') : '',
+        _locFullName: loc ? loc.name : '',
+        _locAddress: loc ? (loc.address || '') : '',
+        _studioName: studio ? studio.name : '',
+      };
+    });
+    return data.data || [];
+  })().catch(() => null);
+  dayCache[key] = p;
+  return p;
+}
+
+// READ-ONLY plan for "Book my usual week": every template entry resolved to a
+// real upcoming class and what a tap would do about it, so the confirm sheet
+// can list exactly that before anything is spent. GETs only (/events per day +
+// location, /bookings when no snapshot is loaded) — nothing is booked, joined
+// or cancelled here. `weekStart` ('YYYY-MM-DD') is the first of the 7 days;
+// default: see _templateDefaultStart.
+// Resolves { ok, reason, mode, weekStart, weekEnd, rows }. reason (when !ok):
+// 'empty' | 'signedout' | 'offline' | 'bookings'. rows[i]: { index, entry,
+// date, state, eventId, studioId, startAt, typeName, instrName, locName,
+// instructorChanged, clashLine } — state as _templatePlanRow, plus 'error'
+// when that day's timetable could not be read.
+async function planWeeklyTemplate(weekStart) {
+  const nowMs = Date.now();
+  const now = _templateLondonNow(nowMs);
+  const def = _templateDefaultStart(nowMs);
+  const custom = /^\d{4}-\d{2}-\d{2}$/.test(String(weekStart || ''));
+  const start = custom ? String(weekStart) : def.start;
+  const plan = {
+    ok: false, reason: '', rows: [],
+    mode: !custom ? def.mode : (start === now.date ? 'next7' : 'nextweek'),
+    weekStart: start, weekEnd: _templateAddDays(start, 6),
+  };
+  const template = loadWeeklyTemplate();
+  if (!template.length) { plan.reason = 'empty'; return plan; }
+  if (!currentUser || !getBearerToken()) { plan.reason = 'signedout'; return plan; }
+  if (!navigator.onLine) { plan.reason = 'offline'; return plan; }
+  // 'booked' / 'clash' are read off _myBookings: over an unloaded map every
+  // class the member already holds would be offered again.
+  if (_bookingsLoadState !== 'loaded' && !(await _rereadBookingsForVerify())) { plan.reason = 'bookings'; return plan; }
+
+  const dayCache = {};
+  plan.rows = await Promise.all(template.map(async (entry, index) => {
+    const date = _templateDateFor(entry, start, now);
+    let row;
+    try {
+      const events = await _fetchTemplateDay(date, _resolveTemplateLocationId(entry.locationId), dayCache);
+      row = events === null
+        ? { entry, date, state: 'error', event: null, instructorChanged: false, clash: null }
+        : _templatePlanRow(entry, events, {
+          date, now, bookings: _myBookings, studios: _studioMap,
+          // The cached copy carries _locName (the travel-squeeze half of a clash).
+          findClash: e => _findClash(_eventCache[String(e.id)] || e, _myBookings, _eventCache),
+        });
+    } catch (e) {
+      console.warn('[psycle] template plan failed:', entry, e);
+      row = { entry, date, state: 'error', event: null, instructorChanged: false, clash: null };
+    }
+    const evt = row.event;
+    const cached = (evt && _eventCache[String(evt.id)]) || {};
+    return {
+      index, entry, date: row.date, state: row.state,
+      eventId: evt ? evt.id : null,
+      studioId: evt ? evt.studio_id : null,
+      startAt: evt ? evt.start_at : null,
+      typeName: cached._typeName || '',
+      instrName: cached._instrName || '',
+      locName: cached._locName || entry.locName || '',
+      instructorChanged: !!row.instructorChanged,
+      clashLine: row.clash ? _clashLabel(row.clash) : '',
+    };
+  }));
+  plan.ok = true;
+  return plan;
 }
 
 // Analyse psycle_class_history for day-of-week + time + type slots booked
@@ -8346,6 +8889,11 @@ function detectRecurringSlots() {
   if (typeof instructors !== 'undefined') {
     instructors.forEach(i => { if (i.full_name) instrByName[i.full_name.toLowerCase()] = i.id; });
   }
+  // History carries the location's display name ("Bank"), not its id.
+  const locByName = {};
+  if (typeof locations !== 'undefined') {
+    locations.forEach(l => { if (l.name) locByName[l.name.replace('Psycle ', '').toLowerCase()] = l.id; });
+  }
 
   // Bucket by day-of-week + rounded half-hour + type name.
   const buckets = {};
@@ -8359,10 +8907,11 @@ function detectRecurringSlots() {
     const typeName = h.typeName || 'Class';
     const key = dow + '|' + halfHour + '|' + typeName.toLowerCase();
     if (!buckets[key]) {
-      buckets[key] = { dow, mins: [], typeName, instrName: h.instrName || '', count: 0 };
+      buckets[key] = { dow, mins: [], typeName, instrName: h.instrName || '', locs: {}, count: 0 };
     }
     buckets[key].count++;
     buckets[key].mins.push(mins);
+    if (h.locName) buckets[key].locs[h.locName] = (buckets[key].locs[h.locName] || 0) + 1;
   });
 
   const candidates = [];
@@ -8370,14 +8919,17 @@ function detectRecurringSlots() {
     if (b.count < 2) return; // recurring = booked 2+ times
     const avg = Math.round(b.mins.reduce((a, c) => a + c, 0) / b.mins.length);
     const hour = Math.floor(avg / 60), minute = avg % 60;
+    // Where this slot was usually ridden — the timetable is read per location.
+    const locName = Object.keys(b.locs).sort((x, y) => b.locs[y] - b.locs[x])[0] || '';
     candidates.push({
       dayOfWeek: b.dow,
       hour,
       minute,
-      locationId: null, // history doesn't carry a numeric location id
+      locationId: locByName[locName.toLowerCase()] ?? null,
       eventTypeId: typeByName[b.typeName.toLowerCase()] ?? null,
       instructorId: instrByName[(b.instrName || '').toLowerCase()] ?? null,
       label: b.typeName + (b.instrName ? ' · ' + b.instrName : ''),
+      locName,
       _count: b.count,
     });
   });
@@ -8389,13 +8941,14 @@ function detectRecurringSlots() {
 window.loadWeeklyTemplate = loadWeeklyTemplate;
 window.saveWeeklyTemplate = saveWeeklyTemplate;
 window.clearWeeklyTemplate = clearWeeklyTemplate;
+window.planWeeklyTemplate = planWeeklyTemplate;
 window.bookWeeklyTemplate = bookWeeklyTemplate;
 window.detectRecurringSlots = detectRecurringSlots;
 
 // ════════════════════════════════════════════════════════════════
 // Feature: Saved / Recent searches + presets
 // 'psycle_recent_searches' = array (cap 5), deduped by a signature of
-// instructors + locations + categories + date-mode.
+// instructors + locations + categories + date-mode + the Time row.
 // ════════════════════════════════════════════════════════════════
 const RECENT_SEARCHES_KEY = 'psycle_recent_searches';
 const RECENT_SEARCHES_CAP = 5;
@@ -8408,6 +8961,10 @@ function _currentSearchState() {
     categories: [...selectedCategories],
     strengthSubs: [...selectedStrengthSubs],
     reformerSubs: [...selectedReformerSubs],
+    // The Time row filters the list like any chip: a pill that left it out
+    // brought back a different list from the one it was saved from.
+    timeBands: [...selectedTimeBands],
+    availableOnly: _availableOnly,
     dateMode: _dateQuickMode || null,
     startDate: document.getElementById('startDate')?.value || '',
     daysAhead: document.getElementById('daysAhead')?.value || '7',
@@ -8422,7 +8979,9 @@ function _searchSignature(s) {
   const locs = [...(s.locations || [])].map(String).sort().join(',');
   const cats = [...(s.categories || [])].map(String).sort().join(',');
   const date = s.dateMode || ('date:' + (s.startDate || '') + '+' + (s.daysAhead || ''));
-  return ['i:' + instr, 'l:' + locs, 'c:' + cats, 'd:' + date].join('|');
+  // The Time row: an entry saved before it existed reads as "row off".
+  const bands = [...(s.timeBands || [])].map(String).sort().join(',');
+  return ['i:' + instr, 'l:' + locs, 'c:' + cats, 'd:' + date, 't:' + bands, 'a:' + (s.availableOnly === true ? 1 : 0)].join('|');
 }
 // ── pure:core:end ──
 
@@ -8449,6 +9008,11 @@ function _searchLabel(s) {
       return c ? c.label : k;
     }).join(' · '));
   }
+  // Named as the Time row's own pills name them: two pills that differ only
+  // there must not read the same.
+  const bandNames = TIME_BANDS.filter(b => (s.timeBands || []).includes(b.key)).map(b => b.label);
+  if (s.availableOnly === true) bandNames.push('Available only');
+  if (bandNames.length) parts.push(bandNames.join(' · '));
   return parts.length ? parts.join(' · ') : 'All classes';
 }
 
@@ -8548,6 +9112,10 @@ function applySavedSearch(obj) {
   selectedReformerSubs.clear();
   ((obj.reformerSubs && obj.reformerSubs.length) ? obj.reformerSubs : REFORMER_SUBS.map(s => s.key))
     .forEach(k => selectedReformerSubs.add(k));
+  // An entry saved before the Time row existed has neither field: the row is
+  // reset, or the pill would bring back its list minus whatever "After 5"
+  // happens to hide today. (setTimeFilters keeps known band keys only.)
+  setTimeFilters(obj.timeBands, obj.availableOnly);
 
   // Same rule as restoreFilters: a preset is re-derived from TODAY (a "Today"
   // recorded yesterday is not yesterday's date) and a picked date already
@@ -8647,7 +9215,7 @@ const _OB_ICON = {
 const ONBOARDING_STEPS = [
   { icon: _OB_ICON.logo, title: 'Psync', body: 'An independent companion for booking Psycle classes.' },
   { icon: _OB_ICON.search, title: 'Search and book', body: 'Filter the timetable by instructor, studio, type or time, then book in a tap. Your usual bike is remembered.' },
-  { icon: _OB_ICON.calendar, title: 'Plan the week', body: 'View the week ahead, save it as a template, and rebook your regulars in one tap.' },
+  { icon: _OB_ICON.calendar, title: 'Plan the week', body: 'Save the classes you ride every week as your usual week in My Bookings, then book them together when the timetable opens. You check the list first.' },
   { icon: _OB_ICON.bars, title: 'Track your training', body: 'Streaks, cost per class and instructor suggestions, from your booking history.' },
 ];
 

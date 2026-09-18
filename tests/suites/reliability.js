@@ -37,6 +37,13 @@ module.exports = async function (t) {
     sb.console = { log() {}, warn() {}, error() {} }; // pushError echoes every scripted failure
     sb.localStorage = w.store;
     sb.navigator = w.nav;
+    // The offline queue (section D) listens for visibilitychange as the module
+    // loads and paints a status line into #tab-bookings. No page here: a
+    // foreground document with no elements, so that line is never drawn.
+    sb.document = { hidden: false, visibilityState: 'visible', addEventListener() {}, getElementById: () => null };
+    // A verified member: the queue stamps every item with its owner, and sends
+    // nothing while there is none (tests/suites/offline-queue.js has the rules).
+    sb.currentUser = { id: 42 };
     sb.AbortController = AbortController;
     sb.setTimeout = (fn, ms) => {
       if (ms === ABORT_MS) { log.abortTimers.push({ fn, ms }); return 0; }
@@ -200,10 +207,20 @@ module.exports = async function (t) {
   const spaceItem = { eventId: 77, slots: [], spaces: 1, timestamp: '2026-01-01T00:00:00.000Z' };
   const seatItem = { eventId: 77, slots: [7], spaces: 0, timestamp: '2026-01-01T00:00:00.000Z' };
   // `script`: post(call) / list(call) / del(call) / event(call) → {status, body} | Error.
+  // Queued the way the app queues: offline, in THIS page session. Those are the
+  // only bookings a reconnect ('online') replays unasked — a queue merely found
+  // in storage waits for "Book it" — and these sections are about what a replay
+  // SENDS. (The offline wrapper queues before its first await, so no await here.)
+  function queueOffline(w, item) {
+    w.nav.onLine = false;
+    if (item.type === 'cancel') w.sb.queueOfflineCancel(item.eventId, item.bookingIds);
+    else w.sb.submitBooking(item.eventId, item.slots, { textContent: 'Book', className: 'book-btn', disabled: false }, { spaces: item.spaces });
+    w.nav.onLine = true;
+  }
   function replayWorld(items, script) {
     const w = world();
     w.unexpected = [];
-    w.store.setItem('psycle_offline_queue', JSON.stringify(items));
+    items.forEach((item) => queueOffline(w, item));
     w.respond = (call) => {
       if (call.method === 'GET' && /^\/events\/\d+$/.test(call.path)) return script.event ? script.event(call) : FUTURE;
       if (call.method === 'POST' && call.path === '/bookings' && script.post) return script.post(call, w);
@@ -225,47 +242,47 @@ module.exports = async function (t) {
     eq([w.log.calls.length, w.log.submits.length, btn.textContent, btn.disabled], [0, 0, 'Queued', true], 'offline: nothing is sent, the button reads "Queued"');
     eq(w.queue().map((i) => [i.eventId, i.slots, i.spaces]), [[77, [], 1]], '…and the queued item carries the space count');
     w.nav.onLine = true;
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq(w.seq(), ['GET /events/77', 'POST /bookings', 'GET /bookings?limit=200'], 'back online, the POST\'s answer is lost: ONE POST, then /bookings is read');
     eq(w.log.calls[1].body, { event_id: 77, slots: 1 }, '…and that POST carried a count (slots: 1), not a seat list');
     eq([w.queue(), w.said(/^1 queued booking confirmed!$/), w.log.refetches, w.unexpected], [[], true, 1, []], '/bookings shows the class → confirmed, off the queue, My Bookings refreshed');
 
     w = replayWorld([spaceItem], { post: () => ({ status: 503 }), list: () => ({ status: 200, body: { data: [{ id: 'Z', event_id: 5 }] } }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.count('GET', '/bookings?limit=200')], [1, 1], 'POST answered 503: still ONE POST (the wrapper\'s 5xx retries are off for a count)');
     eq([w.queue().length, w.said(/confirmed/), w.said(/1 queued action still pending/)], [1, false, true], '/bookings says it did NOT land → kept for the next reconnect, not called booked');
-    await w.sb.processOfflineQueue();
-    eq(w.seq(), ['GET /events/77', 'POST /bookings', 'GET /bookings?limit=200', 'GET /events/77', 'POST /bookings', 'GET /bookings?limit=200'],
-      'the next reconnect may send it again — only because a /bookings read in between said it had not landed');
+    await w.sb.processOfflineQueue('online');
+    eq([w.seq(), w.queue().length], [['GET /events/77', 'POST /bookings', 'GET /bookings?limit=200'], 1],
+      'the next reconnect sends NOTHING by itself — "had not landed" was then, and a space may have been booked by hand since: it waits for a fresh /bookings answer and "Book it" (tests/suites/offline-queue.js)');
 
     w = replayWorld([spaceItem], { post: () => netError(), list: () => netError() });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.count('GET', '/bookings?limit=200')], [1, 4], 'answer lost AND /bookings unreachable (the read itself is retried): still one POST');
     eq([w.queue(), w.said(/confirmed!/), w.said(/Couldn't confirm whether a queued booking went through/)], [[], false, true],
       '…can\'t tell → dropped with "check My Bookings" rather than risk a second space');
     w = replayWorld([spaceItem], { post: () => netError(), list: () => ({ status: 500 }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue(), w.said(/Couldn't confirm/)], [1, [], true], '/bookings answering 500 is "can\'t tell" as well');
   }
 
   t.section('Offline queue: a SLOT body may retry (same seat → 409), and a 409 is an answer');
   {
     let w = replayWorld([seatItem], { post: () => ({ status: 503 }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.count('GET', '/bookings?limit=200'), w.queue().length], [4, 0, 1], 'POST answered 503: 1 + 3 tries (retries: 3 reaches fetchWithRetry), then kept for later');
     eq(w.log.calls[1].body, { event_id: 77, slots: [7] }, '…each carrying the seat list');
 
     w = replayWorld([seatItem], { post: () => ({ status: 409, body: { message: 'Slot taken' } }) });
     w.reread = { 77: { bookingId: 'A', bookingIds: ['A'], slots: [7], slotBookings: { 7: 'A' }, waitlisted: false } };
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue(), w.said(/^1 queued booking confirmed!$/)], [1, [], true], '409 and /bookings shows bike 7: one POST, confirmed, off the queue');
     w = replayWorld([seatItem], { post: () => ({ status: 409, body: {} }) });
     w.reread = {};
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue(), w.said(/confirmed!/), w.said(/taken while you were offline/)], [1, [], false, true], '409 and no seat in /bookings: one POST, "taken", never "confirmed"');
 
     w = replayWorld([seatItem], { post: () => ({ status: 201, body: { data: { id: 'B9' } } }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue(), w.sb._myBookings['77'].bookingId, w.sb._myBookings['77'].slots], [1, [], 'B9', [7]], 'a plain 2xx: booked once, recorded with the id the server returned');
   }
 
@@ -275,7 +292,7 @@ module.exports = async function (t) {
     // Event 88 is queued while 77's POST is in flight (once).
     const queuesAnother = {
       post: (call, world_) => {
-        if (call.body.event_id === 77) world_.store.setItem('psycle_offline_queue', JSON.stringify(world_.queue().concat([extra])));
+        if (call.body.event_id === 77) queueOffline(world_, extra);
         return { status: 201, body: { data: { id: 'B' + call.body.event_id } } };
       },
     };
@@ -290,18 +307,18 @@ module.exports = async function (t) {
     eq([postsFor(w, 88), w.queue()], [1, []], '…the run that was waiting picks up the booking queued meanwhile — once — and resurrects nothing');
 
     w = replayWorld([seatItem], queuesAnother);
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     await flush();
     eq([postsFor(w, 77), postsFor(w, 88), w.queue().map((i) => i.eventId)], [1, 0, [88]], 'a booking queued mid-replay survives the save at the end of the run (not lost, not yet sent)');
 
     w = replayWorld([seatItem, spaceItem], { event: () => ({ status: 200, body: { data: { start_at: '2020-01-01T10:00:00' } } }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue(), w.said(/^Skipped 2 queued bookings/)], [0, [], true], 'classes that have already started are skipped: no POST, no charge');
     w = replayWorld([seatItem], { event: () => ({ status: 404 }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue(), w.said(/^Skipped a queued booking/)], [0, [], true], 'a class that no longer exists is skipped too');
     w = replayWorld([seatItem], { event: () => netError() });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('POST'), w.queue().length], [0, 1], 'the class can\'t be checked at all: nothing is sent, the booking waits');
   }
 
@@ -309,10 +326,10 @@ module.exports = async function (t) {
   {
     const cancel = { type: 'cancel', eventId: 77, bookingIds: ['A', 'B'], timestamp: '2026-01-01T00:00:00.000Z' };
     let w = replayWorld([cancel], { del: (call) => ({ status: call.path === '/bookings/A' ? 204 : 404 }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.seq().sort(), w.queue(), w.said(/^1 queued cancel sent$/)], [['DELETE /bookings/A', 'DELETE /bookings/B'], [], true], 'a queued cancel DELETEs every record; one already gone (404) counts as done');
     w = replayWorld([cancel], { del: () => ({ status: 503 }) });
-    await w.sb.processOfflineQueue();
+    await w.sb.processOfflineQueue('online');
     eq([w.count('DELETE'), w.queue().length], [8, 1], 'a 503 on a cancel IS retried (a repeat DELETE is harmless) and the cancel stays queued');
 
     w = world();

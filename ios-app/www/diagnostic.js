@@ -411,7 +411,11 @@
       details.style.cssText =
         'background:none;border:none;color:inherit;font-weight:700;cursor:pointer;' +
         'font-size:13px;text-decoration:underline;padding:0';
-      details.onclick = function () { openDiagnostics(); };
+      // settings.js's window.openDiagnostics is the real panel; the bare name
+      // here is this module's own fallback, which only opens Settings.
+      details.onclick = function () {
+        if (typeof window.openDiagnostics === 'function') window.openDiagnostics(); else openDiagnostics();
+      };
       banner.appendChild(details);
 
       var dismiss = document.createElement('button');

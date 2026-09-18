@@ -39,10 +39,12 @@
   // and are tracked only for drift visibility. Fields were derived by reading
   // the real accesses in app.js / explore.js / features.js / tabs.js.
   var SCHEMAS = {
-    // GET /profile → data.data (app.js:319,322 subscriptions; app.js:2098 stats)
+    // GET /profile → data.data. Only `id` is required: app.js reads
+    // subscriptions (_pickActiveSubscription) and stats (`|| {}`) with
+    // fallbacks, and a member with neither must not get a safe-mode banner.
     profile: {
-      required: ['id', 'subscriptions', 'stats'],
-      optional: ['first_name', 'email'],
+      required: ['id'],
+      optional: ['subscriptions', 'stats', 'first_name', 'email'],
     },
     // GET /instructors → data[] (app.js:500 is_visible+full_name; explore.js:64 id)
     instructor: {
@@ -114,12 +116,15 @@
     } catch (e) { /* diagnostics must never break the app */ }
   }
 
+  // diagnostic.js exports record(kind, sample) — there never was a noteSample,
+  // so this bridge silently did nothing. (`validation` needs no passing on:
+  // process() reports each missing required field through noteMissingField.)
   function diagNoteSample(kind, sample, validation) {
     try {
       if (typeof window.PsycleDiag !== 'undefined' &&
           window.PsycleDiag &&
-          typeof window.PsycleDiag.noteSample === 'function') {
-        window.PsycleDiag.noteSample(kind, sample, validation);
+          typeof window.PsycleDiag.record === 'function') {
+        window.PsycleDiag.record(kind, sample);
       }
     } catch (e) { /* never break on diagnostics */ }
   }

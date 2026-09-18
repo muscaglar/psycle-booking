@@ -153,11 +153,14 @@ Already configured in `capacitor.config.json`:
 ```json
 {
   "ios": {
-    "preferredContentMode": "mobile",
-    "backgroundColor": "#0a0a0a"
+    "preferredContentMode": "mobile"
   }
 }
 ```
+
+`ios.backgroundColor` is deliberately **not** set. Capacitor then paints the WebView with
+`UIColor.systemBackground`, which follows Dark Mode like the launch screen does; any fixed
+colour flashes before first paint for whichever half of the members it doesn't suit.
 
 The native bridge (`www/native-bridge.js`) auto-sets the status bar style based on dark/light theme.
 

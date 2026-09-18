@@ -18,6 +18,31 @@
 try { if (window.top !== window.self) window.top.location = window.location; }
 catch (e) { document.documentElement.style.display = 'none'; }
 </script>
+<meta name="theme-color" content="#efeee9">
+<script id="themeBoot">
+// First paint in the member's own theme. <html data-theme="cloud"> above is
+// only corrected by the deferred theme.js, so everyone not on Cloud got a
+// Cloud flash at every launch (and a Cloud-coloured status area). Same rule as
+// theme.js _resolveTheme(): a saved id from the registry wins; anything else
+// (nothing saved, or a legacy "dark" / "light") follows the system. The map
+// mirrors APP_THEMES (id → bg) in theme.js — tests compare the two — and
+// theme.js still runs afterwards and has the last word. The theme-color meta
+// sits above this script so it exists when the script looks for it.
+// login.html carries the same script.
+(function () {
+  try {
+    var BG = { cloud: '#efeee9', linen: '#e8e1d5', graphite: '#131418', terminal: '#060906', synthwave: '#140a24', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var id = null;
+    try { id = localStorage.getItem('psycle_theme'); } catch (e) {}
+    if (!id || !Object.prototype.hasOwnProperty.call(BG, id)) {
+      id = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'graphite' : 'cloud';
+    }
+    document.documentElement.setAttribute('data-theme', id);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', BG[id]);
+  } catch (e) {}
+})();
+</script>
 <script>
 // A new service worker took over this page mid-session (a deploy): the HTML is
 // fresh, but the scripts and styles already running came out of the old cache.
@@ -99,6 +124,8 @@ catch (e) { document.documentElement.style.display = 'none'; }
 <link rel="dns-prefetch" href="https://psycle.codexfit.com">
 <title>Psync</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="css/styles.css">
 <link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/features.css">
@@ -107,7 +134,6 @@ catch (e) { document.documentElement.style.display = 'none'; }
 <link rel="stylesheet" href="css/explore.css">
 <link rel="stylesheet" href="css/redesign.css">
 <link rel="stylesheet" href="css/discover-layout-fix.css">
-<meta name="theme-color" content="#efeee9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Psync">
@@ -258,7 +284,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
   </div>
 
   <div class="control-group" style="position:relative">
-    <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors">★ Favs</button></label>
+    <label>Instructor <button class="fav-btn" id="favBtn" onclick="applyFavouritesAsFilter()" title="Filter by starred instructors" aria-label="Filter by starred instructors">★ Favs</button><button class="fav-btn" id="tierBtn" onclick="applyTierFilter()" title="Filter by instructors you ranked S or A" aria-label="Filter by instructors ranked S or A" style="display:none">S/A</button></label>
     <div id="instrBox" class="instr-box" onclick="focusInstrSearch(event)">
       <div id="instrChips"></div>
       <input id="instrSearch" class="instr-search" placeholder="Add an instructor" autocomplete="off"

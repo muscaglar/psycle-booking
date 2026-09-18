@@ -111,7 +111,10 @@ function injectThemeToggle() {
   btn.className = 'theme-toggle';
   btn.setAttribute('aria-label', 'Toggle dark/light mode');
   btn.setAttribute('title', 'Toggle dark/light mode');
-  btn.onclick = toggleTheme;
+  // Looked up at tap time, not bound now: reliability.js (loaded later) wraps
+  // window.toggleTheme to log the flip, and a handler holding THIS function
+  // never went through that wrapper — no tap on the button was ever logged.
+  btn.onclick = function () { window.toggleTheme(); };
   // authPill is nested inside a wrapper div, NOT a direct child of <header> —
   // inserting into header with a reference node from another parent throws
   // NotFoundError (and the toggle never rendered). Insert next to the pill

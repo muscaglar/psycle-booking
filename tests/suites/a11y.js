@@ -359,6 +359,45 @@ module.exports = async function (t) {
     ok(!w.els.historyModalOverlay.isConnected, 'otherwise an overlay without a closer is removed — what its own × does');
   }
 
+  // So does the usual-week sheet (js/tabs.js): own id, own Escape / Tab handler,
+  // z-index above every .modal-overlay. Unknown here, this handler's Escape
+  // closed whatever had mounted UNDER it and — by preventDefault — kept the key
+  // from the sheet's own handler; and focus was moved into the hidden overlay.
+  {
+    const w = world();
+    const opener = w.roleButton({ name: 'week-template-book' });
+    w.doc.activeElement = opener;
+    w.els.usualWeekSheet = { id: 'usualWeekSheet', isConnected: true };
+    const under = w.mount(w.overlay('classDetailOverlay', ['close']));
+    w.tick();
+    ok(w.doc.activeElement === opener, 'the usual-week sheet is up: an overlay that mounts under it does not pull focus out of the sheet');
+    const esc = w.key('Escape');
+    ok(under.isConnected && !esc.defaultPrevented, '…and Escape is the sheet\'s business (not prevented, so its own handler still sees the key)');
+    ok(!w.key('Tab').defaultPrevented, '…as is Tab');
+    w.els.usualWeekSheet.isConnected = false;
+    w.key('Escape');
+    ok(!under.isConnected, 'once the sheet has closed the keys are this handler\'s again');
+  }
+
+  // …and _dialogOpen() — what every BACKGROUND dialog asks before it opens
+  // ("Spot opened", the waitlist "You're in", the offline-booking ask, the sync
+  // prompt, a quiet Discover re-render): a usual-week run re-reads /bookings
+  // after every seat, and each of those was a chance to open over the run.
+  {
+    const dialogSrc = between(appSrc, 'function _dialogOpen() {', '\nlet _allocAnnounceTimer');
+    ok(!!dialogSrc, '_dialogOpen found between its anchors');
+    const dialogOpen = (up) => {
+      const ctx = t.vm.createContext({ document: { getElementById: (id) => (id in up ? up[id] : null) } });
+      t.vm.runInContext(dialogSrc, ctx, { filename: 'js/app.js[_dialogOpen]' });
+      return ctx._dialogOpen();
+    };
+    eq([dialogOpen({}), dialogOpen({ bikeModal: { style: { display: 'none' } } })], [false, false], 'nothing up (the bike picker sits hidden in the page) → no dialog');
+    eq([dialogOpen({ psycleConfirmOverlay: {} }), dialogOpen({ bikeModal: { style: { display: 'flex' } } })], [true, true], 'a confirm dialog or the bike picker → a dialog, as before');
+    eq(dialogOpen({ usualWeekSheet: {} }), true, 'the usual-week sheet alone counts too: background dialogs wait for it to close');
+    ok(/_dialogOpen === 'function' && _dialogOpen\(\)/.test(t.readSource('js/reliability.js')) && /window\._dialogOpen\(\)/.test(t.readSource('js/features.js')),
+      'the offline-booking ask (reliability.js) and "Spot opened" (features.js) both go through it');
+  }
+
   // The sync prompt keeps its "not mid-sync" rule.
   {
     const w = world();
@@ -590,8 +629,10 @@ module.exports = async function (t) {
     });
     dialogs += (src.match(/role="dialog" aria-modal="true"/g) || []).length;
   });
-  // The nine sheets / panels + confirmModal + the first-run tour.
-  eq(dialogs, 11, 'every sheet and panel says it is a modal dialog');
+  // The nine sheets / panels + confirmModal + the first-run tour + the "Your
+  // usual week" sheet (tabs.js; it keeps its own Escape handler and focus trap,
+  // so it is not in the key handler's list below).
+  eq(dialogs, 12, 'every sheet and panel says it is a modal dialog');
   ['tokenDialog', 'bikeModal', 'syncPromptOverlay', 'classDetailOverlay', 'historyModalOverlay', 'instructorModalOverlay',
     'yearReviewOverlay', 'settingsOverlay', 'diagOverlay'].forEach((id) => {
     ok(ovSrc.indexOf("['" + id + "'") !== -1, 'the key handler knows #' + id);

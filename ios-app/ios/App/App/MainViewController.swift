@@ -14,5 +14,6 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(AppGroupPreferencesPlugin())
         bridge?.registerPluginInstance(WidgetCenterPlugin())
         bridge?.registerPluginInstance(PsycleLiveActivityPlugin())
+        bridge?.registerPluginInstance(PsycleDeepLinkPlugin())
     }
 }
