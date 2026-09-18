@@ -227,6 +227,50 @@ module.exports = async function (t) {
     eq(w2.log.pickers, [101], 'with _bookingContext declared (as in the app) a plain tap still opens its picker');
   }
 
+  t.section('Book: a class-sheet tap that had to wait for its class does not overtake a LATER tap');
+  {
+    // The sheet's booked button of a seat painted from saved details waits for
+    // that class to be re-read (up to 10s) BEFORE bookClass runs — so before it
+    // takes a sequence number. The REAL bookClass, _classDetailBookAction and
+    // _ensureStudioKnown together: sheet tap on 101, then Book on 202.
+    const sheetFns = [grab(appSrc, 'function _studioNeedsReread('), grab(appSrc, 'function _ensureStudioKnown('), grab(appSrc, 'function _pickerTakenSince('),
+      grab(appSrc, 'async function _classDetailBookAction(')].join('\n');
+    const sheetRace = () => {
+      const w = raceWorld({ bookings: held7 });
+      w.ctx._eventCache[101] = { id: 101, studio_id: 4, _fromSnapshot: true };
+      w.ctx.document.querySelector = () => null;
+      w.ctx.document.createElement = () => btn('');
+      w.reread = deferred();
+      w.ctx._hydrateEventDetails = () => w.reread.promise;
+      w.ctx.confirmUnbook = () => { throw new Error('a layout seat opens the picker, not the cancel dialog'); };
+      t.vm.runInContext('var BOOKING_VERIFY_DEADLINE_MS = 10000; var _studioRereads = {}; var _sheetActionBusy = {};\n' + sheetFns, w.ctx);
+      w.rereadLands = () => { w.ctx._eventCache[101] = { id: 101, studio_id: 4 }; w.reread.resolve(); };
+      return w;
+    };
+    let w = sheetRace();
+    const pa = w.ctx._classDetailBookAction(101);
+    await tick();
+    const b = btn();
+    const pb = w.ctx.bookClass(202, b, 4); // "+ Add spot" / Book on another class meanwhile
+    await tick();
+    w.rereadLands();
+    await pa;
+    eq(w.log.gets, [['/events/202', 1]], '101\'s re-read lands after 202 was tapped: 101 stands down — bookClass(101) never runs (it used to take the HIGHER number)');
+    w.gets['/events/202'].resolve(okDetail([9, 11]));
+    await pb;
+    eq([w.log.pickers, b.textContent, b.disabled, w.log.toasts.filter(x => x.type === 'error')], [[202], 'Book', false, []],
+      'the LATEST tap gets its picker (202 was put back silently and 101\'s "Your booking" opened instead)');
+    // On its own the sheet's tap is untouched.
+    w = sheetRace();
+    const p1 = w.ctx._classDetailBookAction(101);
+    await tick();
+    w.rereadLands();
+    await tick();
+    w.gets['/events/101'].resolve(okDetail([9, 11]));
+    await p1;
+    eq(w.log.pickers, [101], 'nothing tapped meanwhile: the re-read lands and 101\'s picker opens, as before');
+  }
+
   t.section('Book: a failed tap says something a member can act on');
   for (const [what, err, want] of [
     ['iPhone, weak signal', new TypeError('Load failed'), /offline|connection/i],
@@ -293,18 +337,18 @@ module.exports = async function (t) {
     eq(on.describeCancelError(res(401), {}), 'Session expired — sign in and try again.', '401 unchanged');
     eq(on.describeCancelError(res(403), { message: 'Too late to cancel' }), 'Too late to cancel', "Psycle's own reason still wins");
     eq(on.describeCancelError(res(403), {}), "Psycle wouldn't allow this cancellation (it may be inside the late-cancel window).", '403 with no reason unchanged (a policy refusal, not a dead session)');
-    eq(on.describeCancelError(res(500), {}), "Psycle couldn't cancel this just now (500) — check My Bookings.", 'a bare status is a sentence now, not "Cancel failed (500)"');
+    eq(on.describeCancelError(res(500), {}), "Psycle couldn't cancel this just now — check My Bookings.", 'a bare status is a sentence now, not "Cancel failed (500)" — and carries no status code (that is the error log\'s)');
     // Psycle's 500 answers {"message":"Server Error"} — a framework's stock body,
     // and it was the whole toast. The POST side filtered it; the cancel side did not.
     for (const [status, message] of [[500, 'Server Error'], [500, 'server error.'], [500, ' Internal Server Error '], [503, 'Service Unavailable'],
       [502, 'Bad Gateway'], [504, 'Gateway Timeout'], [504, 'Gateway Time-out'], [500, 'Error']]) {
-      eq(on.describeCancelError(res(status), { message }), `Psycle couldn't cancel this just now (${status}) — check My Bookings.`, status + ' "' + message + '" → the stock body is not a reason: the hedged line, pointing at My Bookings');
+      eq(on.describeCancelError(res(status), { message }), "Psycle couldn't cancel this just now — check My Bookings.", status + ' "' + message + '" → the stock body is not a reason: the hedged line, pointing at My Bookings');
     }
-    eq(on.describeCancelError(res(500), { message: 'SQLSTATE[23000]: Integrity constraint violation' }), "Psycle couldn't cancel this just now (500) — check My Bookings.", "a 5xx's text is never the toast, stock or not — it says nothing of whether the DELETE landed");
+    eq(on.describeCancelError(res(500), { message: 'SQLSTATE[23000]: Integrity constraint violation' }), "Psycle couldn't cancel this just now — check My Bookings.", "a 5xx's text is never the toast, stock or not — it says nothing of whether the DELETE landed");
     eq(on.describeCancelError(res(422), { message: 'This class has already started' }), 'This class has already started', "a refusal's own reason (422) still shows");
-    eq(on.describeCancelError(res(422), { message: 'Server Error' }), "Psycle couldn't cancel this just now (422) — check My Bookings.", 'a stock body is no reason on a 4xx either');
+    eq(on.describeCancelError(res(422), { message: 'Server Error' }), "Psycle couldn't cancel this just now — check My Bookings.", 'a stock body is no reason on a 4xx either');
     eq(on.describeCancelError(res(403), { message: 'Error.' }), "Psycle wouldn't allow this cancellation (it may be inside the late-cancel window).", '…and a 403 carrying one falls to the 403 wording');
-    eq(on.describeCancelError(res(422), { message: { code: 7 } }), "Psycle couldn't cancel this just now (422) — check My Bookings.", 'a message that is not text is never toasted ("[object Object]")');
+    eq(on.describeCancelError(res(422), { message: { code: 7 } }), "Psycle couldn't cancel this just now — check My Bookings.", 'a message that is not text is never toasted ("[object Object]")');
   }
 
   t.section('_friendlyError: follows categorizeError only where it can be trusted');
@@ -432,7 +476,7 @@ module.exports = async function (t) {
   // Psycle's 500 body is {"message":"Server Error"}: that was the whole toast.
   // A DELETE is re-sent up to three times, so a 5xx can follow one that landed.
   const answers = (status, body) => () => ({ ok: false, status, json: async () => body });
-  const SERVER_FAULT = "Psycle couldn't cancel this just now (500) — check My Bookings.";
+  const SERVER_FAULT = "Psycle couldn't cancel this just now — check My Bookings.";
   const cancelPaths = [
     ['the My Bookings seat ×', w => w.ctx.upcomingSeatCancel(77, 7, chip())],
     ['the picker\'s own seat', w => w.ctx.cancelBikeSlot(7, 77)],

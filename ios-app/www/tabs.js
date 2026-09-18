@@ -279,6 +279,14 @@
     }
     if (tab === 'discover') {
       renderWeekView();
+      // A lit date pill restored while another tab was up could not be brought
+      // into view — its row measured 0 (app.js _revealActiveDatePill left this
+      // note). Now it is laid out: once, never on later visits (the row may
+      // have been scrolled by hand since).
+      if (window._datePillRevealOwed) {
+        window._datePillRevealOwed = false;
+        if (typeof _revealActiveDatePill === 'function') _revealActiveDatePill();
+      }
     }
     if (tab === 'stats') {
       renderInsights();
@@ -429,7 +437,10 @@
     var hasHistory = getFullHistory().some(function (h) { return !h.cancelledAt; });
     var statsEmpty = document.getElementById('statsEmpty');
     var shareSection = document.getElementById('shareSection');
-    if (shareSection) shareSection.style.display = hasHistory ? '' : 'none';
+    // Taken classes, not rows: history holds a booking from the moment it is
+    // made, and "Share my stats" only draws classes TAKEN — after a first
+    // booking the button was offered, and could only toast "No history to share yet".
+    if (shareSection) shareSection.style.display = _hasTakenHistory() ? '' : 'none';
     // Signed OUT (no token at all — not "Psycle unreachable", which keeps the
     // member's own numbers up): the history on this device belongs to whoever
     // was last signed in, and must not be presented to the person now holding
@@ -493,8 +504,10 @@
     var studioCount = {};
     var instrCount = {};
 
-    history.forEach(function (h) {
-      if (h.cancelledAt) return;
+    // Classes TAKEN: history holds a booking from the moment it is made, so a
+    // row still to come is "Upcoming" above — not also this month's and all
+    // time's (the year wrap's own test, _takenRows).
+    _takenRows(history, now.getTime(), _historyStartMs()).forEach(function (h) {
       totalClasses++;
       var isSocial = h.slots && h.slots.length > 1;
       if (isSocial) socialClasses++; else soloClasses++;
@@ -514,6 +527,8 @@
       if (entry[1] && entry[1].waitlisted) return;
       var evt = cache[entry[0]];
       if (!evt) return;
+      // Held, not yet taken: counted under "Upcoming" only.
+      if (_stillToCome(evt.start_at, now)) return;
       var inHistory = history.some(function (h) { return h.eventId === entry[0]; });
       if (inHistory) return;
       totalClasses++;
@@ -919,7 +934,8 @@
         return '<li class="usual-week-entry">' +
           '<span class="usual-week-when">' + escapeHTML(when) + '</span>' +
           '<span class="usual-week-what">' + escapeHTML(label) +
-            (en.locName ? '<span class="usual-week-where"> · ' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
+            // The separator has a span of its own: the card puts the studio on a second line (styles.css), where it is dropped.
+            (en.locName ? '<span class="usual-week-where"><span class="usual-week-sep"> · </span>' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
           '<button type="button" class="usual-week-remove" onclick="removeUsualWeekEntry(' + i + ')" aria-label="' +
             escapeHTML('Remove ' + when + ' ' + label + ' from your usual week') + '">×</button>' +
         '</li>';
@@ -1052,6 +1068,7 @@
       function close() {
         if (st.closed || st.running) return; // a run in flight is never orphaned
         st.closed = true;
+        overlay._psycleClosing = true; // still rendered while it fades: not a dialog to announce into (app.js _dialogLiveRegion)
         overlay.classList.remove('show');
         setTimeout(function () { overlay.remove(); }, 180);
         document.removeEventListener('keydown', onKey);
@@ -2295,7 +2312,11 @@
     var months = {}; // "2025-03" -> { instructors: Set, total: number }
     history.forEach(function (h) {
       if (h.cancelledAt || !h.date) return;
-      var key = h.date.substring(0, 7); // "YYYY-MM"
+      // A date that does not read as one has no month: the first seven
+      // characters of "garbage" used to get a column of their own ("ge").
+      var ym = /^\d{4}-(0[1-9]|1[0-2])(?!\d)/.exec(String(h.date));
+      if (!ym) return;
+      var key = ym[0]; // "YYYY-MM"
       if (!months[key]) months[key] = { instructors: new Set(), total: 0 };
       months[key].total++;
       if (h.instrName) months[key].instructors.add(h.instrName);
@@ -2352,7 +2373,26 @@
         !(startMs(h.date) > nowMs);
     });
   }
+  // The same test over every year: what the Stats tiles ("This month", "All
+  // time") and the "Share my stats" image may count — they still took next
+  // week's bookings for classes taken after the wrap had stopped.
+  function _takenRows(history, nowMs, startMs) {
+    return history.filter(function (h) { return !!h && !h.cancelledAt && !(startMs(h.date) > nowMs); });
+  }
   // ── pure:year-review:end ──
+
+  // app.js's London resolver (h.date is gym wall clock); the device-local
+  // parse only when app.js is absent — the same pair _stillToCome falls back on.
+  function _historyStartMs() {
+    return (typeof _gymClassStartMs === 'function') ? _gymClassStartMs
+      : function (d) { return new Date(String(d).replace(' ', 'T')).getTime(); };
+  }
+
+  // Is there a class TAKEN to show? shareInsights' own test — renderInsights
+  // offers "Share my stats" by it.
+  function _hasTakenHistory() {
+    return _takenRows(getFullHistory(), Date.now(), _historyStartMs()).length > 0;
+  }
 
   // Aggregate this year's attended history into a tidy summary object.
   function _computeYearReview(year) {
@@ -2685,7 +2725,8 @@
   }
 
   window.shareInsights = async function () {
-    var history = getFullHistory().filter(function (h) { return !h.cancelledAt; });
+    // Classes taken only — next week's bookings went out on the image as CLASSES.
+    var history = _takenRows(getFullHistory(), Date.now(), _historyStartMs());
     if (history.length === 0) { toast('No history to share yet', 'info'); return; }
 
     var now = new Date();

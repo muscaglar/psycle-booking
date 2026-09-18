@@ -225,6 +225,9 @@ module.exports = async function (t) {
       ctx.window = ctx; // restoreFilters writes window._dateQuickMode
       // The real painter reads the same three values; record what it would light.
       ctx._syncDatePills = () => { w.lit = ctx._datePillState(ctx._dateQuickMode, els.startDate.value, els.daysAhead.value, TODAY); };
+      // Each restore then brings the lit pill into view inside its row: record what was lit at that moment.
+      w.revealed = [];
+      ctx._revealActiveDatePill = () => { w.revealed.push(w.lit && w.lit.label); };
       t.vm.runInContext('function __initTail() {\n' + initTail + '\n}\n' + intSrc.slice(rStart, rEnd), ctx, { filename: 'launch[init tail + restoreFilters]' });
       w.ctx = ctx;
       w.state = () => ({ mode: ctx._dateQuickMode, startDate: els.startDate.value, daysAhead: Number(els.daysAhead.value), lit: w.lit });
@@ -248,6 +251,7 @@ module.exports = async function (t) {
         const w = launch(JSON.stringify(saved));
         orders[order](w);
         t.eq(w.state(), want, order + ': saved ' + name + ' survives the launch with its pill lit');
+        t.eq(w.revealed, [want.lit.label, want.lit.label], order + ': saved ' + name + ' — both restores reveal the pill AFTER painting it (a saved "Next week" sat clipped at a phone\'s right edge)');
       });
     });
     let w = launch(null);

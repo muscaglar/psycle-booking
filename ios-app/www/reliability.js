@@ -156,7 +156,7 @@
   // retry or show an error, not leave buttons stuck on "…" forever.
   const FETCH_TIMEOUT_MS = 15000;
 
-  window.fetchWithRetry = async function fetchWithRetry(url, opts, maxRetries = 3) {
+  window.fetchWithRetry = async function fetchWithRetry(url, opts, maxRetries = 3, stillWanted) {
     opts = opts || {};
     // The browser KNOWS it is offline: three backed-off retries only turn an
     // instant failure into ~7s of spinner. The one attempt still goes out, so
@@ -164,6 +164,11 @@
     if (typeof navigator !== 'undefined' && navigator.onLine === false) maxRetries = 0;
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      // A retry RE-SENDS the headers the first attempt was built with, seconds
+      // later. If the caller says they are no longer its to send (apiFetch:
+      // signed out, or another account, during the backoff) give up the way a
+      // caller-cancelled request does — an AbortError, nothing more sent.
+      if (attempt > 0 && typeof stillWanted === 'function' && !stillWanted()) throw _retryAbandoned();
       // Chain caller-provided signal (if any) with our timeout signal so either
       // one aborts the request.
       const ctrl = new AbortController();
@@ -207,6 +212,26 @@
     return new Promise(resolve => setTimeout(resolve, delay));
   }
 
+  /** What a retry that is no longer wanted rejects with (see stillWanted). */
+  function _retryAbandoned() {
+    const err = new Error('Request abandoned');
+    err.name = 'AbortError';
+    err.abandoned = true;
+    return err;
+  }
+
+  // ── pure:retry-auth:start ── (DOM-free; tests/suites/retry-signout.js evaluates this block)
+  // May a request that was built with the bearer token `startedWith` be sent
+  // AGAIN now that the stored token reads `current`? Only while it is still
+  // that very token: after a sign-out or a session expiry there is none, and
+  // after an account switch it is someone else's. (A request that carried no
+  // token has no credential to re-send.)
+  function _retryTokenStillValid(startedWith, current) {
+    if (!startedWith) return true;
+    return !!current && current === startedWith;
+  }
+  // ── pure:retry-auth:end ──
+
   // Wrap the global apiFetch to use fetchWithRetry instead of raw fetch
   if (typeof apiFetch === 'function') {
     const _originalApiFetch = apiFetch;
@@ -227,7 +252,12 @@
       var method = String(opts.method || 'GET').toUpperCase();
       var maxRetries = (typeof opts.retries === 'number') ? opts.retries : (method === 'POST' ? 0 : 3);
 
-      return fetchWithRetry(apiUrl(path), Object.assign({}, opts, { headers: headers }), maxRetries)
+      // The Authorization header above is built ONCE; every retry re-sends it.
+      // Re-read the store before each one, so a sign-out (or a session that
+      // ended) during the backoff stops the old token going out again.
+      var stillWanted = function () { return _retryTokenStillValid(token, getBearerToken()); };
+
+      return fetchWithRetry(apiUrl(path), Object.assign({}, opts, { headers: headers }), maxRetries, stillWanted)
         .then(function (res) {
           // 401-only: 403 is a business-rule denial with a valid session
           // (matches the base apiFetch in app.js).
@@ -241,7 +271,7 @@
           return res;
         })
         .catch(function (err) {
-          logNetworkError(path, 'NETWORK_ERROR', opts.method || 'GET');
+          logNetworkError(path, (err && err.abandoned) ? 'ABANDONED (signed out)' : 'NETWORK_ERROR', opts.method || 'GET');
           throw err;
         });
     };
@@ -838,9 +868,15 @@
       if (typeof fetchMyBookings === 'function') fetchMyBookings();
     }
     var pending = remaining.length - waiting; // tried, and kept for another go
-    if (failed > 0 && pending > 0) {
+    // Signed out — or the session ended — while this ran: the retry layer gave
+    // up on whatever was in flight, which lands here as "failed". Nobody is
+    // signed in to be told: a sign-out empties the queue as soon as this run
+    // has saved, and an expiry has its own banner (the queue waits for the
+    // sign-in that follows).
+    var signedIn = !!getBearerToken();
+    if (signedIn && failed > 0 && pending > 0) {
       toast(pending + ' queued action' + (pending !== 1 ? 's' : '') + ' still pending', 'info');
-    } else if (failed > 0) {
+    } else if (signedIn && failed > 0) {
       toast(failed + ' queued action' + (failed !== 1 ? 's' : '') + ' could not be completed', 'error');
     }
     // Last, so it is the toast left on screen: the one outcome the member has

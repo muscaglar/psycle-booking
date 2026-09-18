@@ -145,7 +145,11 @@ module.exports = async function (t) {
         _revalidateIfStale: () => w.calls.push('revalidateIfStale'),
         _discoverBusy: () => w.busy,
         switchTab: (tab) => w.calls.push('tab:' + tab),
-        setDateQuick: (mode) => w.calls.push('date:' + mode),
+        // The hook applies the preset WITHOUT saving it: _applyDateQuick, never the
+        // saveFilters-wrapped setDateQuick (a call to that one shows up as "saved:").
+        _applyDateQuick: (mode) => w.calls.push('date:' + mode),
+        setDateQuick: (mode) => w.calls.push('saved:' + mode),
+        _revealActiveDatePill: () => {},
       });
       ctx.window = ctx;
       t.vm.runInContext('var _revalFailedAt = 0, _loadableSearchStarted = ' + (o.launched === false ? 'false' : 'true') + ';\n' + appSrc.slice(rStart, rEnd), ctx, { filename: 'js/app.js[release]' });
@@ -190,11 +194,12 @@ module.exports = async function (t) {
     w = world();
     t.eq(typeof w.ctx._onBookingWeekOpened, 'function', 'window._onBookingWeekOpened is exported');
     w.ctx._onBookingWeekOpened();
-    t.eq(w.calls, ['tab:discover', 'date:nextweek'], "app already up: Discover, then the 'Next week' preset through setDateQuick (it searches and saves like a pill tap)");
+    t.eq(w.calls, ['tab:discover', 'date:nextweek'], "app already up: Discover, then the 'Next week' preset — it searches like a pill tap, but is NOT saved: a tapped notification used to become what every later launch opened on");
+    t.eq(w.ctx._dateRowHeld, true, '…nor by their next chip tap: the date row is marked as the notification\'s, which saveFilters and the overnight roll respect (tests/suites/wave7-leftovers.js, window.js)');
     t.ok(!/refreshWindow\(\)/.test(appSrc.slice(appSrc.indexOf('window._onBookingWeekOpened = function'), rEnd)), 'no explicit refresh to race that search — the freshness rule refetches a pre-release window');
     w = world({ launched: false });
     w.ctx._onBookingWeekOpened();
-    t.eq([w.calls, w.timers.length], [[], 2], 'cold start, launch not done: NOTHING is written yet (setDateQuick saves the filters — before restoreFilters that would wipe the saved studios) — a retry is armed');
+    t.eq([w.calls, w.timers.length, w.ctx._dateRowHeld], [[], 2, undefined], 'cold start, launch not done: NOTHING is written yet (init\'s tail and restoreFilters would each put the old preset back) — a retry is armed');
     t.vm.runInContext('_loadableSearchStarted = true;', w.ctx);
     w.timers[1].fn();
     t.eq(w.calls, ['date:nextweek'], 'once a search that could load has started (launch restored the saved date row before it), the preset is applied — with no second switchTab: the bridge put the member on Discover at the tap');

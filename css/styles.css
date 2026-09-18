@@ -404,6 +404,12 @@ select:focus, input:focus {
    on the light themes. */
 .bike-object { fill: var(--bg-input); stroke: var(--border-light); }
 .bike-object-mark { fill: var(--text-ghost); }
+/* Corner radius from the tokens, not from the rects' rx attributes (a CSS rx
+   outranks the attribute; an engine without the property keeps the attribute's
+   same 6 / 4 units): Handheld zeroes every radius token, and the seat tiles
+   were the one rounded thing left on it. */
+.bike-slot rect { rx: var(--radius-md); ry: var(--radius-md); }
+.bike-object { rx: var(--radius-sm); ry: var(--radius-sm); }
 
 /* Phones: the picker becomes a full-width bottom sheet so the studio map gets
    every pixel (the SVG scales to it — see showBikePicker). Scoped to the bike
@@ -2642,6 +2648,18 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   margin: 0;
   padding: 0;
 }
+
+/* In the card an entry's label takes two lines: class · instructor, then the
+   studio on a line of its own. On ONE line the ellipsis ate the studio first —
+   the only part that tells two entries of the same class apart. A forced break
+   rather than display:block: both lines stay line boxes of .usual-week-what
+   (below), so each still ends in ITS ellipsis in every engine. The " · " that
+   joined the two has nothing left to join. */
+.usual-week-list .usual-week-where::before {
+  content: "\A";
+  white-space: pre;
+}
+.usual-week-list .usual-week-sep { display: none; }
 
 .usual-week-entry {
   display: flex;

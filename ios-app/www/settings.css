@@ -24,6 +24,23 @@
 .next-class-pill:hover { transform: translateX(-50%) scale(1.02); }
 .next-class-pill.hidden { opacity: 0; transform: translateX(-50%) translateY(var(--space-8)); pointer-events: none; }
 
+/* The pill floats over the foot of whatever is scrolling. Every panel keeps a
+   fixed strip free for it (.tab-panel in styles.css; #tab-discover and
+   #tab-membership set their own in redesign.css — hence the ids here), which is
+   right where the pill rides above the docked tab bar (<=640px) but a little
+   short where it sits at the foot of the page: the last card's action row
+   stopped under the pill's top edge. So WHILE the pill is showing
+   (body.has-next-pill — settings.js toggles it with the pill) the panels end at
+   the pill's offset + its height (padding + two lines of text) + a gap. Hidden,
+   nothing changes. */
+@media (min-width: 641px) {
+  body.has-next-pill .tab-panel,
+  body.has-next-pill #tab-discover,
+  body.has-next-pill #tab-membership {
+    padding-bottom: calc(var(--space-7) + var(--space-12) + var(--space-5) + var(--space-5) + env(safe-area-inset-bottom));
+  }
+}
+
 .ncp-countdown {
   font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
@@ -378,6 +395,10 @@
 .bike-pref-svg-slot:hover text { fill: var(--text-heading, #fff); }
 /* Studio objects (podium etc.) */
 .bike-pref-svg-object { fill: var(--bg-panel, #1a1a0a); stroke: var(--border-light, #333); }
+/* Corners from the radius tokens, as the picker's map (css/styles.css): the
+   rects' rx attributes kept these tiles rounded on Handheld. */
+.bike-pref-svg-slot rect { rx: var(--radius-md); ry: var(--radius-md); }
+.bike-pref-svg-object { rx: var(--radius-sm); ry: var(--radius-sm); }
 
 .bike-pref-svg-slot.pref-avoid rect { fill: var(--badge-full-bg, #2a0a0a); stroke: var(--badge-full-text, #e94560); stroke-dasharray: 4 2; }
 .bike-pref-svg-slot.pref-avoid text { fill: var(--badge-full-text, #e94560); }

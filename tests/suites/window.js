@@ -494,6 +494,27 @@ module.exports = async function (t) {
     t.eq([ctx._rollDiscoverForward(), r.applied], [true, ['today']], 'next morning: "Today" is re-applied through setDateQuick (which saves and searches)');
     t.eq(r.reentered, false, 'setDateQuick → triggerAutoSearch comes straight back in: no second roll, no loop');
     t.eq([ctx._rollDiscoverForward(), r.applied.length], [false, 1], 'and only once for that day');
+    // The Monday reminder's "Next week" is on screen (window._dateRowHeld): it
+    // rolls like any preset, but NOT through the name saveFilters wraps — an app
+    // left warm overnight saved it as the launch default with no tap at all.
+    const h = { today: YDAY, applied: [] };
+    const nw = F._dateModeWindow('nextweek', YDAY);
+    const held = { startDate: { value: nw.startDate }, daysAhead: { value: String(nw.daysAhead) } };
+    const hctx = t.loadPure('js/app.js', 'window', {
+      _dateModeWindow: F._dateModeWindow,
+      localDateStr: () => h.today,
+      document: { getElementById: (id) => held[id] || null },
+      setDateQuick: (mode) => h.applied.push('saved:' + mode),
+      _applyDateQuick: (mode) => h.applied.push('unsaved:' + mode),
+    });
+    hctx.window = hctx;
+    hctx._dateRowHeld = true;
+    t.vm.runInContext("var _dateQuickMode = 'nextweek';\n" + appSrc.slice(rfStart, rfEnd), hctx, { filename: 'js/app.js[roll-forward, held]' });
+    h.today = TODAY;
+    t.eq([hctx._rollDiscoverForward(), h.applied], [true, ['unsaved:nextweek']], 'the reminder\'s "Next week" rolls through _applyDateQuick: re-derived and searched, never saved');
+    hctx._dateRowHeld = false;
+    h.today = '2026-09-18';
+    t.eq([hctx._rollDiscoverForward(), h.applied], [true, ['unsaved:nextweek', 'saved:nextweek']], '…and once the row is the member\'s own again, it is setDateQuick as before');
     const trig = appSrc.slice(appSrc.indexOf('function triggerAutoSearch() {'), appSrc.indexOf('// One-line digest of the active filters'));
     t.ok(trig.indexOf('if (_rollDiscoverForward()) return;') !== -1 && trig.indexOf('_rollDiscoverForward()') < trig.indexOf('_windowCovers('), 'triggerAutoSearch rolls the day before it trusts the loaded window');
     const vis = appSrc.slice(rfEnd, appSrc.indexOf('// ── "Last updated"'));

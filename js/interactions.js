@@ -376,6 +376,19 @@
       // since changed by hand is no longer held, and saves live.
       const held = (typeof window !== 'undefined' && window._focusStash) || {};
       const own = function (key, live) { return Array.isArray(held[key]) ? held[key].slice() : live; };
+      // The date row likewise, while it is the Monday reminder's and not the
+      // member's (app.js sets window._dateRowHeld on that tap and clears it
+      // when they pick a date themselves): the date ALREADY SAVED stays. This
+      // save — their next chip tap on that week — used to make "Next week"
+      // what every later launch opened on. Nothing saved yet: the default week.
+      let ownDate = null;
+      if (typeof window !== 'undefined' && window._dateRowHeld) {
+        let stored = null;
+        try { stored = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null'); } catch (e) {}
+        ownDate = (stored && typeof stored === 'object')
+          ? { startDate: stored.startDate || '', daysAhead: stored.daysAhead || '7', dateQuickMode: stored.dateQuickMode || null }
+          : { startDate: '', daysAhead: '7', dateQuickMode: 'week' };
+      }
       const filters = {
         instructorIds: typeof selectedInstructors !== 'undefined' ? [...selectedInstructors] : [],
         locationIds: own('locationIds', typeof selectedLocations !== 'undefined' ? [...selectedLocations] : []),
@@ -386,9 +399,9 @@
         timeBands: own('timeBands', typeof selectedTimeBands !== 'undefined' ? [...selectedTimeBands] : []),
         availableOnly: typeof held.availableOnly === 'boolean' ? held.availableOnly
           : (typeof _availableOnly !== 'undefined' ? _availableOnly === true : false),
-        startDate: document.getElementById('startDate')?.value || '',
-        daysAhead: document.getElementById('daysAhead')?.value || '7',
-        dateQuickMode: typeof _dateQuickMode !== 'undefined' ? _dateQuickMode : null,
+        startDate: ownDate ? ownDate.startDate : (document.getElementById('startDate')?.value || ''),
+        daysAhead: ownDate ? ownDate.daysAhead : (document.getElementById('daysAhead')?.value || '7'),
+        dateQuickMode: ownDate ? ownDate.dateQuickMode : (typeof _dateQuickMode !== 'undefined' ? _dateQuickMode : null),
       };
       localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
     } catch (e) {
@@ -474,6 +487,9 @@
         document.getElementById('daysAhead').value = dateState.daysAhead;
         // Pills + the calendar button's date label are painted from that state.
         if (typeof _syncDatePills === 'function') _syncDatePills();
+        // …and the lit one is brought into view inside its row (a saved "Next
+        // week" sits past a phone's right edge) — the row's scrollLeft only.
+        if (typeof _revealActiveDatePill === 'function') _revealActiveDatePill();
       }
 
       if (typeof updateFiltersSummary === 'function') updateFiltersSummary();

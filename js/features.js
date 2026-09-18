@@ -654,7 +654,7 @@
         const watchlist = getNotifyWatchlist();
         const isWatching = watchlist.includes(String(evt.id));
         const notifyBtn = `<button class="notify-btn${isWatching ? ' watching' : ''}"
-          title="${isWatching ? 'Stop watching for openings' : 'Notify me when a spot opens'}"
+          title="${_bellTitle(isWatching)}" aria-label="${_bellLabel(isWatching)}" aria-pressed="${isWatching}"
           onclick="event.stopPropagation();window._features_toggleNotify('${evt.id}', this)"></button>`;
         // Insert after the book button
         html = html.replace(
@@ -706,6 +706,18 @@
     return result;
   };
 
+  // The bell's glyph is a CSS emoji and its only name was a title, so the emoji
+  // is what a screen reader read out. Three places put the bell in a state (the
+  // card template, a tap, a watch that ends by itself): one source for its name
+  // and its pressed state, so they cannot drift apart.
+  function _bellTitle(watching) { return watching ? 'Stop watching for openings' : 'Notify me when a spot opens'; }
+  function _bellLabel(watching) { return watching ? 'Stop notifying me' : 'Notify me when a spot opens'; }
+  function _setBellState(btn, watching) {
+    btn.title = _bellTitle(watching);
+    btn.setAttribute('aria-label', _bellLabel(watching));
+    btn.setAttribute('aria-pressed', String(!!watching));
+  }
+
   // Toggle notify watchlist for an event
   window._features_toggleNotify = async function (eventId, btn) {
     const eid = String(eventId);
@@ -716,7 +728,7 @@
       watchlist.splice(idx, 1);
       saveNotifyWatchlist(watchlist);
       btn.classList.remove('watching');
-      btn.title = 'Notify me when a spot opens';
+      _setBellState(btn, false);
       if (typeof toast === 'function') toast('Stopped watching this class', 'info');
     } else {
       // The watch first, the browser's permission prompt after — and not waited
@@ -728,7 +740,7 @@
       watchlist.push(eid);
       saveNotifyWatchlist(watchlist);
       btn.classList.add('watching');
-      btn.title = 'Stop watching for openings';
+      _setBellState(btn, true);
       // Say what this really is: there is no server or background fetch behind
       // the bell — the class is only looked at while the app is open, signed in.
       if (typeof toast === 'function') {
@@ -815,7 +827,7 @@
       const btn = document.querySelector(`.class-card[data-id="${eid}"] .notify-btn`);
       if (btn) {
         btn.classList.remove('watching');
-        btn.title = 'Notify me when a spot opens';
+        _setBellState(btn, false);
       }
     }
   }

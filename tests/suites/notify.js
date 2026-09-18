@@ -398,8 +398,9 @@ module.exports = async function (t) {
       }
       t.vm.runInContext(region('  // Request notification permission', '  function _hasToken('), w.ctx);
       const classes = [];
-      const btn = { title: '', classList: { add: (c) => classes.push('+' + c), remove: (c) => classes.push('-' + c) } };
-      return Object.assign(w, { asked, btn, classes, tap: (id) => w.ctx._features_toggleNotify(id, btn) });
+      const attrs = {};
+      const btn = { title: '', classList: { add: (c) => classes.push('+' + c), remove: (c) => classes.push('-' + c) }, setAttribute: (k, v) => { attrs[k] = v; } };
+      return Object.assign(w, { asked, btn, classes, attrs, tap: (id) => w.ctx._features_toggleNotify(id, btn) });
     };
 
     // Chrome / Safari on the web, never asked: the prompt is left UNANSWERED.
@@ -408,6 +409,7 @@ module.exports = async function (t) {
     eq([w.watch(), w.classes, w.btn.title, w.log.toasts], [['555'], ['+watching'], 'Stop watching for openings', [['Watching this class — checked whenever Psync is open', 'success']]],
       'saved, the bell flipped and the toast shown straight away (the tap used to hang on the prompt: nothing saved, no toast — a dead tap)');
     eq(w.asked.count, 1, '…and the browser is still asked, once, after all of that');
+    eq(w.attrs, { 'aria-label': 'Stop notifying me', 'aria-pressed': 'true' }, 'the bell has a NAME (its glyph is a CSS emoji — that is what was read out) and says it is on');
     w.asked.answer('granted');
     await w.settle();
     eq([w.watch(), w.log.toasts.map((x) => x[0])], [['555'], ['Watching this class — checked whenever Psync is open', 'Notifications enabled']], 'answering later changes nothing about the watch');
@@ -431,6 +433,7 @@ module.exports = async function (t) {
     w = bellWorld('default', { watch: ['560', '561'] });
     await w.tap(560);
     eq([w.watch(), w.classes, w.asked.count, w.log.toasts], [['561'], ['-watching'], 0, [['Stopped watching this class', 'info']]], 'a second tap stops watching — and never prompts');
+    eq([w.attrs, w.btn.title], [{ 'aria-label': 'Notify me when a spot opens', 'aria-pressed': 'false' }, 'Notify me when a spot opens'], '…and the name and pressed state flip back with it');
     w = bellWorld('granted', { token: null });
     await w.tap(562);
     eq(w.log.toasts[0][0], 'Watching this class — sign in so Psync can check it', 'signed out: the toast says why nothing will be checked yet');

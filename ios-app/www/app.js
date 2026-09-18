@@ -1004,6 +1004,19 @@ function _joinAnnouncements(queue) {
   });
   return out.join(' ');
 }
+
+// Which of the open aria-modal dialogs is on top: the highest z-index and,
+// among equals, the one later in the document (built overlays are appended to
+// <body> as they open — a confirm over the picker comes after it). `dialogs`:
+// [{ z }] in document order, z = the layer's computed z-index ('auto' → NaN →
+// 0). → its index, or -1 when none is open.
+function _topDialogIndex(dialogs) {
+  const list = Array.isArray(dialogs) ? dialogs : [];
+  const zOf = d => Number(d && d.z) || 0;
+  let top = -1;
+  list.forEach((d, i) => { if (top === -1 || zOf(d) >= zOf(list[top])) top = i; });
+  return top;
+}
 // ── pure:a11y:end ──
 
 // Say something to screen-reader users. The ~130 toasts, the session banner
@@ -1013,6 +1026,7 @@ function _joinAnnouncements(queue) {
 // text twice running ("Booking cancelled") is announced both times.
 const _srQueue = { srStatus: [], srAlert: [] };
 const _srTimers = {};
+const _srInDialog = {}; // region id → the in-dialog copy last written to (see _dialogLiveRegion)
 function announce(text, assertive) {
   const id = assertive ? 'srAlert' : 'srStatus';
   let el = document.getElementById(id);
@@ -1029,14 +1043,58 @@ function announce(text, assertive) {
   }
   _srQueue[id].push(text);
   el.textContent = '';
+  // The same line goes inside an open aria-modal dialog too (made now, written
+  // with the page's region a beat later). A copy left in ANOTHER dialog by the
+  // last message is emptied here: its own clean-up timer is cancelled below.
+  const inDialog = _dialogLiveRegion(id, assertive);
+  if (_srInDialog[id] && _srInDialog[id] !== inDialog) _srInDialog[id].textContent = '';
+  _srInDialog[id] = inDialog;
+  if (inDialog) inDialog.textContent = '';
   clearTimeout(_srTimers[id]);
   _srTimers[id] = setTimeout(() => {
     const line = _joinAnnouncements(_srQueue[id]);
     _srQueue[id] = [];
     el.textContent = line;
+    if (inDialog) inDialog.textContent = line;
     // Not left behind for someone swiping through the page a minute later.
-    _srTimers[id] = setTimeout(() => { el.textContent = ''; }, _toastDuration(line));
+    _srTimers[id] = setTimeout(() => { el.textContent = ''; if (inDialog) inDialog.textContent = ''; }, _toastDuration(line));
   }, 50);
+}
+
+// A screen reader treats everything outside an open aria-modal dialog as inert
+// — #srStatus / #srAlert included — so a toast raised while one is up ("Bike 12
+// cancelled" in the picker, an error under a confirm) was never spoken. The
+// line is ALSO written to a region INSIDE the top-most open dialog: made on
+// demand, one per politeness (no role swapped at runtime, as above), kept for
+// that dialog's next message and gone with the dialog. null = no dialog open.
+function _dialogLiveRegion(id, assertive) {
+  try {
+    if (typeof document.querySelectorAll !== 'function') return null; // a test page without one
+    // Open = rendered: the token dialog and the picker are static markup inside
+    // a display:none overlay while closed. And not on its way out: a dismissed
+    // confirm (the usual-week sheet, the tour) stays rendered — top layer, still
+    // aria-modal — for the ~200ms of its fade, and the toast its answer raised
+    // ("You're offline — nothing was cancelled") went into a region that was
+    // removed with it; the picker still open underneath never got one.
+    const open = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'))
+      .map(d => ({ el: d, layer: d.closest('body > *') || d }))
+      .filter(o => o.el.getClientRects().length > 0 && !o.layer._psycleClosing)
+      .map(o => ({ el: o.el, z: parseInt(getComputedStyle(o.layer).zIndex, 10) }));
+    const top = _topDialogIndex(open);
+    if (top === -1) return null;
+    const dialog = open[top].el;
+    let region = dialog.querySelector('[data-sr-region="' + id + '"]');
+    if (!region) {
+      region = document.createElement('div');
+      region.className = 'sr-only';
+      region.setAttribute('data-sr-region', id);
+      region.setAttribute('role', assertive ? 'alert' : 'status');
+      region.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+      region.setAttribute('aria-atomic', 'true');
+      dialog.appendChild(region);
+    }
+    return region;
+  } catch (e) { return null; } // an announcement must never break the toast that carries it
 }
 
 // Toast (toastTimer managed by state.js)
@@ -1166,8 +1224,11 @@ const ACCOUNT_STASH_KEYS = [
 const ACCOUNT_CLEAR_KEYS = [
   'psycle_class_history', 'psycle_history_synced', 'psycle_history_prompt_dismissed',
   'psycle_calendar_data', 'psycle_offline_queue',
-  // Rebuildable per-account caches other modules keep (absent = a no-op).
-  'psycle_history_topup_at', 'psycle_booked_event_details',
+  // Rebuildable per-account caches other modules keep (absent = a no-op). The
+  // top-up's "N too many" note with its stamp: left behind, a Settings import
+  // told the newcomer the leaver's "61 past classes are not in it yet" and held
+  // their weekly top-up back for a week (explore.js).
+  'psycle_history_topup_at', 'psycle_history_topup_skipped', 'psycle_booked_event_details',
   // Whose history that was (features.js _historyIsMine only ever WRITES it when
   // absent): left on the leaver, the newcomer's /bookings reconcile and weekly
   // top-up were refused for good. Keep it LAST — until it goes, a switch
@@ -1721,6 +1782,7 @@ function clearToken() {
   _lastWaitlistEntries = null;
   try { localStorage.removeItem(WAITLIST_PLACES_KEY); } catch (e) {}
   if (typeof _dropFocusStash === 'function') _dropFocusStash(); // nor filters a shortcut set aside
+  if (typeof _releaseDateRow === 'function') _releaseDateRow(); // nor a date row a notification put up
   // Empty the previous account's bookings at the source. With the token gone,
   // fetchMyBookings takes its no-token branch: it bumps _bookingsSeq (a
   // /bookings answer still in flight can't put them back), clears the map and
@@ -1949,6 +2011,7 @@ const _modulesLoaded = _laterModulesLoaded(document, window);
   document.getElementById('startDate').value = _ds.startDate;
   document.getElementById('daysAhead').value = _ds.daysAhead;
   _syncDatePills();
+  _revealActiveDatePill(); // a saved "Next week" / "14 days" is past a phone's right edge
 
   updateDiscoverEmptyState();
   updateFiltersSummary();
@@ -2111,7 +2174,44 @@ function _restoredDateState(saved, todayStr) {
   const week = _dateModeWindow('week', todayStr);
   return { mode: 'week', startDate: week.startDate, daysAhead: week.daysAhead };
 }
+
+// The scrollLeft that brings one item of a scroll row fully into view, with
+// `pad` to spare on the side it was cut off at — unchanged when it already
+// is. Everything in the row's own content coordinates.
+function _scrollLeftToReveal(scrollLeft, viewW, itemLeft, itemW, pad) {
+  const cur = Number(scrollLeft) || 0;
+  if (!(viewW > 0) || !(itemW > 0) || isNaN(itemLeft)) return cur;
+  const gap = pad > 0 ? pad : 0;
+  if (itemLeft - gap < cur) return Math.max(0, itemLeft - gap);
+  if (itemLeft + itemW + gap > cur + viewW) return Math.max(0, itemLeft + itemW + gap - viewW);
+  return cur;
+}
 // ── pure:filters:end ──
+
+// A reload with "Next week" (or any later pill) saved lit a pill that sat
+// clipped at the row's right edge: the row is wider than a 390px window and
+// opens at its start. Moved by the ROW's own scrollLeft, never scrollIntoView()
+// — that scrolls every scrollable ancestor too, and the page would jump on
+// launch. For a restore / a programmatic change only: _syncDatePills also runs
+// on every background search, which must not drag a row the member scrolled.
+// A row that is not laid out (another tab is up) measures 0 and cannot be
+// moved yet — a reload on #bookings, or a launch from a widget tap, restored
+// "Next week" like that and nothing came back to it. It is owed instead:
+// switchTab (tabs.js) reveals it, once, when Discover is next shown.
+function _revealActiveDatePill() {
+  try {
+    const row = document.querySelector('.date-presets');
+    const pill = row && row.querySelector('.date-quick-btn.active');
+    if (!pill) return;
+    if (!(row.clientWidth > 0)) { window._datePillRevealOwed = true; return; }
+    if (!(row.scrollWidth > row.clientWidth)) return;
+    const rowBox = row.getBoundingClientRect(), box = pill.getBoundingClientRect();
+    // One row gap to spare (a token, read off the row), so the pill does not end flush against the edge.
+    const pad = parseFloat(getComputedStyle(row).columnGap) || 0;
+    const next = _scrollLeftToReveal(row.scrollLeft, row.clientWidth, box.left - rowBox.left + row.scrollLeft, box.width, pad);
+    if (next !== row.scrollLeft) row.scrollLeft = next;
+  } catch (e) { /* a nicety: never in the way of the restore that called it */ }
+}
 
 // The date pills' selected state was a CSS class only — a screen reader heard
 // "Today, button" lit or not. .active is written from many places (here, the
@@ -2162,6 +2262,16 @@ function _syncDatePills() {
 }
 
 function setDateQuick(mode) {
+  if (typeof _releaseDateRow === 'function') _releaseDateRow(); // a pill tap: the date row is the member's own again
+  _applyDateQuick(mode);
+}
+
+// The preset itself. Split from setDateQuick because THAT name is the one
+// interactions.js wraps with saveFilters — a pill tap is the member's choice
+// and becomes what the next launch restores. The Monday-reminder tap shows
+// "Next week" through here instead: a notification must not change the
+// launch default.
+function _applyDateQuick(mode) {
   // An unknown mode behaves as the default week view.
   const todayStr = localDateStr();
   if (!_dateModeWindow(mode, todayStr)) mode = 'week';
@@ -2173,8 +2283,22 @@ function setDateQuick(mode) {
   triggerAutoSearch();
 }
 
+// …nor may the member's NEXT tap change it: every wrapped toggle (a studio
+// chip, a class type, the Time row) has saveFilters snapshot the LIVE date row,
+// so one chip tapped on the reminder's "Next week" saved it as the launch
+// default after all. While window._dateRowHeld is set (_onBookingWeekOpened),
+// saveFilters (interactions.js) keeps the date it already has stored, and the
+// overnight roll re-applies the preset unsaved. A date the member picks
+// themselves — a pill, the calendar, Clear filters, a recent search — makes the
+// row theirs again; sign-out forgets it. (typeof window: the suites run the
+// callers without one.)
+function _releaseDateRow() {
+  if (typeof window !== 'undefined') window._dateRowHeld = false;
+}
+
 // Clear active quick-btn highlight when date/days inputs are changed manually
 function onDateInputChange() {
+  if (typeof _releaseDateRow === 'function') _releaseDateRow(); // a date of the member's own choosing
   _dateQuickMode = null;
   document.querySelectorAll('.date-quick-btn').forEach(b => b.classList.remove('active'));
   const daysGroup = document.getElementById('daysAheadGroup');
@@ -2204,6 +2328,7 @@ function clearFilters() {
   // Cleared means cleared: favourites are NOT re-selected here (the Favs
   // button is one tap away) — re-adding them left "Clear" still filtering.
   if (typeof _dropFocusStash === 'function') _dropFocusStash(); // …and what a shortcut set aside is not brought back
+  if (typeof _releaseDateRow === 'function') _releaseDateRow(); // the week it resets to is the member's choice, and saved
   selectedInstructors.clear();
   document.getElementById('instrSearch').value = '';
   selectedLocations.clear();
@@ -2554,10 +2679,35 @@ PsycleEvents.on('bookings:loaded', _showOwnFullClasses);
 
 // ── Pick-a-date calendar (redesign) ─────────────────────────────────
 let _calMonth = null; // { y, m }
+
+// Escape closes the calendar and hands focus back to its button. It is an
+// inline disclosure, not a modal layer: the overlay key handler further down
+// knows nothing about it, and should not — this is the calendar's own keydown,
+// wired the first time it opens (so it runs AFTER that handler, which has
+// already claimed the key for any sheet that is up). Only when the key is the
+// calendar's to take: focus in it, on its button, or nowhere (stepping a month
+// rebuilds the arrow that was pressed, and Safari never focuses a clicked
+// button) — Escape in the instructor search box is not ours.
+let _datePickerKeysWired = false;
+function _wireDatePickerKeys(el, btn) {
+  if (_datePickerKeysWired) return;
+  _datePickerKeysWired = true;
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.defaultPrevented || el.style.display === 'none') return;
+    if (_ownKeysOverlayUp()) return; // a confirm / the tour / the usual-week sheet is on top
+    const at = document.activeElement;
+    if (at && at !== document.body && at !== btn && !el.contains(at)) return;
+    e.preventDefault();
+    toggleDatePicker(); // its close branch: hidden, pills and aria-expanded re-synced
+    if (btn && typeof btn.focus === 'function') btn.focus();
+  });
+}
+
 function toggleDatePicker() {
   const el = document.getElementById('datePicker');
   const btn = document.getElementById('pickDateBtn');
   if (!el) return;
+  _wireDatePickerKeys(el, btn);
   // Closed is exactly display:none. Opening sets display to '' — the old
   // `|| !el.style.display` read that as closed too, so a second tap on the
   // button re-opened the calendar and the close branch below never ran.
@@ -2818,6 +2968,9 @@ let _discoverDay = localDateStr(); // the day the date row was last checked agai
 
 // Re-derive the date row if the day has changed. True when it moved — the
 // preset was re-applied through setDateQuick, which saves it and searches.
+// Not while the row is the Monday reminder's (see _releaseDateRow): rolled the
+// same, but through _applyDateQuick — an app left warm overnight saved "Next
+// week" as the launch default with no tap at all.
 function _rollDiscoverForward() {
   const today = localDateStr();
   if (today === _discoverDay) return false;
@@ -2828,7 +2981,8 @@ function _rollDiscoverForward() {
   });
   _discoverDay = today; // before setDateQuick: it comes straight back through triggerAutoSearch
   if (!mode) return false;
-  setDateQuick(mode);
+  if (typeof window !== 'undefined' && window._dateRowHeld) _applyDateQuick(mode);
+  else setDateQuick(mode);
   return true;
 }
 
@@ -2929,12 +3083,12 @@ _armReleaseTimer();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) _armReleaseTimer(); });
 
 // The Monday "new booking week opens" reminder was tapped (the iOS bridge
-// calls this). Show exactly that week: the 'Next week' preset, through
-// setDateQuick like a pill tap — it searches, and a window fetched before the
-// release is refreshed by the freshness rule, so there is no explicit refresh
-// here to race that search. Not before launch is done, though: setDateQuick
-// saves the filters (interactions.js), and saved before restoreFilters has put
-// the member's studios / instructors back that would wipe them — while init's
+// calls this). Show exactly that week: the 'Next week' preset, as a pill tap
+// would — it searches, and a window fetched before the release is refreshed by
+// the freshness rule, so there is no explicit refresh here to race that
+// search. Through _applyDateQuick, NOT setDateQuick: that one saves the
+// filters (interactions.js), and a tapped notification made "Next week" what
+// every later launch opened on. Not before launch is done, though: init's
 // tail and restoreFilters would each put the OLD date preset back. A search
 // that could load only starts after both. Nor under a booking in progress (the
 // search rebuilds the list the open picker's button lives in). Bounded: signed
@@ -2961,7 +3115,9 @@ window._onBookingWeekOpened = function (isRetry) {
     return;
   }
   if (isRetry !== true && typeof switchTab === 'function') switchTab('discover');
-  setDateQuick('nextweek');
+  window._dateRowHeld = true; // …nor may the member's next chip tap save it (see _releaseDateRow)
+  _applyDateQuick('nextweek');
+  _revealActiveDatePill(); // "Next week" is past a phone's right edge
 };
 
 async function search(opts) {
@@ -3507,6 +3663,20 @@ function _layoutFromEventDetail(detail, studioId) {
   return [rel && rel.layout, data.studio && data.studio.layout, data.layout, detail.layout]
     .find(l => !!l && Array.isArray(l.slots) && l.slots.length > 0) || null;
 }
+
+// The studio's own record out of the same answer, for a class whose studio
+// nothing has put on _studioMap yet. The one the class itself names first: the
+// id the caller holds can come from the saved class details, and a class moves
+// rooms. Only a record that SAYS whether it has a seat map counts — that flag
+// is what decides between the picker and the count body.
+function _studioFromEventDetail(detail, studioId) {
+  if (!detail || typeof detail !== 'object') return null;
+  const data = (detail.data && typeof detail.data === 'object') ? detail.data : {};
+  const studios = (detail.relations && Array.isArray(detail.relations.studios)) ? detail.relations.studios : [];
+  const byId = id => (id == null ? null : studios.find(s => s && s.id != null && String(s.id) === String(id)));
+  const rel = byId(data.studio_id) || byId(studioId);
+  return (rel && typeof rel.has_layout === 'boolean') ? rel : null;
+}
 // ── pure:book-fresh:end ──
 
 async function bookClass(eventId, btn, studioId) {
@@ -3654,7 +3824,15 @@ async function bookClass(eventId, btn, studioId) {
     let bookClashLine = clashLine;
     try { bookClashLine = _clashLabel(_clashFor(eventId, evtData, { includePlaces: true })); } catch (e) {}
 
-    const studio = _studioMap[studioId];
+    let studio = _studioMap[studioId];
+    // Nothing has put this class's studio on _studioMap yet: "+ Add spot" on a
+    // My Bookings card painted from the saved class details gets here before
+    // any list or detail read has. The answer just read carries the studio's
+    // own record — use it, and keep it (under ITS id: the saved one can be old).
+    if ((!studio || typeof studio.has_layout !== 'boolean') && typeof _studioFromEventDetail === 'function') {
+      const rel = _studioFromEventDetail(detail, studioId);
+      if (rel) { studioId = rel.id; studio = _studioMap[rel.id] = rel; }
+    }
     let layout = studio?.layout;
     // The cached studio record can be without its seat map (a list response's
     // relations don't always carry one, and render() replaces the record with
@@ -3712,9 +3890,14 @@ async function bookClass(eventId, btn, studioId) {
     // open, and the confirm below books by COUNT — for has_layout === false
     // only (Psycle turns a seat studio's slot-less body down: "Booking slot
     // required"). Say so instead of offering a booking that cannot go through.
-    if (!hasLayout && studio?.has_layout) {
+    // A studio that could not be resolved at all ends here too: the confirm
+    // below used to be offered for it, and then posted no slots and no count.
+    if (!hasLayout && !(studio && studio.has_layout === false)) {
       btn.disabled = false;
-      if (myBooking && (myBooking.bookingId || (myBooking.slots || []).length)) applyBookedState(btn, eventId, myBooking);
+      // "+ Add spot" is not a card button: it gets its own label back, never
+      // the card's "Bike 7 ✓" styling.
+      if (btn.classList && !btn.classList.contains('book-btn')) btn.textContent = tapLabel;
+      else if (myBooking && (myBooking.bookingId || (myBooking.slots || []).length)) applyBookedState(btn, eventId, myBooking);
       else btn.textContent = 'Book';
       toast("Couldn't load the studio map — try again", 'error');
       return;
@@ -3764,7 +3947,11 @@ async function bookClass(eventId, btn, studioId) {
       });
       if (!ok) {
         btn.disabled = false;
-        if (heldAlready) applyBookedState(btn, eventId, myBooking); else btn.textContent = 'Book';
+        // As above: "+ Add spot" is not a card button. "Not now" left it
+        // reading "Booked ✓", in the card's booked styling, under "Cancel booking".
+        if (btn.classList && !btn.classList.contains('book-btn')) btn.textContent = tapLabel;
+        else if (heldAlready) applyBookedState(btn, eventId, myBooking);
+        else btn.textContent = 'Book';
         return;
       }
       await submitBooking(eventId, null, btn, studio && studio.has_layout === false ? { spaces: 1 } : {});
@@ -4718,8 +4905,13 @@ function _waitlistClassLine(eventId) {
   const d = new Date(String(evt.start_at).replace(' ', 'T'));
   if (!isNaN(d.getTime())) {
     const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const h = d.getHours(), m = d.getMinutes();
-    when = `${days[d.getDay()]} ${d.getDate()}, ${h % 12 || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`;
+    // "Fri 18" only places a class within the week. A waitlist place can be
+    // held weeks ahead (and an ended one is read about weeks later): more than
+    // 6 days off either way, the month is said too — "Fri 18 Sep, 11:33am".
+    const far = Math.abs(d.getTime() - Date.now()) > 6 * 24 * 60 * 60 * 1000;
+    when = `${days[d.getDay()]} ${d.getDate()}${far ? ' ' + months[d.getMonth()] : ''}, ${h % 12 || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`;
   }
   return [evt._typeName, evt._instrName, when].filter(Boolean).join(' · ');
 }
@@ -5631,8 +5823,10 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   `;
   document.body.appendChild(el);
 
-  // Trigger animation on next frame
-  requestAnimationFrame(() => { el.classList.add('show'); });
+  // Trigger animation on next frame — unless it was dismissed before that frame
+  // came (the usual-week run dismisses each sheet as soon as its booking
+  // settles): sliding a dismissed sheet IN would flash it over the run's own.
+  requestAnimationFrame(() => { if (el.id) el.classList.add('show'); });
 
   // The sheet slides in silently for a screen reader: say what it shows — the
   // same lines, as plain text. "& " reads as "and" in a list of seats.
@@ -5653,12 +5847,18 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
 function dismissBookingConfirmation() {
   clearTimeout(_confirmationTimer);
   _confirmationTimer = null;
-  const el = document.getElementById('bookingConfirmation');
-  if (!el) return;
-  el.classList.remove('show');
-  el.addEventListener('transitionend', () => el.remove(), { once: true });
-  // Fallback removal if transition doesn't fire
-  setTimeout(() => { if (el.parentNode) el.remove(); }, 400);
+  // A dismissed sheet gives up its id at once: it stays in the document while it
+  // slides out, and getElementById returns the FIRST match — so two bookings
+  // settling inside that window (the usual-week run) dismissed the dying sheet
+  // twice and left the new one, its timer just cleared, on screen for good.
+  // Whoever asks "is the Booked! sheet up?" by that id now gets the live one only.
+  document.querySelectorAll('#bookingConfirmation').forEach((el) => {
+    el.removeAttribute('id');
+    el.classList.remove('show');
+    el.addEventListener('transitionend', () => el.remove(), { once: true });
+    // Fallback removal if transition doesn't fire
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 400);
+  });
 }
 
 function scrollToUpcoming() {
@@ -5722,6 +5922,7 @@ function confirmModal(opts) {
     const close = result => {
       if (settled) return;
       settled = true;
+      overlay._psycleClosing = true; // still rendered while it fades: not a dialog to announce into (_dialogLiveRegion)
       overlay.classList.remove('show');
       setTimeout(() => overlay.remove(), 180);
       document.removeEventListener('keydown', onKey);
@@ -6014,7 +6215,10 @@ function describeCancelError(failedResponse, data, err, sentOnline) {
     if (failedResponse.status === 403) {
       return "Psycle wouldn't allow this cancellation (it may be inside the late-cancel window).";
     }
-    return `Psycle couldn't cancel this just now (${failedResponse.status}) — check My Bookings.`;
+    // No "(500)": a bare status code means nothing to a member. It is in the
+    // error log all the same — reliability.js's apiFetch records the verb, the
+    // path and the status of every failed answer.
+    return "Psycle couldn't cancel this just now — check My Bookings.";
   }
   return 'Cancel failed';
 }
@@ -8530,6 +8734,20 @@ async function rebookNextWeek(eventId) {
 // ── Change Spot ─────────────────────────────────────────────────
 // Opens bike picker. When user selects a new spot, cancels old + books new.
 window.changeSpot = async function(eventId) {
+  // Read before the first wait: what the member tapped SINCE wins (below).
+  const seqAtTap = (typeof bookClass === 'function' && bookClass._seq) || 0;
+  // Painted from saved details: the studio — and so the seat map — isn't known
+  // until this class has been re-read (see _ensureStudioKnown). Never the
+  // "No layout available" error below for that, and never the saved studio's
+  // map. (typeof: the suites run changeSpot on its own.)
+  if (typeof _ensureStudioKnown === 'function' && getBearerToken() && _studioNeedsReread(eventId)) {
+    toast('Loading class…', 'info');
+    if (!(await _ensureStudioKnown(eventId))) {
+      // (No token left = the session ended meanwhile, and said so itself.)
+      if (getBearerToken()) toast("Couldn't load this class — nothing was changed. Try again in a moment.", 'error');
+      return;
+    }
+  }
   // A fresh multi-seat booking maps every seat to the single returned booking
   // id until fetchMyBookings corrects it — swapping off that stale map would
   // cancel the wrong seat. Refresh ONLY when the local record looks
@@ -8584,6 +8802,11 @@ window.changeSpot = async function(eventId) {
       toast('No layout available for this studio', 'error');
       return;
     }
+
+    // Another class was tapped while this loaded (up to 10s, with the re-read
+    // above), or its picker is already up: opening now would replace that
+    // picker's class and re-wire its Confirm to a swap. Theirs, quietly.
+    if (typeof _pickerTakenSince === 'function' && _pickerTakenSince(seqAtTap)) return;
 
     // Default to the first booked slot (whose own record is known — above). If
     // the user has multiple, the modalHint renders chips so they can pick
@@ -9204,6 +9427,52 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
 
 // _eventCache managed by state.js
 
+// ── A held class whose studio isn't known yet ───────────────────
+// A booking painted from last launch's saved details (_fromSnapshot) is on
+// screen BEFORE GET /events/{id} has told _studioMap about its studio — and the
+// saved studio id can itself be out of date. (A waitlist place Psycle turned
+// into a seat is the same: its cache entry came from the place, not a detail
+// read.) "Change spot" then answered "No layout available for this studio", and
+// the sheet's booked button — it routes on has_layout — opened the cancel
+// dialog instead of the picker. Both wait here first.
+function _studioNeedsReread(eventId) {
+  const evt = _eventCache[String(eventId)];
+  return !!evt && (!!evt._fromSnapshot || evt.studio_id == null || !_studioMap[evt.studio_id]);
+}
+
+// Re-read THAT class, under the deadline a booking tap waits for /bookings
+// (_rereadBookingsForVerify): one request per class however many taps. True
+// once a real detail read has replaced the record — ours, or the background one
+// fetchMyBookings started — and false when Psycle didn't answer in time: the
+// caller then says so and stops, rather than act on details nobody confirmed.
+const _studioRereads = {};
+function _ensureStudioKnown(eventId) {
+  const key = String(eventId);
+  if (!_studioNeedsReread(key)) return Promise.resolve(true);
+  if (!_studioRereads[key]) {
+    const before = _eventCache[key];
+    const landed = () => _eventCache[key] !== before || !_studioNeedsReread(key);
+    _studioRereads[key] = Promise.race([
+      _hydrateEventDetails([key]).then(landed, () => false),
+      new Promise(r => setTimeout(() => r(landed()), BOOKING_VERIFY_DEADLINE_MS)),
+    ]).then(ok => { delete _studioRereads[key]; return ok === true; });
+  }
+  return _studioRereads[key];
+}
+
+// Latest tap wins (see bookClass) — for the taps that wait BEFORE a picker
+// without having taken bookClass's sequence number: the sheet's booked button
+// (the re-read above, up to 10s) and Change spot. Has another class been tapped
+// since `seqAtTap` was read, or is a picker up that somebody else opened? The
+// sheet's tap used to reach bookClass late and take the HIGHER number: the
+// class tapped since was put back silently and this, older, one opened instead.
+// (typeof / .style checks: the suites run the callers against bare fakes.)
+function _pickerTakenSince(seqAtTap) {
+  if (((typeof bookClass === 'function' && bookClass._seq) || 0) !== seqAtTap) return true;
+  const picker = typeof document.getElementById === 'function' ? document.getElementById('bikeModal') : null;
+  return !!(picker && picker.style && picker.style.display && picker.style.display !== 'none');
+}
+
 // ── Class Detail Sheet ──────────────────────────────────────────
 // The sheet's Book / booked button. Prefer the rendered Discover card button
 // (its label stays in sync). Opened from My Bookings there often is none, so
@@ -9220,6 +9489,22 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
 const _sheetActionBusy = {};
 async function _classDetailBookAction(eventId) {
   const id = Number(eventId) || 0;
+  // A held seat whose studio isn't known yet: picker or cancel dialog (below)
+  // can't be chosen until the class has been re-read — see _ensureStudioKnown.
+  // Everything after this reads state afresh. (typeof: the suites run this
+  // function on its own.)
+  const heldSeat = _myBookings[String(id)];
+  if (typeof _ensureStudioKnown === 'function' && getBearerToken() && heldSeat && !heldSeat.waitlisted && _studioNeedsReread(id)) {
+    const seqAtTap = (typeof bookClass === 'function' && bookClass._seq) || 0;
+    toast('Loading class…', 'info');
+    if (!(await _ensureStudioKnown(id))) {
+      // (No token left = the session ended meanwhile, and said so itself.)
+      if (getBearerToken()) toast("Couldn't load this class — try again in a moment", 'error');
+      return;
+    }
+    // The member tapped another class while this one loaded: theirs, quietly.
+    if (typeof _pickerTakenSince === 'function' && _pickerTakenSince(seqAtTap)) return;
+  }
   const studioId = Number(_eventCache[String(id)]?.studio_id) || 0;
   const booking = _myBookings[String(id)];
   // A place, or a booking without a known layout, opens its dialog at once
@@ -10364,6 +10649,7 @@ function _focusSearch(o) {
 function applySavedSearch(obj) {
   if (!obj) return;
   if (typeof _dropFocusStash === 'function') _dropFocusStash(); // a whole filter state of the member's choosing
+  if (typeof _releaseDateRow === 'function') _releaseDateRow(); // …its date included
   selectedInstructors.clear();
   (obj.instructors || []).forEach(id => selectedInstructors.add(String(id)));
   selectedLocations.clear();
@@ -10493,7 +10779,8 @@ function _onboardCleanup() {
 function _onboardFinish(thenSignIn) {
   try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch {}
   const ov = document.getElementById('onboardOverlay');
-  if (ov) { ov.classList.remove('show'); setTimeout(_onboardCleanup, 220); }
+  // (_psycleClosing: fading, but no longer a dialog to announce into — see _dialogLiveRegion.)
+  if (ov) { ov._psycleClosing = true; ov.classList.remove('show'); setTimeout(_onboardCleanup, 220); }
   else _onboardCleanup();
   if (thenSignIn && typeof openLoginPopup === 'function') openLoginPopup();
 }

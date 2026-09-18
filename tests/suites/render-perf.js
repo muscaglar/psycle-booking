@@ -449,7 +449,9 @@ module.exports = function (t) {
       getBearerToken: () => state.token, Intl,
     });
     t.vm.runInContext("var SYNC_KEY = 'psycle_history_synced', HISTORY_KEY = 'psycle_class_history', _syncing = false, _syncLabel = '';\n" +
+      "var TOPUP_SKIPPED_KEY = 'psycle_history_topup_skipped';\n" + // the synced banner reads the "too many to top up" note
       'var escapeHtml = ' + esc.toString() + ';\n' +
+      grab(expSrc, '  function _topUpTooBig(', '  }') + '\n' +
       grab(expSrc, '  function getHistory(', '  }') + '\n' + grab(expSrc, '  function setHtml(', '  }') + '\n' +
       grab(expSrc, '  function hasSynced(', '  }') + '\n' + grab(expSrc, '  function renderSyncBanner(', '  }') + '\n' +
       appSrc.slice(appSrc.indexOf('// ── pure:copy:start'), appSrc.indexOf('// ── pure:copy:end')), bctx); // the banner counts with _plural

@@ -843,6 +843,7 @@
 
     var history = getHistory();
     var historyCount = history.length;
+    var missing = _topUpTooBig().count;
 
     // A sync in flight is part of what the banner shows, not something written
     // onto a button afterwards: a bookings event mid-sync re-rendered this
@@ -856,6 +857,8 @@
           '<div class="explore-sync-text">' +
             '<strong>' + _plural(historyCount, 'booking') + ' in history</strong>' +
             (dateLabel ? '<br><span>Last synced ' + dateLabel + '</span>' : '') +
+            // A quiet top-up found more than it may fetch by itself (a number of ours, never API text).
+            (missing ? '<br><span>' + missing + ' past classes are not in it yet — tap Re-sync to import them.</span>' : '') +
           '</div>' +
           '<button class="explore-sync-btn explore-sync-btn-secondary" id="syncHistoryBtn" onclick="window._explore_syncHistory()"' + (btnState || '>Re-sync') + '</button>' +
         '</div>');
@@ -1007,6 +1010,7 @@
         _syncing = false; // before any repaint below, or the banner is drawn busy for good
         if (_confirmedEmpty) {
           localStorage.setItem(SYNC_KEY, new Date().toISOString());
+          _clearTopUpTooBig();
           if (!silent && typeof toast === 'function') toast('No past bookings on your Psycle account yet — your history is up to date.', 'info');
           markDirtyAndMaybeRender(); // the banner flips to its "synced" state
         } else if (!silent && typeof toast === 'function') {
@@ -1035,6 +1039,13 @@
       });
 
       if (silent && uniqueBookings.length > TOPUP_MAX_NEW) {
+        // Not silently: SYNC_KEY does not move here, so giving up without a
+        // trace meant paging the WHOLE history again on the next attempt — and
+        // the one after — only to give up again. Remember it (maybeTopUpHistory
+        // then waits a week) and let the Stats banner offer the member's own
+        // Re-sync, which is the only thing that may fetch this many.
+        _noteTopUpTooBig(uniqueBookings.length);
+        markDirtyAndMaybeRender();
         _syncing = false;
         paintBanner(); // a section rebuilt mid-top-up drew it busy; same HTML otherwise (setHtml skips it)
         return;
@@ -1126,9 +1137,14 @@
       // (failed page / failed detail fetches) must stay retryable, not
       // silently report success and suppress the sync prompt forever.
       var partial = _syncIncomplete || _syncFailedDetails > 0;
-      if (!partial) {
-        localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      }
+      if (!partial) localStorage.setItem(SYNC_KEY, new Date().toISOString());
+      // The "N too many" note goes however this ended: every class it counted
+      // has just been tried, so its number is stale — after a Re-sync that
+      // imported 60 of 61 the banner still read "61 past classes are not in it
+      // yet", next to a toast saying one could not be fetched, and held the
+      // weekly top-up back for that one class. A partial sync leaves SYNC_KEY
+      // alone, so the rest is retried (or re-counted) by the next top-up.
+      _clearTopUpTooBig();
 
       if (!silent && typeof toast === 'function') {
         if (partial) {
@@ -1180,6 +1196,42 @@
   var TOPUP_AT_KEY = 'psycle_history_topup_at';
   var _topUpTried = false;
 
+  // {at: ISO, count} — a top-up found more unknown classes than it may fetch
+  // (TOPUP_MAX_NEW). SYNC_KEY does not move then, so TOPUP_AT_KEY alone had it
+  // page the whole history again every day, to give up again. With this it
+  // waits a week, and the Stats banner offers Re-sync meanwhile (device-local,
+  // like TOPUP_AT_KEY; any sync that gets as far as fetching them removes it).
+  var TOPUP_SKIPPED_KEY = 'psycle_history_topup_skipped';
+  function _noteTopUpTooBig(count) {
+    try { localStorage.setItem(TOPUP_SKIPPED_KEY, JSON.stringify({ at: new Date().toISOString(), count: count })); } catch (e) {}
+  }
+  function _clearTopUpTooBig() {
+    try { localStorage.removeItem(TOPUP_SKIPPED_KEY); } catch (e) {}
+  }
+  // → {at: ms | NaN, count: whole number, 0 when there is no readable note}
+  function _topUpTooBig() {
+    try {
+      var note = JSON.parse(localStorage.getItem(TOPUP_SKIPPED_KEY) || 'null');
+      var at = note ? Date.parse(note.at || '') : NaN;
+      var count = note ? Math.floor(Number(note.count)) : 0;
+      return { at: at, count: (!isNaN(at) && count > 0) ? count : 0 };
+    } catch (e) { return { at: NaN, count: 0 }; }
+  }
+
+  // ── pure:history-topup:start ── (DOM-free; tests/suites/7a-final-polish.js evaluates this block)
+  // May a silent top-up start now? All times are ms; NaN = never / unreadable.
+  //   lastSync    the last COMPLETED sync. Never synced → no: the first sync can
+  //               mean hundreds of requests, so it stays the member's own tap.
+  //   lastTried   a top-up last STARTED (one that keeps coming back partial).
+  //   lastTooBig  a top-up last gave up as "too many to fetch quietly".
+  function _topUpMayStart(now, lastSync, lastTried, lastTooBig, afterMs, retryMs) {
+    if (isNaN(lastSync) || now - lastSync < afterMs) return false;
+    if (!isNaN(lastTried) && now - lastTried < retryMs) return false;
+    if (!isNaN(lastTooBig) && now - lastTooBig < afterMs) return false;
+    return true;
+  }
+  // ── pure:history-topup:end ──
+
   function maybeTopUpHistory() {
     try {
       if (_topUpTried || _syncing) return;
@@ -1194,9 +1246,8 @@
       var last = Date.parse(localStorage.getItem(SYNC_KEY) || '');
       // Never synced (or an unreadable stamp): the FIRST sync can mean hundreds
       // of requests, so it stays the member's own tap — never started for them.
-      if (isNaN(last) || now - last < TOPUP_AFTER_MS) return;
       var tried = Date.parse(localStorage.getItem(TOPUP_AT_KEY) || '');
-      if (!isNaN(tried) && now - tried < TOPUP_RETRY_MS) return;
+      if (!_topUpMayStart(now, last, tried, _topUpTooBig().at, TOPUP_AFTER_MS, TOPUP_RETRY_MS)) return;
       setTimeout(function () {
         try {
           if (_syncing || !getBearerToken() || navigator.onLine === false) return;

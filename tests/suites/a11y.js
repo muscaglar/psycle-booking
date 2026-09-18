@@ -637,4 +637,129 @@ module.exports = async function (t) {
     'yearReviewOverlay', 'settingsOverlay', 'diagOverlay'].forEach((id) => {
     ok(ovSrc.indexOf("['" + id + "'") !== -1, 'the key handler knows #' + id);
   });
+
+  // ── Toasts while an aria-modal dialog is open ────────────────────────────
+  // A screen reader treats everything outside an open aria-modal dialog as
+  // inert — #srStatus / #srAlert included — so "Bike 12 cancelled" in the
+  // picker, or an error under a confirm, was never spoken.
+  t.section('A11y: which open dialog is on top (pure)');
+  eq([p._topDialogIndex([]), p._topDialogIndex(undefined), p._topDialogIndex(null)], [-1, -1, -1], 'no dialog open → none');
+  eq(p._topDialogIndex([{ z: 1000 }]), 0, 'one open → that one');
+  eq(p._topDialogIndex([{ z: 1000 }, { z: 1100 }]), 1, 'a confirm (1100) over the picker (1000) → the confirm');
+  eq(p._topDialogIndex([{ z: 1000 }, { z: 300 }]), 0, 'the static picker comes FIRST in the document but sits above Settings (300): z-index wins over order');
+  eq(p._topDialogIndex([{ z: 250 }, { z: 250 }]), 1, 'equal layers (a profile opened from the history sheet): the later one — overlays are appended as they open');
+  eq(p._topDialogIndex([{ z: NaN }, { z: 'auto' }, {}]), 2, "'auto' / unreadable z-index counts as 0, so document order decides");
+  eq(p._topDialogIndex([{ z: 10000 }, { z: NaN }]), 0, '…and never beats a real layer');
+
+  t.section('A11y: a toast raised while a dialog is open is ALSO written inside it');
+  {
+    const dialogWorld = () => {
+      const timers = [];
+      const mkRegion = () => ({
+        textContent: '', className: '', attrs: {}, isRegion: true,
+        setAttribute(k, v) { this.attrs[k] = v; },
+      });
+      const mkDialog = (name, z, open) => {
+        const d = {
+          name, z, open, kids: [],
+          getClientRects() { return this.open ? [{}] : []; },
+          closest() { return { z: this.z, _psycleClosing: this.closing === true }; }, // the body-level overlay: its layer, and confirmModal's "fading out" mark
+          querySelector(sel) { const m = /\[data-sr-region="(\w+)"\]/.exec(sel); return this.kids.find((k) => m && k.attrs['data-sr-region'] === m[1]) || null; },
+          appendChild(k) { this.kids.push(k); return k; },
+        };
+        return d;
+      };
+      const els = { toast: { textContent: '', className: '', classList: { remove() {} } }, srStatus: mkRegion(), srAlert: mkRegion() };
+      const dialogs = [];
+      const ctx = t.loadPure('js/app.js', 'a11y', {
+        toastTimer: undefined,
+        setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+        clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].live = false; },
+        getComputedStyle: (layer) => ({ zIndex: String(layer.z) }),
+        document: {
+          getElementById: (id) => els[id] || null,
+          createElement: () => mkRegion(),
+          body: { appendChild() {} },
+          querySelectorAll: (sel) => (sel === '[role="dialog"][aria-modal="true"]' ? dialogs : []),
+        },
+      });
+      t.vm.runInContext(speakSrc, ctx, { filename: 'js/app.js[toast+announce]' });
+      const run = (ms) => timers.filter((x) => x.live && x.ms === ms).forEach((x) => { x.live = false; x.fn(); });
+      return { ctx, els, dialogs, mkDialog, run, timers };
+    };
+
+    let w = dialogWorld();
+    const picker = w.mkDialog('picker', 1000, false); // static markup: in the page, inside a display:none overlay
+    w.dialogs.push(picker);
+    w.ctx.toast('Booking cancelled');
+    w.run(50);
+    eq([w.els.srStatus.textContent, picker.kids.length], ['Booking cancelled', 0], 'no dialog OPEN (the closed picker is still in the page): the page region only, nothing is added to the picker');
+
+    picker.open = true;
+    w.ctx.toast('Bike 12 cancelled');
+    eq(picker.kids.length, 1, 'the picker is open: a region is made inside it at the call — before the text, so it is in the tree when the text arrives');
+    eq([picker.kids[0].className, picker.kids[0].attrs.role, picker.kids[0].attrs['aria-live'], picker.kids[0].attrs['aria-atomic'], picker.kids[0].textContent],
+      ['sr-only', 'status', 'polite', 'true', ''], '…visually hidden, polite, atomic — and still empty');
+    w.run(50);
+    eq([picker.kids[0].textContent, w.els.srStatus.textContent, w.els.toast.textContent], ['Bike 12 cancelled', 'Bike 12 cancelled', 'Bike 12 cancelled'],
+      'a beat later the line is in BOTH regions; the visible toast is untouched');
+    w.ctx.toast('Bike 14 cancelled');
+    w.run(50);
+    eq([picker.kids.length, picker.kids[0].textContent], [1, 'Bike 14 cancelled'], 'the next message reuses that region (one per dialog and politeness)');
+    w.run(p._toastDuration('Bike 14 cancelled'));
+    eq([picker.kids[0].textContent, w.els.srStatus.textContent], ['', ''], 'both are emptied afterwards — nothing stale to swipe onto inside the dialog either');
+
+    // An error, under a confirm that is on top of the picker.
+    const confirm = w.mkDialog('confirm', 1100, true);
+    w.dialogs.push(confirm);
+    w.ctx.toast("Couldn't cancel — try again", 'error');
+    w.run(50);
+    eq([confirm.kids.map((k) => [k.attrs.role, k.attrs['aria-live'], k.textContent]), picker.kids.length, w.els.srAlert.textContent],
+      [[['alert', 'assertive', "Couldn't cancel — try again"]], 1, "Couldn't cancel — try again"],
+      'an error goes to an ASSERTIVE region in the top-most dialog (the confirm), not the picker under it — no role is swapped on an existing region');
+
+    // The confirm closes (removed with its region); the picker's own region takes over, and its stale sibling is not left behind.
+    w.ctx.toast('Working…');
+    w.run(50);
+    eq(confirm.kids.find((k) => k.attrs.role === 'status').textContent, 'Working…', '(a polite line while the confirm is up lands in the confirm)');
+    confirm.open = false;
+    w.ctx.toast('Booking cancelled');
+    eq(confirm.kids.find((k) => k.attrs.role === 'status').textContent, '', 'the copy left in the dialog that was on top is emptied as the next message moves elsewhere (its own clean-up timer was cancelled)');
+    w.run(50);
+    eq([picker.kids.find((k) => k.attrs.role === 'status').textContent, confirm.kids.find((k) => k.attrs.role === 'status').textContent], ['Booking cancelled', ''],
+      '…and the message is spoken in the dialog that is on top now');
+
+    // A confirm that has been ANSWERED is still rendered — top layer, aria-modal
+    // — for the 180ms of its fade (close() only drops .show). The toast its
+    // answer raises ("You're offline — nothing was cancelled", 'Import
+    // cancelled') used to go into that dying dialog and vanish with it.
+    w = dialogWorld();
+    const under = w.mkDialog('picker', 1000, true);
+    const fading = w.mkDialog('confirm', 1100, true);
+    fading.closing = true; // overlay._psycleClosing, set beside classList.remove('show')
+    w.dialogs.push(under, fading);
+    w.ctx.toast("You're offline — nothing was cancelled", 'error');
+    w.run(50);
+    eq([fading.kids.length, under.kids.map((k) => [k.attrs.role, k.textContent])], [0, [['alert', "You're offline — nothing was cancelled"]]],
+      'a confirm on its way out gets nothing: the line goes to the dialog the member is still in (the picker)');
+    w = dialogWorld();
+    const lone = w.mkDialog('confirm', 1100, true);
+    lone.closing = true;
+    w.dialogs.push(lone);
+    w.ctx.toast('Import cancelled');
+    w.run(50);
+    eq([lone.kids.length, w.els.srStatus.textContent], [0, 'Import cancelled'], '…and with nothing else open, the page region alone (no longer inert once the confirm is gone)');
+    ok(/overlay\._psycleClosing = true;[^\n]*\n\s*overlay\.classList\.remove\('show'\);/.test(appSrc) && /ov\._psycleClosing = true; ov\.classList\.remove\('show'\);/.test(appSrc) &&
+      /overlay\._psycleClosing = true;[^\n]*\n\s*overlay\.classList\.remove\('show'\);/.test(t.readSource('js/tabs.js')),
+      'confirmModal, the tour and the usual-week sheet mark their overlay as closing where they start the fade');
+
+    // Nothing about a dialog may break the toast that carries the message.
+    w = dialogWorld();
+    w.dialogs.push({ getClientRects() { throw new Error('detached'); } });
+    w.ctx.toast('Still shown', 'error');
+    w.run(50);
+    eq([w.els.toast.textContent, w.els.srAlert.textContent], ['Still shown', 'Still shown'], 'a dialog that cannot be measured: the toast and the page region carry on as if none were open');
+  }
+  ok(/function _dialogLiveRegion\(id, assertive\) \{\n  try \{\n    if \(typeof document\.querySelectorAll !== 'function'\) return null;/.test(appSrc),
+    'a page (or test shell) without querySelectorAll is simply "no dialog open"');
 };

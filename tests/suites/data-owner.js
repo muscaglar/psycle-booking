@@ -104,6 +104,22 @@ module.exports = async function (t) {
     s.setItem = realSet; s.removeItem = realRemove;
   }
 
+  t.section('Data owner: A → B takes the history top-up\'s notes with the history');
+  {
+    // explore.js's silent top-up keeps two device-local notes: when it last
+    // started, and "N too many to fetch quietly" — the Stats banner's "N past
+    // classes are not in it yet". The second was added after ACCOUNT_CLEAR_KEYS
+    // and stayed behind: B, restoring a backup in Settings (which stamps the
+    // history as synced), was told A's number and had B's weekly top-up held
+    // back for up to a week on A's stamp.
+    const s = seed({ psycle_data_owner: '7', psycle_history_topup_at: NOW, psycle_history_topup_skipped: JSON.stringify({ at: NOW, count: 75 }) });
+    const r = p._swapAccountData(s, 8, NOW);
+    eq([r.action, s.getItem('psycle_history_topup_at'), s.getItem('psycle_history_topup_skipped')], ['switch', null, null], 'both notes go with A\'s history');
+    ok(r.cleared.indexOf('psycle_history_topup_skipped') !== -1 && r.cleared.indexOf('psycle_history_topup_at') !== -1, '…and the result lists them');
+    const topUp = t.readSource('js/explore.js');
+    ok(/var TOPUP_AT_KEY = 'psycle_history_topup_at';/.test(topUp) && /var TOPUP_SKIPPED_KEY = 'psycle_history_topup_skipped';/.test(topUp), '(the two keys explore.js writes — a rename there must reach ACCOUNT_CLEAR_KEYS)');
+  }
+
   t.section('Data owner: B → A restores A\'s, stashes B\'s');
   {
     const s = sAB;

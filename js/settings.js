@@ -93,6 +93,9 @@
   // when hidden. Set as attributes, never markup: the label carries API text.
   function _pillA11y(label) {
     if (!_pillEl) return;
+    // While it shows, the panels end a pill higher so their last row can be
+    // scrolled clear of it (css/settings.css); hidden, nothing is reserved.
+    document.body.classList.toggle('has-next-pill', label != null);
     if (label == null) {
       // aria-hidden on the element that holds focus is invalid: let go first.
       if (document.activeElement === _pillEl) _pillEl.blur();
@@ -197,7 +200,18 @@
     // there would tell the calendar sync "the server confirmed none"), so the
     // pill needs its own cue or it keeps counting down to the previous
     // account's class. Nothing to clear if it was never created.
-    PsycleEvents.on('auth:changed', function () { if (_pillEl) updatePill(); });
+    PsycleEvents.on('auth:changed', function () {
+      if (!_pillEl) return;
+      updatePill();
+      // `.hidden` only fades the pill out: it is still in the page, and so was
+      // the last class it showed — after a sign-out, the PREVIOUS member's.
+      // Whichever way the session changed: an expired one keeps its bookings
+      // (and so its pill: not hidden, not emptied), and when someone ELSE then
+      // signs in from that banner the event says signedIn:true — the pill is
+      // hidden with the first member's class still in it. Safe while hidden:
+      // updatePill rewrites the markup before it ever shows the pill again.
+      if (_pillEl.classList.contains('hidden')) _pillEl.textContent = '';
+    });
   } else {
     // Fallback: poll for bookings
     var _pollPill = setInterval(function () {
@@ -534,9 +548,10 @@
    * device and, through the calendar's own sync, every other one, with no
    * undo. The list offers the member's REAL calendars (Home, Work, Family…),
    * so a pick alone is never consent: count what would go, say so, and ask.
-   * Resolves true only on an explicit "Use this calendar".
+   * Resolves true only on an explicit "Use this calendar". `lead`: why a
+   * button other than the picker is asking (said first, before what goes).
    */
-  async function _confirmCalendarOwnership(calId, name, cancelText) {
+  async function _confirmCalendarOwnership(calId, name, cancelText, lead) {
     if (typeof window.confirmModal !== 'function') return false; // can't ask → never assume yes
     var n = null; // null = couldn't count → warn without a number
     if (typeof window.psycleCountForeignEvents === 'function') {
@@ -558,7 +573,7 @@
     }
     return !!(await window.confirmModal({
       title: 'Let Psync manage ' + q + '?',
-      body: body,
+      body: (lead || '') + body,
       warn: 'This can\'t be undone. Pick a calendar made just for Psycle, not your personal one.',
       confirmText: 'Use this calendar',
       cancelText: cancelText || 'Choose another',
@@ -621,9 +636,31 @@
     if (!window.psycleCleanupDuplicates) return;
     var old = btn.textContent;
     btn.disabled = true;
+    // A calendar that was never handed over is reconciled by marker only: the
+    // unmarked copies an older build left in it — exactly what this button is
+    // for — are not Psync's to delete yet, and the scan answered "No
+    // duplicates" over them. Say what it takes, and offer the same hand-over
+    // "Re-sync now" asks for. (Signed out: nothing will run, nothing to ask.)
+    var handedOver = false;
+    var cfg = typeof window.psycleGetCalendarConfig === 'function' ? window.psycleGetCalendarConfig() : {};
+    if (cfg.mode === 'custom' && cfg.targetId && cfg.ownedAck === false &&
+        !(typeof getBearerToken === 'function' && !getBearerToken())) {
+      var sel = document.getElementById('calSyncTarget');
+      var cur = sel && sel.options && sel.options[sel.selectedIndex];
+      var name = cur && String(cur.value) === String(cfg.targetId) ? cur.text : 'this calendar';
+      try {
+        handedOver = await _confirmCalendarOwnership(cfg.targetId, name, 'Not now',
+          'Psync can only remove duplicates from a calendar it manages, and this one has not been handed over yet. ');
+      } catch (e) {}
+      if (!handedOver) { btn.disabled = false; return; }
+    }
     btn.textContent = 'Scanning…';
     try {
-      var res = await window.psycleCleanupDuplicates();
+      // Handed over just now: the reconcile has to carry that yes itself — the
+      // bridge's cleanup is a plain resync, which never grants ownership.
+      var res = handedOver && typeof window.psycleResyncCalendar === 'function'
+        ? await window.psycleResyncCalendar({ ownedAck: true })
+        : await window.psycleCleanupDuplicates();
       var problem = _calSyncProblem(res);
       if (problem) {
         btn.textContent = problem; // incl. a reconcile that never ran — not "No duplicates"

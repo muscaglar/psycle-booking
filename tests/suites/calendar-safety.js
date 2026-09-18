@@ -534,4 +534,51 @@ module.exports = async function (t) {
     t.eq(await dupes({ scanned: 4, removed: 0 }), 'No duplicates', 'a real scan with nothing to remove still reads "No duplicates"');
     t.eq(await dupes({ scanned: 4, removed: 2 }), 'Removed 2', '…and a real removal its count');
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  // An un-owned calendar is reconciled by marker only, so the unmarked copies
+  // an older build left — what the button exists for — were scanned past and
+  // reported as "No duplicates".
+  t.section('Calendar safety: "Remove duplicates" on a calendar that was never handed over');
+  {
+    const unowned = { mode: 'custom', targetId: 'home', ownedAck: false };
+    const dupeBtn = () => ({ textContent: 'Remove duplicates', disabled: false });
+    let s = settings({ count: 3, cfg: unowned, cleanup: { scanned: 3, removed: 0 } });
+    let btn = dupeBtn();
+    let done = s.window.onCalendarCleanupDupes(btn);
+    await flush();
+    t.eq([s.log.modals.length, s.log.counted, s.log.resync.length, btn.disabled], [1, ['home'], 0, true], 'the hand-over dialog first, for the STORED target — nothing is scanned or reconciled before the answer');
+    const m = s.log.modals[0].opts;
+    t.ok(/^Psync can only remove duplicates from a calendar it manages, and this one has not been handed over yet\. "Home" has 3 upcoming events/.test(m.body),
+      'it says why it is asking, then what handing over deletes: ' + m.body);
+    t.eq([m.title, m.cancelText, m.confirmText, m.danger], ['Let Psync manage "Home"?', 'Not now', 'Use this calendar', true], '…the SAME dialog "Re-sync now" shows');
+    s.log.modals[0].answer(false);
+    await done;
+    t.eq([s.log.resync.length, btn.disabled, btn.textContent], [0, false, 'Remove duplicates'], '"Not now": nothing runs, and the button never claims "No duplicates"');
+
+    s = settings({ cfg: unowned, resync: { added: 0, removed: 2, kept: 3 }, cleanup: { scanned: 3, removed: 0 } });
+    btn = dupeBtn();
+    done = s.window.onCalendarCleanupDupes(btn);
+    await flush();
+    s.log.modals[0].answer(true);
+    await done;
+    t.eq([s.log.resync, btn.textContent], [[{ ownedAck: true }], 'Removed 2'], 'agreed: the reconcile carries ownedAck:true (the bridge\'s cleanup grants nothing) and the copies go');
+    s.log.timers.forEach((fn) => fn());
+    t.eq([btn.textContent, btn.disabled], ['Remove duplicates', false], '…then the button resets');
+
+    s = settings({ cfg: { mode: 'custom', targetId: 'home', ownedAck: true }, cleanup: { scanned: 4, removed: 1 } });
+    btn = dupeBtn();
+    await s.window.onCalendarCleanupDupes(btn);
+    t.eq([s.log.modals.length, s.log.resync.length, btn.textContent], [0, 0, 'Removed 1'], 'an owned calendar: no question, the bridge\'s own cleanup (unchanged)');
+
+    s = settings({ token: '', cfg: unowned, cleanup: { scanned: 0, removed: 0, error: 'Sign in to sync' } });
+    btn = dupeBtn();
+    await s.window.onCalendarCleanupDupes(btn);
+    t.eq([s.log.modals.length, btn.textContent], [0, 'Sign in to sync'], 'signed out: no hand-over question for a scan that cannot run');
+
+    s = settings({ noModal: true, cfg: unowned, cleanup: { scanned: 3, removed: 0 } });
+    btn = dupeBtn();
+    await s.window.onCalendarCleanupDupes(btn);
+    t.eq([s.log.resync.length, btn.disabled, btn.textContent], [0, false, 'Remove duplicates'], 'no way to ask: never assume yes — and still no "No duplicates"');
+  }
 };

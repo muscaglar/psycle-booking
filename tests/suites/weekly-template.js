@@ -442,6 +442,124 @@ module.exports = async function (t) {
     ok(!/location=/.test(wide.log.requests[0].path), 'an entry with no location reads the whole day rather than sending location=');
   }
 
+  // ── The slide-up the run dismisses ───────────────────────────────────────
+  // Seen in a real browser: two classes settling ~260ms apart left "Booked!" on
+  // screen for good. A dismissed sheet stays in the document for its slide-out
+  // (≤400ms) and both sheets carried id="bookingConfirmation": getElementById
+  // returned the dying one, so the second dismiss cleared the new sheet's timer
+  // and never touched the sheet. The REAL show / dismiss pair on a fake
+  // document that answers getElementById as a browser does (first match), with
+  // a hand-wound clock.
+  t.section('Usual week run: the "Booked!" sheet it dismisses is really gone');
+  {
+    const sheetWorld = () => {
+      const kids = [];
+      const mkEl = () => {
+        const attrs = {}, cls = new Set(), on = {};
+        const el = {
+          get id() { return attrs.id || ''; }, set id(v) { attrs.id = String(v); },
+          className: '', innerHTML: '',
+          classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) },
+          removeAttribute: (n) => { delete attrs[n]; },
+          addEventListener: (type, fn) => { (on[type] = on[type] || []).push(fn); },
+          fire: (type) => (on[type] || []).splice(0).forEach((fn) => fn()), // every listener here is { once: true }
+          get parentNode() { return kids.includes(el) ? body : null; },
+          get isConnected() { return kids.includes(el); },
+          contains: (other) => other === el.focused,
+          remove: () => { const i = kids.indexOf(el); if (i !== -1) kids.splice(i, 1); },
+        };
+        return el;
+      };
+      const body = { appendChild: (el) => { kids.push(el); } };
+      const timers = [], frames = [];
+      let now = 0, seq = 0;
+      const g = {
+        _eventCache: {}, announce() {}, escapeHTML: (s) => String(s),
+        slotLabelForEvent: () => 'Bike', formatSlots: (label, slots) => label + ' ' + slots.join(' & '), _cancelDeadline: () => null,
+        document: {
+          body, activeElement: null, createElement: mkEl,
+          getElementById: (id) => kids.find((k) => k.id === id) || null,
+          querySelectorAll: (sel) => {
+            if (sel === '#bookingConfirmation') return kids.filter((k) => k.id === 'bookingConfirmation');
+            if (sel === '.booking-confirmation') return kids.filter((k) => k.className === 'booking-confirmation');
+            throw new Error('fake DOM: ' + sel);
+          },
+        },
+        requestAnimationFrame: (fn) => { frames.push(fn); },
+        setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: now + ms, fn }); return seq; },
+        clearTimeout: (id) => { const i = timers.findIndex((x) => x.id === id); if (i !== -1) timers.splice(i, 1); },
+      };
+      const ctx = t.vm.createContext(g);
+      t.vm.runInContext('let _confirmationTimer = null;\n' + grab('function showBookingConfirmation(') + '\n' + grab('function dismissBookingConfirmation('), ctx, { filename: 'js/app.js[booking confirmation]' });
+      return {
+        ctx, kids,
+        frame: () => frames.splice(0).forEach((fn) => fn()),
+        // Due timers in time order, including any they arm on the way.
+        advance: (ms) => {
+          const until = now + ms;
+          for (;;) {
+            const due = timers.filter((x) => x.at <= until).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+            if (!due) break;
+            timers.splice(timers.indexOf(due), 1);
+            now = due.at;
+            due.fn();
+          }
+          now = until;
+        },
+        timer: () => t.vm.runInContext('_confirmationTimer', ctx),
+        shown: () => kids.filter((k) => k.classList.contains('show')).length,
+      };
+    };
+
+    // The run as the browser saw it: each sheet dismissed the moment its class
+    // settles (before its first frame), the second class 259ms after the first.
+    let w = sheetWorld();
+    w.ctx.showBookingConfirmation(10, [12]);
+    w.ctx.dismissBookingConfirmation();
+    w.frame();
+    eq([w.kids.length, w.shown()], [1, 0], 'dismissed before its first frame: the sheet is still in the document for its slide-out, and that frame does NOT slide it in');
+    w.advance(259);
+    w.ctx.showBookingConfirmation(11, [7]);
+    eq([w.kids.length, w.ctx.document.getElementById('bookingConfirmation') === w.kids[1]], [2, true], 'the second class raises its sheet while the first is still leaving — and only the NEW one answers to the id');
+    w.ctx.dismissBookingConfirmation();
+    w.frame();
+    eq([w.shown(), w.ctx.document.getElementById('bookingConfirmation'), w.timer()], [0, null, null],
+      'the run\'s dismiss reaches the new sheet: nothing shown, nothing findable (what the history prompt, the queued-booking dialog and the iOS reminder ask poll for), no timer left');
+    w.advance(6500);
+    eq([w.kids.length, w.shown()], [0, 0], '6.5s later no sheet is left in the document (it stayed up until "Done" was tapped)');
+
+    // Both sheets got their frame before the dismiss (a slower device): same end.
+    w = sheetWorld();
+    w.ctx.showBookingConfirmation(10, [12]);
+    w.frame();
+    w.ctx.dismissBookingConfirmation();
+    w.advance(259);
+    w.ctx.showBookingConfirmation(11, [7]);
+    w.frame();
+    eq(w.shown(), 1, '(the second sheet slid in)');
+    w.ctx.dismissBookingConfirmation();
+    eq(w.shown(), 0, '…and the dismiss slides THAT one out, not the first again');
+    w.kids.slice().forEach((k) => k.fire('transitionend'));
+    eq(w.kids.length, 0, 'each leaves the document when its slide-out ends');
+    w.advance(400); // the fallback timers find nothing to do
+
+    // Outside the run nothing changes: a sheet slides in, keeps its id while it
+    // is up, waits for a member who has moved into it, and goes after 5s.
+    w = sheetWorld();
+    w.ctx.showBookingConfirmation(10, [12]);
+    w.frame();
+    const live = w.kids[0];
+    eq([w.shown(), w.ctx.document.getElementById('bookingConfirmation') === live, /Booked!/.test(live.innerHTML) && /Bike 12/.test(live.innerHTML)], [1, true, true], 'a booking from the picker: the sheet is up and findable by its id');
+    live.focused = w.ctx.document.activeElement = { name: 'Done' };
+    w.advance(5000);
+    eq([w.shown(), w.kids.length], [1, 1], 'focus is on its buttons at 5s → it stays');
+    w.ctx.document.activeElement = null;
+    w.advance(5000);
+    eq([w.shown(), live.id, w.timer()], [0, '', null], 'focus left → the next check dismisses it');
+    w.advance(400);
+    eq(w.kids.length, 0, '…and the fallback removes it when no transition ends (reduced motion)');
+  }
+
   // ── Wiring ───────────────────────────────────────────────────────────────
   t.section('Usual week wiring');
   {

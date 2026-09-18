@@ -301,7 +301,9 @@ module.exports = async function (t) {
         _pillEl: pill, _pillA11y: (label) => { pill.label = label; },
       });
       // renderQuickStats words its counts with app.js's _plural (pure:copy) — the real one.
-      let src = pureRegion(appSrc, 'copy') + '\n' + inner(tabsSrc, '  function _stillToCome(') + '\n' + inner(tabsSrc, '  function updateTabBadge(') + '\n' + inner(tabsSrc, '  function renderQuickStats(') + '\n' + inner(settingsSrc, '  function updatePill(');
+      // …and counts classes TAKEN with tabs.js's own filter (pure:year-review + its clock).
+      let src = pureRegion(appSrc, 'copy') + '\n' + pureRegion(tabsSrc, 'year-review') + '\n' + inner(tabsSrc, '  function _historyStartMs(') + '\n' +
+        inner(tabsSrc, '  function _stillToCome(') + '\n' + inner(tabsSrc, '  function updateTabBadge(') + '\n' + inner(tabsSrc, '  function renderQuickStats(') + '\n' + inner(settingsSrc, '  function updatePill(');
       if (resolver !== null) {
         src = pureRegion(appSrc, 'gym-time') + '\n' + pureRegion(appSrc, 'bookings-started') + '\n' + src;
         if (resolver) src += '\n_gymClassStartMs = ' + resolver + ';';
@@ -470,9 +472,12 @@ module.exports = async function (t) {
     w = bookWorld({ studio: { has_layout: false, name: 'Studio 2' }, confirm: true });
     await w.ctx.bookClass(77, btn(), 4);
     eq([w.log.confirms, w.log.posts], [['Book this class?'], [[null, { spaces: 1 }]]], 'has_layout === false: still the confirm, still the count body');
+    // Was: [[null, {}]] — "Book this class?" and then a POST with no slots and no
+    // count, which Psycle refuses. An unknown studio no longer reaches a confirm
+    // at all (tests/suites/add-spot-studio.js has the whole story).
     w = bookWorld({ studio: null, confirm: true });
     await w.ctx.bookClass(77, btn(), 4);
-    eq(w.log.posts, [[null, {}]], 'an unknown studio never gets a guessed count (as before)');
+    eq([w.log.confirms, w.log.posts], [[], []], 'an unknown studio never gets a guessed count — nor a confirm that could only end in "Booking slot required"');
     ok(/studio && studio\.has_layout === false \? \{ spaces: 1 \} : \{\}/.test(grab(appSrc, 'async function bookClass(')), 'the count body stays exclusive to has_layout === false');
   }
 

@@ -145,6 +145,9 @@ module.exports = async function (t) {
       toast: (m, k) => log.toasts.push([m, k]),
       _plural: p._plural,
       getFullHistory: () => opts.history || [],
+      // The stats card counts classes TAKEN: tabs.js's own filter (pure:year-review), on the device clock here.
+      _takenRows: t.loadPure('js/tabs.js', 'year-review')._takenRows,
+      _historyStartMs: () => (d) => new Date(String(d).replace(' ', 'T')).getTime(),
       _computeYearReview: () => opts.year || null,
       CATEGORY_MAP: opts.cats || [],
       getCategory: (typeName) => (opts.cats || []).find((c) => c.key === typeName) || null,
@@ -230,6 +233,18 @@ module.exports = async function (t) {
     const r = boot({ history: [] });
     await r.ctx.shareInsights();
     eq([r.log.canvases.length, r.log.toasts[0] && r.log.toasts[0][0]], [0, 'No history to share yet'], 'nothing to share → says so, draws nothing');
+  }
+  {
+    // History holds a booking from the moment it is made: next year's is not a class taken.
+    const later = { date: '2099-01-05 07:00:00', instrName: 'Not Yet', locName: 'Bank', typeName: 'RIDE', slots: [5] };
+    const r = boot({ history: [later].concat(historyOf(3, 2)), cats: CATS });
+    await r.ctx.shareInsights();
+    const drawn = texts(r.log.canvases[0]);
+    const classes = drawn[drawn.findIndex((c) => c[1] === 'CLASSES') - 1];
+    eq([classes && classes[1], drawn.some((c) => c[1] === 'Not Yet')], ['3', false], 'a booking still to come is not on the image: CLASSES 3 (it read 4), and its instructor cannot be "top"');
+    const none = boot({ history: [later], cats: CATS });
+    await none.ctx.shareInsights();
+    eq([none.log.canvases.length, none.log.toasts[0] && none.log.toasts[0][0]], [0, 'No history to share yet'], 'only bookings still to come → nothing to share yet');
   }
   {
     // The display face must never hold the share up: navigator.share() needs
