@@ -179,6 +179,10 @@
 
   window.fetchWithRetry = async function fetchWithRetry(url, opts, maxRetries = 3) {
     opts = opts || {};
+    // The browser KNOWS it is offline: three backed-off retries only turn an
+    // instant failure into ~7s of spinner. The one attempt still goes out, so
+    // a wrong "offline" reading (some VPN set-ups) costs nothing.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) maxRetries = 0;
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Chain caller-provided signal (if any) with our timeout signal so either

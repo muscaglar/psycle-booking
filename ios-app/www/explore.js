@@ -466,7 +466,7 @@
 
     if (data.noRefs) {
       container.innerHTML = '<div class="explore-title">You might like</div>' +
-        '<div class="explore-empty">Star some favourite instructors or rank them in Settings to get personalised recommendations.</div>';
+        '<div class="explore-empty">Star some favourite instructors or rank them on the Membership tab to get personalised recommendations.</div>';
       container.style.display = '';
       return;
     }
@@ -771,9 +771,9 @@
       '</div>' +
       tagHtml +
       locHtml +
+      // (_features_filterByInstructor switches to Discover itself.)
       '<button class="explore-card-action" onclick="' +
-        'window._features_filterByInstructor(\'' + idEscaped + '\');' +
-        'window.switchTab(\'discover\')' +
+        'window._features_filterByInstructor(\'' + idEscaped + '\')' +
       '">View classes</button>' +
     '</div>';
   }
@@ -833,8 +833,11 @@
    * Tries multiple approaches and uses whatever returns data.
    */
   window._explore_openSettingsForInstructor = function (name) {
-    if (typeof openSettings === 'function') openSettings();
-    // Wait for settings panel to render, then pre-fill the search
+    // The rankings moved to the Membership tab; the Settings sheet this used to
+    // open has no tier list, so the chip filled a hidden input behind an
+    // unrelated panel. (Name kept: it is in the chips' onclick strings.)
+    if (typeof switchTab === 'function') switchTab('membership');
+    // Wait for the tab to render, then pre-fill the search
     setTimeout(function () {
       var search = document.getElementById('tierSearch');
       if (search) {
@@ -1037,7 +1040,10 @@
         seen.add(e.eventId);
         return true;
       });
-      if (merged.length > 1000) merged.length = 1000;
+      // Same cap as features.js's addHistoryEntry (it owns the number): two
+      // different caps made every in-app booking shed synced history.
+      var historyMax = window.PSYCLE_HISTORY_MAX || 2000;
+      if (merged.length > historyMax) merged.length = historyMax;
       localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
 
       // Only mark the sync complete when nothing was dropped — a partial sync

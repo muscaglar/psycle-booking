@@ -14,18 +14,11 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* Cards inside a .class-grid (all of them today) take their timing, stagger
+   and the "first 8 only" cap from the Motion block in tabs.css. */
 .class-card {
-  animation: cardEnter 0.3s ease-out both;
+  animation: cardEnter 0.3s ease-out backwards;
 }
-.class-grid .class-card:nth-child(1) { animation-delay: 0s; }
-.class-grid .class-card:nth-child(2) { animation-delay: 0.04s; }
-.class-grid .class-card:nth-child(3) { animation-delay: 0.08s; }
-.class-grid .class-card:nth-child(4) { animation-delay: 0.12s; }
-.class-grid .class-card:nth-child(5) { animation-delay: 0.16s; }
-.class-grid .class-card:nth-child(6) { animation-delay: 0.2s; }
-.class-grid .class-card:nth-child(7) { animation-delay: 0.24s; }
-.class-grid .class-card:nth-child(8) { animation-delay: 0.28s; }
-.class-grid .class-card:nth-child(n+9) { animation-delay: 0.32s; }
 
 header {
   background: var(--bg-panel, #111);
@@ -466,6 +459,34 @@ select:focus, input:focus {
   margin-bottom: var(--space-7);
 }
 
+/* Bike picker: when cancelling stops being free (showBikePicker builds it
+   right under the hint). The negative top margin closes most of the hint's
+   own bottom gap, so the pair reads as one block above the buttons. */
+.modal-policy {
+  font-size: var(--text-sm); color: var(--text-dim); text-align: center;
+  margin: calc(var(--space-3) - var(--space-7)) 0 var(--space-7);
+}
+/* Inside the 12h window / a clash with a seat already held: status ink ON its
+   own chip colour — the pairs every theme tunes for contrast. */
+.modal-policy.is-late {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--badge-waitlist-border);
+  border-radius: var(--radius-md);
+  background: var(--badge-waitlist-bg);
+  color: var(--badge-waitlist-text);
+}
+.modal-clash {
+  display: block;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--badge-full-border);
+  border-radius: var(--radius-md);
+  background: var(--badge-full-bg);
+  color: var(--badge-full-text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
 .days-control {
   display: flex;
   gap: var(--space-2);
@@ -718,6 +739,43 @@ select:focus, input:focus {
 .app-banner-action { color: var(--text-heading, #fff); font-weight: var(--weight-bold); text-decoration: underline; text-underline-offset: 2px; }
 .app-banner-close { margin-left: auto; background: none; border: none; color: inherit; cursor: pointer; font-size: var(--text-xl); line-height: 1; }
 .app-banner code { background: var(--bg-deep, #111); color: var(--text, #f0f0f0); padding: 2px var(--space-2); border-radius: var(--radius-sm); }
+
+/* #offlineBanner (js/app.js) is a warning and keeps the amber above.
+   #updateBanner ("A new version is ready" — psycle-finder.html's head script)
+   is only news: body ink on the panel surface, the top of the text ladder in
+   every theme. Both are built in JS and sit under #sessionBanner, so they are
+   flex children of the ≤640px app shell too (css/tabs.css) — never squeezed. */
+.app-banner-info {
+  background: var(--bg-panel, #111113);
+  border-bottom-color: var(--border, #1e1e24);
+  color: var(--text, #f0f0f0);
+}
+#offlineBanner, #updateBanner { flex: 0 0 auto; }
+/* "Reload" is a <button>: same look as the session banner's link. */
+button.app-banner-action { background: none; border: none; padding: 0; font: inherit; font-weight: var(--weight-bold); cursor: pointer; }
+
+/* Saved copy of My Bookings (js/app.js _savedBookingsHTML): the note above the
+   read-only cards. The label is the point — nothing under it is live. No fill
+   of its own: --text-muted on the bookings panel is AA in every theme, on
+   --bg-input it is not (Handheld, 3.8:1). */
+.mb-saved-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-light, #2a2a32);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  line-height: 1.45;
+  color: var(--text-muted, #aaa);
+}
+.mb-saved-label { font-weight: var(--weight-bold); color: var(--text, #f0f0f0); white-space: nowrap; }
+.mb-saved-text { flex: 1 1 200px; min-width: 0; }
+/* Nothing on a saved card is tappable: no pointer, no hover lift, no press squeeze. */
+.my-booking-card.is-saved-copy { cursor: default; }
+.my-booking-card.is-saved-copy:hover, .my-booking-card.is-saved-copy:active { transform: none; box-shadow: none; }
 
 .token-dialog {
   position: fixed; inset: 0;
@@ -1227,7 +1285,11 @@ select:focus, input:focus {
   transition: opacity var(--transition-base);
   border-radius: inherit;
   pointer-events: none;
-  z-index: 0;
+  /* 1, not 0: the seat chips' × buttons are position:relative (tap targets,
+     below) — at 0 they shared this layer, came later in the tree and showed
+     through the fill. Still far under the Similar popup (100). No
+     isolation on the card: the next card would then cover that popup. */
+  z-index: 1;
 }
 
 .swipe-cancel-bg span {
@@ -1703,11 +1765,13 @@ select:focus, input:focus {
   /* Constrain all tab panels to a readable max-width */
   .tab-panel { max-width: 1080px; margin: 0 auto; }
 
-  /* Discover: sidebar filters + results side-by-side */
+  /* Discover: one centred column — filters stacked above the results (the
+     layout itself is in discover-layout-fix.css). No padding here: this
+     selector outranks redesign.css's #tab-discover, and a `0` top put the
+     page title flush against the tab bar. */
   #tab-discover.active {
     max-width: 1080px;
     margin: 0 auto;
-    padding: 0 var(--space-9);
   }
   /* Consistent alignment: all children flush to the same edges */
   #tab-discover .week-view {
@@ -1717,10 +1781,6 @@ select:focus, input:focus {
   }
   #tab-discover #discoverExploreWrap {
     padding: var(--space-3) 0 0;
-  }
-  #tab-discover #discoverExploreWrap .explore-section {
-    padding-left: 0;
-    padding-right: 0;
   }
   #tab-discover .controls {
     flex-direction: column;
@@ -2178,6 +2238,104 @@ select:focus, input:focus {
 .confirm-btn:focus-visible {
   outline: 2px solid var(--accent, #e94560);
   outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tap targets
+   Glyph-sized controls (×, Skip) keep their look: an invisible ::after
+   carries the fingertip-sized hit area, so nothing in the layout moves.
+   Every area is sized to stay inside its own container — most of these sit
+   in overflow:auto sheets, where an overhang would add a sideways scroll —
+   and clear of the next interactive control. (Refresh / Clear filters have
+   theirs in redesign.css, next to the .disc-actions layout they depend on.)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Not .cds-close / .onboard-skip (already position:absolute — relative would
+   un-anchor them; absolute is a containing block for ::after all the same),
+   not .diag-close (a real 44px box), and not .travel-notice-close (its area
+   is measured from the notice, below). */
+.modal-close:not(.cds-close),
+.settings-close:not(.diag-close),
+.up-seat-chip button,
+.instr-chip button { position: relative; }
+
+.modal-close::after,
+.settings-close:not(.diag-close)::after,
+.travel-notice-close::after,
+.onboard-skip::after,
+.up-seat-chip button::after,
+.instr-chip button::after { content: ''; position: absolute; }
+
+/* Sheet / panel ×: centred on the glyph vertically; sideways it overhangs by
+   --space-4 — inside --space-5, the tightest padding any of these headers
+   sits in (the bike picker on a phone) — and takes the rest from the title
+   side. */
+.modal-close:not(.cds-close)::after,
+.settings-close:not(.diag-close)::after {
+  top: 50%;
+  right: calc(var(--space-4) * -1);
+  width: var(--tap-min);
+  height: var(--tap-min);
+  transform: translateY(-50%);
+}
+
+/* Class sheet ×: the offsets all but undo .cds-close's own top / right
+   (--space-5 / --space-7), so the area is the sheet's top-right corner, a
+   hair inside its edge. */
+.cds-close::after {
+  top: calc(var(--space-4) * -1);
+  right: calc(var(--space-6) * -1);
+  width: var(--tap-min);
+  height: var(--tap-min);
+}
+
+/* Onboarding "Skip": same corner idea; inset, because the label's width
+   follows the theme font. */
+.onboard-skip::after {
+  inset: calc(var(--space-5) * -1) calc(var(--space-6) * -1) calc(var(--space-5) * -1) calc(var(--space-5) * -1);
+}
+
+/* Travel notice ×: the button stays unpositioned, so the area resolves
+   against the notice — its full height (one line or two) at the right end,
+   never past its edge onto the instructor box above. */
+.travel-notice { position: relative; }
+.travel-notice-close::after {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--tap-min);
+}
+
+/* Seat chip × (only rendered when 2+ seats are held): a 40px area (it was
+   ~31x30, under the 40px floor). Grows up and towards its own label; 10px
+   right and 6px down keep it off the next chip and the Cancel button under
+   the row. Wrapped rows sit --space-8 apart so one row's area stops where the
+   next row's begins — a tap can't pick the wrong seat. */
+.up-seats { row-gap: var(--space-8); }
+.up-seat-chip button::after {
+  inset: calc(var(--space-8) * -1) calc(var(--space-4) * -1) calc(var(--space-2) * -1) calc(var(--space-8) * -1);
+}
+
+/* Instructor filter chip ×: 40px (it was 32) at the chip's right end. Sideways
+   it starts at the chip's own outer edge (--space-6 = its right padding +
+   border) and takes the rest from the name, so it can't reach the next chip
+   or the search field; the 2px it stands proud of the 36px chip above and
+   below stay inside .instr-box's padding, short of the next wrapped row. */
+.instr-chip button::after {
+  top: 50%;
+  right: calc(var(--space-6) * -1);
+  width: var(--space-11);
+  height: var(--space-11);
+  transform: translateY(-50%);
+}
+
+/* Text buttons: a real fingertip height on touch screens only, so the mouse
+   layout keeps its density. */
+@media (pointer: coarse) {
+  .booking-action-btn,
+  .mb-primary-btn,
+  .confirm-btn,
+  .habit-find-btn { min-height: var(--tap-min); }
 }
 
 /* ════════════════════════════════════════════════════════════════

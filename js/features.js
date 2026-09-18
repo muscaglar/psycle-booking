@@ -43,6 +43,13 @@
      ═══════════════════════════════════════════════════════════════ */
 
   const HISTORY_KEY = 'psycle_class_history';
+  // ONE cap for both writers — explore.js's history sync reads it too. This
+  // file used to cut to 500 on every booking while the sync kept 1000, so a
+  // long-time member's all-time total, streaks and instructor stats shrank the
+  // moment they booked in the app. Set at load, not in the deferred init(), so
+  // it exists before any sync can run. 2000 × ~220 B ≈ 440 KB: inside
+  // localStorage and the iOS Preferences mirror.
+  window.PSYCLE_HISTORY_MAX = 2000;
 
   function getHistory() {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
@@ -50,7 +57,10 @@
   }
 
   function saveHistory(arr) {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+    // Reached from the patched submitBooking AFTER the booking went through: a
+    // quota error thrown here would reject it and read as a failed booking.
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); }
+    catch (e) { console.warn('[features] class history not saved:', e); }
   }
 
   function addHistoryEntry(eventId, slots) {
@@ -69,8 +79,8 @@
       slots: slots ? slots.map(Number) : [],
       bookedAt: new Date().toISOString(),
     });
-    // Keep a reasonable limit
-    if (history.length > 500) history.length = 500;
+    // Keep a reasonable limit (newest first, so the tail is the oldest)
+    if (history.length > window.PSYCLE_HISTORY_MAX) history.length = window.PSYCLE_HISTORY_MAX;
     saveHistory(history);
   }
 
@@ -251,6 +261,33 @@
      B. INSTRUCTOR PROFILES
      ═══════════════════════════════════════════════════════════════ */
 
+  // [label, .badge modifier] for one row of the modal's class list, or null.
+  // What the member most needs before tapping: is it theirs, is it full.
+  function classStatusChip(evt) {
+    const held = window._myBookings?.[String(evt.id)];
+    if (held) return held.waitlisted ? ['Waitlisted', 'waitlist'] : ['Booked', 'highlight'];
+    if (evt.is_fully_booked) return evt.is_waitlistable ? ['Waitlist', 'waitlist'] : ['Full', 'full'];
+    const left = Number(evt.capacity_remaining);
+    if (evt.capacity != null && evt.capacity_remaining != null && left > 0) return [left + ' left', ''];
+    return null;
+  }
+
+  // ★ + S–F under the name: the Membership tab's own controls (.tier-fav /
+  // .tier-btn) driven by its own writers, so a rank set here is THE rank. No
+  // ids in inline handlers — the overlay's one click listener reads data-*.
+  function instructorRankHtml(instrId) {
+    if (typeof window.setInstructorTier !== 'function' || typeof window.toggleFavFromSettings !== 'function') return '';
+    const sid = String(instrId);
+    const isFav = (typeof favouriteInstructors !== 'undefined' && favouriteInstructors) ? favouriteInstructors.has(sid) : false;
+    const tier = (typeof getInstructorTier === 'function') ? getInstructorTier(sid) : null;
+    const btns = ['S', 'A', 'B', 'C', 'D', 'F'].map(t =>
+      `<button type="button" class="tier-btn${tier === t ? ' active-' + t : ''}" data-instr-tier="${t}" aria-pressed="${tier === t}" aria-label="Rank ${t}">${t}</button>`
+    ).join('');
+    return `<button type="button" class="tier-fav${isFav ? ' is-fav' : ''}" data-instr-fav="1" aria-pressed="${isFav}"
+        title="${isFav ? 'Remove from favourites' : 'Add to favourites'}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}"></button>
+      <div class="tier-btns">${btns}</div>`;
+  }
+
   function openInstructorModal(instrName, instrId) {
     // Remove any existing modal
     document.getElementById('instructorModalOverlay')?.remove();
@@ -288,7 +325,10 @@
       profileHtml += `<img class="instructor-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(instrName)}" loading="eager">`;
     }
     profileHtml += '<div class="instructor-profile-info">';
-    profileHtml += `<div class="instructor-name-title">${escapeHtml(instrName)} ${tierBadge}</div>`;
+    profileHtml += `<div class="instructor-name-title">${escapeHtml(instrName)} <span class="instructor-tier-slot">${tierBadge}</span></div>`;
+    // Only for a real instructor record: a name with no id has nothing to rank.
+    const rankHtml = instr ? instructorRankHtml(instr.id) : '';
+    if (rankHtml) profileHtml += `<div class="instructor-rank">${rankHtml}</div>`;
     if (keywords.length > 0) {
       profileHtml += '<div class="instructor-keywords">' +
         keywords.map(k => `<span class="instructor-keyword">${escapeHtml(k)}</span>`).join('') +
@@ -309,7 +349,8 @@
     // Class list
     let listHtml = '';
     if (upcoming.length === 0) {
-      listHtml = '<div class="instructor-empty">No upcoming classes in cache. Run a search to load more.</div>';
+      // The list is whatever Discover has loaded — not "the next 7 days".
+      listHtml = '<div class="instructor-empty">No upcoming classes in the dates you\'ve searched.</div>';
     } else {
       listHtml = '<div class="instructor-class-list">';
       for (const evt of upcoming.slice(0, 20)) {
@@ -318,14 +359,19 @@
         const h = dt.getHours(), m = dt.getMinutes().toString().padStart(2, '0');
         const ampm = h >= 12 ? 'pm' : 'am';
         const timeStr = (h % 12 || 12) + ':' + m + ampm;
+        const chip = classStatusChip(evt);
+        // A row opens that class's sheet (its Book works with no Discover card
+        // in the DOM — _classDetailBookAction). The id rides in data-*, read by
+        // the overlay's click listener below.
         listHtml += `
-          <div class="instructor-class-item">
+          <div class="instructor-class-item" role="button" tabindex="0" data-event-id="${escapeHtml(String(evt.id))}">
             <div class="instructor-class-day">${dayStr.replace(' ', '<br>')}</div>
             <div class="instructor-class-time">${timeStr}</div>
             <div class="instructor-class-info">
               <div class="instructor-class-type">${escapeHtml(evt._typeName || 'Class')}</div>
               <div class="instructor-class-loc">${escapeHtml(evt._locName || '')}</div>
             </div>
+            ${chip ? `<span class="badge${chip[1] ? ' ' + chip[1] : ''}">${escapeHtml(chip[0])}</span>` : ''}
           </div>`;
       }
       listHtml += '</div>';
@@ -342,8 +388,7 @@
         ${bioHtml}
         ${listHtml}
         <div class="instructor-actions">
-          <button class="instructor-view-schedule"
-            onclick="window._features_filterByInstructor('${String(instrId).replace(/'/g, "\\'")}'); document.getElementById('instructorModalOverlay').remove();">
+          <button class="instructor-view-schedule" data-instr-schedule="1">
             View schedule
           </button>
           <a class="instructor-view-schedule instructor-psycle-link" href="${psycleUrl}" target="_blank" rel="noopener">
@@ -351,6 +396,57 @@
           </a>
         </div>
       </div>`;
+
+    // One listener for everything tappable in the modal. The ids come from the
+    // closure / data-*, never from a string built into an onclick.
+    overlay.addEventListener('click', function (e) {
+      const el = e.target && e.target.closest ? e.target : null;
+      if (!el) return;
+      if (el.closest('[data-instr-schedule]')) {
+        window._features_filterByInstructor(instrId);
+        overlay.remove();
+        return;
+      }
+      const row = el.closest('.instructor-class-item[data-event-id]');
+      if (row) {
+        if (typeof window.openClassDetail !== 'function') return;
+        overlay.remove();
+        window.openClassDetail(row.dataset.eventId);
+        return;
+      }
+      const fav = el.closest('[data-instr-fav]');
+      const tierBtn = el.closest('[data-instr-tier]');
+      if (!instr || (!fav && !tierBtn)) return;
+      const picked = tierBtn ? tierBtn.dataset.instrTier : null;
+      if (fav) window.toggleFavFromSettings(instr.id);
+      else window.setInstructorTier(instr.id, picked);
+      // Repaint from the stores those writers just changed (the tapped button
+      // is replaced, so hand the focus to its successor).
+      const rank = overlay.querySelector('.instructor-rank');
+      if (rank) {
+        rank.innerHTML = instructorRankHtml(instr.id);
+        const again = rank.querySelector(fav ? '[data-instr-fav]' : '[data-instr-tier="' + picked + '"]');
+        if (again) again.focus();
+      }
+      const slot = overlay.querySelector('.instructor-tier-slot');
+      if (slot) slot.innerHTML = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instr.id) : '';
+      // The writers only repaint Membership's (hidden) list, and the tier badge
+      // is baked into each card when it is built: the cards under this modal
+      // kept the old rank. A star writes nothing on a card — it only brings
+      // back Discover's "My favourites" quick action after a first favourite.
+      if (tierBtn) {
+        if (typeof _renderWindowInPlace === 'function') _renderWindowInPlace();
+        if (typeof refreshUpcomingPanel === 'function') refreshUpcomingPanel();
+      } else if (typeof updateDiscoverEmptyState === 'function') updateDiscoverEmptyState();
+    });
+    // The rows are divs with role="button": Enter / Space must work too.
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const row = e.target && e.target.matches && e.target.matches('.instructor-class-item[data-event-id]') ? e.target : null;
+      if (!row) return;
+      e.preventDefault();
+      row.click();
+    });
 
     document.body.appendChild(overlay);
   }
@@ -365,6 +461,11 @@
     }
     if (typeof window.renderInstrChips === 'function') window.renderInstrChips();
     if (typeof window.renderInstrDropdown === 'function') window.renderInstrDropdown();
+    // The modal opens from My Bookings and Stats too: without the tab switch
+    // the search filled a hidden panel and the tap looked like it did nothing.
+    // (search() and its wrappers never switch tab; every other filter-and-
+    // search CTA does it first.)
+    if (typeof window.switchTab === 'function') window.switchTab('discover');
     if (typeof window.search === 'function') window.search();
   };
 

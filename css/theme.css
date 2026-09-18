@@ -61,7 +61,14 @@
   --radius-xl: 10px;
   --radius-2xl: 12px;
   --radius-3xl: 14px;
+  --radius-4xl: 16px;
+  --radius-5xl: 18px;
   --radius-full: 9999px;
+
+  /* ── Tap targets ───────────────────────────────────────────── */
+  /* Fingertip minimum: the invisible hit area behind glyph-sized controls
+     (×, Skip) and the min-height of text buttons on touch screens. */
+  --tap-min: 44px;
 
   /* ── Font size scale ───────────────────────────────────────── */
   --text-2xs: 9px;
@@ -1093,9 +1100,11 @@ select:focus, input:focus { border-color: var(--accent); }
 .header-subtitle { color: var(--text-dim); }
 .disconnect-link { color: var(--text-ghost); }
 
+/* Ink is Cloud's --badge-full-text, which sits on this same pink: 5.1:1 for
+   the small bold "CANCEL BOOKING" label (the old #c73650 was 4.4:1). */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .book-btn.booked {
   background: #fde8ec;
-  color: #c73650;
+  color: #b82d46;
   border-color: #f5b3bf;
 }
 
@@ -1342,7 +1351,8 @@ select:focus, input:focus { border-color: var(--accent); }
   --shadow-overlay: rgba(0,0,0,0.5);
   /* Pixel hardware: no rounded corners anywhere */
   --radius-xs: 0; --radius-sm: 0; --radius-md: 0; --radius-lg: 0;
-  --radius-xl: 0; --radius-2xl: 0; --radius-3xl: 0; --radius-full: 0;
+  --radius-xl: 0; --radius-2xl: 0; --radius-3xl: 0; --radius-4xl: 0;
+  --radius-5xl: 0; --radius-full: 0;
   --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
 }
 

@@ -81,9 +81,18 @@
     if (tabId === 'tab-bookings') {
       return (typeof fetchMyBookings === 'function') ? (fetchMyBookings() || true) : null;
     }
-    // Discover uses the explicit "Updated · Refresh" link instead of
-    // pull-to-refresh — the gesture was firing during normal scrolling and
-    // re-rendering the list, so it's a no-op here.
+    // Discover: the same silent refresh as its "Updated · Refresh" link — the
+    // list stays up and is re-rendered in place, scroll kept. (This was a
+    // no-op while the gesture still armed mid-scroll; it only arms at the very
+    // top now, and showed a pill that then did nothing.) Before a first load
+    // there is nothing to refresh — and signed out (the public window stays in
+    // memory) revalidateWindow() will not run: refreshWindow()'s promise is
+    // truthy all the same, and held "Refreshing..." up over a pull that sent
+    // nothing.
+    if (tabId === 'tab-discover' && window._windowEvents && typeof refreshWindow === 'function' &&
+        typeof getBearerToken === 'function' && getBearerToken()) {
+      return refreshWindow();
+    }
     return null;
   }
 
@@ -314,10 +323,11 @@
       ensureSwipeBg(swipeTarget);
       // Remove transition during drag
       swipeTarget.style.transition = 'none';
-      // .class-card's entry animation (cardEnter, fill-mode both) keeps holding
-      // transform + opacity after it ends, and an animation outranks inline
-      // style — the card would not move. Never restored: putting it back would
-      // replay the entry, and the next render rebuilds the card anyway.
+      // While .class-card's entry animation (cardEnter, fill-mode backwards) is
+      // still running — the first ~0.5s after a render, stagger delay included —
+      // it holds transform + opacity, and an animation outranks inline style:
+      // the card would not move. Never restored: putting it back would replay
+      // the entry, and the next render rebuilds the card anyway.
       swipeTarget.style.animation = 'none';
     }
 

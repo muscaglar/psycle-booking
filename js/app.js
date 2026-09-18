@@ -981,7 +981,10 @@ if (typeof PsycleEvents !== 'undefined') {
     // has no timetable yet: the launch path only searches when a token already
     // existed. `initial` is skipped because that launch search is already
     // running — a second one would double-fetch or flash "No classes found".
-    if (s && s.signedIn && !s.initial && !window._windowEvents && locations.length) {
+    // A search that died with the old session leaves its error (and "Sign in")
+    // in the list while an earlier window is still loaded: run it again too.
+    if (s && s.signedIn && !s.initial && locations.length &&
+        (!window._windowEvents || document.querySelector('#results .status-error'))) {
       try { search(); } catch {}
     }
   });
@@ -1250,11 +1253,57 @@ document.addEventListener('visibilitychange', function() {
 window.addEventListener('online', function() {
   if (currentUser) refreshProfile();
   else _healAuth();
+  // Discover only had a resume hook: a partial window shown at an offline
+  // launch stayed up, with no spinner, until the next tap. A reconnect is also
+  // what ends the failed-refresh back-off. Last and on its own — nothing here
+  // may get in the way of the auth healing above.
+  try { _revalFailedAt = 0; _discoverResumed(); } catch (e) {}
 });
+
+// ── Offline indicator ────────────────────────────────────────────
+// Nothing said "you're offline": requests just spun, then failed. A bar under
+// the header says so the moment the browser knows. navigator.onLine can read
+// false on a working connection (some VPN / desktop set-ups), so any answer
+// from Psycle takes the bar down again, and it can be dismissed.
+function _setOfflineBanner(show) {
+  let el = document.getElementById('offlineBanner');
+  if (!show) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'offlineBanner';
+    el.className = 'app-banner';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<span>You're offline — times and availability may be out of date.</span>
+      <button type="button" class="app-banner-close" aria-label="Dismiss" onclick="this.parentNode.style.display='none'">×</button>`;
+  }
+  // (Re)anchored under the session banner on every show. tabs.js moves that
+  // banner when it builds the tab shell; a bar shown before then simply stays
+  // where the banner was — still between the header and the content.
+  const anchor = document.getElementById('sessionBanner');
+  if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  else document.body.insertBefore(el, document.body.firstChild);
+  el.style.display = 'flex';
+}
+window.addEventListener('offline', function() { _setOfflineBanner(true); });
+window.addEventListener('online', function() { _setOfflineBanner(false); });
+if (typeof PsycleEvents !== 'undefined') {
+  ['profile:updated', 'bookings:loaded'].forEach(evt => PsycleEvents.on(evt, () => _setOfflineBanner(false)));
+}
+if (navigator.onLine === false) _setOfflineBanner(true); // launched offline: no 'offline' event will say so
 
 // Init — wait for security module to decrypt stored token
 if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
 (window.securityReady || Promise.resolve()).then(function() {
+  // tabs.js paints My Bookings ~50ms after load — on iOS before the stored
+  // token is restored and decrypted, so that paint is the "Sign in" hero, and
+  // nothing took it down until /profile answered (15s+ on a weak signal, longer
+  // while /bookings retries). The token is readable now: paint once more, so
+  // the saved copy with "Checking…" (or the "One moment" gate) is what stays
+  // up through /profile and /bookings. (Guarded: nothing here may keep
+  // checkAuth from running.)
+  try {
+    if (getBearerToken() && !currentUser && !Object.keys(_myBookings).length) renderMyBookings();
+  } catch (e) {}
   checkAuth();
   if (typeof scheduleTokenExpiryCheck === 'function') scheduleTokenExpiryCheck();
 });
@@ -1271,9 +1320,8 @@ if (IS_FILE) document.getElementById('corsBanner').style.display = 'block';
     fetchJson('/locations'),
     fetchJson('/event-types'),
   ]).catch(err => {
-    document.getElementById('results').innerHTML = `<div class="status" style="color:#e94560">
-      Failed to load: ${escapeHTML(err.message)}<br><small style="color:#666">Check the console for details.</small>
-    </div>`;
+    // A friendly line and a Reload button — "check the console" is no help on a phone.
+    showInitError(err);
     throw err;
   });
 
@@ -1353,13 +1401,19 @@ let _autoSearchTimer = null;
 function triggerAutoSearch() {
   updateFiltersSummary();
   if (!getBearerToken()) return;
-  // If the window for the current date range is already cached, re-filter it
+  // Left open past midnight with no resume in between (a desktop tab): the
+  // date row still means yesterday. Rolling it searches by itself.
+  if (_rollDiscoverForward()) return;
+  // If the loaded window already holds the selected date range, re-filter it
   // client-side instantly — no debounce, no network. This makes every filter
-  // (including instructor) update results immediately, so there's no Search button.
-  const wk = (typeof currentWindowDates === 'function') ? currentWindowDates().windowKey : null;
-  if (wk && window._windowKey === wk && Array.isArray(window._windowEvents) && window._windowRelations) {
+  // (including instructor, and Today / Tomorrow / a picked day inside the
+  // loaded week) update results immediately, so there's no Search button.
+  // Numbers older than WINDOW_FRESH_MS are then refreshed silently.
+  const wd = currentWindowDates();
+  if (_windowCovers(wd.startDate, wd.endDateStr)) {
     clearTimeout(_autoSearchTimer); // pending debounced search is obsolete
     renderFromWindow(currentFilters());
+    _revalidateIfStale();
     return;
   }
   clearTimeout(_autoSearchTimer);
@@ -1633,6 +1687,98 @@ let _loadableSearchStarted = false;
 const WINDOW_CACHE_KEY = 'psycle_window_cache';
 const WINDOW_CACHE_TTL = 24 * 60 * 60 * 1000;
 
+// ── pure:window:start ── (DOM-free window-range helpers; tests/suites/window.js evaluates this block)
+// How long a loaded window is re-filtered with no network call at all. Past
+// it the classes still render at once, but a silent revalidate follows:
+// "spots left" must never look fresher than it is.
+const WINDOW_FRESH_MS = 15 * 60 * 1000;
+
+// 'start|end' → { start, end }; null for anything that is not two ISO days in
+// order (the key also comes back from localStorage).
+function _parseWindowKey(key) {
+  const m = /^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/.exec(String(key || ''));
+  return (m && m[1] <= m[2]) ? { start: m[1], end: m[2] } : null;
+}
+
+// Does the window `key` hold every day of start..end? (ISO days sort as strings.)
+function _keyCovers(key, start, end) {
+  const w = _parseWindowKey(key);
+  return !!w && !!start && !!end && start <= end && w.start <= start && end <= w.end;
+}
+
+// Is a class's day inside start..end? The loaded window can be wider than the
+// selection, so render() and the facet counts both bound the days with this.
+// A missing bound bounds nothing (a restored legacy search has none). The day
+// is the first 10 characters of the T- and the space-form start_at alike.
+function _dayInRange(startAt, start, end) {
+  const day = String(startAt).slice(0, 10);
+  return !(start && day < start) && !(end && day > end);
+}
+
+// A stamp from the future (the clock was moved back) is NOT fresh — it would
+// otherwise pass for fresh until the clock caught up with it.
+function _windowIsFresh(fetchedAt, now) {
+  const age = now - fetchedAt;
+  return !!fetchedAt && age >= 0 && age < WINDOW_FRESH_MS;
+}
+
+// What a persisted window can give a launch that asks for start..end:
+//   'covers'  — it holds the whole range: adopt it as it is, under its own key;
+//   'overlap' — it holds the first days only (yesterday's week, opened this
+//               morning): show those at once, then fetch the real range;
+//   null      — nothing usable.
+function _cachePlan(cachedKey, start, end) {
+  const w = _parseWindowKey(cachedKey);
+  if (!w || !start || !end || start > end) return null;
+  if (w.start <= start && end <= w.end) return 'covers';
+  return (w.start <= start && start <= w.end) ? 'overlap' : null;
+}
+
+// The range a revalidate fetches. A window that covers the selection is
+// refreshed as a whole — refreshing "Today" must not shrink the loaded week to
+// one day — minus days already gone, and never cutting into the selection.
+// Anything else fetches exactly what is selected.
+function _revalRange(windowKey, selStart, selEnd, todayStr) {
+  if (!_keyCovers(windowKey, selStart, selEnd)) return { startDate: selStart, endDateStr: selEnd };
+  const w = _parseWindowKey(windowKey);
+  const start = w.start >= todayStr ? w.start : (todayStr < selStart ? todayStr : selStart);
+  return { startDate: start, endDateStr: w.end };
+}
+
+// The preset to re-apply when the app is looked at on a different day than the
+// one its date row was derived for (`lastDay`); null = leave the dates alone.
+//  - a preset whose inputs still ARE its window as of lastDay follows the
+//    calendar: Today stays "today", Tomorrow becomes the new tomorrow;
+//  - any other range that now starts in the past (a picked day that has gone)
+//    falls back to the week — render() would drop every class in it;
+//  - a range still ahead was chosen on purpose and stays.
+// (The inputs are compared, not just the mode: flows that move the date can
+// leave a stale mode behind, and that must not drag a future date to today.)
+function _rollForwardMode(s) {
+  if (!s || !s.today || s.today === s.lastDay) return null;
+  const was = _dateModeWindow(s.mode, s.lastDay);
+  if (was && was.startDate === s.startDate && was.daysAhead === parseInt(s.daysAhead, 10)) return s.mode;
+  return (/^\d{4}-\d{2}-\d{2}$/.test(String(s.startDate || '')) && s.startDate < s.today) ? 'week' : null;
+}
+
+// Did any class start in [fromMs, toMs)? Same clock and same edge as render()'s
+// "already started" test (start < now), so a resume re-renders exactly when
+// that test would now drop a card it kept at fromMs. An unparseable start_at
+// never counts (NaN compares false).
+function _anyStartedBetween(events, fromMs, toMs) {
+  return (events || []).some(e => {
+    const t = new Date(e.start_at).getTime();
+    return t >= fromMs && t < toMs;
+  });
+}
+// ── pure:window:end ──
+
+// Is the selected range inside the window already in memory?
+function _windowCovers(startDate, endDateStr) {
+  return Array.isArray(window._windowEvents) && !!window._windowRelations &&
+    _keyCovers(window._windowKey, startDate, endDateStr);
+}
+
 function currentWindowDates() {
   const startDate = document.getElementById('startDate').value;
   const days = parseInt(document.getElementById('daysAhead').value) || 14;
@@ -1670,11 +1816,24 @@ function _buildFacetClasses(events, relations) {
   refreshFacetCounts();
 }
 
-function _setWindow(windowKey, events, relations, fetchedAt) {
+// `partial`: the events do not fill the key's whole range (an older cache
+// adopted for a newer range while the real fetch runs, or a search that lost a
+// studio). Such a window is never persisted and never counts as fresh,
+// whatever its stamp says — the next render from it refetches quietly.
+function _setWindow(windowKey, events, relations, fetchedAt, partial) {
   window._windowKey = windowKey;
   window._windowEvents = events;
   window._windowRelations = relations;
   window._windowFetchedAt = fetchedAt || Date.now();
+  window._windowPartial = !!partial;
+  // The last day an adopted cache really held (search(), 'overlap' — the only
+  // caller that sets it, right after this): the key claims days past it.
+  window._windowHeldEnd = null;
+  // Why the last load behind this window failed (a categorizeError message),
+  // for "Couldn't check these dates": a 503 is not the member's connection.
+  // Never 'auth' — the session banner owns that, and it would outlive the
+  // re-login.
+  window._windowLoadError = null;
 }
 
 function _persistWindow(windowKey, events, relations) {
@@ -1691,14 +1850,23 @@ function _readWindowCache() {
   return null;
 }
 
-function renderFromWindow(filters) {
+let _windowRenderedAt = 0; // when the list was last built from the window (on resume: has a class started since?)
+// `quiet`: nobody asked for this render (a background refresh landed, a
+// resume). The rebuilt cards must not replay their entrance — the top of the
+// list blinked under the member's eyes (css/tabs.css reads data-quiet). Only
+// when cards are already up: "Checking…" / empty → list keeps its entrance.
+function renderFromWindow(filters, quiet) {
   // An instant cached render owns the view from this moment: supersede any
   // in-flight search for a different range, or its late progressive renders
   // would append foreign day-groups on top of this view and restamp the
   // window key to the abandoned range.
   _searchSeq++;
+  _windowRenderedAt = Date.now();
   const cont = document.getElementById('results');
-  if (cont) cont.innerHTML = '';
+  if (cont) {
+    cont.toggleAttribute('data-quiet', !!quiet && !!cont.querySelector('.class-card'));
+    cont.innerHTML = '';
+  }
   render(window._windowEvents, window._windowRelations, filters, true);
   if (typeof refreshFacetCounts === 'function') refreshFacetCounts();
   renderLastUpdated();
@@ -1708,11 +1876,11 @@ function renderFromWindow(filters) {
 // window instantly; the per-dimension pill counts stay selection-based.
 function onDiscoverSearch(v) {
   window._discoverQuery = (v || '').trim().toLowerCase();
-  // Instant path only when the cached window matches the SELECTED range —
+  // Instant path only when the cached window holds the SELECTED range —
   // renderFromWindow supersedes in-flight fetches, and rendering a stale
   // range here would strand the fetch for the range the user actually picked.
-  const wk = (typeof currentWindowDates === 'function') ? currentWindowDates().windowKey : null;
-  if (window._windowEvents && wk && window._windowKey === wk) renderFromWindow(currentFilters());
+  const wd = currentWindowDates();
+  if (_windowCovers(wd.startDate, wd.endDateStr)) { renderFromWindow(currentFilters()); _revalidateIfStale(); }
   else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
 }
 
@@ -1806,24 +1974,215 @@ async function fetchFullWindow(startDate, endDateStr, stale) {
   return { events: allEvents, relations };
 }
 
-// Background refresh: silently re-fetch the current window, update the
-// cache + facets, and re-render unless the user has moved on. No spinner.
-async function revalidateWindow() {
-  if (!getBearerToken()) return;
-  const { startDate, endDateStr, windowKey } = currentWindowDates();
-  const mySeq = ++_searchSeq;
-  const stale = () => mySeq !== _searchSeq;
-  let result;
-  try { result = await fetchFullWindow(startDate, endDateStr, stale); }
-  catch (e) { return; }
-  if (!result || !result.relations) return;
-  if (currentWindowDates().windowKey !== windowKey) return; // date changed mid-flight
-  _setWindow(windowKey, result.events, result.relations);
-  _persistWindow(windowKey, result.events, result.relations);
-  _buildFacetClasses(result.events, result.relations);
-  if (stale()) return; // a newer user action owns the view
-  renderFromWindow(currentFilters());
+// True while a Discover card is mid-flow: a dialog is up, or a Book button is
+// waiting on the server. The flow holds that very button, so the list must
+// not be rebuilt underneath it (same test as _resyncDiscoverButtons).
+function _discoverBusy() {
+  if (_dialogOpen()) return true;
+  return Array.from(document.querySelectorAll('#results .book-btn'))
+    .some(b => b.dataset.busy === '1' || b.textContent === '…');
 }
+
+// Re-render after a background refresh without yanking the page: the scroll
+// offset survives (clearing #results collapses the scroller and clamps it),
+// and a busy list is left alone — we come back for it, bounded like
+// showHistorySyncPrompt's deferral. The window itself is already updated, so
+// the next filter tap shows the new numbers either way.
+let _inPlaceTimer = null, _inPlaceDefers = 0;
+function _renderWindowInPlace(isRetry) {
+  clearTimeout(_inPlaceTimer);
+  if (!isRetry) _inPlaceDefers = 0;
+  const sel = currentWindowDates();
+  if (!_windowCovers(sel.startDate, sel.endDateStr)) return;  // the view moved to another range
+  if (_fetchingSeq && _fetchingSeq === _searchSeq) return;     // a live search owns the list
+  if (_discoverBusy()) {
+    if (_inPlaceDefers++ < 40) _inPlaceTimer = setTimeout(() => _renderWindowInPlace(true), 1500);
+    return;
+  }
+  const sc = document.querySelector('.tab-content'); // the scroller at <=640px; wider, it is the document
+  const top = sc ? sc.scrollTop : 0, y = window.scrollY;
+  renderFromWindow(currentFilters(), true);
+  if (sc && sc.scrollTop !== top) sc.scrollTop = top;
+  if (window.scrollY !== y) window.scrollTo(0, y);
+}
+
+// The sequence number of the search() that is fetching right now (0 = none).
+// It is only "live" while it still equals _searchSeq — a superseded search
+// keeps running until its requests return, but will never render or commit.
+let _fetchingSeq = 0;
+// One revalidate per range at a time: renderLastUpdated() repaints on every
+// chip tap and used to hand back a live Refresh link mid-refresh.
+let _revalInFlight = null; // { key, silent, moved, promise }
+// A background refresh that failed is not retried for a minute — every chip
+// tap over a stale window asks for one, and each costs a request per studio.
+let _revalFailedAt = 0;
+const REVAL_RETRY_MS = 60 * 1000;
+// The provisional window a failed refresh was already handed to search() for
+// (see _runRevalidate): once per window, never on every retry.
+let _handoverKey = null;
+
+// Refresh the window behind the current view: re-fetch, update the cache +
+// facets, re-render in place. No spinner; the list stays up. Resolves true
+// only when a COMPLETE window was committed.
+//   opts.silent — nobody asked (resume, a render from a stale window): no
+//                 toasts, skipped while offline and just after a failure.
+function revalidateWindow(opts) {
+  const silent = !!(opts && opts.silent);
+  if (!getBearerToken() || !locations.length) return Promise.resolve(false);
+  // A live search is already loading this view fresh; a second loader would
+  // only race its renders.
+  if (_fetchingSeq && _fetchingSeq === _searchSeq) return Promise.resolve(false);
+  if (navigator.onLine === false) {
+    // GETs retry with backoff: offline that is ~7s of failures per studio,
+    // and an error-log entry for each.
+    if (!silent) toast("You're offline — showing the last timetable we loaded", 'info');
+    return Promise.resolve(false);
+  }
+  if (silent && Date.now() - _revalFailedAt < REVAL_RETRY_MS) return Promise.resolve(false);
+  const sel = currentWindowDates();
+  const range = _revalRange(window._windowKey, sel.startDate, sel.endDateStr, localDateStr());
+  const run = { key: range.startDate + '|' + range.endDateStr, silent, moved: false, promise: null };
+  // A run whose latch has tripped (the view left its range and came back) will
+  // never commit: joining it made Refresh do nothing and left "Checking…" up
+  // for good. It is replaced instead — its clean-up only clears the slot while
+  // it still holds it.
+  if (_revalInFlight && _revalInFlight.key === run.key && !_revalInFlight.moved) {
+    // Join it. A Refresh tapped over a background run makes it a manual one:
+    // whoever asked gets told if it fails.
+    if (!silent) _revalInFlight.silent = false;
+    return _revalInFlight.promise;
+  }
+  _revalInFlight = run;
+  renderLastUpdated(); // "Refreshing…"
+  run.promise = _runRevalidate(run, range).catch(() => {
+    if (_revalInFlight === run) _revalInFlight = null;
+    renderLastUpdated();
+    return false;
+  });
+  return run.promise;
+}
+
+async function _runRevalidate(run, range) {
+  // LATCHED "this range is no longer wanted". It deliberately ignores
+  // _searchSeq: every chip tap bumps that (renderFromWindow), which made
+  // fetchFullWindow drop the studios still loading — and the truncated window
+  // was then committed AND persisted, so whole studios vanished for the day.
+  // Only a move to a range this fetch does not hold abandons it, and once
+  // abandoned it stays abandoned (studios were skipped in the meantime) even
+  // if the member taps straight back. The latch lives on the run, so
+  // revalidateWindow() can see a dead run and start a new one beside it.
+  const gone = () => {
+    if (!run.moved) {
+      const now = currentWindowDates();
+      run.moved = !_keyCovers(run.key, now.startDate, now.endDateStr);
+    }
+    return run.moved;
+  };
+  let result = null, err = null;
+  try { result = await fetchFullWindow(range.startDate, range.endDateStr, gone); }
+  catch (e) { err = e; } // one studio failing rejects the lot: never commit a partial window
+  if (_revalInFlight === run) _revalInFlight = null; // before the repaints below read it
+  if (!err && result && result.relations && !gone()) {
+    _revalFailedAt = 0;
+    _setWindow(run.key, result.events, result.relations);
+    _persistWindow(run.key, result.events, result.relations);
+    _buildFacetClasses(result.events, result.relations);
+    _renderWindowInPlace();
+    renderLastUpdated(); // also when the re-render was deferred
+    return true;
+  }
+  if (err) {
+    _revalFailedAt = Date.now();
+    let cat = null;
+    try { cat = window.PsycleAPI.categorizeError(err); } catch (_) {}
+    if (cat && cat.type !== 'unknown' && cat.type !== 'auth') window._windowLoadError = cat.userMessage; // see _setWindow
+    // A window adopted from an older cache still lacks its last day(s), and
+    // this all-or-nothing refresh keeps failing for as long as ONE studio is
+    // down — the member saw a short week, or "no classes" on a day nobody had
+    // loaded. search() shows the studios that do answer (and says which did
+    // not), so hand over to it: once per window, and only for a server error
+    // — on a bad connection it would swap the cached list for an error. It
+    // clears #results, so never under a booking in progress.
+    if (cat && cat.type === 'server' && window._windowHeldEnd && _handoverKey !== window._windowKey &&
+        !gone() && !_discoverBusy() && getBearerToken()) {
+      _handoverKey = window._windowKey;
+      search({ force: true });
+    } else if (!run.silent && !gone() && getBearerToken()) {
+      // Read at failure time: a manual Refresh may have joined a background run.
+      // A dead session already has its own banner (apiFetch → showSessionExpired).
+      let msg = "Couldn't refresh the timetable — check your connection and try again";
+      if (cat && cat.type !== 'unknown') msg = cat.userMessage; // "Psycle's servers are having trouble…" is not a connection problem
+      toast(msg, 'error');
+    }
+  } else if (result && !result.relations && !run.silent && !gone()) {
+    // Every studio answered 200 with no classes at all. Nothing was committed
+    // above — an empty 200 must not wipe a timetable (and the day's cache)
+    // that was real a minute ago — and the "Updated" stamp stays as old as
+    // the list is. Whoever tapped Refresh is told: it looked like a dead tap.
+    toast('Psycle sent back an empty timetable — still showing the last one we loaded', 'info');
+  }
+  // A provisional window showed "Checking…" in place of an empty list (see
+  // _discoverEmptyContext): nothing more is coming, so say what we know —
+  // unless a newer run has taken this one's place (it swaps the placeholder
+  // itself). A view that moved to another range is left alone in there.
+  if (!_revalInFlight && document.querySelector('#results .empty-loading')) _renderWindowInPlace();
+  renderLastUpdated();
+  return false;
+}
+
+// Render from the window, then refresh it quietly when its numbers are old.
+function _revalidateIfStale() {
+  if (!window._windowPartial && _windowIsFresh(window._windowFetchedAt, Date.now())) return;
+  revalidateWindow({ silent: true });
+}
+
+// ── Discover rolls forward ──────────────────────────────────────────
+// The date row is derived once (launch, or a tap) and an iPhone keeps the app
+// warm for days: next morning "Today" still meant yesterday — every class in
+// it started, the next chip tap said "No classes found" — and nothing looked
+// at Discover on resume at all.
+let _discoverDay = localDateStr(); // the day the date row was last checked against
+
+// Re-derive the date row if the day has changed. True when it moved — the
+// preset was re-applied through setDateQuick, which saves it and searches.
+function _rollDiscoverForward() {
+  const today = localDateStr();
+  if (today === _discoverDay) return false;
+  const startEl = document.getElementById('startDate'), daysEl = document.getElementById('daysAhead');
+  const mode = _rollForwardMode({
+    today, lastDay: _discoverDay, mode: _dateQuickMode,
+    startDate: startEl ? startEl.value : '', daysAhead: daysEl ? daysEl.value : '',
+  });
+  _discoverDay = today; // before setDateQuick: it comes straight back through triggerAutoSearch
+  if (!mode) return false;
+  setDateQuick(mode);
+  return true;
+}
+
+// Back in the foreground (the other visibility handlers reload bookings and
+// heal auth; this one is Discover's). New day: roll the date row. Same day:
+// drop the classes that started while we were away — only if one did, a
+// rebuild is not free — and refresh numbers that have gone old (silently; it
+// re-renders in place when it lands). Never under a booking in progress: a
+// roll searches, and that search rebuilds the list the open picker's button
+// lives in — wait for the flow to end (bounded, as above).
+let _resumeTimer = null, _resumeDefers = 0;
+function _discoverResumed(isRetry) {
+  clearTimeout(_resumeTimer);
+  if (!isRetry) _resumeDefers = 0;
+  if (document.hidden || !getBearerToken()) return;
+  if (_discoverBusy()) {
+    if (_resumeDefers++ < 40) _resumeTimer = setTimeout(() => _discoverResumed(true), 1500);
+    return;
+  }
+  if (_rollDiscoverForward()) return;
+  const sel = currentWindowDates();
+  if (!_windowCovers(sel.startDate, sel.endDateStr)) return; // nothing loaded for this view (or a search is on its way)
+  renderLastUpdated(); // "Updated 3m ago" does not tick on its own
+  if (_anyStartedBetween(window._windowEvents, _windowRenderedAt, Date.now())) _renderWindowInPlace();
+  _revalidateIfStale();
+}
+document.addEventListener('visibilitychange', function () { _discoverResumed(); });
 
 // ── "Last updated" + manual refresh (Discover filters) ──────────────
 function _relativeTime(ts) {
@@ -1841,16 +2200,18 @@ function renderLastUpdated() {
   const el = document.getElementById('lastUpdated');
   if (!el) return;
   if (!window._windowFetchedAt) { el.innerHTML = ''; return; }
-  el.innerHTML = 'Updated ' + _relativeTime(window._windowFetchedAt) +
-    ' · <button type="button" class="refresh-link" onclick="refreshWindow()">Refresh</button>';
+  // Painted from state, not by the click handler: every chip tap repaints this
+  // label, and a refresh in flight (manual or background) must stay "Refreshing…".
+  el.innerHTML = 'Updated ' + _relativeTime(window._windowFetchedAt) + ' · ' +
+    (_revalInFlight
+      ? '<button type="button" class="refresh-link" disabled>Refreshing…</button>'
+      : '<button type="button" class="refresh-link" onclick="refreshWindow()">Refresh</button>');
 }
 
-// Manual refresh — silently re-fetch the current window (results stay
-// visible while loading) and restamp "last updated".
+// Manual refresh (the link above, and pull-to-refresh on Discover) — silently
+// re-fetch the window (results stay visible while loading) and restamp "last
+// updated". Returns the promise so the pull indicator can resolve with it.
 async function refreshWindow() {
-  const el = document.getElementById('lastUpdated');
-  const btn = el && el.querySelector('.refresh-link');
-  if (btn) { btn.textContent = 'Refreshing…'; btn.disabled = true; }
   try { await revalidateWindow(); } catch (e) {}
   renderLastUpdated();
 }
@@ -1885,30 +2246,61 @@ async function search(opts) {
   const filters = { instructorId, locationIds, categoryKeys, startDate, endDateStr, strengthSubs: new Set(selectedStrengthSubs), reformerSubs: new Set(selectedReformerSubs) };
 
   // 1. In-memory window: studio/instructor/type filtering is entirely
-  //    client-side, so when only those change (same date range) we re-render
-  //    from the cached window instantly — no refetch.
-  if (!force && window._windowKey === windowKey && Array.isArray(window._windowEvents) && window._windowRelations) {
+  //    client-side, and so is any date range INSIDE the loaded window (Today /
+  //    Tomorrow / a picked day within the week — render() bounds the days), so
+  //    those re-render from the cached window instantly — no refetch, and the
+  //    wider window is not thrown away for a one-day one. Numbers older than
+  //    WINDOW_FRESH_MS are refreshed silently right after.
+  if (!force && _windowCovers(startDate, endDateStr)) {
     renderFromWindow(filters);
+    _revalidateIfStale();
     return;
   }
 
   // 2. Persistent window (cross-launch): on first load only (no in-memory
-  //    window yet) AND only when the cached date range matches the current
-  //    one, hydrate instantly with NO network call. Otherwise fall through to
-  //    a real fetch. A later date change has an in-memory window, so it also
-  //    falls through to a fetch for that range.
+  //    window yet), hydrate instantly from a cache (<24h) that holds the
+  //    selected range, under the CACHE's own key. The list is up with no
+  //    spinner; a cache older than WINDOW_FRESH_MS is then revalidated in the
+  //    background, so "spots left" is never hours old for long. A later date
+  //    change outside the window has an in-memory window, so it falls through
+  //    to a fetch for that range.
   if (!force && !window._windowEvents) {
     const cached = _readWindowCache();
-    if (cached && cached.key === windowKey) {
-      // Daily model: a fresh (<24h), same-range cache loads with no network
-      // call. It's refreshed only when it ages out (>24h), the date range
-      // changes (new key → cache miss → fetch), or the user taps Refresh /
-      // pull-to-refresh. Booking re-fetches live availability regardless.
-      _setWindow(windowKey, cached.events, cached.relations, cached.fetchedAt);
+    const plan = cached ? _cachePlan(cached.key, startDate, endDateStr) : null;
+    if (plan === 'covers') {
+      _setWindow(cached.key, cached.events, cached.relations, cached.fetchedAt);
       _buildFacetClasses(cached.events, cached.relations);
       renderFromWindow(filters);
+      _revalidateIfStale();
       return;
     }
+    if (plan === 'overlap') {
+      // First open of the day: yesterday's week still holds all but the last
+      // day of today's. Show those days now (in memory only, flagged partial
+      // — never persisted) and fetch the real range behind them.
+      const held = cached.events.filter(e => _dayInRange(e.start_at, startDate, endDateStr));
+      if (held.length) {
+        _setWindow(windowKey, held, cached.relations, cached.fetchedAt, true);
+        // The key now claims days the cache never held. If the fetch behind
+        // them fails (or never runs — offline), an empty day past this one is
+        // "couldn't check", not "no classes" (_discoverEmptyContext).
+        window._windowHeldEnd = _parseWindowKey(cached.key).end;
+        _buildFacetClasses(held, cached.relations);
+        revalidateWindow({ silent: true }); // first: an empty filtered list then reads "Checking…", not "No classes"
+        renderFromWindow(filters);
+        return;
+      }
+    }
+  }
+
+  // Reference data has not landed yet (a tap during a cold launch): there are
+  // no studios to fetch, and the empty loop below used to answer "No classes
+  // found". Say loading instead — the launch path searches as soon as
+  // /locations is in (_loadableSearchStarted stays false for this run).
+  if (!locations.length) {
+    if (_refDataFailed) showInitError();
+    else setStatus('<span class="spinner"></span>Loading studios…');
+    return;
   }
 
   const btn = document.getElementById('searchBtn');
@@ -1919,9 +2311,15 @@ async function search(opts) {
   }
   window._searchAborted = false;
 
+  _fetchingSeq = mySeq; // from here this run is the live loader (revalidateWindow defers to it)
+  // A fetched list is one the member asked for: its cards animate in, whatever
+  // the last background re-render left on the container (renderFromWindow).
+  const resultsEl = document.getElementById('results');
+  if (resultsEl) resultsEl.removeAttribute('data-quiet');
   setStatus('<span class="spinner"></span>Connecting…');
 
   let allEvents = [], relations = null;
+  let studiosFailed = 0; // a window missing studios is shown, but never persisted
   const seenIds = new Set();
 
   // Always fetch the FULL window (every studio) so the faceted counts reflect
@@ -1967,6 +2365,7 @@ async function search(opts) {
       const total = locationsToFetch.length;
       let done = 0;
       const failedStudios = [];
+      let firstErr = null;
 
       const promises = locationsToFetch.map(async loc => {
         try {
@@ -1976,6 +2375,7 @@ async function search(opts) {
           if (!relations) relations = rel;
           else if (rel) mergeRelations(relations, rel);
         } catch (e) {
+          firstErr = firstErr || e;
           failedStudios.push(loc.name ? loc.name.replace('Psycle ', '') : String(loc.id));
         } finally {
           done++;
@@ -1986,16 +2386,31 @@ async function search(opts) {
       await Promise.all(promises);
 
       if (!stale() && failedStudios.length) {
-        if (failedStudios.length === total) throw new Error('All studios failed to load');
+        // Rethrow the REAL cause ('HTTP 503', a TypeError…): showSearchError can
+        // only fall back to the last results for an error it can classify, and
+        // the generic message below classified as nothing.
+        if (failedStudios.length === total) throw firstErr || new Error('All studios failed to load');
         toast(`Couldn't load ${failedStudios.join(', ')} — showing the other studios`, 'info');
       }
+      studiosFailed = failedStudios.length;
     }
 
     if (!stale()) {
       if (!relations) setStatus('No classes found.');
       else {
-        _setWindow(windowKey, allEvents, relations);
-        _persistWindow(windowKey, allEvents, relations);
+        // A window that lost a studio is flagged partial: it covers every
+        // in-week date tap, and stamped complete + fresh it kept the studio
+        // missing for 15 minutes after it had recovered. Partial is never
+        // fresh, so the next render from it refetches quietly — a minute from
+        // now at the earliest (the same back-off as a failed refresh).
+        _setWindow(windowKey, allEvents, relations, 0, studiosFailed > 0);
+        if (studiosFailed) _revalFailedAt = Date.now();
+        // Missing studios must not become tomorrow's cached timetable.
+        if (!studiosFailed) _persistWindow(windowKey, allEvents, relations);
+        // Stamped like renderFromWindow does, BEFORE render() reads its own
+        // clock: unstamped, the first resume after any fetched load rebuilt the
+        // whole list although no class had started.
+        _windowRenderedAt = Date.now();
         render(allEvents, relations, filters, true);
         _buildFacetClasses(allEvents, relations);
         renderLastUpdated();
@@ -2005,6 +2420,7 @@ async function search(opts) {
   } catch (e) {
     if (!stale()) showSearchError(e);
   } finally {
+    if (_fetchingSeq === mySeq) _fetchingSeq = 0;
     // Only the most recent search owns the button state. (btn is null in the
     // redesigned live-filter UI, which has no standalone Search button.)
     if (mySeq === _searchSeq) {
@@ -2016,7 +2432,7 @@ async function search(opts) {
       if (window._searchAborted) {
         // Stopped by the user — never leave a live spinner behind.
         if (relations) render(allEvents, relations, filters, true);
-        else setStatus('Search stopped — tap Search to retry.');
+        else setStatus(_errorStatusHTML('Search stopped.', 'Try again', 'search()'));
       }
     }
   }
@@ -2032,7 +2448,13 @@ function showSearchError(e) {
       cat = window.PsycleAPI.categorizeError(e) || cat;
     }
   } catch (_) {}
+  if (cat.type !== 'unknown' && cat.type !== 'auth') window._windowLoadError = cat.userMessage; // see _setWindow
 
+  // Both retries below are FORCED. A search that fails over a provisional
+  // window (the _runRevalidate handover lands here) leaves that window in
+  // memory under today's key: a plain search() found the range "covered",
+  // re-rendered the held days and sent nothing — the tap made no request and
+  // swapped the server's message for "Couldn't check these dates".
   const canFallBack = cat.type === 'network' || cat.type === 'server' || cat.type === 'timeout';
   let cached = false;
   if (canFallBack) {
@@ -2046,13 +2468,89 @@ function showSearchError(e) {
     if (container && !container.querySelector('.stale-results-banner')) {
       const banner = document.createElement('div');
       banner.className = 'stale-results-banner';
-      banner.textContent = "Showing your last results — couldn't reach Psycle";
+      banner.textContent = "Showing your last results — couldn't reach Psycle ";
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'refresh-link';
+      retry.textContent = 'Try again';
+      retry.onclick = () => search({ force: true });
+      banner.appendChild(retry);
       container.insertBefore(banner, container.firstChild);
     }
     return;
   }
 
-  setStatus(`<span style="color:#e94560">${escapeHTML(cat.userMessage || ('Error: ' + (e && e.message || 'Unknown error')))}</span>`);
+  // The session ended (apiFetch → showSessionExpired has already cleared the
+  // token): "Try again" would send the same request unauthenticated and land
+  // back here. Gated on the token being GONE — a 403 classifies as auth too,
+  // and the app treats that as a live session (Retry, never Sign in).
+  if (cat.type === 'auth' && !getBearerToken()) {
+    setStatus(_errorStatusHTML(cat.userMessage, 'Sign in', 'openLoginPopup()'));
+    return;
+  }
+
+  setStatus(_errorStatusHTML(cat.userMessage || ('Error: ' + (e && e.message || 'Unknown error')), 'Try again', 'search({ force: true })'));
+}
+
+// An error line with its one way out — the old copy said "retry" with nothing
+// to tap. `label` and `onclick` are fixed strings from this file, never data;
+// the message is escaped here.
+function _errorStatusHTML(message, label, onclick) {
+  return `<span class="status-error">${escapeHTML(message)}</span>` +
+    `<div class="empty-actions"><button type="button" class="empty-action primary" onclick="${onclick}">${label}</button></div>`;
+}
+
+// Reference data (/instructors, /locations, /event-types) failed at launch.
+// Nothing can be searched without it and nothing re-requests it, so the one
+// useful action is a reload. search() shows this again rather than a spinner
+// that would never end.
+let _refDataFailed = null; // the launch failure's message, once there was one
+function showInitError(err) {
+  if (err || !_refDataFailed) {
+    let cat = { userMessage: 'Something went wrong — please try again.' };
+    try {
+      if (err && window.PsycleAPI && typeof window.PsycleAPI.categorizeError === 'function') {
+        cat = window.PsycleAPI.categorizeError(err) || cat;
+      }
+    } catch (_) {}
+    _refDataFailed = "Couldn't load Psycle's studios and instructors. " + cat.userMessage;
+  }
+  setStatus(_errorStatusHTML(_refDataFailed, 'Reload', 'location.reload()'));
+}
+
+// WHY the Discover list is empty, for theme.js's renderEmptyState (it draws
+// the block: wrapRender flattens render()'s own .no-results div to its text,
+// so buttons cannot ride along in it). `actions` are ids that renderEmptyState
+// maps to its own fixed handlers — nothing returned here is markup.
+function _discoverEmptyContext() {
+  // A provisional window (yesterday's cache shown while today's range loads)
+  // cannot say "no classes" yet: the days still missing may hold them.
+  if (window._windowPartial && _revalInFlight) return { loading: true };
+  // Before the first real search this is only restoreLastResults() repainting
+  // LAST session's list for a moment: say nothing specific about today.
+  if (!_loadableSearchStarted) return null;
+  const sel = currentWindowDates();
+  // …and once that fetch is over (it failed, or never ran — offline), the days
+  // past what the adopted cache held were still never loaded: "no classes"
+  // there would be a guess. Days it did hold (Today run dry) keep their copy
+  // below. 'retry' is a plain search — it shows whatever studios answer, where
+  // Refresh is all-or-nothing.
+  if (window._windowPartial && window._windowHeldEnd && sel.endDateStr > window._windowHeldEnd) {
+    // The server's own reason when the load did fail; the connection copy is
+    // for a fetch that never ran (offline) or failed in a way nobody can name.
+    return { title: "Couldn't check these dates", sub: window._windowLoadError || "The latest timetable didn't load — check your connection and try again.", actions: ['retry'] };
+  }
+  const today = localDateStr();
+  const filtered = selectedInstructors.size > 0 || selectedLocations.size > 0 ||
+    selectedCategories.size > 0 || !!window._discoverQuery;
+  if (filtered) {
+    return { sub: 'Nothing matches these filters on the dates shown.', actions: ['clear'] };
+  }
+  if (sel.startDate === today && sel.endDateStr === today) {
+    // render() drops started classes, so late in the day "Today" runs dry.
+    return { title: 'No more classes today', sub: "Nothing left on today's timetable.", actions: ['tomorrow', 'week'] };
+  }
+  return { sub: 'There are no classes on the dates shown.', actions: _dateQuickMode === 'week' ? [] : ['week'] };
 }
 
 function mergeRelations(base, incoming) {
@@ -2107,6 +2605,94 @@ function _busyLabel(btn) {
     mo.disconnect();
   });
   mo.observe(btn, { childList: true, characterData: true, subtree: true });
+}
+
+// ── pure:clash:start ── (DOM-free; tests/suites/clash.js evaluates this block)
+// Nothing stopped a member booking a 7:15 Ride at Bank while holding a 7:00 at
+// Oxford Circus — they found out at the door, or paid a late-cancel fee to undo
+// it. Every start_at is the same naive UK wall clock, so two classes compare
+// exactly on their DIGITS: read by regex into minutes — never through
+// new Date('YYYY-MM-DD HH:MM:SS') (Invalid Date on iOS WebKit), and never
+// through the device zone. NaN when the time can't be read.
+const CLASH_DEFAULT_MIN = 45; // a class that carries no duration
+const CLASH_TRAVEL_MIN = 30;  // needed between two DIFFERENT locations
+function _clashStartMin(startAt) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(startAt == null ? '' : startAt).trim());
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 60000 : NaN;
+}
+
+// The held SEAT `evt` collides with, or null. `bookings` is _myBookings, `cache`
+// is _eventCache (start_at / duration / _locName of every held class). Skipped:
+// waitlist places (no seat yet), the class itself, anything with no readable
+// time. kind 'overlap' = the two share minutes — touching end-to-start does
+// not count, back-to-back doubles are normal. kind 'travel' = they don't, but
+// they are at different locations with under CLASH_TRAVEL_MIN between them
+// (only when BOTH locations are known: a missing name must not invent one).
+// An overlap outranks a travel squeeze; within a kind the earliest class wins.
+function _findClash(evt, bookings, cache) {
+  if (!evt) return null;
+  const start = _clashStartMin(evt.start_at);
+  if (isNaN(start)) return null;
+  const end = start + (Number(evt.duration) || CLASH_DEFAULT_MIN);
+  const selfId = evt.id == null ? '' : String(evt.id);
+  let found = null;
+  Object.keys(bookings || {}).forEach(id => {
+    const held = bookings[id];
+    if (!held || held.waitlisted || String(id) === selfId) return;
+    const other = (cache || {})[id];
+    if (!other) return;
+    const oStart = _clashStartMin(other.start_at);
+    if (isNaN(oStart)) return;
+    const oEnd = oStart + (Number(other.duration) || CLASH_DEFAULT_MIN);
+    let kind = null;
+    if (start < oEnd && oStart < end) kind = 'overlap';
+    else if (evt._locName && other._locName && evt._locName !== other._locName &&
+      start < oEnd + CLASH_TRAVEL_MIN && oStart < end + CLASH_TRAVEL_MIN) kind = 'travel';
+    if (!kind) return;
+    const better = !found || (kind === 'overlap' && found.kind !== 'overlap') ||
+      (kind === found.kind && oStart < found.startMin);
+    if (!better) return;
+    found = {
+      eventId: String(id), kind, startMin: oStart,
+      heldIsFirst: oStart < start,
+      gapMin: kind === 'travel' ? (oStart >= end ? oStart - end : start - oEnd) : 0,
+      start_at: other.start_at, typeName: other._typeName || '', locName: other._locName || '',
+    };
+  });
+  return found;
+}
+
+// "7:00am", from the digits again (see _clashStartMin).
+function _clashTimeLabel(startAt) {
+  const m = /[T ](\d{2}):(\d{2})/.exec(String(startAt == null ? '' : startAt));
+  if (!m) return '';
+  const h = +m[1];
+  return `${h % 12 || 12}:${m[2]}${h >= 12 ? 'pm' : 'am'}`;
+}
+
+// One member-facing sentence for a _findClash result, no trailing full stop
+// (callers append their own copy). Names are API text: callers escape.
+function _clashLabel(clash) {
+  if (!clash) return '';
+  const type = clash.typeName && clash.typeName !== 'Class' ? clash.typeName : 'class';
+  const what = ['your', _clashTimeLabel(clash.start_at), type].filter(Boolean).join(' ') +
+    (clash.locName ? ` at ${clash.locName}` : '');
+  if (clash.kind === 'overlap') return `Clashes with ${what}`;
+  const squeeze = clash.heldIsFirst
+    ? (clash.gapMin > 0 ? `Starts only ${clash.gapMin} min after ${what} ends` : `Starts as ${what} ends`)
+    : (clash.gapMin > 0 ? `Ends only ${clash.gapMin} min before ${what} starts` : `Ends as ${what} starts`);
+  return `${squeeze} — a different location`;
+}
+// ── pure:clash:end ──
+
+// _findClash for a class about to be booked / joined / opened. `fresh` is the
+// just-fetched /events/{id} data when the caller has it: its time wins over the
+// cached copy (the names only exist in the cache).
+function _clashFor(eventId, fresh) {
+  const evt = Object.assign({}, _eventCache[String(eventId)] || {}, { id: eventId });
+  if (fresh && !isNaN(_clashStartMin(fresh.start_at))) evt.start_at = fresh.start_at;
+  if (fresh && Number(fresh.duration) > 0) evt.duration = fresh.duration;
+  return _findClash(evt, _myBookings, _eventCache);
 }
 
 async function bookClass(eventId, btn, studioId) {
@@ -2208,6 +2794,12 @@ async function bookClass(eventId, btn, studioId) {
     const isWaitlistable = evtData.is_waitlistable ?? cached.is_waitlistable;
     const myBooking = _myBookings[String(eventId)];
 
+    // A seat already held at this time: said inside the confirms / picker below
+    // rather than as one more gate — the member may well mean it. Advisory, so
+    // nothing that goes wrong reading the cache may stop the booking.
+    let clashLine = '';
+    try { clashLine = _clashLabel(_clashFor(eventId, evtData)); } catch (e) {}
+
     const studio = _studioMap[studioId];
     const layout = studio?.layout;
     const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
@@ -2224,7 +2816,7 @@ async function bookClass(eventId, btn, studioId) {
         return;
       }
       btn.textContent = 'Join Waitlist';
-      await confirmJoinWaitlist(eventId, btn);
+      await confirmJoinWaitlist(eventId, btn, clashLine);
       return;
     }
 
@@ -2241,7 +2833,7 @@ async function bookClass(eventId, btn, studioId) {
       const ok = await confirmModal({
         title: 'Book this spot?',
         body: `Only ${SL} ${slotN} is left — book it?`,
-        warn: "Psycle's normal 12-hour cancellation policy applies.",
+        warn: (clashLine ? clashLine + '. ' : '') + "Psycle's normal 12-hour cancellation policy applies.",
         confirmText: 'Book it',
         cancelText: 'Not now',
       });
@@ -2276,7 +2868,7 @@ async function bookClass(eventId, btn, studioId) {
           } catch {}
         }
       }
-      showBikePicker(eventId, btn, layout, availableSlotIds, mySlots, studio.name);
+      showBikePicker(eventId, btn, layout, availableSlotIds, mySlots, studio.name, { clashLine });
     } else {
       // No layout: book one space — after the same explicit confirm every
       // other credit-spending path has (there's no picker step here). Only
@@ -2288,7 +2880,7 @@ async function bookClass(eventId, btn, studioId) {
         body: heldAlready
           ? `${line ? line + '. ' : ''}You already hold a space in this class — this books (and pays for) one more.`
           : (line ? `${line}. This uses one class credit.` : 'This uses one class credit.'),
-        warn: "Psycle's normal 12-hour cancellation policy applies.",
+        warn: (clashLine ? clashLine + '. ' : '') + "Psycle's normal 12-hour cancellation policy applies.",
         confirmText: heldAlready ? 'Book one more' : 'Book it',
         cancelText: 'Not now',
       });
@@ -2308,7 +2900,7 @@ async function bookClass(eventId, btn, studioId) {
   }
 }
 
-function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studioName) {
+function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studioName, opts) {
   _bookingContext = { eventId, btn };
   _selectedSlots = [];
   _usualPreselected = null;
@@ -2336,10 +2928,40 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   } else {
     document.getElementById('modalSubtitle').textContent = studioName;
   }
+  // A seat already held at this time (bookClass read it off the fresh event).
+  // In the header because #modalHint is rewritten on every tap; never in a
+  // swap — that is a class the member already holds. The subtitle is rebuilt
+  // above on every open, so no earlier class's line can linger.
+  const _swapOpen = !!window._changeSpotContext;
+  if (!_swapOpen && opts && opts.clashLine) {
+    const _clashEl = document.createElement('span');
+    _clashEl.className = 'modal-clash';
+    _clashEl.textContent = opts.clashLine; // class / studio names are API text
+    document.getElementById('modalSubtitle').appendChild(_clashEl);
+  }
 
   document.getElementById('modalHint').textContent = hasMySlots
     ? `Your ${pluralizeSlotLabel(_sl)} highlighted — tap to cancel. Select another to book.`
     : `Select up to ${MAX_SEATS} ${pluralizeSlotLabel(_sl)}`;
+  // When cancelling stops being free — the same _cancelDeadline as the card,
+  // the confirmation sheet and the cancel dialog, so the four can't disagree.
+  // Its OWN element under the hint: selectBike, the usual-bike pre-select and
+  // renderChangeSpotHint all overwrite #modalHint. Built here rather than in
+  // the page so a cached older shell still gets it. Hidden in a swap (the seat
+  // is already paid for, and changeSpot refuses inside the window anyway).
+  let _policyEl = document.getElementById('modalPolicy');
+  if (!_policyEl) {
+    _policyEl = document.createElement('div');
+    _policyEl.id = 'modalPolicy';
+    document.getElementById('modalHint').insertAdjacentElement('afterend', _policyEl);
+  }
+  const _deadline = (!_swapOpen && _evt) ? _cancelDeadline(_evt.start_at) : null;
+  _policyEl.className = 'modal-policy' + (_deadline && _deadline.insideWindow ? ' is-late' : '');
+  _policyEl.textContent = !_deadline ? ''
+    : (_deadline.insideWindow
+      ? 'Inside the 12-hour late-cancel window — cancelling is usually charged'
+      : `Cancel by ${_deadline.label} to avoid a late-cancel charge`);
+  _policyEl.style.display = _deadline ? '' : 'none';
   // Fully reset the confirm button on every open — changeSpot() overrides the
   // label and handler for swap mode, and without this reset those overrides
   // (and a stale "Swapping..." label) would leak into later normal bookings.
@@ -2443,6 +3065,10 @@ function _tapReplacesUsual(selected, usualPreselected, tappedId, swapMode) {
 
 function selectBike(slotId) {
   const id = Number(slotId);
+  // Only ever reached from a tap on the map, so it can tick: choosing a bike was
+  // silent while programmatic searches buzzed (theme.js). Same light 'tap' the
+  // dialogs use — the iOS bridge needs no new case.
+  if (typeof haptic === 'function') { try { haptic('tap'); } catch {} }
   const swapMode = !!window._changeSpotContext;
   const idx = _selectedSlots.indexOf(id);
   if (idx !== -1) {
@@ -3008,13 +3634,20 @@ function _waitlistClassLine(eventId) {
 
 // Ask first, then join. Used by bookClass (Discover card, class detail sheet,
 // rebook flows) — the one consent dialog before PUT /waitlists.
-async function confirmJoinWaitlist(eventId, btn) {
+async function confirmJoinWaitlist(eventId, btn, clashLine) {
   const line = _waitlistClassLine(eventId);
+  // Psycle turns a place into a CHARGEABLE seat on its own, so a clash with a
+  // seat already held matters here as much as on a booking. bookClass passes
+  // the line it built from the fresh event; any other caller gets the cache's.
+  if (clashLine == null) {
+    try { clashLine = _clashLabel(_clashFor(eventId)); } catch (e) { clashLine = ''; }
+  }
   const ok = await confirmModal({
     title: 'Join the waitlist?',
     body: (line ? line + ' is full. ' : 'This class is full. ') +
       'Psycle fills freed-up spots from the waitlist automatically, first come first served — keep a credit free so you can be booked in. Close to class time they email an offer instead, which you can also accept here in My Bookings.',
-    warn: 'One waitlist place per person. Once you’re given a spot the normal 12-hour cancellation policy applies; the waitlist closes 30 minutes before class.',
+    warn: (clashLine ? clashLine + '. ' : '') +
+      'One waitlist place per person. Once you’re given a spot the normal 12-hour cancellation policy applies; the waitlist closes 30 minutes before class.',
     confirmText: 'Join waitlist',
     cancelText: 'Not now',
   });
@@ -4092,7 +4725,9 @@ function confirmCancelWithPolicy(eventId, base) {
     let remaining;
     if (hoursUntil < 0) remaining = 'has already started';
     else if (left.hrs === 0) remaining = `starts in ${Math.max(1, left.mins)} min`;
-    else remaining = `starts in ${left.hrs}h ${left.mins}m`;
+    // No "10h 0m": the card's countdown chip drops a zero minute part too
+    // ("In 10h"), and the two are read side by side.
+    else remaining = left.mins === 0 ? `starts in ${left.hrs}h` : `starts in ${left.hrs}h ${left.mins}m`;
     return confirmModal({
       title: base,
       warn: `This class ${remaining}. Cancellations inside 12 hours are usually charged by Psycle.`,
@@ -4425,6 +5060,9 @@ function render(events, relations, filters, done) {
   const filtered = events.filter(e => {
     // Never show classes that have already started
     if (new Date(e.start_at) < now) return false;
+    // Only the days asked for: the loaded window can be wider than the
+    // selection (Today inside the loaded week is filtered here, not re-fetched).
+    if (!_dayInRange(e.start_at, filters.startDate, filters.endDateStr)) return false;
     if (filters.instructorId.length && !filters.instructorId.includes(String(e.instructor_id))) return false;
     // Category filter
     const typeName = typeMap[e.event_type_id]?.name || '';
@@ -4572,6 +5210,10 @@ const selectedLocations = new Set();
 // you stack filters — multi-select preserved. Until the first search
 // populates the window, _facetResult is null and controls render plainly.
 function discoverFacets() {
+  // Count only the selected days: the window can hold the whole week while
+  // "Today" is showing, and a chip must not promise classes from other days.
+  // (_classDays — the calendar dots — reads _facetClasses unfiltered on purpose.)
+  const { startDate, endDateStr } = currentWindowDates();
   return PsycleFacets.run(window._facetClasses || [], {
     instructor: [...selectedInstructors],
     location: [...selectedLocations],
@@ -4582,6 +5224,7 @@ function discoverFacets() {
       location: c => c.loc,
       category: c => c.cat,
     },
+    dateFilter: c => _dayInRange(c.start_at, startDate, endDateStr),
   });
 }
 
@@ -4879,6 +5522,9 @@ function showBookingSkeleton(count) {
   const panel = document.getElementById('upcomingPanel');
   const list = document.getElementById('upcomingList');
   if (!panel || !list) return;
+  // The saved copy (see _paintSavedBookings) is already on screen: real class
+  // times beat grey bars for the second until the live cards replace them.
+  if (list.querySelector('.is-saved-copy')) return;
   panel.style.display = '';
   const n = Math.min(count, 6);
   let html = '';
@@ -4896,22 +5542,57 @@ function showBookingSkeleton(count) {
 }
 
 // ── Countdown helper for imminent classes ────────────────────────
-function getCountdownText(eventDate, now) {
-  const diff = eventDate.getTime() - now.getTime();
-  if (diff <= 0) return null; // past
+let _gymDayFmt = null; // lazy: the gym's (London) calendar date of an instant
+// 'YYYY-MM-DD' on the gym's calendar for an instant, `addDays` later. Calendar
+// arithmetic on the DATE, not +24h on the instant: the clocks-back day is 25
+// hours long. Throws when the engine has no Europe/London data.
+function _gymDayKey(ms, addDays) {
+  if (!_gymDayFmt) {
+    _gymDayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+  const p = {};
+  _gymDayFmt.formatToParts(new Date(ms)).forEach(x => { if (x.type !== 'literal') p[x.type] = Number(x.value); });
+  return new Date(Date.UTC(p.year, p.month - 1, p.day + (addDays || 0))).toISOString().slice(0, 10);
+}
 
-  const diffHours = diff / (1000 * 60 * 60);
-  const todayStr = localDateStr(now);
-  const eventDayStr = localDateStr(eventDate);
+// `startAt` is the API's raw (naive UK wall-clock) string. Given it, the chip
+// counts from the REAL start — the instant _cancelDeadline reads — and takes
+// today / tomorrow off the gym's calendar, so abroad "In 10h" can no longer sit
+// beside a late-cancel warning that says 5. Without it, or without
+// Europe/London data, it stays device-local: right on a UK device.
+function getCountdownText(eventDate, now, startAt) {
+  let startMs = eventDate.getTime();
+  let todayStr = localDateStr(now);
+  let eventDayStr = localDateStr(eventDate);
 
   // Check if tomorrow
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = localDateStr(tomorrow);
+  let tomorrowStr = localDateStr(tomorrow);
+
+  if (typeof startAt === 'string' && typeof window !== 'undefined' && typeof window._psycleClassStartMs === 'function') {
+    try {
+      const realMs = window._psycleClassStartMs(startAt);
+      if (!isNaN(realMs)) {
+        // All three keys before anything is swapped: a throw leaves the local set whole.
+        const keys = [_gymDayKey(now.getTime(), 0), _gymDayKey(realMs, 0), _gymDayKey(now.getTime(), 1)];
+        startMs = realMs;
+        todayStr = keys[0];
+        eventDayStr = keys[1];
+        tomorrowStr = keys[2];
+      }
+    } catch (e) { /* no Europe/London data — stay device-local, as _cancelDeadline does */ }
+  }
+
+  const diff = startMs - now.getTime();
+  if (diff <= 0) return null; // past
+
+  const diffHours = diff / (1000 * 60 * 60);
 
   if (eventDayStr === todayStr) {
     const { hrs, mins } = _hoursMinsLeft(diffHours);
-    if (hrs === 0) return `In ${mins}min`;
+    // The last 30 seconds round to 0: never "In 0min" (the dialog says "1 min").
+    if (hrs === 0) return mins === 0 ? 'Starting now' : `In ${mins}min`;
     if (mins === 0) return `In ${hrs}h`;
     return `In ${hrs}h ${mins}m`;
   } else if (eventDayStr === tomorrowStr) {
@@ -4922,6 +5603,238 @@ function getCountdownText(eventDate, now) {
     return `Tomorrow ${h12}:${m}${ampm}`;
   }
   return null; // not today or tomorrow
+}
+
+// ── Saved copy of My Bookings ────────────────────────────────────
+// _myBookings is memory-only, so a launch with no signal — the studio door —
+// had nothing to show. After every list Psycle confirms, the display fields of
+// each held class are kept in psycle_bookings_snapshot and PAINTED (read-only,
+// labelled "Saved copy · HH:MM") while this session has no answer from Psycle.
+// They are never fed back into _myBookings / _eventCache: the iOS calendar
+// reconcile, the widget and the T-90 reminders all read those, and must only
+// ever follow what the server said.
+
+// ── pure:offline:start ── (DOM-free helpers; tests/suites/offline.js evaluates this block)
+const BOOKINGS_SNAPSHOT_MAX_ITEMS = 40;
+const BOOKINGS_SNAPSHOT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // older says nothing useful about today
+
+function _snapshotText(v, max) {
+  return String(v == null ? '' : v).slice(0, max || 80);
+}
+
+// One item → exactly the shape the painter relies on, or null. Storage is not
+// trusted: it can be hand-edited, half-written or left by another build.
+function _coerceSnapshotItem(it) {
+  if (!it || typeof it !== 'object') return null;
+  const id = _snapshotText(it.id, 24);
+  const startAt = _snapshotText(it.start_at, 32);
+  if (!/^\d+$/.test(id) || !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(startAt)) return null;
+  const duration = Number(it.duration);
+  const spaces = Number(it.spaces);
+  return {
+    id,
+    start_at: startAt,
+    duration: duration > 0 && duration < 600 ? Math.round(duration) : 0,
+    type: _snapshotText(it.type, 80) || 'Class',
+    instructor: _snapshotText(it.instructor, 80),
+    location: _snapshotText(it.location, 80),
+    studio: _snapshotText(it.studio, 80),
+    slots: (Array.isArray(it.slots) ? it.slots : []).map(Number).filter(n => n > 0 && n < 10000).slice(0, 12),
+    spaces: spaces > 1 && spaces < 100 ? Math.round(spaces) : 0, // no-layout studios hold a count, not seats
+    waitlisted: it.waitlisted === true,
+  };
+}
+
+// What is in storage → { owner, savedAt, items }, or null: unparseable, some
+// other shape, no owner to tie it to, or too old to be worth showing.
+function _coerceBookingsSnapshot(raw, nowMs) {
+  let snap = raw;
+  if (typeof raw === 'string') { try { snap = JSON.parse(raw); } catch (e) { return null; } }
+  if (!snap || typeof snap !== 'object' || snap.v !== 1 || !Array.isArray(snap.items)) return null;
+  const owner = _snapshotText(snap.owner, 40);
+  const savedAt = Number(snap.savedAt);
+  if (!owner || !(savedAt > 0) || nowMs - savedAt > BOOKINGS_SNAPSHOT_MAX_AGE_MS) return null;
+  const items = snap.items.map(_coerceSnapshotItem).filter(Boolean).slice(0, BOOKINGS_SNAPSHOT_MAX_ITEMS);
+  return { owner, savedAt, items };
+}
+
+// The record of what is held right now. A class whose details couldn't be
+// loaded this time keeps its previous entry (with today's seats) instead of
+// vanishing. Null = don't write: without an owner it can't be tied to an
+// account, and whatever is stored already is the better copy.
+function _buildBookingsSnapshot(bookings, eventCache, prev, owner, nowMs) {
+  if (owner == null || owner === '') return null;
+  const prevById = {};
+  if (prev && prev.owner === String(owner)) (prev.items || []).forEach(it => { prevById[it.id] = it; });
+  const items = [];
+  Object.keys(bookings || {}).forEach(id => {
+    const b = bookings[id] || {};
+    const evt = (eventCache || {})[id];
+    const known = evt
+      ? { id, start_at: evt.start_at, duration: evt.duration, type: evt._typeName, instructor: evt._instrName, location: evt._locName, studio: evt._studioName }
+      : prevById[id];
+    if (!known) return;
+    const seats = Array.isArray(b.slots) ? b.slots : [];
+    const item = _coerceSnapshotItem(Object.assign({}, known, {
+      slots: seats,
+      spaces: seats.length ? 0 : (b.bookingIds || []).length,
+      waitlisted: !!b.waitlisted,
+    }));
+    if (item) items.push(item);
+  });
+  items.sort((a, b) => a.start_at.localeCompare(b.start_at));
+  return { v: 1, owner: String(owner), savedAt: nowMs, items: items.slice(0, BOOKINGS_SNAPSHOT_MAX_ITEMS) };
+}
+
+// Saved classes still worth showing: until the class has ENDED — a member
+// running late still needs their bike number. `startMsOf` = _gymClassStartMs.
+function _snapshotItemsToShow(items, nowMs, startMsOf) {
+  return (items || []).filter(it => {
+    const start = startMsOf(it.start_at);
+    return !isNaN(start) && start + (it.duration || 45) * 60000 > nowMs;
+  });
+}
+
+// "Saved copy · 14:05" — with the day once it is no longer today's.
+function _snapshotLabel(savedAt, nowMs) {
+  const d = new Date(savedAt), now = new Date(nowMs);
+  const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  return 'Saved copy · ' + (sameDay ? '' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ') + hhmm;
+}
+
+// Read-only cards in the live list's markup (same day groups and card classes)
+// minus everything that acts: no onclick, no buttons, no data-id — the swipe,
+// Similar and button-resync code must never take one for a live booking.
+// `waiting` = Psycle has been asked and not answered yet (no Retry to offer).
+function _savedBookingsHTML(items, label, waiting) {
+  let html = `<div class="mb-saved-note" role="status">
+    <span class="mb-saved-label">${escapeHTML(label)}</span>
+    <span class="mb-saved-text">${waiting
+      ? 'Checking with Psycle for changes…'
+      : "Can't reach Psycle right now, so this is your list as it was then. Booking, cancelling and changing spots need a connection."}</span>
+    ${waiting ? '' : '<button type="button" class="booking-action-btn" onclick="retrySavedBookings(this)">Retry</button>'}
+  </div>`;
+  const byDay = {};
+  items.forEach(it => {
+    const day = it.start_at.slice(0, 10);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(it);
+  });
+  Object.keys(byDay).sort().forEach(day => {
+    const dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    html += `<div class="mb-day-group"><div class="mb-day-header">${escapeHTML(dayLabel)}</div><div class="class-grid">`;
+    byDay[day].forEach(it => {
+      // The class time is a UK wall-clock string: show its own digits.
+      const hours = Number(it.start_at.slice(11, 13));
+      const mins = it.start_at.slice(14, 16);
+      const noun = slotLabel(it.type);
+      let seatHtml = it.slots.map(slot => `<span class="up-seat-chip">${escapeHTML(noun)} ${Number(slot)}</span>`).join('');
+      if (!seatHtml && it.spaces > 1) seatHtml = `<span class="up-seat-chip">${Number(it.spaces)} spaces</span>`;
+      html += `<div class="class-card ${it.waitlisted ? 'is-waitlisted' : 'is-booked'} my-booking-card is-saved-copy">
+        <div class="class-time">${hours % 12 || 12}:${escapeHTML(mins)}<span class="class-time-ampm">${hours >= 12 ? 'pm' : 'am'}</span></div>
+        <div class="class-info">
+          <div class="class-type">${escapeHTML(it.type)}</div>
+          <div class="class-instructor">${escapeHTML(it.instructor)}</div>
+          <div class="class-location">${escapeHTML(it.location)}${it.studio ? ' · ' + escapeHTML(it.studio) : ''}</div>
+          <div class="class-meta">${it.duration ? `<span class="badge">${Number(it.duration)}min</span>` : ''}${it.waitlisted ? '<span class="badge waitlist">Waitlisted</span>' : ''}</div>
+          ${seatHtml ? `<div class="up-seats" style="margin-top:8px">${seatHtml}</div>` : ''}
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  return html;
+}
+// ── pure:offline:end ──
+
+const BOOKINGS_SNAPSHOT_KEY = 'psycle_bookings_snapshot';
+
+function _readBookingsSnapshot() {
+  try { return _coerceBookingsSnapshot(localStorage.getItem(BOOKINGS_SNAPSHOT_KEY), Date.now()); } catch (e) { return null; }
+}
+
+function _clearBookingsSnapshot() {
+  try { localStorage.removeItem(BOOKINGS_SNAPSHOT_KEY); } catch (e) {}
+}
+
+// Only from a map Psycle has confirmed this session ('loaded'): before that
+// _myBookings can be empty or hold just the class booked a moment ago, and
+// writing that would throw the good copy away.
+function _saveBookingsSnapshot() {
+  if (_bookingsLoadState !== 'loaded' || !getBearerToken()) return;
+  const owner = currentUser ? currentUser.id : _lastProfileId;
+  const snap = _buildBookingsSnapshot(_myBookings, _eventCache, _readBookingsSnapshot(), owner, Date.now());
+  if (!snap) return;
+  try { localStorage.setItem(BOOKINGS_SNAPSHOT_KEY, JSON.stringify(snap)); } catch (e) {}
+}
+
+// Called from renderMyBookings' empty branch. True = the saved copy is up and
+// the caller skips its skeleton / hero. Never once this session's list is
+// known — a loaded list, even an empty one, is the truth — except when that
+// list loaded but none of its classes could be drawn (`unhydrated`, as in
+// renderMyBookings): then the saved entries of the classes it names are shown.
+function _paintSavedBookings(panel, list, countEl, emptyEl) {
+  if (!getBearerToken()) return false;
+  const unhydrated = !!currentUser && Object.keys(_myBookings).some(id => !_eventCache[id]);
+  const listKnown = _bookingsLoadState === 'loaded';
+  if (listKnown && !unhydrated) return false;
+  const snap = _readBookingsSnapshot();
+  if (!snap) return false;
+  // Another account's copy is never painted (auth:changed below deletes it).
+  const owner = currentUser ? currentUser.id : _lastProfileId;
+  if (owner != null && String(owner) !== snap.owner) return false;
+  let items = _snapshotItemsToShow(snap.items, Date.now(), _gymClassStartMs);
+  if (listKnown) items = items.filter(it => _myBookings[it.id]);
+  if (!items.length) return false;
+  // Still waiting for an answer (first /profile or /bookings in flight) vs
+  // Psycle could not be reached — only the second has anything to retry.
+  const waiting = currentUser
+    ? (_bookingsLoadState === 'pending' && !unhydrated)
+    : _authGateViewFor(true, _authUnverified) === 'checking';
+  const seats = items.filter(it => !it.waitlisted).length;
+  countEl.textContent = items.length > seats ? `${seats} + ${items.length - seats} waitlist` : String(seats);
+  if (emptyEl) emptyEl.style.display = 'none';
+  panel.style.display = '';
+  list.innerHTML = _savedBookingsHTML(items, _snapshotLabel(snap.savedAt, Date.now()), waiting);
+  return true;
+}
+
+// Retry on the saved copy: whichever step never got an answer.
+function retrySavedBookings(btn) {
+  return currentUser ? retryBookingsLoad(btn) : retryAuth(btn);
+}
+
+if (typeof PsycleEvents !== 'undefined') {
+  // Every confirmed list, and every local change on top of one (the refetch
+  // that follows a booking may never land if the signal drops right after).
+  ['bookings:loaded', 'booking:complete', 'booking:cancelled', 'seat:cancelled',
+    'waitlist:joined', 'waitlist:left', 'waitlist:claimed'].forEach(evt => {
+    PsycleEvents.on(evt, () => _saveBookingsSnapshot());
+  });
+  // The copy belongs to one signed-in account. No token left (sign-out,
+  // session expiry) or a different customer behind the new one → delete it,
+  // and take it off the screen if it is up.
+  PsycleEvents.on('auth:changed', s => {
+    let stale = !getBearerToken();
+    // No token in MEMORY is not always a session that ended: when the crypto
+    // set-up times out on a slow launch, security.js keeps the stored token
+    // for the next one — and that launch, offline, had no copy left to paint.
+    // Every real ending (clearToken, showSessionExpired) removes the stored
+    // keys before it emits. A localStorage that throws still deletes.
+    if (stale) {
+      try {
+        if (localStorage.getItem('psycle_bearer_token_enc') || localStorage.getItem('psycle_bearer_token')) stale = false;
+      } catch (e) {}
+    }
+    if (!stale && s && s.signedIn && currentUser && currentUser.id != null) {
+      const snap = _readBookingsSnapshot();
+      stale = !!snap && snap.owner !== String(currentUser.id);
+    }
+    if (!stale) return;
+    _clearBookingsSnapshot();
+    if (document.querySelector('#upcomingList .is-saved-copy')) renderMyBookings();
+  });
 }
 
 function renderMyBookings() {
@@ -4956,7 +5869,14 @@ function renderMyBookings() {
 
   if (upcoming.length === 0 && past.length === 0) {
     panel.style.display = 'none';
+    // Hidden is not gone: after a sign-out (or an account switch) the previous
+    // member's cards stayed in the DOM inside the hidden panel.
+    list.innerHTML = '';
     if (histBtn) histBtn.style.display = (currentUser && histCount > 0) ? '' : 'none';
+    // Psycle hasn't answered for this session (still asking, launched offline,
+    // a failed load): the read-only saved copy beats a skeleton or a Retry hero.
+    // (typeof: the suites run this function on its own, without the painter.)
+    if (typeof _paintSavedBookings === 'function' && _paintSavedBookings(panel, list, countEl, emptyEl)) return;
     // Signed in but /bookings never answered: "Nothing booked" would be a
     // guess (and its cards would say Book over classes already held). Just as
     // much a guess when it DID answer but no held class could be drawn — a
@@ -5194,7 +6114,7 @@ function renderMyBookings() {
 
       // Countdown badge for the next 2 upcoming classes you hold a seat in
       if (!eventPast && !isPlace && _countdownShown < 2) {
-        const cdText = getCountdownText(dt, now);
+        const cdText = getCountdownText(dt, now, evt.start_at);
         if (cdText) {
           badges += `<span class="mb-countdown">${cdText}</span>`;
           _countdownShown++;
@@ -5490,7 +6410,9 @@ async function rebookNextWeek(eventId) {
     if (typeof _syncFilterUI === 'function') _syncFilterUI();
     if (typeof switchTab === 'function') switchTab('discover');
     search();
-    toast('No exact match — showing alternatives for ' + dayStr, 'info');
+    // 'Wed 30 Sept', as the date pill now reads — not the raw '2026-09-30'.
+    toast('No exact match — showing alternatives for ' +
+      nextWeek.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), 'info');
   } else {
     toast('No matching class found next week at this location', 'info');
   }
@@ -6233,6 +7155,20 @@ window.openClassDetail = function (eventId) {
   const isPast = dt <= new Date();
   if (isPast) availHtml = '';
 
+  // A seat already held at this time, said before the member taps Book. The
+  // status inks are the ones .cds-avail* already carries on this surface.
+  // Advisory: a cache entry of an odd shape must not stop the sheet opening.
+  let clashHtml = '';
+  if (!isPast) {
+    try {
+      const clash = _clashFor(eventId);
+      if (clash) {
+        clashHtml = '<div class="cds-detail-row"><span class="cds-icon">&#9888;&#65039;</span><span class="' +
+          (clash.kind === 'overlap' ? 'cds-avail-full' : 'cds-avail-waitlist') + '">' + escapeHTML(_clashLabel(clash)) + '</span></div>';
+      }
+    } catch (e) {}
+  }
+
   // Booking state
   const myBooking = _myBookings[String(eventId)];
   const safeEventId = Number(eventId) || 0;
@@ -6294,6 +7230,7 @@ window.openClassDetail = function (eventId) {
         '<div class="cds-detail-row"><span class="cds-icon">&#128197;</span><span>' + escapeHTML(dayStr) + ' at ' + escapeHTML(timeStr) + '</span></div>' +
         '<div class="cds-detail-row"><span class="cds-icon">&#128205;</span><span>' + escapeHTML(locName) + (studioName ? ' &middot; ' + escapeHTML(studioName) : '') + '</span></div>' +
         (availHtml ? '<div class="cds-detail-row"><span class="cds-icon">&#9898;</span>' + availHtml + '</div>' : '') +
+        clashHtml +
       '</div>' +
       (bioExcerpt ? '<div class="cds-bio">' + escapeHTML(bioExcerpt) + '</div>' : '') +
       keywordsHtml +
@@ -6383,6 +7320,18 @@ async function _bookEventHeadless(eventId, studioId) {
     const cached = _eventCache[String(eventId)] || {};
     const isFullyBooked = evtData.is_fully_booked ?? cached.is_fully_booked;
     const isWaitlistable = evtData.is_waitlistable ?? cached.is_waitlistable;
+
+    // This path spends credits with no confirm, so a HARD overlap with a seat
+    // already held is skipped — before a waitlist join too (Psycle turns a
+    // place into a chargeable seat by itself). A tight change between two
+    // locations is the member's own template and stays bookable. Advisory
+    // lookup: if reading the cache throws, book exactly as before.
+    let clash = null;
+    try { clash = _clashFor(eventId, evtData); } catch (e) {}
+    if (clash && clash.kind === 'overlap') {
+      console.info('[psycle] headless book skipped:', eventId, _clashLabel(clash));
+      return 'skipped';
+    }
 
     const studio = _studioMap[studioId];
     const layout = studio?.layout;
@@ -7269,6 +8218,21 @@ if (typeof PsycleEvents !== 'undefined') {
 });
 
 // ── PWA Service Worker ───────────────────────────────────────────
+// What happens once a NEW worker has taken over (reload, or a "new version"
+// bar) lives in psycle-finder.html's inline head script, so it works even when
+// this file is the stale one. Here: browsers only re-check sw.js on a
+// navigation, and an installed PWA can sit open for days — so ask again when
+// the app comes back to the foreground, at most hourly. In the iOS app
+// native-bridge swaps navigator.serviceWorker for a register-only stub whose
+// promise resolves with nothing, hence the `reg` checks.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    if (!reg || typeof reg.update !== 'function') return;
+    let checkedAt = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || Date.now() - checkedAt < 60 * 60 * 1000) return;
+      checkedAt = Date.now();
+      try { reg.update().catch(() => {}); } catch {}
+    });
+  }).catch(() => {});
 }

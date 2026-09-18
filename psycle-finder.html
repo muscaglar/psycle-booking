@@ -18,6 +18,82 @@
 try { if (window.top !== window.self) window.top.location = window.location; }
 catch (e) { document.documentElement.style.display = 'none'; }
 </script>
+<script>
+// A new service worker took over this page mid-session (a deploy): the HTML is
+// fresh, but the scripts and styles already running came out of the old cache.
+// Inline and in the head, not in a script file, so it works on the very deploy
+// that adds it and even when a stale cached script throws. Does nothing
+// without a real ServiceWorkerContainer (the iOS app has none), or when no
+// worker controlled the page at load (a first install: nothing here is stale).
+(function () {
+  try {
+    var sw = navigator.serviceWorker;
+    if (!sw || typeof sw.addEventListener !== 'function' || !sw.controller) return;
+    var bornAt = Date.now(), STAMP = 'psycle_sw_reload_at';
+    // Mid-dialog, mid-booking, mid-typing or mid history sync (it can run for
+    // a minute, often with the tab in the background) is never the moment.
+    function busy() {
+      try {
+        if (typeof _dialogOpen === 'function' && _dialogOpen()) return true;
+        if (document.querySelector('#syncHistoryBtn:disabled, #syncPromptBtn:disabled')) return true;
+        var el = document.activeElement;
+        if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true;
+        var btns = document.querySelectorAll('.book-btn, .booking-action-btn');
+        for (var i = 0; i < btns.length; i++) {
+          if (btns[i].getAttribute('data-busy') === '1' || btns[i].textContent === '…') return true;
+        }
+        return false;
+      } catch (e) { return true; }
+    }
+    // At most one automatic reload per 10 minutes, so a worker that keeps
+    // re-claiming can never loop the page. No sessionStorage = no way to
+    // tell, so then it is never automatic.
+    function mayAutoReload() {
+      try {
+        if (Date.now() - Number(sessionStorage.getItem(STAMP) || 0) < 600000) return false;
+        sessionStorage.setItem(STAMP, String(Date.now()));
+        return true;
+      } catch (e) { return false; }
+    }
+    function showBar() {
+      if (!document.body) { document.addEventListener('DOMContentLoaded', showBar); return; }
+      var bar = document.getElementById('updateBanner');
+      if (bar) { bar.style.display = 'flex'; return; }
+      bar = document.createElement('div');
+      bar.id = 'updateBanner';
+      bar.className = 'app-banner app-banner-info';
+      bar.setAttribute('role', 'status');
+      bar.style.display = 'flex';
+      var msg = document.createElement('span');
+      msg.textContent = 'A new version of Psync is ready.';
+      var go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'app-banner-action';
+      go.textContent = 'Reload';
+      go.onclick = function () { location.reload(); };
+      var close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'app-banner-close';
+      close.setAttribute('aria-label', 'Dismiss');
+      close.textContent = '×';
+      close.onclick = function () { bar.style.display = 'none'; };
+      bar.appendChild(msg);
+      bar.appendChild(go);
+      bar.appendChild(close);
+      var anchor = document.getElementById('sessionBanner');
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(bar, anchor.nextSibling);
+      else document.body.insertBefore(bar, document.body.firstChild);
+    }
+    sw.addEventListener('controllerchange', function () {
+      // Nobody is looking (hidden, or the page is under 5s old): just reload.
+      // Otherwise never yank the page from under a member; offer it instead.
+      var unseen = document.hidden || Date.now() - bornAt < 5000;
+      if (unseen && !busy() && mayAutoReload()) { location.reload(); return; }
+      showBar();
+    });
+  } catch (e) {}
+})();
+</script>
 <!-- Save a DNS+TLS round-trip on the first API call. -->
 <link rel="preconnect" href="https://psycle.codexfit.com" crossorigin>
 <link rel="dns-prefetch" href="https://psycle.codexfit.com">

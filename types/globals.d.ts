@@ -105,7 +105,6 @@ declare global {
   var APP_VERSION: string | undefined;
 
   // Monkey-patch bookkeeping flags (set by reliability.js / performance.js / theme.js)
-  var _origApiFetchForCache: any;
   var _originalApiFetch: any;
   var _themeBookingWrapped: boolean;
   var _themeRenderWrapped: boolean;

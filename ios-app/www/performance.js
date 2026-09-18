@@ -152,73 +152,39 @@ function _makePlaceholder(cardHtml, eventId) {
 const CACHE_PREFIX = 'psycle_cache_';
 const TTL_24H = 24 * 60 * 60 * 1000; // 24 hours in ms
 
-/**
- * Fetch JSON from `path` with localStorage caching.
- * Returns cached data immediately if available.
- * Always revalidates in the background (stale-while-revalidate).
- * If no cache exists, fetches from network and caches the result.
- *
- * @param {string}  path  - API path (e.g. '/instructors')
- * @param {number}  ttlMs - Cache TTL in milliseconds
- * @returns {Promise<any>} Parsed JSON response
- */
-async function cachedFetch(path, ttlMs) {
-  const cacheKey = CACHE_PREFIX + path.replace(/^\//, '');
-  let cached = null;
-
-  try {
-    const raw = localStorage.getItem(cacheKey);
-    if (raw) cached = JSON.parse(raw);
-  } catch {
-    // Corrupt cache entry — ignore
-  }
-
-  if (cached && cached.data) {
-    // Return cached data immediately, revalidate in background
-    _revalidateInBackground(path, cacheKey);
-    return cached.data;
-  }
-
-  // No cache at all — must fetch from network
-  const data = await _fetchAndCache(path, cacheKey);
-  return data;
+// ── pure:static-cache:start ── (DOM-free; tests/suites/offline.js evaluates this block)
+// Does the entry hold a list worth serving at all? An empty or poisoned 200
+// that got cached must never be the answer: app.js's init IIFE would take it
+// as the studio list, and since a background refresh only lands in
+// localStorage, Discover sat on "Loading studios…" for the whole launch.
+function _staticCacheHasList(cached) {
+  const list = cached && cached.data && cached.data.data;
+  return Array.isArray(list) && list.length > 0;
 }
-
-/**
- * Fetch from network using the un-patched apiFetch, store in cache, return parsed JSON.
- */
-async function _fetchAndCache(path, cacheKey) {
-  const fetchFn = window._origApiFetchForCache || window.apiFetch;
-  const res = await fetchFn(path);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  try {
-    localStorage.setItem(cacheKey, JSON.stringify({
-      data: data,
-      timestamp: Date.now(),
-    }));
-  } catch {
-    // localStorage full or unavailable — non-fatal
-  }
-  return data;
+// Is a cached static list still good enough to skip the network altogether?
+// Only inside its TTL — and only when the clock has not gone backwards since
+// it was written (a back-dated device clock must not pin the entry for ever).
+// A usable list outside that: serve it, but refresh behind it.
+function _staticCacheIsFresh(cached, ttlMs, nowMs) {
+  if (!_staticCacheHasList(cached)) return false;
+  const age = nowMs - (Number(cached.timestamp) || 0);
+  return age >= 0 && age < ttlMs;
 }
-
-/**
- * Fire-and-forget background revalidation. Updates cache silently.
- */
-function _revalidateInBackground(path, cacheKey) {
-  _fetchAndCache(path, cacheKey).catch(() => {
-    // Background refresh failed — stale cache remains usable
-  });
-}
+// ── pure:static-cache:end ──
 
 /**
  * Patch apiFetch so that GET requests to cacheable endpoints are served
- * from localStorage when cache data is available, with background revalidation.
+ * from localStorage when cache data is available. A copy younger than its TTL
+ * is the whole answer (no request); an older one is returned at once and
+ * refreshed in the background (stale-while-revalidate). A copy with no list in
+ * it (an empty or malformed 200 that got cached) is never served.
  *
- * The init IIFE in app.js dispatches /instructors, /locations, /event-types
- * before this script loads (synchronous call inside the async IIFE).
- * To handle this, we also eagerly pre-populate the global arrays from cache below.
+ * app.js's init IIFE awaits securityReady (IndexedDB, so a task or more)
+ * before asking for /instructors, /locations and /event-types, so this patch
+ * is normally in place by then: three requests saved per launch inside the
+ * TTL. (Where crypto is unavailable securityReady settles in a microtask and
+ * those calls go out unpatched, as they always did.) A background refresh only
+ * lands in localStorage — the in-memory lists pick it up on the next launch.
  */
 (function patchApiFetchForCaching() {
   const CACHEABLE_PATHS = {
@@ -233,8 +199,6 @@ function _revalidateInBackground(path, cacheKey) {
   }
 
   const _origApiFetch = apiFetch;
-  // Expose original for _fetchAndCache to use (avoids infinite recursion)
-  window._origApiFetchForCache = _origApiFetch;
 
   window.apiFetch = function patchedApiFetch(path, opts) {
     // Only cache GET requests (no opts.method or method === 'GET')
@@ -258,19 +222,27 @@ function _revalidateInBackground(path, cacheKey) {
       // ignore
     }
 
-    if (cached && cached.data) {
-      // Return cached data as a fake Response, revalidate in background
-      _origApiFetch(path, opts).then(async (res) => {
-        if (res.ok) {
-          try {
-            const data = await res.json();
-            localStorage.setItem(cacheKey, JSON.stringify({
-              data: data,
-              timestamp: Date.now(),
-            }));
-          } catch {}
-        }
-      }).catch(() => {});
+    // An entry without a usable list is treated as no cache: the network is
+    // awaited below (and its answer overwrites the bad entry), so a failure
+    // reaches the caller's Reload error instead of an endless spinner.
+    if (_staticCacheHasList(cached)) {
+      // Return cached data as a fake Response. Inside the TTL that is all —
+      // `ttl` used to be a truthiness test only, so all three lists were
+      // re-downloaded on every launch. Past it (or for a copy that can't be
+      // trusted) revalidate in the background.
+      if (!_staticCacheIsFresh(cached, ttl, Date.now())) {
+        _origApiFetch(path, opts).then(async (res) => {
+          if (res.ok) {
+            try {
+              const data = await res.json();
+              localStorage.setItem(cacheKey, JSON.stringify({
+                data: data,
+                timestamp: Date.now(),
+              }));
+            } catch {}
+          }
+        }).catch(() => {});
+      }
 
       // Return a Response-like object so callers can chain .then(r => r.json())
       return Promise.resolve({
@@ -299,15 +271,14 @@ function _revalidateInBackground(path, cacheKey) {
 })();
 
 /**
- * Eager cache pre-population: the init IIFE in app.js fires its fetchJson calls
- * synchronously before this script loads, so the apiFetch patch above cannot
- * intercept those initial requests. However, on repeat visits the cache already
- * has data from a previous session. We read it here and pre-populate the global
- * arrays (instructors, locations, eventTypes) so the UI can render immediately
- * without waiting for the network.
+ * Eager cache pre-population: app.js's init IIFE is still waiting on
+ * securityReady (slow on iOS) when this script loads. On repeat visits the
+ * cache already has data from a previous session, so we read it here and
+ * pre-populate the global arrays (instructors, locations, eventTypes): the
+ * filters render immediately instead of after the token has been decrypted.
  *
- * When the init IIFE's network responses arrive, they overwrite these arrays
- * with fresh data — so this is truly stale-while-revalidate for the init data.
+ * When the init IIFE's own answers arrive (the cached copy again inside the
+ * TTL, the network otherwise) it re-assigns these arrays.
  */
 (function eagerCachePrePopulate() {
   function readCache(key) {

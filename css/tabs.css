@@ -1490,14 +1490,26 @@
 }
 
 /* Search result cards enter with a small cascade (capped so long
-   lists don't feel slow — everything past 6 shares one delay) */
-.class-grid .class-card { animation: cardEnter 0.3s ease-out both; }
+   lists don't feel slow — everything past 6 shares one delay).
+   Fill is `backwards`, not `both`: a held end keyframe kept transform +
+   opacity on every card for good, which outranks the :hover lift and the
+   :active press below. */
+.class-grid .class-card { animation: cardEnter 0.3s ease-out backwards; }
 .class-grid .class-card:nth-child(1) { animation-delay: 0.02s; }
 .class-grid .class-card:nth-child(2) { animation-delay: 0.05s; }
 .class-grid .class-card:nth-child(3) { animation-delay: 0.08s; }
 .class-grid .class-card:nth-child(4) { animation-delay: 0.11s; }
 .class-grid .class-card:nth-child(5) { animation-delay: 0.14s; }
 .class-grid .class-card:nth-child(n+6) { animation-delay: 0.17s; }
+/* Only what can be on screen animates: the first 8 cards of the first day.
+   A week of classes is 1,000+ cards, and animating every off-screen one
+   (opacity + transform layers) made each list rebuild stutter. */
+.class-grid .class-card:nth-child(n+9),
+.day-group ~ .day-group .class-card { animation: none; }
+/* A background re-render (renderFromWindow's `quiet`, js/app.js: a silent
+   refresh landed, a resume) rebuilds cards that were already up. No entrance
+   then — the top of the list blinked with nobody having touched it. */
+#results[data-quiet] .class-card { animation: none; }
 
 /* Bottom-bar icon springs when its tab activates */
 @keyframes tabIconPop {
@@ -1511,11 +1523,17 @@
 }
 
 /* Press feedback on tappable surfaces */
-.class-card:active,
 .week-event:active,
 .reco-card:active,
 .discover-quick-btn:active,
 .theme-swatch:active { transform: scale(0.985); }
+/* A card is :active while anything inside it is pressed, and on desktop the
+   ~1000px card shrinking about its centre slid the Book / Cancel pill (and an
+   instructor link) ~6px from under the pointer mid-click — the click then
+   landed on the card and opened the detail sheet instead. Press the card only
+   when the press is on the card itself. A rule of its own: a browser without
+   :has() drops just this one. */
+.class-card:active:not(:has(:is(button, a, [role="button"], [onclick]):active)) { transform: scale(0.985); }
 
 @media (prefers-reduced-motion: reduce) {
   .tab-empty > *,

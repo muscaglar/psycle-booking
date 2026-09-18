@@ -252,8 +252,9 @@ module.exports = async function (t) {
       return asked && (asked.warn || null);
     };
     const CHARGED = ' Cancellations inside 12 hours are usually charged by Psycle.';
-    t.eq(warnAt('2026-09-18T06:00:00', '2026-09-17T20:00:20'), 'This class starts in 10h 0m.' + CHARGED, 'dialog, 9h59m40s to go: "starts in 10h 0m" (was "9h 60m")');
-    t.eq(warnAt('2026-09-18T06:00:00', '2026-09-18T05:00:20'), 'This class starts in 1h 0m.' + CHARGED, 'dialog, 59m40s to go: "starts in 1h 0m" (was "60 min")');
+    // A zero minute part is dropped, as the chip does ("In 10h"): the two are read side by side.
+    t.eq(warnAt('2026-09-18T06:00:00', '2026-09-17T20:00:20'), 'This class starts in 10h.' + CHARGED, 'dialog, 9h59m40s to go: "starts in 10h" (was "9h 60m", then "10h 0m")');
+    t.eq(warnAt('2026-09-18T06:00:00', '2026-09-18T05:00:20'), 'This class starts in 1h.' + CHARGED, 'dialog, 59m40s to go: "starts in 1h" (was "60 min", then "1h 0m")');
     t.eq([warnAt('2026-09-18T06:00:00', '2026-09-17T23:30:00'), warnAt('2026-09-18T06:00:00', '2026-09-18T05:30:00'), warnAt('2026-09-18T06:00:00', '2026-09-18T05:59:50')],
       ['This class starts in 6h 30m.' + CHARGED, 'This class starts in 30 min.' + CHARGED, 'This class starts in 1 min.' + CHARGED], 'dialog: ordinary times unchanged, and the last seconds still read "1 min", never "0 min"');
     t.eq([warnAt('2026-09-18T06:00:00', '2026-09-18T06:10:00'), warnAt('2026-09-18T06:00:00', '2026-09-17T17:00:00')],
@@ -280,6 +281,13 @@ module.exports = async function (t) {
     t.ok(/^\.mb-primary-btn\.booked\b/.test(BUTTON), '…and the swipe only ever presses .mb-primary-btn.booked');
     IGNORE.split(',').map((x) => x.trim().slice(1)).forEach((cls) => t.ok(src.includes(cls), 'ignored control .' + cls + ' is still emitted by js/app.js'));
     t.ok(/\.my-booking-card \{[^}]*position: relative;/.test(t.readSource('css/styles.css')), 'the card is the containing block for the absolutely-positioned .swipe-cancel-bg');
+    // The seat chips' × buttons are position:relative (tap targets): at z-index 0
+    // they shared the fill's layer, came later in the tree and showed through it.
+    const fillCss = t.readSource('css/styles.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const fillZ = Number(((fillCss.match(/\.swipe-cancel-bg \{[^}]*\}/) || [''])[0].match(/z-index:\s*(\d+)/) || [])[1]);
+    const popupZ = Number(((fillCss.match(/\n\.find-similar-popup \{[^}]*\}/) || [''])[0].match(/z-index:\s*(\d+)/) || [])[1]);
+    t.ok(fillZ >= 1 && fillZ < popupZ, 'the Cancel fill paints over positioned card children (z-index ' + fillZ + ' ≥ 1) and still under the Similar popup (' + popupZ + ')');
+    t.ok(!/\.my-booking-card \{[^}]*isolation:/.test(fillCss), '…without isolating the card (the next card would cover that popup)');
 
     t.eq([swipePure.swipeShouldCancel(-156, 390), swipePure.swipeShouldCancel(-155, 390)], [true, false], '40% of the card width is the cut-off');
     t.eq([swipePure.swipeShouldCancel(200, 390), swipePure.swipeShouldCancel(-200, 0)], [false, false], 'a rightward drag or an unmeasured card never cancels');
@@ -474,6 +482,9 @@ module.exports = async function (t) {
     t.ok(iTab !== -1 && iTab < iSearch, 'switches to Discover BEFORE searching (the results used to fill a hidden tab)');
     t.ok(w.log.calls.indexOf('syncUI') !== -1 && w.log.calls.indexOf('syncUI') < iSearch, 'chips, pills and summary are re-synced first');
     t.ok(/showing alternatives/.test(w.log.toasts.join('|')), 'and only then says so');
+    // The day is said the way the date pill says it, not as the raw search value.
+    t.ok(/alternatives for Tue,? 29 Sept?$/.test(w.log.toasts.join('|')) && !/\d{4}-\d{2}-\d{2}/.test(w.log.toasts.join('|')),
+      'the toast names the day as "Tue 29 Sep(t)", never "2026-09-29" (got: ' + w.log.toasts.join('|') + ')');
 
     const none = similarWorld({ locations: [] , events: [{ id: 9003, event_type_id: 7, instructor_id: 99, studio_id: 4, start_at: '2026-09-29 08:00:00' }] });
     await none.ctx.rebookNextWeek(77);

@@ -46,7 +46,9 @@
 
   window.tierBadgeHTML = function (instrId) {
     var tier = getInstructorTier(instrId);
-    if (!tier) return '';
+    // Only a known tier letter reaches the markup: the stored value can come
+    // from an imported settings file, and it lands in a class attribute.
+    if (!tier || TIERS.indexOf(tier) === -1) return '';
     return '<span class="tier-badge tier-' + tier + '">' + tier + '</span>';
   };
 
@@ -162,8 +164,35 @@
   // Settings Panel
   // ═══════════════════════════════════════════════════════════════════
 
-  window.openSettings = function () {
-    if (document.getElementById('settingsOverlay')) return;
+  // The Membership rows each open the panel AT their own section; all four used
+  // to land at the top of the same sheet. Keys → section element ids.
+  var SETTINGS_SECTION_IDS = {
+    reminders: 'settingsSecReminders',
+    bike: 'settingsSecBike',
+    calendar: 'settingsSecCalendar',
+    data: 'settingsSecData',
+  };
+
+  // Bring one section to the top of the panel's own scroller. scrollTop on
+  // .settings-body, not scrollIntoView: that scrolls every ancestor too — on
+  // iOS the page itself (the caveat switchTab in tabs.js documents). Returns
+  // the offset it set, or -1 when there was nothing to scroll to.
+  function scrollSettingsTo(section) {
+    var id = Object.prototype.hasOwnProperty.call(SETTINGS_SECTION_IDS, section) ? SETTINGS_SECTION_IDS[section] : '';
+    var sec = id ? document.getElementById(id) : null;
+    var body = sec ? sec.closest('.settings-body') : null;
+    if (!body) return -1;
+    body.scrollTop += sec.getBoundingClientRect().top - body.getBoundingClientRect().top;
+    return body.scrollTop;
+  }
+
+  // `section` is optional ('reminders' | 'bike' | 'calendar' | 'data'). Anything
+  // that is not a string — no argument, or the Event a listener would pass —
+  // opens the panel at the top, as before.
+  window.openSettings = function (section) {
+    if (typeof section !== 'string') section = '';
+    // Already open (a second row tapped behind it, a deep link): just move.
+    if (document.getElementById('settingsOverlay')) { scrollSettingsTo(section); return; }
 
     var overlay = document.createElement('div');
     overlay.id = 'settingsOverlay';
@@ -179,11 +208,14 @@
         '<div class="settings-body">' +
           // App-focused settings only — instructor rankings/favourites
           // live on the Membership tab with the rest of the personal data.
-          '<div class="settings-section">' +
-            '<div class="settings-section-title">Reminders</div>' +
-            '<div id="reminderRow"></div>' +
-          '</div>' +
-          '<div class="settings-section">' +
+          // Reminders exist only in the iOS app: on the web renderReminderRow
+          // paints nothing, which left a heading over an empty section.
+          (window._nativeReminder ?
+            '<div class="settings-section" id="settingsSecReminders">' +
+              '<div class="settings-section-title">Reminders</div>' +
+              '<div id="reminderRow"></div>' +
+            '</div>' : '') +
+          '<div class="settings-section" id="settingsSecBike">' +
             '<div class="settings-section-title">Bike / Spot Preferences</div>' +
             '<select class="bike-pref-studio-select" id="bikePrefStudio" onchange="renderBikePrefGrid()">' +
               '<option value="">Select a studio…</option>' +
@@ -198,11 +230,11 @@
             '<div id="bikePrefGrid" class="bike-pref-grid" style="display:none"></div>' +
           '</div>' +
           (typeof window.psycleListCalendars === 'function' ?
-            '<div class="settings-section">' +
+            '<div class="settings-section" id="settingsSecCalendar">' +
               '<div class="settings-section-title">Calendar Sync (iOS)</div>' +
               '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
             '</div>' : '') +
-          '<div class="settings-section">' +
+          '<div class="settings-section" id="settingsSecData">' +
             '<div class="settings-section-title">Data</div>' +
             '<div class="app-advanced">' +
               '<button class="app-advanced-btn" onclick="exportSettings()">Export settings</button>' +
@@ -225,7 +257,17 @@
     if (typeof window.renderThemePicker === 'function') window.renderThemePicker();
     if (typeof window.renderReminderRow === 'function') window.renderReminderRow();
     populateStudioSelect();
-    if (typeof window.psycleListCalendars === 'function') renderCalendarSync();
+    var calendarsReady = (typeof window.psycleListCalendars === 'function') ? renderCalendarSync() : null;
+    if (!section) return;
+    var aimedAt = scrollSettingsTo(section);
+    // The calendar list lands a moment later and grows ITS section, pushing the
+    // ones under it down. Re-aim once — unless the member has scrolled since.
+    if (aimedAt !== -1 && calendarsReady && typeof calendarsReady.then === 'function') {
+      calendarsReady.then(function () {
+        var body = overlay.querySelector('.settings-body');
+        if (overlay.isConnected && body && body.scrollTop === aimedAt) scrollSettingsTo(section);
+      }, function () {});
+    }
   };
 
   window.closeSettings = function () {
@@ -718,7 +760,10 @@
   // redesigned eventCard, so badges silently stopped rendering.
   window.tierBadgeHTML = function (instructorId) {
     var tier = getInstructorTier(instructorId);
-    return tier ? '<span class="tier-badge tier-' + tier + '">' + tier + '</span>' : '';
+    // This definition is the one that wins (it replaces the one above), so it
+    // carries the same guard: an imported tier that is not a known letter
+    // must never be interpolated into markup.
+    return tier && TIERS.indexOf(tier) !== -1 ? '<span class="tier-badge tier-' + tier + '">' + tier + '</span>' : '';
   };
 
 

@@ -278,6 +278,14 @@
       if (x instanceof Error) msg = String(x.message || '');
       else if (typeof x === 'string') msg = x;
       else if (x && x.message) msg = String(x.message);
+
+      // app.js turns a bad response into `new Error('HTTP 503')` before anyone
+      // sees the Response, so the status only survives inside the message.
+      // Without this every failed search classified as 'unknown' and the
+      // last-results fallback (network / server / timeout only) never ran.
+      var httpMatch = /\bHTTP (\d{3})\b/.exec(msg);
+      if (httpMatch) return categorizeError(Number(httpMatch[1]));
+
       var lower = (name + ' ' + msg).toLowerCase();
 
       if (name === 'AbortError' || lower.indexOf('timed out') !== -1 ||

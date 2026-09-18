@@ -163,12 +163,15 @@
         '<div class="ms-section-title">Appearance</div>' +
         '<div id="themePicker"></div>' +
       '</div>' +
-      // Settings list — each row opens the Settings panel
+      // Settings list — each row opens the Settings panel AT its own section,
+      // and promises only what that section holds ("Default studio", "waitlist
+      // alerts" and "clear local data" existed nowhere). Reminders / Calendar
+      // sync are iOS-only: renderMembershipInfo shows or hides those two rows.
       '<div class="ms-list">' +
-        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Bike preferences</span><span class="ms-row-sub">Default studio · favourite bikes</span></span><span class="ms-row-chev">›</span></button>' +
-        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Reminders</span><span class="ms-row-sub">Class reminders · waitlist alerts</span></span><span class="ms-row-chev">›</span></button>' +
-        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Calendar sync</span><span class="ms-row-sub">Add bookings to your calendar</span></span><span class="ms-row-chev">›</span></button>' +
-        '<button class="ms-row" onclick="openSettings()"><span class="ms-row-text"><span class="ms-row-label">Data &amp; privacy</span><span class="ms-row-sub">Export · import · clear local data</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings(\'bike\')"><span class="ms-row-text"><span class="ms-row-label">Bike preferences</span><span class="ms-row-sub">Prefer or avoid spots, per studio</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" id="msRowReminders" onclick="openSettings(\'reminders\')"><span class="ms-row-text"><span class="ms-row-label">Reminders</span><span class="ms-row-sub">Monday booking · before each class</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" id="msRowCalendar" onclick="openSettings(\'calendar\')"><span class="ms-row-text"><span class="ms-row-label">Calendar sync</span><span class="ms-row-sub">Add bookings to your calendar</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings(\'data\')"><span class="ms-row-text"><span class="ms-row-label">Data &amp; privacy</span><span class="ms-row-sub">Export · import · bug report</span></span><span class="ms-row-chev">›</span></button>' +
       '</div>' +
       // Sign out (signed-in only — toggled in renderMembershipInfo)
       '<button id="signOutRow" class="ms-signout" onclick="if(typeof confirmSignOut===\'function\')confirmSignOut();else if(typeof clearToken===\'function\')clearToken()" style="display:none">Sign out</button>' +
@@ -1124,6 +1127,16 @@
       (typeof getBearerToken === 'function' && !!getBearerToken());
     if (_signOut) _signOut.style.display = _hasSession ? '' : 'none';
 
+    // Two Settings rows lead to sections only the iOS app has (on the web the
+    // Reminders section is empty and there is no Calendar section). Decided
+    // here, per render and before the signed-out return — not in the template:
+    // the bridge loads after this file, so a template-time check would hide
+    // them in the app as well.
+    var _rowReminders = document.getElementById('msRowReminders');
+    if (_rowReminders) _rowReminders.style.display = window._nativeReminder ? '' : 'none';
+    var _rowCalendar = document.getElementById('msRowCalendar');
+    if (_rowCalendar) _rowCalendar.style.display = (typeof window.psycleListCalendars === 'function') ? '' : 'none';
+
     var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
     var user = (typeof currentUser !== 'undefined') ? currentUser : null;
     var signinEl = document.getElementById('membershipSignin');
@@ -1153,10 +1166,28 @@
       var made = Number(sub.bookings_made) || 0;
       var max = sub.max_bookings || 0;
       var status = sub.status_detail || sub.status || 'Active';
-      var fmtD = function (d) { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
-      var fmtEnd = function (d) { var prev = new Date(d); prev.setDate(prev.getDate() - 1); return fmtD(prev); };
-      var periodLabel = sub.period_start && sub.period_end
-        ? fmtD(sub.period_start) + ' — ' + fmtEnd(sub.period_end) : '';
+      // These dates can arrive as 'YYYY-MM-DD HH:MM:SS', which iOS WebKit reads
+      // as Invalid Date — parse them like the rest of the app (My Bookings
+      // already does) and print nothing rather than "Invalid Date". A Date goes
+      // straight through: parsePsycleDate(String(aDate)) is itself invalid.
+      var parseD = function (d) {
+        if (d instanceof Date) return d;
+        return typeof parsePsycleDate === 'function' ? parsePsycleDate(d) : (d ? new Date(d) : null);
+      };
+      var fmtD = function (d) {
+        var dt = parseD(d);
+        return dt && !isNaN(dt.getTime()) ? dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      };
+      // period_end is the START of the next period: show the day before.
+      var fmtEnd = function (d) {
+        var prev = parseD(d);
+        if (!prev || isNaN(prev.getTime())) return '';
+        prev = new Date(prev.getTime());
+        prev.setDate(prev.getDate() - 1);
+        return fmtD(prev);
+      };
+      var periodFrom = fmtD(sub.period_start), periodTo = fmtEnd(sub.period_end);
+      var periodLabel = periodFrom && periodTo ? periodFrom + ' — ' + periodTo : '';
 
       html += '<div class="membership-card">';
       html += '<div class="membership-plan">' + escapeHTML(planName) + '</div>';
@@ -1173,14 +1204,15 @@
 
       // Upcoming billing periods
       var periods = sub.upcoming_billing_periods || [];
-      if (periods.length > 0) {
+      // A period whose dates can't be read gets no row (never " — ").
+      var periodRows = periods.slice(0, 3).map(function (p) {
+        var span = [fmtD(p && p.start), fmtD(p && p.end)].filter(Boolean).join(' — ');
+        return span ? '<div class="membership-period-item">' + span +
+          (p.pausable ? ' <span class="membership-pausable">Pausable</span>' : '') + '</div>' : '';
+      }).filter(Boolean);
+      if (periodRows.length > 0) {
         html += '<div class="membership-upcoming-title">Upcoming periods</div>';
-        html += '<div class="membership-periods">';
-        periods.slice(0, 3).forEach(function (p) {
-          html += '<div class="membership-period-item">' + fmtD(p.start) + ' — ' + fmtD(p.end) +
-            (p.pausable ? ' <span class="membership-pausable">Pausable</span>' : '') + '</div>';
-        });
-        html += '</div>';
+        html += '<div class="membership-periods">' + periodRows.join('') + '</div>';
       }
 
       // Plan price
@@ -1256,23 +1288,29 @@
     if (!container) return;
 
     var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
-    if (!sub || !sub.max_bookings) { container.style.display = 'none'; return; }
-    container.style.display = '';
+    if (!sub) { container.style.display = 'none'; return; }
 
     var price = Number(sub.plan?.price || sub.price || 0); // price is in pence
     var made = Number(sub.bookings_made) || 0;
-    var max = Number(sub.max_bookings) || 30;
+    // 0 = an unlimited plan: no cap to measure against. (This read `|| 30`,
+    // which nothing reached — unlimited plans were hidden outright, though My
+    // Bookings shows them as 'Unlimited'.)
+    var max = Number(sub.max_bookings) || 0;
+    // Without a price every card read £0.00. An unlimited plan has only
+    // bookings_made to go on, so it waits for the first class of the period.
+    if (price <= 0 || (max === 0 && made < 1)) { container.style.display = 'none'; return; }
+    container.style.display = '';
     var priceGbp = price / 100;
     var costPerClass = made > 0 ? priceGbp / made : priceGbp;
-    var costAtMax = priceGbp / max;
+    var costAtMax = max > 0 ? priceGbp / max : 0; // never price / 0
     var remaining = Math.max(0, max - made);
     var daysLeft = _daysLeftInBillingPeriod(sub);
 
-    // Savings message
+    // Savings message — capped plans only ("maxed out your 0 classes" otherwise)
     var savingsMsg = '';
-    if (made > 0 && made < max) {
+    if (max > 0 && made > 0 && made < max) {
       savingsMsg = 'Book ' + remaining + ' more to hit ' + _formatGbp(costAtMax) + '/class';
-    } else if (made >= max) {
+    } else if (max > 0 && made >= max) {
       savingsMsg = 'You\'ve maxed out your ' + max + ' classes — incredible!';
     }
 
@@ -1282,7 +1320,7 @@
     // Cost per class card
     html += '<div class="cost-card cost-main">';
     html += '<div class="cost-value">' + _formatGbp(costPerClass) + '</div>';
-    html += '<div class="cost-label">Per class this month</div>';
+    html += '<div class="cost-label">Per class this period</div>'; // bookings_made is per billing period
     if (made === 0) html += '<div class="cost-hint">Book your first class!</div>';
     html += '</div>';
 
@@ -1293,20 +1331,30 @@
     html += '<div class="cost-hint">' + escapeHTML(sub.name || 'Unlimited') + '</div>';
     html += '</div>';
 
-    // Target card
-    html += '<div class="cost-card">';
-    html += '<div class="cost-value">' + _formatGbp(costAtMax) + '</div>';
-    html += '<div class="cost-label">Best possible</div>';
-    html += '<div class="cost-hint">If you use all ' + max + ' classes</div>';
-    html += '</div>';
+    // Target card (a cap to aim for: capped plans only)
+    if (max > 0) {
+      html += '<div class="cost-card">';
+      html += '<div class="cost-value">' + _formatGbp(costAtMax) + '</div>';
+      html += '<div class="cost-label">Best possible</div>';
+      html += '<div class="cost-hint">If you use all ' + max + ' classes</div>';
+      html += '</div>';
+    }
 
     // Pace card
-    if (daysLeft > 0 && remaining > 0) {
-      var perWeek = Math.ceil(remaining / (daysLeft / 7));
+    if (max > 0 && daysLeft > 0 && remaining > 0) {
       html += '<div class="cost-card">';
-      html += '<div class="cost-value">' + perWeek + '</div>';
-      html += '<div class="cost-label">Per week needed</div>';
-      html += '<div class="cost-hint">' + remaining + ' classes in ' + daysLeft + ' days</div>';
+      if (daysLeft < 7) {
+        // Under a week left a weekly rate is nonsense: 4 classes in 3 days
+        // read "10 per week needed". Say what is left instead.
+        html += '<div class="cost-value">' + remaining + '</div>';
+        html += '<div class="cost-label">Left this period</div>';
+        html += '<div class="cost-hint">' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' to go</div>';
+      } else {
+        var perWeek = Math.ceil(remaining / (daysLeft / 7));
+        html += '<div class="cost-value">' + perWeek + '</div>';
+        html += '<div class="cost-label">Per week needed</div>';
+        html += '<div class="cost-hint">' + remaining + ' classes in ' + daysLeft + ' days</div>';
+      }
       html += '</div>';
     }
 

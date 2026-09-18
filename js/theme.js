@@ -227,8 +227,32 @@ function hideSkeletonLoading() {
 
 // ── C. Empty State Illustration ─────────────────────────────────
 
+// The ways out of an empty list. app.js names them by id; the handlers live
+// here as fixed strings, so nothing app- or API-supplied reaches an onclick.
+const EMPTY_STATE_ACTIONS = {
+  tomorrow: { label: 'Tomorrow', onclick: "setDateQuick('tomorrow')" },
+  week: { label: 'Next 7 days', onclick: "setDateQuick('week')" },
+  clear: { label: 'Clear filters', onclick: 'clearFilters()' },
+  // A forced search, not refreshWindow(): it shows the studios that answer,
+  // where a refresh commits nothing unless every studio does.
+  retry: { label: 'Try again', onclick: 'search({ force: true })' },
+};
+
 function renderEmptyState(message) {
-  const msg = message || 'No classes found for these filters.';
+  // app.js knows WHY the list is empty (today has run out / the filters match
+  // nothing / more days are still loading) — this block used to be a sentence
+  // with nothing to tap. Absent (or throwing), the plain copy below stands.
+  let ctx = null;
+  try { if (typeof _discoverEmptyContext === 'function') ctx = _discoverEmptyContext(); } catch (e) {}
+  if (ctx && ctx.loading) {
+    return '<div class="status empty-loading"><span class="spinner"></span>Checking the latest timetable…</div>';
+  }
+  const msg = escapeHTML((ctx && ctx.title) || message || 'No classes found for these filters.');
+  const sub = escapeHTML((ctx && ctx.sub) || 'Try adjusting your filters, selecting a different date range, or choosing another studio.');
+  const actions = ((ctx && ctx.actions) || []).map((id, i) => {
+    const a = Object.prototype.hasOwnProperty.call(EMPTY_STATE_ACTIONS, id) ? EMPTY_STATE_ACTIONS[id] : null;
+    return a ? `<button type="button" class="empty-action${i === 0 ? ' primary' : ''}" onclick="${a.onclick}">${a.label}</button>` : '';
+  }).join('');
   // Inline SVG: magnifying glass with a small cycling figure
   return `<div class="empty-state">
     <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -249,7 +273,8 @@ function renderEmptyState(message) {
       <circle cx="34" cy="27" r="2.5" fill="var(--text-dim, #888)"/>
     </svg>
     <div class="empty-title">${msg}</div>
-    <div class="empty-subtitle">Try adjusting your filters, selecting a different date range, or choosing another studio.</div>
+    <div class="empty-subtitle">${sub}</div>
+    ${actions ? `<div class="empty-actions">${actions}</div>` : ''}
   </div>`;
 }
 
@@ -309,7 +334,10 @@ function wrapSearch() {
     // Skip the skeleton when a cached window exists — those searches re-filter
     // instantly from cache, so the skeleton would just flash.
     if (!window._windowEvents) showSkeletonLoading();
-    haptic('tap');
+    // No haptic here: search() is almost never a tap. It runs by itself ~1s
+    // after every signed-in launch and 600ms after each filter change, so the
+    // phone buzzed unprompted. Real taps tick where they happen (selectBike,
+    // the dialogs, the booking result).
     return originalSearch.apply(this, arguments);
   };
 }

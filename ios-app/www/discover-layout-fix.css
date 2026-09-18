@@ -30,6 +30,20 @@
     width: 100%;
     min-width: 0;
   }
+
+  /* The content is a centred 1080px column (.tab-panel, styles.css) while the
+     header and tab bar were full-bleed, so on a wide window the logo and tabs
+     hugged the far left. Inset the chrome to the same column. 100%, not
+     100vw: a classic scrollbar would push it off by half its width.
+     The banners (session, CORS, offline, "new version") are body children
+     between the two, and kept their text at the window's edge. Only the
+     inline padding: each banner's own block padding stands (this file loads
+     last, so it also wins over .app-banner-danger's shorthand). */
+  .app-banner,
+  header,
+  .tab-bar {
+    padding-inline: max(var(--space-9), calc((100% - 1080px) / 2 + var(--space-9)));
+  }
 }
 
 /* Each pill row is a single horizontal side-scrolling row, left-aligned and
@@ -41,4 +55,19 @@
   overflow-x: auto;
   justify-content: flex-start;
   margin: 0;               /* nuke any negative-margin bleed trick */
+}
+
+/* …except on desktop, where the rows wrap instead: the scrollbar is hidden and
+   a mouse wheel can't scroll sideways, so the ~20 studio chips past the right
+   edge were unreachable. After the rule above on purpose (same specificity —
+   its overflow-x would win otherwise); !important only to beat redesign.css's
+   own `nowrap !important`, hence the identical selectors. */
+@media (min-width: 1024px) {
+  #tab-discover .location-chips,
+  #tab-discover #categoryPills,
+  #tab-discover .date-presets,
+  #tab-discover .instr-matches {
+    flex-wrap: wrap !important;
+    overflow-x: visible;
+  }
 }

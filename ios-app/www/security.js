@@ -406,6 +406,12 @@
 
     // Warn 5 minutes before expiry
     var warnMs = msLeft - 5 * 60 * 1000;
+    // setTimeout's delay is a signed 32-bit int: past ~24.8 days it wraps and
+    // fires at once, and the "still far from expiry → rearm" branch below then
+    // re-armed itself hundreds of times a second for a long-lived JWT. Clamped,
+    // that same branch simply rearms once per 24.8 days. (The other two timers
+    // are 5 minutes at most.)
+    var MAX_TIMER_MS = 0x7FFFFFFF;
     if (warnMs > 0) {
       _expiryTimer = setTimeout(function () {
         var exp = getTokenExpiry();
@@ -415,7 +421,7 @@
         }
         _emitExpiring();
         _expiryTimer2 = setTimeout(_fireExpiredIfStillExpired, 5 * 60 * 1000);
-      }, warnMs);
+      }, Math.min(warnMs, MAX_TIMER_MS));
     } else if (msLeft > 0) {
       // Less than 5 min left
       _emitExpiring();

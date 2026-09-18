@@ -63,16 +63,22 @@
   <div id="sLogin">
     <h1>Sign in</h1>
     <p class="sub">Use your Psycle account email and password.</p>
-    <div class="field">
-      <label>Email</label>
-      <input id="email" type="email" autocomplete="email" placeholder="you@example.com" inputmode="email">
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input id="password" type="password" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
-    </div>
-    <button id="loginBtn" class="btn" onclick="doLogin()">Sign in</button>
-    <div id="errMsg" class="error"></div>
+    <!-- A real form: Enter submits, and password managers / VoiceOver see a
+         login. preventDefault() comes FIRST, so a script error can never turn
+         into a native submit — and the fields deliberately have no name=, so
+         even a native submit could not put the password in the URL. -->
+    <form id="loginForm" novalidate onsubmit="event.preventDefault();doLogin()">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" placeholder="you@example.com" inputmode="email" autocapitalize="none" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
+      </div>
+      <button id="loginBtn" class="btn" type="submit">Sign in</button>
+    </form>
+    <div id="errMsg" class="error" role="alert"></div>
     <a href="./psycle-finder.html" class="back">&larr; Back to Psync</a>
   </div>
 
@@ -95,6 +101,8 @@ var LOGIN_URL = 'https://psycle.codexfit.com/api/v1/customer/auth/login';
 
 var MAX_ATTEMPTS = 3;
 var COOLDOWN_BASE = 30;
+var RATE_LIMIT_COOLDOWN = 60; // seconds to stand off after a 429
+var LOGIN_TIMEOUT_MS = 15000; // same cap as the app's apiFetch
 var _failCount = 0;
 var _lockedUntil = 0;
 var _cooldownInterval = null;
@@ -102,32 +110,46 @@ var _cooldownInterval = null;
 function checkRateLimit() {
   if (Date.now() < _lockedUntil) {
     var secs = Math.ceil((_lockedUntil - Date.now()) / 1000);
-    showError('Too many failed attempts. Try again in ' + secs + 's.');
+    showError('Too many attempts. Try again in ' + secs + 's.');
     return false;
   }
   return true;
 }
 
+// Lock the button for `seconds`, counting down on it.
+function startCooldown(seconds) {
+  _lockedUntil = Date.now() + seconds * 1000;
+  var btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  if (_cooldownInterval) clearInterval(_cooldownInterval);
+  var updateCountdown = function() {
+    var secs = Math.ceil((_lockedUntil - Date.now()) / 1000);
+    if (secs <= 0) {
+      clearInterval(_cooldownInterval);
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+      hideError();
+      return;
+    }
+    btn.textContent = 'Wait ' + secs + 's';
+  };
+  updateCountdown();
+  _cooldownInterval = setInterval(updateCountdown, 1000);
+}
+
+// Only an answer that means "Psycle looked at these details and said no"
+// counts towards the lockout: a 4xx other than 408 (timeout) / 429 (rate
+// limit). Psycle's exact bad-credentials status isn't known, so no single
+// code is hard-wired. A dropped connection, a timeout or a 5xx says nothing
+// about the password — three taps on a flaky train used to lock a member out.
+function countsTowardLockout(status) {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 function onLoginFailure() {
   _failCount++;
   if (_failCount >= MAX_ATTEMPTS) {
-    var cooldown = COOLDOWN_BASE * Math.pow(2, Math.floor((_failCount - MAX_ATTEMPTS) / MAX_ATTEMPTS));
-    _lockedUntil = Date.now() + cooldown * 1000;
-    var btn = document.getElementById('loginBtn');
-    btn.disabled = true;
-    var updateCountdown = function() {
-      var secs = Math.ceil((_lockedUntil - Date.now()) / 1000);
-      if (secs <= 0) {
-        clearInterval(_cooldownInterval);
-        btn.disabled = false;
-        btn.textContent = 'Sign in';
-        hideError();
-        return;
-      }
-      btn.textContent = 'Wait ' + secs + 's';
-    };
-    updateCountdown();
-    _cooldownInterval = setInterval(updateCountdown, 1000);
+    startCooldown(COOLDOWN_BASE * Math.pow(2, Math.floor((_failCount - MAX_ATTEMPTS) / MAX_ATTEMPTS)));
   }
 }
 
@@ -137,14 +159,27 @@ function onLoginSuccess() {
   if (_cooldownInterval) clearInterval(_cooldownInterval);
 }
 
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'Enter') return;
-  var btn = document.getElementById('loginBtn');
-  // Respect the disabled state — Enter must not fire a duplicate POST while
-  // a login is in flight, nor re-run after success.
-  if (btn.disabled || document.getElementById('sLogin').style.display === 'none') return;
-  doLogin();
-});
+// The first human-readable line of a failed sign-in. Psycle sends `message`,
+// or Laravel-style `errors` ({field: [msg, …]}), which used to be shown as raw
+// JSON. Always a plain string: it goes into textContent.
+function firstErrorMessage(data, status) {
+  if (status === 429) return 'Too many attempts — give it a minute, then try again.';
+  if (status >= 500) return 'Psycle is having trouble right now — try again shortly.';
+  var pick = function(v) {
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) return v.length ? pick(v[0]) : '';
+    if (v && typeof v === 'object') {
+      if (typeof v.message === 'string') return v.message;
+      var keys = Object.keys(v);
+      return keys.length ? pick(v[keys[0]]) : '';
+    }
+    return '';
+  };
+  var msg = typeof data === 'string' ? data
+    : (data ? (pick(data.message) || pick(data.error) || pick(data.errors)) : '');
+  msg = String(msg || '').trim().slice(0, 200);
+  return msg || 'Sign in failed (' + status + ')';
+}
 
 function showError(msg) {
   var el = document.getElementById('errMsg');
@@ -176,14 +211,25 @@ async function doLogin() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Signing in&hellip;';
 
+  // A hung request used to spin until the OS gave up (about a minute on iOS).
+  // The timer stays armed until the body has been read — that can hang too.
+  var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, LOGIN_TIMEOUT_MS) : null;
+
   try {
     var res = await fetch(LOGIN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ email: email, password: password })
+      body: JSON.stringify({ email: email, password: password }),
+      signal: ctrl ? ctrl.signal : undefined
     });
 
-    var data = await res.json().catch(function() { return {}; });
+    var data = await res.json().catch(function(e) {
+      if (e && e.name === 'AbortError') throw e; // timed out mid-body: not "an empty answer"
+      return {};
+    });
+    clearTimeout(timer);
+    if (data == null) data = {};
 
     if (res.ok) {
       var token = data.token || data.access_token || data.bearer_token
@@ -211,19 +257,20 @@ async function doLogin() {
           setTimeout(function() { location.href = APP_URL; }, 1500);
         }
       } else {
-        console.log('[psync-login] response:', JSON.stringify(data));
-        showError('Signed in but no token was returned. Check the console and report the field name.');
+        // Field NAMES only — the body of a successful sign-in holds a live
+        // token under some name we don't know; it must not land in a console
+        // that gets pasted into a bug report.
+        var inner = (data && typeof data.data === 'object' && data.data) ? Object.keys(data.data) : [];
+        console.log('[psync-login] response fields:', typeof data === 'object' ? Object.keys(data) : typeof data, inner);
+        showError('Signed in but no token was returned. Check the console and report the field names.');
         btn.disabled = false;
         btn.textContent = 'Sign in';
         _loginInFlight = false;
       }
     } else {
-      onLoginFailure();
-      var msg = data.message || data.error || data.errors
-        || (typeof data === 'string' ? data : null)
-        || 'Sign in failed (' + res.status + ')';
-      if (typeof msg === 'object') msg = JSON.stringify(msg);
-      showError(msg);
+      if (countsTowardLockout(res.status)) onLoginFailure();
+      else if (res.status === 429) startCooldown(RATE_LIMIT_COOLDOWN);
+      showError(firstErrorMessage(data, res.status));
       if (Date.now() >= _lockedUntil) {
         btn.disabled = false;
         btn.textContent = 'Sign in';
@@ -231,8 +278,12 @@ async function doLogin() {
       _loginInFlight = false;
     }
   } catch (e) {
-    onLoginFailure();
-    showError('Network error. Check your connection and try again.');
+    // Never reached Psycle (or never heard back): says nothing about the
+    // password, so it never counts towards the lockout.
+    clearTimeout(timer);
+    showError(e && e.name === 'AbortError'
+      ? 'Psycle took too long to answer. Check your connection and try again.'
+      : 'Network error. Check your connection and try again.');
     if (Date.now() >= _lockedUntil) {
       btn.disabled = false;
       btn.textContent = 'Sign in';

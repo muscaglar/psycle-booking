@@ -85,6 +85,18 @@ header .theme-toggle {
   color: var(--ink-3, #9a9c9f); font: 500 11px/1.3 var(--font-body);
   cursor: pointer; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
 }
+/* Both are 14px-tall text links stacked 5px apart. Each gets an invisible hit
+   area that grows AWAY from the other (2px towards it, so the two never
+   overlap): a near miss on Refresh must not land on Clear filters, which
+   wipes the filters without asking. */
+.disc-actions .refresh-link, .disc-clear-btn { position: relative; }
+.disc-actions .refresh-link::after, .disc-clear-btn::after { content: ''; position: absolute; }
+.disc-actions .refresh-link::after {
+  inset: calc(var(--space-6) * -1) calc(var(--space-3) * -1) -2px calc(var(--space-6) * -1);
+}
+.disc-clear-btn::after {
+  inset: -2px calc(var(--space-3) * -1) calc(var(--space-6) * -1) calc(var(--space-6) * -1);
+}
 
 /* ── Discover: unified search ───────────────────────────────────────────── */
 .disc-search {
@@ -93,7 +105,7 @@ header .theme-toggle {
   height: 48px; padding: 0 16px;
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 14px;
+  border-radius: var(--radius-3xl);
 }
 .disc-search svg { flex: none; }
 .disc-search input {
@@ -110,7 +122,7 @@ header .theme-toggle {
 }
 .disc-count-n {
   min-width: 19px; height: 19px; padding: 0 6px;
-  border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center;
   font: 700 11px/1 var(--font-body);
   background: var(--surface-2, #f5f4ef); color: var(--ink-2, #5c5e63);
 }
@@ -120,8 +132,14 @@ header .theme-toggle {
 /* The filters are inline on the page now — no card chrome; #tab-discover
    provides the uniform 22px side padding (the design's gutter). */
 .controls { background: var(--bg, #efeee9); border: none; border-radius: 0; padding: 0; margin-top: 14px; }
-#tab-discover { padding: 18px 22px 120px; }
+/* Bottom: the .tab-panel clearance for the floating next-class pill (72px),
+   like Bookings and Stats — .tab-content already clears the docked tab bar.
+   (Was 120px: ~200px of empty scroll under the last card on a phone.) */
+#tab-discover { padding: 18px 22px 72px; }
 #tab-discover .results { padding-left: 0; padding-right: 0; }
+/* …and the discovery rows under the results: their own side padding stacked
+   on the gutter (38px in on a phone). At every width, not just desktop. */
+#tab-discover #discoverExploreWrap .explore-section { padding-left: 0; padding-right: 0; }
 .disc-title, .disc-search, .disc-count { margin-left: 0; margin-right: 0; }
 .controls-toggle { display: none; } /* design shows filters inline — no collapse header */
 /* flex-wrap:nowrap is critical — the max-width:640px base rule sets
@@ -172,7 +190,7 @@ header .theme-toggle {
   flex: none;
   height: 32px; padding: 0 13px;
   display: inline-flex; align-items: center;
-  border-radius: 99px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--line, #e7e5df);
   background: var(--surface, #fff);
   color: var(--ink-2, #5c5e63);
@@ -221,7 +239,7 @@ header .theme-toggle {
 .date-quick-btn {
   flex: none;
   height: 38px; padding: 0 14px;
-  border-radius: 99px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--line, #e7e5df);
   background: var(--surface, #fff);
   color: var(--ink-2, #5c5e63);
@@ -240,7 +258,7 @@ header .theme-toggle {
   flex: none;
   height: 38px; padding: 0 14px;
   display: inline-flex; align-items: center;
-  border-radius: 99px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--line, #e7e5df);
   background: var(--surface, #fff);
   color: var(--ink-2, #5c5e63);
@@ -257,7 +275,7 @@ header .theme-toggle {
 .chip-count, .pill-count {
   margin-left: 8px;
   min-width: 19px; height: 19px; padding: 0 6px;
-  border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center;
   font: 700 11px/1 var(--font-body);
   background: var(--surface-2, #f5f4ef); color: var(--ink-2, #5c5e63);
   opacity: 1;
@@ -269,7 +287,7 @@ header .theme-toggle {
 /* instructor selected chips + add-search + matches */
 .instr-box {
   min-height: 44px; padding: 4px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
   align-items: center;
@@ -277,7 +295,7 @@ header .theme-toggle {
 .instr-search { font: 400 14px/1 var(--font-body); color: var(--ink, #17181c); }
 .instr-chip {
   height: 36px; padding: 0 13px 0 15px; gap: 8px;
-  border-radius: 99px;
+  border-radius: var(--radius-full);
   background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
   border: 1px solid var(--accent, #1f6f5c);
   font: 600 13px/1 var(--font-body);
@@ -303,7 +321,7 @@ header .theme-toggle {
   padding: 16px;
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
 }
 .class-card.is-booked { border-left: 3px solid var(--accent, #1f6f5c); }
 .class-card:hover { border-color: var(--accent, #1f6f5c); }
@@ -348,7 +366,7 @@ header .theme-toggle {
   /* `font:` doesn't reset these — the base .book-btn is tracked uppercase,
      which made "JOIN WAITLIST" a 136px pill; same reset as the other pills */
   margin-top: 0; letter-spacing: 0; text-transform: none; white-space: nowrap;
-  border-radius: 99px;
+  border-radius: var(--radius-full);
   font: 600 13px/1 var(--font-body);
   background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
   border: 1px solid var(--accent, #1f6f5c);
@@ -361,10 +379,33 @@ header .theme-toggle {
   margin-top: 8px; padding: 34px 22px; text-align: center;
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
   color: var(--ink-3, #9a9c9f);
   font: 500 13px/1.4 var(--font-body);
 }
+/* Ways out of an empty or failed list (theme.js renderEmptyState, app.js
+   _errorStatusHTML): a row of pills under the message. Tokens only — these
+   sit on the page background in every theme. */
+.empty-actions {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: var(--space-3); margin-top: var(--space-5);
+}
+.empty-action {
+  min-height: var(--tap-min, 44px); padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink);
+  font-family: var(--font-body); font-size: var(--text-md); font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.empty-action.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.empty-action:active { transform: scale(0.97); }
+.empty-state .empty-actions { margin-top: 0; } /* .empty-state spaces its children with a flex gap already */
+.status-error { color: var(--badge-full-text); }
+/* "Try again" inside the amber last-results banner: the banner's own ink, not
+   the accent (red on amber in Noir, jade on amber in Cloud). */
+.stale-results-banner .refresh-link { color: inherit; }
 
 /* ── Header avatar: hide the redundant pill name/avatar (the header avatar
    carries the initials); keep the log-out control. ─────────────────────── */
@@ -378,7 +419,7 @@ header .theme-toggle {
   margin-top: 12px; padding: 16px;
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 16px;
+  border-radius: var(--radius-4xl);
 }
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .cal-title { font: 600 15px/1 var(--font-display); color: var(--ink, #17181c); }
@@ -412,7 +453,7 @@ header .theme-toggle {
 /* ════════════════════════════════════════════════════════════════════════
    Membership tab — account · appearance · settings list · sign out
    ════════════════════════════════════════════════════════════════════════ */
-#tab-membership { padding: 18px 22px 120px; }
+#tab-membership { padding: 18px 22px 72px; } /* bottom: as #tab-discover */
 
 /* #membershipInfo wraps the account + plan cards — it has no card chrome itself */
 #tab-membership > #membershipInfo { background: none; border: none; padding: 0; margin: 0; }
@@ -423,7 +464,7 @@ header .theme-toggle {
   padding: 16px 18px;
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
   margin-bottom: 16px;
 }
 .ms-account-avatar {
@@ -446,7 +487,7 @@ header .theme-toggle {
 #tab-membership .cost-section {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
   padding: 16px 18px;
   margin-bottom: 16px;
 }
@@ -478,7 +519,7 @@ header .theme-toggle {
   padding: 15px 12px;
   background: var(--surface, #fff);
   border: 1.5px solid var(--line, #e7e5df);
-  border-radius: 16px;
+  border-radius: var(--radius-4xl);
   cursor: pointer;
   transition: border-color var(--transition-base, .15s);
 }
@@ -505,7 +546,7 @@ header .theme-toggle {
 .ms-list {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
   overflow: hidden;
   margin-bottom: 16px;
 }
@@ -528,7 +569,7 @@ header .theme-toggle {
   padding: 15px 18px;
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
   color: #b3261e;
   font: 700 15px/1 var(--font-body);
   text-align: center; cursor: pointer;
@@ -540,7 +581,7 @@ header .theme-toggle {
 #tab-membership > .insights-section:not(#membershipInfo) {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
-  border-radius: 18px;
+  border-radius: var(--radius-5xl);
   padding: 16px 18px;
   margin-bottom: 16px;
 }
