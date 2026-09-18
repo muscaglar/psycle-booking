@@ -53,8 +53,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // (Re)arm the class-start cleanup task with the freshest snapshot —
-        // backgrounding is the last moment we're guaranteed to run.
+        // Not called under the scene life cycle — SceneDelegate calls
+        // appDidEnterBackground() instead. Kept for completeness.
+        appDidEnterBackground()
+    }
+
+    /// (Re)arm the class-start cleanup task with the freshest snapshot —
+    /// backgrounding is the last moment we're guaranteed to run.
+    func appDidEnterBackground() {
         scheduleLiveActivityEndTask()
     }
 
@@ -63,6 +69,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        // Not called under the scene life cycle — SceneDelegate calls
+        // appDidBecomeActive() instead. Kept for completeness.
+        appDidBecomeActive()
+    }
+
+    func appDidBecomeActive() {
         #if DEBUG
         // Test hook: `simctl launch <dev> com.psyclefinder.app -PSYCLE_LA_TEST 1`
         // seeds a class 30 minutes out so the Live Activity path can be
@@ -103,4 +115,83 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+    // MARK: UISceneSession life cycle
+
+    /// Names the scene configuration in Info.plist (UIApplicationSceneManifest):
+    /// SceneDelegate below, window and root view controller from Main.storyboard.
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+    }
+
+}
+
+/// Scene life cycle. REQUIRED from the iOS 27 SDK: a UIKit app built with it
+/// that has no scene manifest is killed at launch ("UIScene life cycle is
+/// required for apps built with this SDK"). Capacitor only adopted scenes in
+/// 8.5; this is the same adoption for Capacitor 6.
+///
+/// Under scenes UIKit stops calling the app delegate's
+/// applicationDidBecomeActive / applicationDidEnterBackground and stops
+/// delivering URLs and user activities to it, so this class hands each of
+/// them to where it went before: AppDelegate's handlers, and Capacitor's
+/// ApplicationDelegateProxy (which keeps `lastURL` and posts the
+/// notifications PsycleDeepLinkPlugin and Capacitor listen for).
+///
+/// Lives in this file on purpose: AppDelegate.swift is already in the app
+/// target's Sources phase, so no project surgery is needed.
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+
+    /// Set by UIKit from Main.storyboard (UISceneStoryboardFile).
+    var window: UIWindow?
+
+    private var appDelegate: AppDelegate? {
+        return UIApplication.shared.delegate as? AppDelegate
+    }
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        // A cold launch from a widget tap or a link arrives here, before the
+        // web view exists. The proxy remembers the URL (lastURL), which is
+        // what PsycleDeepLinkPlugin.load() reads once it is registered.
+        forward(connectionOptions.urlContexts)
+        if let activity = connectionOptions.userActivities.first {
+            forward(activity)
+        }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        forward(URLContexts)
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        forward(userActivity)
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        appDelegate?.appDidBecomeActive()
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        appDelegate?.appDidEnterBackground()
+    }
+
+    private func forward(_ contexts: Set<UIOpenURLContext>) {
+        for context in contexts {
+            var options: [UIApplication.OpenURLOptionsKey: Any] = [
+                .openInPlace: context.options.openInPlace
+            ]
+            if let source = context.options.sourceApplication {
+                options[.sourceApplication] = source
+            }
+            if let annotation = context.options.annotation {
+                options[.annotation] = annotation
+            }
+            _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: context.url, options: options)
+        }
+    }
+
+    private func forward(_ activity: NSUserActivity) {
+        _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, continue: activity, restorationHandler: { _ in })
+    }
 }

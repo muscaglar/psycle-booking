@@ -14,6 +14,10 @@
  * and the calendar entries must carry that zone regardless of where the
  * phone happens to be. That needs a few lines inside the plugin's Swift.
  *
+ * A second patch (see PATCHES) makes Capacitor 6's temporary presentation
+ * window scene-aware, which the scene life cycle required by the iOS 27 SDK
+ * needs for the in-app browser to appear.
+ *
  * Rather than pull in patch-package (a registry dependency + postinstall) for
  * a handful of anchored edits, this dependency-free script applies them:
  *
@@ -220,6 +224,33 @@ const PATCHES = [
             '\n' +
             '        do {\n' +
             '            try eventStore.save(newEvent, span: .thisEvent)',
+        },
+      ],
+    },
+  },
+  {
+    // Scene life cycle (required from the iOS 27 SDK — see SceneDelegate in
+    // ios/App/App/AppDelegate.swift). Capacitor 6 presents full-screen view
+    // controllers (the in-app browser behind every external link) in a
+    // temporary UIWindow made with init(frame:). In a scene-based app a window
+    // that belongs to no scene is never shown, so the browser would silently
+    // fail to appear. Attach the window to the scene the web view is in.
+    // Capacitor adopted scenes itself in 8.5; drop this patch when upgrading.
+    pkg: '@capacitor/ios',
+    version: '6.2.1',
+    files: {
+      'Capacitor/Capacitor/CapacitorBridge.swift': [
+        {
+          find:
+            '            self.tmpWindow = UIWindow.init(frame: UIScreen.main.bounds)\n' +
+            '            self.tmpWindow?.rootViewController = TmpViewController.init()',
+          replace:
+            '            if let windowScene = self.viewController?.view.window?.windowScene {\n' +
+            '                self.tmpWindow = UIWindow(windowScene: windowScene)\n' +
+            '            } else {\n' +
+            '                self.tmpWindow = UIWindow.init(frame: UIScreen.main.bounds)\n' +
+            '            }\n' +
+            '            self.tmpWindow?.rootViewController = TmpViewController.init()',
         },
       ],
     },

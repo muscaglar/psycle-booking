@@ -100,6 +100,20 @@ build's **What to Test** notes so testers know channel 3 exists.
   `curl -s https://api.github.com/repos/muscaglar/psycle-booking/commits/<sha>/check-runs`
   and look for the `Xcode Cloud` app's "Archive - iOS" run (`conclusion`:
   `success`, or `action_required` = failed; `output.text` lists the errors).
+- **Scene life cycle is mandatory from the iOS 27 SDK.** A UIKit app built
+  with Xcode 27 that has no `UIApplicationSceneManifest` is killed at launch
+  ("UIScene life cycle is required for apps built with this SDK") — it
+  archives and uploads fine, then crashes on every device. That is what the
+  first Xcode 27 TestFlight build did (September 2026). The app adopts scenes
+  by hand, because Capacitor only did so in 8.5: the scene manifest in
+  `Info.plist`, `SceneDelegate` at the bottom of `App/AppDelegate.swift`
+  (forwards URL opens / user activities to Capacitor's
+  `ApplicationDelegateProxy` and calls the AppDelegate's
+  `appDidBecomeActive()` / `appDidEnterBackground()` — UIKit no longer calls
+  the `application…` versions), and a `patch-plugins.js` entry that makes
+  Capacitor 6's temporary presentation window scene-aware so the in-app
+  browser still appears. When upgrading to Capacitor ≥ 8.5, replace these
+  with Capacitor's own `SceneDelegateProxy` and drop that patch.
 - **Deployment target floor.** Xcode 27 accepts iOS 15.0 and up only and
   fails the archive — once per target — on anything lower (September 2026:
   eight archives in a row failed on "set to 13.0, but the range of supported

@@ -48,6 +48,17 @@ Xcode, so the failure was only visible as the Xcode Cloud check on each commit.
 Podfile. The archive for `8f8c62c` succeeded. **The app now requires iOS 15 or later.** How to read the archive
 result for a commit is in `ios-app/CICD.md` under "Notes / gotchas".
 
+### Follow-up: that first Xcode 27 build crashed at launch
+
+The archive was green and the upload succeeded, but the build crashed on launch on the owner's phone. Cause: from
+the iOS 27 SDK, UIKit kills any app that has not adopted the scene life cycle ("UIScene life cycle is required for
+apps built with this SDK"), and the Capacitor 6 template is app-delegate only. Every earlier build was made with an
+older SDK, so none was affected. The fix adopts scenes by hand (Capacitor itself only did so in 8.5): a scene
+manifest in `Info.plist`, a `SceneDelegate` that hands URL opens and user activities to Capacitor's proxy and the
+active / background moments to the AppDelegate's handlers, and a version-pinned patch so Capacitor's temporary
+presentation window (the in-app browser) joins the scene. Details in `ios-app/CICD.md` → Notes / gotchas.
+**A green archive proves nothing about launch — open the TestFlight build on a phone.**
+
 ## How it was done
 
 A multi-pass review: discovery, independent verification of each finding, implementation in small patches,
