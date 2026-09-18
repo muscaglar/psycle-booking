@@ -163,40 +163,29 @@ struct PsycleWidgetEntryView: View {
     // MARK: Lock Screen
 
     // No padding on either accessory: the system insets them itself and
-    // there is no height to give away.
+    // there is no height to give away. The layouts live in
+    // PsycleRectangularAccessory / PsycleInlineAccessory below.
     private var rectangularView: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        Group {
             if let next = entry.nextClass {
-                Text(next.typeName)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .widgetAccentable()
-                if let start = next.startDate {
-                    Text(start, format: .dateTime.weekday().hour().minute())
-                        .font(.subheadline)
-                        .lineLimit(1)
-                }
-                Text(placeLine(next))
-                    .font(.caption)
-                    .lineLimit(1)
+                PsycleRectangularAccessory(title: next.typeName,
+                                           when: next.startDate,
+                                           seat: next.slotSummary,
+                                           place: next.locName.isEmpty ? next.studioName : next.locName)
             } else {
                 Text("No upcoming class")
                     .font(.headline)
                     .widgetAccentable()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .accessoryContainerBackground()
     }
 
-    // One line above the clock, cut off at the tail when long — so the time
-    // leads and it is the class name that gets trimmed, never the hour.
     private var inlineView: some View {
         Group {
-            if let next = entry.nextClass, let start = next.startDate {
-                Text("\(start, format: .dateTime.weekday().hour().minute()) · \(next.typeName)")
-            } else if let next = entry.nextClass {
-                Text(next.typeName)
+            if let next = entry.nextClass {
+                PsycleInlineAccessory(title: next.typeName, when: next.startDate, now: entry.date)
             } else {
                 Text("No upcoming class")
             }
@@ -331,17 +320,104 @@ struct PsycleWidgetEntryView: View {
         if let slot = next.slotSummary { parts.append(slot) }
         return parts.joined(separator: " · ")
     }
+}
 
-    /// "Bank · Bike 12" — where to be, without the instructor: the Lock
-    /// Screen row has no room for all three.
-    private func placeLine(_ next: PsycleNextClass) -> String {
-        var parts: [String] = []
-        let place = next.locName.isEmpty ? next.studioName : next.locName
-        if !place.isEmpty { parts.append(place) }
-        if let slot = next.slotSummary { parts.append(slot) }
-        return parts.joined(separator: " · ")
+// MARK: - Lock Screen layouts
+
+// ── accessory-views:start ── (SwiftUI + WidgetKit only: no entry, no snapshot types)
+
+/// One line of text at the largest of three sizes that shows ALL of it.
+/// ViewThatFits takes the first option whose full, unwrapped width fits; the
+/// last one is the floor and may tighten and shrink a little before it
+/// finally truncates. A Lock Screen line should step down a size rather than
+/// end in "…".
+struct PsycleFittedLine: View {
+    let text: Text
+    let large: Font
+    let medium: Font
+    let small: Font
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            text.font(large).lineLimit(1)
+            text.font(medium).lineLimit(1)
+            text.font(small).lineLimit(1).minimumScaleFactor(0.75).allowsTightening(true)
+        }
     }
 }
+
+/// Lock Screen rectangle, three lines: the class / when + seat / where.
+/// The seat rides with the time so the location has a line to itself — the
+/// old "Oxford Circus · Bike 12" line was the one that got cut off. Times use
+/// the same device-local formatting as the other families.
+struct PsycleRectangularAccessory: View {
+    let title: String
+    let when: Date?
+    let seat: String?
+    let place: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            PsycleFittedLine(text: Text(title),
+                             large: .headline,
+                             medium: .subheadline.weight(.semibold),
+                             small: .caption.weight(.semibold))
+                .widgetAccentable()
+            if let whenLine = whenLine {
+                PsycleFittedLine(text: whenLine, large: .subheadline, medium: .footnote, small: .caption2)
+            }
+            if !place.isEmpty {
+                PsycleFittedLine(text: Text(place), large: .caption, medium: .caption2, small: .caption2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var whenLine: Text? {
+        let seatText = (seat ?? "").isEmpty ? nil : seat
+        switch (when, seatText) {
+        case let (when?, seat?):
+            return Text("\(when, format: .dateTime.weekday().hour().minute()) · \(seat)")
+        case let (when?, nil):
+            return Text(when, format: .dateTime.weekday().hour().minute())
+        case let (nil, seat?):
+            return Text(seat)
+        default:
+            return nil
+        }
+    }
+}
+
+/// The single line above the clock. The system sets its font, so the only
+/// lever is length: the time leads, the weekday is dropped for a class today,
+/// and a long class name keeps just the part before its colon
+/// ("REFORMER PILATES: SCULPT 50" → "REFORMER PILATES").
+struct PsycleInlineAccessory: View {
+    let title: String
+    let when: Date?
+    let now: Date
+
+    var body: some View {
+        if let when = when {
+            if Calendar.current.isDate(when, inSameDayAs: now) {
+                Text("\(when, format: .dateTime.hour().minute()) · \(Self.shortTitle(title))")
+            } else {
+                Text("\(when, format: .dateTime.weekday().hour().minute()) · \(Self.shortTitle(title))")
+            }
+        } else {
+            Text(Self.shortTitle(title))
+        }
+    }
+
+    static func shortTitle(_ title: String, limit: Int = 18) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count > limit, let colon = trimmed.firstIndex(of: ":") else { return trimmed }
+        let head = trimmed[..<colon].trimmingCharacters(in: .whitespaces)
+        return head.isEmpty ? trimmed : head
+    }
+}
+
+// ── accessory-views:end ──
 
 // MARK: - Widget
 
