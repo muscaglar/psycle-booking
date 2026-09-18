@@ -57,6 +57,11 @@
     if (!pullIndicator) return;
     pullIndicator.classList.remove('refreshing');
     pullIndicator.style.transform = 'translateX(-50%) translateY(-50px)';
+    // Once the pill's `top` clears the status bar / Dynamic Island, -50px alone
+    // parks it BESIDE the island, where it shows for the length of the opacity
+    // fade — lift it by the inset too. Second assignment on purpose: an engine
+    // without env() drops it at parse time and keeps the line above.
+    pullIndicator.style.transform = 'translateX(-50%) translateY(calc(-50px - env(safe-area-inset-top, 0px)))';
     pullIndicator.style.opacity = '0';
   }
 
@@ -79,6 +84,12 @@
     var active = document.querySelector('.tab-panel.active');
     var tabId = active ? active.id : 'tab-discover';
     if (tabId === 'tab-bookings') {
+      // Session expired: the list is kept on purpose (the widget, Live Activity
+      // and class reminders stay true until the member signs back in), and
+      // fetchMyBookings' no-token branch would empty it — the next foreground
+      // then blanked the widget and cancelled every armed reminder. Nothing to
+      // refresh without a session: the pill just resets.
+      if (typeof getBearerToken === 'function' && !getBearerToken()) return null;
       return (typeof fetchMyBookings === 'function') ? (fetchMyBookings() || true) : null;
     }
     // Discover: the same silent refresh as its "Updated · Refresh" link — the
@@ -357,15 +368,24 @@
 
   function saveFilters() {
     try {
+      // While a "find it" shortcut's filters are on screen (app.js _focusSearch),
+      // what the member had on BEFORE it is what the next launch restores: the
+      // shortcut is deliberately unsaved, and this save — fired by their next
+      // tap (× on the instructor chip, a date pill) — used to snapshot the
+      // cleared home studio / class type for good. Per dimension: one they have
+      // since changed by hand is no longer held, and saves live.
+      const held = (typeof window !== 'undefined' && window._focusStash) || {};
+      const own = function (key, live) { return Array.isArray(held[key]) ? held[key].slice() : live; };
       const filters = {
         instructorIds: typeof selectedInstructors !== 'undefined' ? [...selectedInstructors] : [],
-        locationIds: typeof selectedLocations !== 'undefined' ? [...selectedLocations] : [],
-        categories: typeof selectedCategories !== 'undefined' ? [...selectedCategories] : [],
-        strengthSubs: typeof selectedStrengthSubs !== 'undefined' ? [...selectedStrengthSubs] : [],
-        reformerSubs: typeof selectedReformerSubs !== 'undefined' ? [...selectedReformerSubs] : [],
+        locationIds: own('locationIds', typeof selectedLocations !== 'undefined' ? [...selectedLocations] : []),
+        categories: own('categories', typeof selectedCategories !== 'undefined' ? [...selectedCategories] : []),
+        strengthSubs: own('strengthSubs', typeof selectedStrengthSubs !== 'undefined' ? [...selectedStrengthSubs] : []),
+        reformerSubs: own('reformerSubs', typeof selectedReformerSubs !== 'undefined' ? [...selectedReformerSubs] : []),
         // The Time row (app.js): band keys + the "Available only" pill.
-        timeBands: typeof selectedTimeBands !== 'undefined' ? [...selectedTimeBands] : [],
-        availableOnly: typeof _availableOnly !== 'undefined' ? _availableOnly === true : false,
+        timeBands: own('timeBands', typeof selectedTimeBands !== 'undefined' ? [...selectedTimeBands] : []),
+        availableOnly: typeof held.availableOnly === 'boolean' ? held.availableOnly
+          : (typeof _availableOnly !== 'undefined' ? _availableOnly === true : false),
         startDate: document.getElementById('startDate')?.value || '',
         daysAhead: document.getElementById('daysAhead')?.value || '7',
         dateQuickMode: typeof _dateQuickMode !== 'undefined' ? _dateQuickMode : null,

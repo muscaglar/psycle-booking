@@ -90,13 +90,10 @@
     // Discover (not part of the redesign). #weekView is no longer created, so
     // renderWeekView() no-ops via its null-check and the section never appears.
 
-    // Instructor discovery sections (New to you + You might like)
-    var discoverExplore = document.createElement('div');
-    discoverExplore.id = 'discoverExploreWrap';
-    discoverExplore.innerHTML =
-      '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
-      '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>';
-
+    // Instructor discovery (New to you / You might like) lives on Stats now.
+    // Under the results it sat below the whole pre-loaded timetable — a week
+    // of every studio — where nobody scrolls to; above the filters it
+    // competed with them for attention (user feedback).
     discoverPanel.appendChild(controls);
     // app.js's travel notice sits right above #results and can be up before
     // this runs (reference data answered from the cache): it moves with it —
@@ -104,9 +101,6 @@
     var travelNotice = document.getElementById('travelNotice');
     if (travelNotice) discoverPanel.appendChild(travelNotice);
     discoverPanel.appendChild(results);
-    // Discovery lives UNDER the class finder — at the top it competed with
-    // the planner and filters for attention (user feedback).
-    discoverPanel.appendChild(discoverExplore);
 
     // ── My Bookings tab: upcoming bookings + history ──
     var bookingsPanel = document.createElement('div');
@@ -157,6 +151,9 @@
       '<div id="lapsedSection" class="insights-section" style="display:none"></div>' +
       // Patterns
       '<div id="recoSection" class="reco-section" style="display:none"></div>' +
+      // Instructor suggestions (explore.js fills them by id on switchTab('stats'))
+      '<div id="exploreLikeSection" class="explore-section" style="display:none"></div>' +
+      '<div id="exploreNewSection" class="explore-section" style="display:none"></div>' +
       '<div id="classTypeSection" class="insights-section" style="display:none"></div>' +
       // Deep analytics
       '<div id="exploreMapSection" class="explore-section" style="display:none"></div>' +
@@ -188,7 +185,7 @@
       // alerts" and "clear local data" existed nowhere). Reminders / Calendar
       // sync are iOS-only: renderMembershipInfo shows or hides those two rows.
       '<div class="ms-list">' +
-        '<button class="ms-row" onclick="openSettings(\'bike\')"><span class="ms-row-text"><span class="ms-row-label">Bike preferences</span><span class="ms-row-sub">Prefer or avoid spots, per studio</span></span><span class="ms-row-chev">›</span></button>' +
+        '<button class="ms-row" onclick="openSettings(\'bike\')"><span class="ms-row-text"><span class="ms-row-label">Bike / spot preferences</span><span class="ms-row-sub">Prefer or avoid spots, per studio</span></span><span class="ms-row-chev">›</span></button>' +
         '<button class="ms-row" id="msRowReminders" onclick="openSettings(\'reminders\')"><span class="ms-row-text"><span class="ms-row-label">Reminders</span><span class="ms-row-sub">Monday booking · before each class</span></span><span class="ms-row-chev">›</span></button>' +
         '<button class="ms-row" id="msRowCalendar" onclick="openSettings(\'calendar\')"><span class="ms-row-text"><span class="ms-row-label">Calendar sync</span><span class="ms-row-sub">Add bookings to your calendar</span></span><span class="ms-row-chev">›</span></button>' +
         '<button class="ms-row" onclick="openSettings(\'data\')"><span class="ms-row-text"><span class="ms-row-label">Data &amp; privacy</span><span class="ms-row-sub">Export · import · bug report</span></span><span class="ms-row-chev">›</span></button>' +
@@ -207,7 +204,7 @@
       '</div>' +
       '<div class="about-block">' +
         '<div class="about-mark">PSYNC</div>' +
-        '<div class="about-text">An independent companion for Psycle London riders.<br>Not affiliated with, or endorsed by, Psycle.</div>' +
+        '<div class="about-text">An independent companion for Psycle London members.<br>Not affiliated with, or endorsed by, Psycle.</div>' +
       '</div>';
 
     // Wrap all panels in tab-content
@@ -282,7 +279,6 @@
     }
     if (tab === 'discover') {
       renderWeekView();
-      if (typeof renderExplore === 'function') renderExplore();
     }
     if (tab === 'stats') {
       renderInsights();
@@ -391,14 +387,40 @@
 
   // ── Render insights tab content ────────────────────────────────
 
+  // One Stats paint asks getFullHistory() ~11 times (every section below) and
+  // the string runs to 400 KB. Remembered against the raw string itself, so
+  // every writer — a booking, the sync, an import, another tab — invalidates it
+  // with no hook. Only a good parse is kept. Callers only read (filter /
+  // forEach / some): they share the one array, so nothing here may sort or
+  // push on it.
+  var _historyRaw = null, _historyParsed = null;
+
   /**
    * Get the full class history from localStorage (synced + locally tracked).
    * Each entry has: { eventId, typeName, instrName, locName, date, cancelledAt? }
    */
   function getFullHistory() {
-    try { return JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); }
-    catch (e) { return []; }
+    var raw;
+    try { raw = localStorage.getItem('psycle_class_history') || '[]'; } catch (e) { return []; }
+    if (raw === _historyRaw) return _historyParsed;
+    try {
+      var parsed = JSON.parse(raw);
+      _historyRaw = raw;
+      // Coerced where it is read (app.js, pure:stored-data), like features.js
+      // and explore.js — once per stored string, not once per reader.
+      _historyParsed = typeof _cleanStoredHistory === 'function' ? _cleanStoredHistory(parsed) : parsed;
+      return _historyParsed;
+    } catch (e) { return []; }
   }
+
+  // The stored token is only readable once security.js has decrypted it (on
+  // iOS: after the Preferences restore). Until then "no token" proves nothing:
+  // a first paint of Stats must not call a signed-in member signed out.
+  var _tokenReadable = false;
+  (window.securityReady || Promise.resolve()).then(function () {}, function () {}).then(function () {
+    _tokenReadable = true;
+    if (_currentTab === 'stats') window.renderInsights();
+  });
 
   window.renderInsights = function () {
     // Signed-out with no data: one hero CTA instead of a page of stubs.
@@ -408,8 +430,16 @@
     var statsEmpty = document.getElementById('statsEmpty');
     var shareSection = document.getElementById('shareSection');
     if (shareSection) shareSection.style.display = hasHistory ? '' : 'none';
+    // Signed OUT (no token at all — not "Psycle unreachable", which keeps the
+    // member's own numbers up): the history on this device belongs to whoever
+    // was last signed in, and must not be presented to the person now holding
+    // it as their stats. The hero below takes the tab; css/tabs.css hides every
+    // other section while the panel carries this class, whoever repaints them.
+    var signedOut = _tokenReadable && !signedIn && !(typeof getBearerToken === 'function' && getBearerToken());
+    var statsPanel = document.getElementById('tab-stats');
+    if (statsPanel) statsPanel.classList.toggle('stats-signed-out', signedOut);
     if (statsEmpty) {
-      if (!signedIn && !hasHistory) {
+      if (signedOut || (!signedIn && !hasHistory)) {
         statsEmpty.style.display = '';
         statsEmpty.innerHTML =
           '<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-6M12 20V8M19 20V5"/></svg></div>' +
@@ -541,12 +571,12 @@
       (favStudio ? '<div class="stat-card">' +
         '<div class="stat-value" style="font-size:16px">' + escapeHTML(favStudio[0]) + '</div>' +
         '<div class="stat-label">Top studio</div>' +
-        '<div class="stat-detail">' + favStudio[1] + ' classes</div>' +
+        '<div class="stat-detail">' + _plural(favStudio[1], 'class', 'classes') + '</div>' +
       '</div>' : '') +
       (favInstr ? '<div class="stat-card">' +
         '<div class="stat-value" style="font-size:16px">' + escapeHTML(favInstr[0]) + '</div>' +
         '<div class="stat-label">Top instructor</div>' +
-        '<div class="stat-detail">' + favInstr[1] + ' classes</div>' +
+        '<div class="stat-detail">' + _plural(favInstr[1], 'class', 'classes') + '</div>' +
       '</div>' : '');
 
     container.innerHTML = html;
@@ -1276,8 +1306,12 @@
 
     history.forEach(function (h) {
       if (h.cancelledAt || !h.date) return;
-      var dt = new Date(h.date);
-      var dayName = dt.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      var dt = new Date(String(h.date).replace(' ', 'T'));
+      // An unreadable date used to become its own "Invalid dates at NaN:NaN" card.
+      if (isNaN(dt.getTime())) return;
+      // Not toLocaleDateString: that builds a new Intl formatter per entry — for
+      // a full history, 2,000 of them and most of the time Stats took to paint.
+      var dayName = DAY_NAMES_FULL[dt.getDay()].toLowerCase();
       var timeKey = dt.getHours() * 100 + dt.getMinutes();
       var key = dayName + '-' + timeKey;
       if (!daySlots[key]) {
@@ -1373,7 +1407,7 @@
     container.style.display = '';
 
     var html = '<div class="habit-title">Your usual slots</div>' +
-      '<div class="habit-subtitle">Tap to find this week\'s session</div>' +
+      '<div class="habit-subtitle">Tap to see that day\'s classes</div>' +
       '<div class="habit-cards">';
 
     habits.forEach(function (s) {
@@ -1386,12 +1420,16 @@
       var timeLabel = (s.hour % 12 || 12) + ':' + String(topMinute).padStart(2, '0') + ampm;
       var dayName = DAY_NAMES_FULL[s.dow];
       var dateStr = _nextWeekdayDateStr(s.dow);
+      // The habit's class type as one of app.js's fixed category keys ('RIDE',
+      // 'STRENGTH'…) — what "Find this week" narrows Discover to. '' when the
+      // type is only the 'Class' placeholder: better no filter than a wrong one.
+      var catKey = (typeof getCategory === 'function' && s.type !== 'Class') ? String((getCategory(s.type) || {}).key || '') : '';
 
       html += '<div class="habit-card">' +
-        '<div class="habit-line">You usually ride <strong>' + escapeHTML(dayName) + 's ~' + timeLabel + '</strong></div>' +
+        '<div class="habit-line">You usually book <strong>' + escapeHTML(dayName) + 's ~' + timeLabel + '</strong></div>' +
         '<div class="habit-class">' + escapeHTML(s.type) + '</div>' +
         '<div class="habit-meta">' + s.count + 'x in your history</div>' +
-        '<button class="habit-find-btn" data-date="' + dateStr + '">Find this week</button>' +
+        '<button class="habit-find-btn" data-date="' + dateStr + '" data-cat="' + escapeHTML(catKey) + '">Find this week</button>' +
       '</div>';
     });
 
@@ -1406,6 +1444,15 @@
     if (!btn) return;
     var dateStr = btn.getAttribute('data-date');
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+    // That one day, narrowed to the habit's own class type (a fixed category
+    // key from app.js's map — never the name) and to nothing else: the studio,
+    // instructor and class-type filters left on Discover used to decide what
+    // "Find this week" found. app.js's _focusSearch does the rest (no preset
+    // mode for a picked day, Discover shown, search).
+    if (typeof window._focusSearch === 'function') {
+      window._focusSearch({ categoryKey: btn.getAttribute('data-cat') || '', startDate: dateStr, daysAhead: 1 });
+      return;
+    }
     var startDateEl = document.getElementById('startDate');
     var daysAheadEl = document.getElementById('daysAhead');
     if (startDateEl) startDateEl.value = dateStr;
@@ -1528,8 +1575,7 @@
 
     var bookings = _myBookings || {};
     var cache = _eventCache || {};
-    var history = [];
-    try { history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]'); } catch (e) {}
+    var history = getFullHistory(); // the shared parse, not one more of its own
 
     // Merge current bookings + history for a richer picture. Skip cancelled
     // history entries (never attended) and history entries whose event is
@@ -1852,7 +1898,7 @@
         var perWeek = Math.ceil(remaining / (daysLeft / 7));
         html += '<div class="cost-value">' + perWeek + '</div>';
         html += '<div class="cost-label">Per week needed</div>';
-        html += '<div class="cost-hint">' + remaining + ' classes in ' + daysLeft + ' days</div>';
+        html += '<div class="cost-hint">' + remaining + ' class' + (remaining !== 1 ? 'es' : '') + ' in ' + daysLeft + ' days</div>'; // daysLeft >= 7 here
       }
       html += '</div>';
     }
@@ -2043,7 +2089,7 @@
     var html =
       '<button class="app-row" role="switch" aria-checked="' + !!on + '" onclick="window._toggleReminder()">' +
         '<span class="app-row-text"><span class="app-row-label">Monday booking reminder</span>' +
-        '<span class="app-row-detail">11:59 UK — when the new booking week opens</span></span>' +
+        '<span class="app-row-detail">11:59 UK — a minute before the new booking week opens</span></span>' +
         '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
       '</button>';
     if (window._nativeClassReminders) {
@@ -2092,7 +2138,7 @@
       toast('Weekly reminder off', 'info');
     } else {
       var ok = await window._nativeReminder.enable();
-      toast(ok ? 'Reminder set — Mondays at 11:59' : 'Enable notifications for Psycle in iOS Settings first', ok ? 'success' : 'error');
+      toast(ok ? 'Reminder set — Mondays at 11:59' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
     }
     renderReminderRow();
   };
@@ -2275,7 +2321,7 @@
       var monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       var monthLabel = monthNames[parseInt(label)] || label;
 
-      html += '<div class="variety-col" title="' + monthLabel + ': ' + data.instructors.size + ' instructors, ' + data.total + ' classes">' +
+      html += '<div class="variety-col" title="' + monthLabel + ': ' + _plural(data.instructors.size, 'instructor') + ', ' + _plural(data.total, 'class', 'classes') + '">' +
         '<div class="variety-bar-area">' +
           '<span class="variety-value">' + data.instructors.size + '</span>' +
           '<div class="variety-bar" style="height:' + instrH + 'px"></div>' +
@@ -2292,11 +2338,28 @@
   // Entry-point button in Stats → modal summarising the year, with a
   // shareable canvas image (same share/download path as shareInsights).
 
+  // ── pure:year-review:start ── (DOM-free; tests/suites/year-review.js evaluates this block)
+  // The rows a year's wrap may count: this year's, not cancelled — and not
+  // still to come. History holds a booking from the moment it is made
+  // (features.js records it on booking:complete, its /bookings reconcile adds
+  // the rest), so next week's classes were counted as taken, ran the "longest
+  // streak" into the future and went out on the share image under CLASSES
+  // TAKEN. `startMs`: app.js's London resolver (h.date is gym wall clock). A
+  // date nothing can place is not provably ahead: it stays in, as before.
+  function _yearReviewRows(history, year, nowMs, startMs) {
+    return history.filter(function (h) {
+      return !h.cancelledAt && h.date && String(h.date).substring(0, 4) === String(year) &&
+        !(startMs(h.date) > nowMs);
+    });
+  }
+  // ── pure:year-review:end ──
+
   // Aggregate this year's attended history into a tidy summary object.
   function _computeYearReview(year) {
-    var history = getFullHistory().filter(function (h) {
-      return !h.cancelledAt && h.date && String(h.date).substring(0, 4) === String(year);
-    });
+    // Same clock as _stillToCome (and the same fallback when app.js is absent).
+    var startMs = (typeof _gymClassStartMs === 'function') ? _gymClassStartMs
+      : function (d) { return new Date(String(d).replace(' ', 'T')).getTime(); };
+    var history = _yearReviewRows(getFullHistory(), year, Date.now(), startMs);
     if (history.length === 0) return null;
 
     var instrCount = {}, studioCount = {}, dowCount = {}, hourCount = {};
@@ -2356,7 +2419,7 @@
       '<div class="insights-title">' + year + ' in review</div>' +
       '<button class="year-review-btn" onclick="openYearReview()">' +
         '<span class="year-review-btn-main">See your ' + year + ' wrap</span>' +
-        '<span class="year-review-btn-sub">' + summary.total + ' classes · ' + summary.uniqueInstrs + ' instructors</span>' +
+        '<span class="year-review-btn-sub">' + _plural(summary.total, 'class', 'classes') + ' · ' + _plural(summary.uniqueInstrs, 'instructor') + '</span>' +
       '</button>';
   }
 
@@ -2395,7 +2458,7 @@
         '<div class="modal-header">' +
           '<div>' +
             '<div class="modal-title" id="yearReviewTitle">' + year + ' in review</div>' +
-            '<div class="modal-subtitle">Your year on the bike</div>' +
+            '<div class="modal-subtitle">Your year at Psycle</div>' +
           '</div>' +
           '<button class="modal-close" onclick="document.getElementById(\'yearReviewOverlay\').remove()" aria-label="Close">&times;</button>' +
         '</div>' +
@@ -2408,54 +2471,131 @@
     document.body.appendChild(overlay);
   };
 
+  // ── Share images (year wrap + stats card): shared helpers ───────
+  // The one thing members post outside the app, so it wears the theme they
+  // are looking at and the app's own name — not a pink "P S Y C L E" on black.
+
+  // ── pure:share:start ── (DOM-free; tests/suites/copy.js evaluates this block)
+  // Cloud, whole. Canvas silently IGNORES an invalid fillStyle (it keeps the
+  // previous colour), so a token that cannot be read is never mixed with ones
+  // that can: one theme's dark ink on another's dark paper is an unreadable
+  // image. Any miss → this complete, known-good set.
+  var SHARE_FALLBACK = { bg: '#efeee9', panel: '#ffffff', border: '#e7e5df', heading: '#0e0f12', muted: '#5c5e63', accent: '#1f6f5c' };
+  // Small grey labels read `muted` (--text-muted), never --text-faint: faint
+  // is under 3:1 in Handheld, and these labels are 9–13px.
+  var SHARE_TOKENS = { bg: '--bg', panel: '--bg-panel', border: '--border', heading: '--text-heading', muted: '--text-muted', accent: '--accent' };
+  // One credit line for both images (they were signed "Psycle Companion" and
+  // "Psycle Class Finder" — neither is the app's name).
+  var SHARE_FOOTER = 'Made with Psync · an independent companion for Psycle members';
+  // Export scale: a fixed integer, not devicePixelRatio — the PNG is looked at
+  // on OTHER devices, and a fractional ratio (2.625) gives a non-integer
+  // canvas. 640x820 @3 = 1920x2460, well inside iOS's 16.7M-pixel canvas cap.
+  var SHARE_SCALE = 3;
+
+  // read(tokenName) → the custom property's text, e.g. ' #efeee9'.
+  function _sharePaletteFrom(read) {
+    var out = {};
+    for (var k in SHARE_TOKENS) {
+      var v = String(read(SHARE_TOKENS[k]) || '').trim();
+      if (!/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) && !/^(?:rgb|hsl)a?\(/i.test(v)) return SHARE_FALLBACK;
+      out[k] = v;
+    }
+    return out;
+  }
+  // ── pure:share:end ──
+
+  function _sharePalette() {
+    try {
+      var cs = getComputedStyle(document.documentElement);
+      return _sharePaletteFrom(function (name) { return cs.getPropertyValue(name); });
+    } catch (e) { return SHARE_FALLBACK; }
+  }
+
+  // A W x H surface exported at SHARE_SCALE: every coordinate below stays in
+  // 640-wide layout units, the pixels are 3x (a 640px PNG went soft as soon as
+  // Messages or Instagram scaled it up to a phone's ~1170px width).
+  function _shareCanvas(W, H) {
+    var canvas = document.createElement('canvas');
+    canvas.width = W * SHARE_SCALE; canvas.height = H * SHARE_SCALE;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(SHARE_SCALE, SHARE_SCALE);
+    return { canvas: canvas, ctx: ctx };
+  }
+
+  // Wait for the display face so the wordmark is not drawn in a fallback —
+  // but never for long: navigator.share() spends the tap's activation, which a
+  // slow font fetch would let lapse. The app header already uses this face, so
+  // in practice it is loaded and this settles at once.
+  var SHARE_WORDMARK_FONT = "700 16px 'Bricolage Grotesque'";
+  function _shareFontReady() {
+    try {
+      if (!document.fonts || typeof document.fonts.load !== 'function') return Promise.resolve();
+      return Promise.race([
+        document.fonts.load(SHARE_WORDMARK_FONT).catch(function () {}),
+        new Promise(function (resolve) { setTimeout(resolve, 250); }),
+      ]);
+    } catch (e) { return Promise.resolve(); }
+  }
+
+  // "Psync" + the image's section label, on one baseline.
+  function _shareWordmark(ctx, pal, y, label) {
+    ctx.fillStyle = pal.heading;
+    ctx.font = SHARE_WORDMARK_FONT + ', -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Psync', 32, y);
+    var wordW = ctx.measureText('Psync').width;
+    ctx.fillStyle = pal.muted;
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(label, 32 + wordW + 12, y);
+  }
+
   window.shareYearReview = async function () {
     var year = new Date().getFullYear();
     var s = _computeYearReview(year);
     if (!s) { toast('No classes this year yet', 'info'); return; }
 
+    await _shareFontReady();
+    var pal = _sharePalette();
     var W = 640, H = 820;
-    var canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    var ctx = canvas.getContext('2d');
+    var surface = _shareCanvas(W, H);
+    var canvas = surface.canvas, ctx = surface.ctx;
 
     // Background
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#222';
+    ctx.strokeStyle = pal.border;
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, W - 2, H - 2);
 
     var y = 56;
 
     // Header
-    ctx.fillStyle = '#e94560';
-    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('P S Y C L E', 32, y);
-    ctx.fillStyle = '#555';
-    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('YEAR IN REVIEW', 130, y);
+    _shareWordmark(ctx, pal, y, 'YEAR IN REVIEW');
     y += 12;
-    ctx.strokeStyle = '#222';
+    ctx.strokeStyle = pal.border;
     ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
     y += 60;
 
     // Big year
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = pal.heading;
     ctx.font = 'bold 64px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText(String(year), 32, y);
     y += 28;
-    ctx.fillStyle = '#888';
+    ctx.fillStyle = pal.muted;
     ctx.font = '15px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('A year on the bike', 32, y);
-    y += 48;
+    ctx.fillText('Your year at Psycle', 32, y);
+    // Room for the 88px hero below: its digits stand ~64px above their baseline
+    // (y + 10), and at 48 their tops struck through this line. The canvas has
+    // ~200px spare under the last detail row, so nothing else moves off it.
+    y += 76;
 
     // Hero number
-    ctx.fillStyle = '#e94560';
+    ctx.fillStyle = pal.accent;
     ctx.font = 'bold 88px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText(String(s.total), 32, y + 10);
-    ctx.fillStyle = '#888';
+    ctx.fillStyle = pal.muted;
     ctx.font = '600 13px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('CLASSES RIDDEN', 36, y + 36);
+    // "Taken", not "ridden": the count covers Reformer, Strength, Yoga… too.
+    ctx.fillText(s.total === 1 ? 'CLASS TAKEN' : 'CLASSES TAKEN', 36, y + 36);
     y += 90;
 
     // Detail rows (canvas draws plain strings; no HTML escaping needed here)
@@ -2469,22 +2609,23 @@
     if (s.favTime) rows.push(['Favourite time', s.favTime]);
 
     rows.forEach(function (r) {
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = pal.muted;
       ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText(String(r[0]).toUpperCase(), 32, y);
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = pal.heading;
       ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(r[1], 32, y + 26);
+      // maxWidth: a long instructor/studio name squeezes instead of running off the image.
+      ctx.fillText(r[1], 32, y + 26, W - 64);
       y += 56;
     });
 
     // Footer
     y = H - 40;
-    ctx.strokeStyle = '#222';
+    ctx.strokeStyle = pal.border;
     ctx.beginPath(); ctx.moveTo(32, y - 16); ctx.lineTo(W - 32, y - 16); ctx.stroke();
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = pal.muted;
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('Generated by Psycle Companion · ' + year + ' wrap', 32, y);
+    ctx.fillText(SHARE_FOOTER, 32, y, W - 64);
 
     try {
       var blob = await new Promise(function (resolve, reject) {
@@ -2497,7 +2638,7 @@
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: 'My ' + year + ' on Psycle',
-              text: s.total + ' classes · ' + s.uniqueInstrs + ' instructors',
+              text: _plural(s.total, 'class', 'classes') + ' · ' + _plural(s.uniqueInstrs, 'instructor'),
               files: [file],
             });
             return;
@@ -2580,46 +2721,39 @@
     // Unique instructors
     var uniqueInstrs = Object.keys(instrCount).length;
 
-    // Render to canvas
+    // Render to canvas. H is only the scratch height: the image is cropped to
+    // what was drawn before export (see "Crop" below), and framed there.
+    await _shareFontReady();
+    var pal = _sharePalette();
     var W = 640, H = 820;
-    var canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    var ctx = canvas.getContext('2d');
+    var surface = _shareCanvas(W, H);
+    var canvas = surface.canvas, ctx = surface.ctx;
 
     // Background
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, W, H);
-
-    // Subtle border
-    ctx.strokeStyle = '#222';
     ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, W - 2, H - 2);
 
     var y = 40;
 
     // Header
-    ctx.fillStyle = '#e94560';
-    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('P S Y C L E', 32, y);
-    ctx.fillStyle = '#555';
-    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('CLASS FINDER', 130, y);
+    _shareWordmark(ctx, pal, y, 'MY STATS');
     y += 12;
 
     // Divider
-    ctx.strokeStyle = '#222';
+    ctx.strokeStyle = pal.border;
     ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
     y += 28;
 
-    // Title
-    ctx.fillStyle = '#fff';
+    // Title (maxWidth: userName falls back to an email address)
+    ctx.fillStyle = pal.heading;
     ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(userName ? userName + "'s Stats" : 'My Psycle Stats', 32, y);
+    ctx.fillText(userName ? userName + "'s Stats" : 'My Psycle Stats', 32, y, W - 64);
     y += 14;
 
     // Date range
     if (firstDate) {
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = pal.muted;
       ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
       var fd = new Date(firstDate);
       ctx.fillText(
@@ -2641,50 +2775,53 @@
 
     statCards.forEach(function (card, i) {
       var cx = cardX + i * (cardW + cardGap);
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = pal.panel;
       ctx.beginPath();
       ctx.roundRect(cx, y, cardW, cardH, 8);
       ctx.fill();
-      ctx.strokeStyle = '#222';
+      ctx.strokeStyle = pal.border;
       ctx.beginPath();
       ctx.roundRect(cx, y, cardW, cardH, 8);
       ctx.stroke();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = pal.heading;
       ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText(card.value, cx + 14, y + 34);
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = pal.muted;
       ctx.font = '600 9px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText(card.label, cx + 14, y + 52);
     });
     y += cardH + 28;
 
     // Top instructor & studio
+    // Names get a maxWidth (each column is W/2 - 48 wide): a long instructor
+    // name used to run into the "Top studio" column beside it.
+    var nameMaxW = W / 2 - 48;
     if (topInstr) {
-      ctx.fillStyle = '#888';
+      ctx.fillStyle = pal.muted;
       ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText('TOP INSTRUCTOR', 32, y);
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = pal.heading;
       ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(topInstr[0], 32, y + 22);
-      ctx.fillStyle = '#888';
+      ctx.fillText(topInstr[0], 32, y + 22, nameMaxW);
+      ctx.fillStyle = pal.muted;
       ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(topInstr[1] + ' classes', 32, y + 40);
+      ctx.fillText(_plural(topInstr[1], 'class', 'classes'), 32, y + 40);
     }
     if (topStudio) {
-      ctx.fillStyle = '#888';
+      ctx.fillStyle = pal.muted;
       ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText('TOP STUDIO', W / 2, y);
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = pal.heading;
       ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(topStudio[0], W / 2, y + 22);
-      ctx.fillStyle = '#888';
+      ctx.fillText(topStudio[0], W / 2, y + 22, nameMaxW);
+      ctx.fillStyle = pal.muted;
       ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(topStudio[1] + ' classes', W / 2, y + 40);
+      ctx.fillText(_plural(topStudio[1], 'class', 'classes'), W / 2, y + 40);
     }
     y += 64;
 
     // Class type bars
-    ctx.fillStyle = '#888';
+    ctx.fillStyle = pal.muted;
     ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText('CLASS TYPES', 32, y);
     y += 14;
@@ -2693,18 +2830,18 @@
       var barMaxW = W - 200;
       var barW = Math.max(6, Math.round(cat.count / catMax * barMaxW));
 
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = pal.muted;
       ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(cat.label, 100, y + 14);
       ctx.textAlign = 'left';
 
-      ctx.fillStyle = '#0d0d0d';
+      ctx.fillStyle = pal.border;
       ctx.beginPath(); ctx.roundRect(112, y + 2, barMaxW, 16, 3); ctx.fill();
       ctx.fillStyle = cat.color;
       ctx.beginPath(); ctx.roundRect(112, y + 2, barW, 16, 3); ctx.fill();
 
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = pal.heading;
       ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText(String(cat.count), 112 + barMaxW + 8, y + 14);
 
@@ -2713,17 +2850,31 @@
     y += 16;
 
     // Footer
-    ctx.strokeStyle = '#222';
+    ctx.strokeStyle = pal.border;
     ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
     y += 20;
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = pal.muted;
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('Generated by Psycle Class Finder · ' + now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), 32, y);
+    ctx.fillText(SHARE_FOOTER, 32, y, W - 64);
+
+    // Crop: the card used to sit on top of 340–460px of empty background
+    // (41–56% of the image, depending on how many class types there are). Cut
+    // the scratch surface off under the footer — measured, not a magic height,
+    // so the layout above can change — and frame the result.
+    var outH = Math.min(H, Math.ceil(y + 28));
+    var out = document.createElement('canvas');
+    out.width = W * SHARE_SCALE; out.height = outH * SHARE_SCALE;
+    var octx = out.getContext('2d');
+    octx.drawImage(canvas, 0, 0); // 1:1 device pixels; the taller source is clipped
+    octx.scale(SHARE_SCALE, SHARE_SCALE);
+    octx.strokeStyle = pal.border;
+    octx.lineWidth = 2;
+    octx.strokeRect(1, 1, W - 2, outH - 2);
 
     // Export and share
     try {
       var blob = await new Promise(function (resolve, reject) {
-        canvas.toBlob(function (b) {
+        out.toBlob(function (b) {
           if (b) resolve(b); else reject(new Error('toBlob returned null'));
         }, 'image/png');
       });
@@ -2736,7 +2887,7 @@
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: 'My Psycle Stats',
-              text: totalClasses + ' classes · ' + uniqueInstrs + ' instructors · Top: ' + (topInstr ? topInstr[0] : ''),
+              text: _plural(totalClasses, 'class', 'classes') + ' · ' + _plural(uniqueInstrs, 'instructor') + (topInstr ? ' · Top: ' + topInstr[0] : ''),
               files: [file],
             });
             return;

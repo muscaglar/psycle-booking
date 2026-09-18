@@ -350,6 +350,7 @@ module.exports = async function (t) {
       const log = { toasts: [] };
       const g = {
         console: quiet, navigator: { onLine: true }, setTimeout: () => 0,
+        window: {}, // _friendlyError reads window.PsycleAPI (absent here → the caller's own fallback wording)
         document: { createElement: () => ({ textContent: '', disabled: false }) },
         _busyLabel: () => {}, toast: (msg, type) => log.toasts.push({ msg, type }), fetchMyBookings: () => {},
         _waitlistEntryFromResponse: () => null, _recordShape: () => {},
@@ -358,7 +359,8 @@ module.exports = async function (t) {
         apiFetch: async () => { if (put instanceof Error) throw put; return { ok: false, status: put, json: async () => ({ message: 'no' }) }; },
       };
       const world = t.vm.createContext(g);
-      t.vm.runInContext(grab('async function joinWaitlist('), world);
+      // joinWaitlist's failure path words its toast through the REAL _friendlyError.
+      t.vm.runInContext(grab('function _friendlyError(') + '\n' + grab('async function joinWaitlist('), world);
       return { log, join: (opts) => world.joinWaitlist(10, null, opts) };
     };
     const flag = async (put, lookup) => { const opts = { quiet: true }; const joined = await joinWorld(put, lookup).join(opts); return [joined, opts.unsure === true]; };

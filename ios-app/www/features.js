@@ -52,7 +52,12 @@
   window.PSYCLE_HISTORY_MAX = 2000;
 
   function getHistory() {
-    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    try {
+      const arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      // Ids and seat lists are coerced where they are read (app.js,
+      // pure:stored-data): the stored list can come from an imported file.
+      return typeof _cleanStoredHistory === 'function' ? _cleanStoredHistory(arr) : (Array.isArray(arr) ? arr : []);
+    }
     catch { return []; }
   }
 
@@ -200,6 +205,29 @@
   // Expose openHistoryModal so the My Bookings tab button can call it
   window.openHistoryModal = openHistoryModal;
 
+  // Two formatters for the whole list, made on the first open — never at module
+  // load (tests/suites/booking-extras.js runs this file in a bare sandbox).
+  // toLocaleDateString builds a new Intl formatter on every call: two per row,
+  // 4,000 for a full history, and nearly all of the time this modal took to open.
+  let _histMonthFmt = null, _histDayFmt = null;
+  const HISTORY_FIRST_ROWS = 100, HISTORY_MORE_ROWS = 200;
+
+  // ── pure:history-chunks:start ── (DOM-free; tests/suites/render-perf.js evaluates this block)
+  // Row ranges [from, to) the modal is filled in: a first screenful that opens
+  // at once, then the rest in bigger steps, one per task. A full history is
+  // 14,000 elements — built and parsed in one go, that was the freeze on the tap.
+  function historyChunks(total, first, step) {
+    var out = [];
+    var from = 0;
+    while (from < total) {
+      var to = Math.min(total, from + Math.max(1, out.length ? step : first)); // max: a 0 step must not loop for ever
+      out.push([from, to]);
+      from = to;
+    }
+    return out;
+  }
+  // ── pure:history-chunks:end ──
+
   function openHistoryModal() {
     // Remove any existing modal
     document.getElementById('historyModalOverlay')?.remove();
@@ -215,31 +243,40 @@
     if (history.length === 0) {
       bodyHtml = '<div class="history-empty">No booking history yet. Book a class and it will appear here.</div>';
     } else {
-      // Group by month
+      if (!_histMonthFmt) {
+        _histMonthFmt = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' });
+        _histDayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      }
+      // Group by month. One Date per entry, kept for its row below. A date that
+      // can't be read gets a group of its own, last: format() THROWS on an
+      // Invalid Date where toLocaleDateString printed "Invalid Date", and one
+      // bad row must not stop the modal opening.
       const byMonth = {};
       for (const entry of history) {
-        const d = new Date(entry.date);
-        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        const label = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-        if (!byMonth[key]) byMonth[key] = { label, items: [] };
-        byMonth[key].items.push(entry);
+        const parsed = new Date(String(entry.date).replace(' ', 'T'));
+        const d = isNaN(parsed.getTime()) ? null : parsed;
+        const key = d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : '0000-00';
+        if (!byMonth[key]) byMonth[key] = { label: d ? _histMonthFmt.format(d) : 'Date unknown', items: [] };
+        byMonth[key].items.push({ entry, d });
       }
 
-      // Sort months descending (most recent first)
+      // Sort months descending (most recent first). One string per row; a
+      // month's header rides on its first row so slices never split them.
+      const rows = [];
       const sortedKeys = Object.keys(byMonth).sort().reverse();
       for (const key of sortedKeys) {
         const group = byMonth[key];
-        bodyHtml += `<div class="history-month-header">${group.label}</div>`;
-        for (const entry of group.items) {
-          const d = new Date(entry.date);
-          const dayStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-          const h = d.getHours(), m = d.getMinutes().toString().padStart(2, '0');
+        let lead = `<div class="history-month-header">${group.label}</div>`;
+        for (const { entry, d } of group.items) {
+          const dayStr = d ? _histDayFmt.format(d) : '—';
+          const h = d ? d.getHours() : 0, m = d ? d.getMinutes().toString().padStart(2, '0') : '';
           const ampm = h >= 12 ? 'pm' : 'am';
-          const timeStr = (h % 12 || 12) + ':' + m + ampm;
+          const timeStr = d ? (h % 12 || 12) + ':' + m + ampm : '';
           const isCancelled = !!entry.cancelledAt;
           const _slH = (typeof slotLabel === 'function') ? slotLabel(entry.typeName) : 'Bike';
-          const slotsStr = entry.slots && entry.slots.length > 0 ? ' | ' + formatSlots(_slH, entry.slots) : '';
-          bodyHtml += `
+          // Escaped: history can come from an imported file, where a slot need not be a number.
+          const slotsStr = entry.slots && entry.slots.length > 0 ? ' | ' + escapeHtml(formatSlots(_slH, entry.slots)) : '';
+          rows.push(lead + `
             <div class="history-item${isCancelled ? ' cancelled' : ''}">
               <div class="history-date">${dayStr.replace(' ', '<br>')}</div>
               <div class="history-details">
@@ -248,8 +285,27 @@
               </div>
               ${timeStr ? '<div style="font-size:12px;color:#888;min-width:52px;text-align:right">' + timeStr + '</div>' : ''}
               ${isCancelled ? '<span class="history-cancelled-tag">Cancelled</span>' : ''}
-            </div>`;
+            </div>`);
+          lead = '';
         }
+      }
+
+      // The newest rows now; the rest a slice per task, in front of a hidden
+      // marker, for as long as this modal is the one on screen. (The timer only
+      // fires after this function has put the overlay in the document.)
+      const chunks = historyChunks(rows.length, HISTORY_FIRST_ROWS, HISTORY_MORE_ROWS);
+      bodyHtml = rows.slice(chunks[0][0], chunks[0][1]).join('');
+      if (chunks.length > 1) {
+        bodyHtml += '<div id="historyModalMore" hidden></div>';
+        let next = 1;
+        const appendMore = function () {
+          const more = overlay.isConnected ? overlay.querySelector('#historyModalMore') : null;
+          if (!more) return;
+          more.insertAdjacentHTML('beforebegin', rows.slice(chunks[next][0], chunks[next][1]).join(''));
+          if (++next < chunks.length) setTimeout(appendMore, 0);
+          else more.remove();
+        };
+        setTimeout(appendMore, 0);
       }
     }
 
@@ -561,6 +617,11 @@
   // Filter main results to just this instructor
   window._features_filterByInstructor = function (instrId) {
     const sid = String(instrId);
+    // "View schedule" / "View classes" mean THIS instructor's classes: app.js's
+    // _focusSearch also drops the studio and class-type filters left on
+    // Discover (they hid the classes the modal had just listed), widens a
+    // single-day date row to the week, shows Discover and searches.
+    if (typeof window._focusSearch === 'function') { window._focusSearch({ instructorId: sid }); return; }
     // Clear current selections and select just this instructor
     if (window.selectedInstructors) {
       window.selectedInstructors.clear();

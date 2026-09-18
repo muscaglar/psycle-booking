@@ -362,6 +362,15 @@ module.exports = async function (t) {
     eq(w.log.toasts.map(x => x.msg), ['Not enough credits'], 'a 500 with a reason, verified not booked → the reason is shown');
     eq(b.textContent, 'Failed — retry', '…on a no-tick label');
   }
+  // …but a framework's stock body is no reason: Psycle's plain 500 answers
+  // {"message":"Server Error"}, and that raw text was the toast.
+  for (const stock of ['Server Error', 'server error.', 'Internal Server Error', 'Service Unavailable', 'Bad Gateway', 'Gateway Timeout', ' Error ']) {
+    const w = world({}, [{ status: 500, body: { message: stock } }], [{}]);
+    const b = w.btn();
+    await w.submit([7], b);
+    eq([w.log.toasts.map(x => x.msg), b.textContent], [["Psycle didn't confirm that booking and it isn't showing in My Bookings — try again"], 'Failed — retry'],
+      'a 500 saying only ' + JSON.stringify(stock) + ' → the member wording, as for an empty body');
+  }
   {
     const w = world({}, [{ status: 409, body: { message: 'You have already booked this class' } }], [{}]);
     const b = w.btn();
@@ -419,6 +428,9 @@ module.exports = async function (t) {
     const w2 = world(seat5(), [{ status: 502, body: {} }], [seat5()]);
     await w2.submit([7], w2.btn());
     ok(w2.log.toasts.some(x => /Bike 7 isn't showing as booked — check My Bookings/.test(x.msg)), 'no reason given → the hedge as before');
+    const w3 = world(seat5(), [{ status: 500, body: { message: 'Server Error' } }], [seat5()]);
+    await w3.submit([7], w3.btn());
+    eq(w3.log.toasts.map(x => x.msg), ["Bike 7 isn't showing as booked — check My Bookings before trying again"], 'a stock "Server Error" is no reason either → the hedge, never "Psycle said: Server Error"');
   }
 
   t.section('Booking: a session that dies mid-verify is "unconfirmed", never a verified "no seat"');

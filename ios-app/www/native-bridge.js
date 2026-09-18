@@ -92,6 +92,53 @@
   }
   window._psycleClassStartMs = _classStartMs; // exported for tests/unit.js (and future native callers)
 
+  // ── Calendar ownership decisions (pure) ─────────────────────────
+  // WHICH native events Psync may destroy. Here, before the Capacitor guard,
+  // so tests/suites/calendar-safety.js can drive them without EventKit.
+  // `markerOf(ev)` → the Psycle event id in the event's notes, or null (the
+  // bridge passes _markerEventId). An event WITHOUT our marker is the member's
+  // own dentist appointment unless they explicitly handed the whole calendar
+  // over (the ownership ack). An event that reports no calendarId can't be
+  // attributed to any calendar, so it only ever counts when it is marked.
+
+  /** Unmarked events in calendar `calId` — what a full-ownership reconcile would delete that isn't ours. */
+  function _calForeignEvents(events, calId, markerOf) {
+    return (events || []).filter(function (ev) {
+      return !!ev && ev.calendarId != null && String(ev.calendarId) === String(calId) && !markerOf(ev);
+    });
+  }
+
+  /** Native ids to clear out of `calId` when it stops being the sync target. */
+  function _calSweepVictimIds(events, calId, ownedAck, markerOf) {
+    var ids = [];
+    (events || []).forEach(function (ev) {
+      if (!ev) return;
+      var marked = !!markerOf(ev);
+      if (ev.calendarId != null) {
+        if (String(ev.calendarId) !== String(calId)) return;
+        if (!marked && !ownedAck) return; // never handed over → unmarked events are not ours to delete
+      } else if (!marked) {
+        return;
+      }
+      var nid = ev.id || ev.eventId;
+      if (nid) ids.push(String(nid));
+    });
+    return ids;
+  }
+  /**
+   * Does the stored ownership ack hand over calendar `calId`? Only the value
+   * the confirmed dialog writes — '2:<calendarId>' — counts. The bare '1' of
+   * the build before the dialog was written on EVERY pick / "Re-sync now" /
+   * "Remove duplicates" with nothing shown, so it is not consent: it reads as
+   * un-owned (marker-only reconcile) until the member confirms the dialog.
+   */
+  function _calAckCovers(stored, calId) {
+    return !!calId && stored === '2:' + String(calId);
+  }
+  window._psycleCalForeignEvents = _calForeignEvents;   // exported for tests/suites/calendar-safety.js
+  window._psycleCalSweepVictimIds = _calSweepVictimIds;
+  window._psycleCalAckCovers = _calAckCovers;
+
   // Wait for Capacitor to be ready
   if (!window.Capacitor) {
     console.log('[native] Not running in Capacitor — skipping native bridge');
@@ -161,6 +208,11 @@
     // Whose history that is (features.js): restored WITH it, or a storage
     // purge would hand the restored history to whoever is signed in next.
     'psycle_class_history_owner',
+    // Whose device data this is, and the other member's stashed rankings /
+    // favourites / bike prefs (app.js, pure:data-owner). Without the stamp a
+    // purge reads as a pre-stamp install ("adopt") on the next sign-in, and
+    // the stash — hand-entered, not rebuildable from Psycle — is simply gone.
+    'psycle_data_owner', 'psycle_account_stash',
     'psycle_notify_watchlist', 'psycle_calendar_data',
     'psycle_error_log', 'psycle_offline_queue', 'psycle_action_log',
     // (psycle_waitlisted_events retired: waitlist places come from GET
@@ -293,9 +345,17 @@
   var CAL_TARGET_KEY = 'psycle_calendar_target_id';   // user-selected target calendar ID
   var CAL_MODE_KEY = 'psycle_calendar_mode';          // 'auto' | 'custom' | 'default'
   var CAL_ENABLED_KEY = 'psycle_calendar_enabled';    // '0' disables sync entirely
-  // '1' once the user has picked/confirmed the target under the full-ownership
-  // contract — only then may the reconcile delete events WITHOUT our marker.
+  // '2:<calendarId>' once the user has confirmed that target under the
+  // full-ownership contract — only then may the reconcile delete events
+  // WITHOUT our marker. It is granted ONLY by a caller that has just shown the
+  // ownership dialog (`ownedAck: true`) and names the one calendar it is for:
+  // a target change that doesn't carry it clears it, so no code path hands a
+  // calendar over silently. A legacy '1' (written silently by the build before
+  // the dialog) is NOT consent — see _calAckCovers.
   var CAL_OWNED_ACK_KEY = 'psycle_calendar_owned_ack';
+  function _calIsOwned(calId) {
+    return _calAckCovers(localStorage.getItem(CAL_OWNED_ACK_KEY), calId);
+  }
   var PSYCLE_CAL_TITLE = 'Psycle';
   var PSYCLE_CAL_COLOR = '#e94560';
   var PSYCLE_EVENT_MARKER = 'psycle-event-id:'; // stable owner tag in event notes for safe orphan removal
@@ -607,7 +667,7 @@
     // the user has picked/confirmed the calendar under the new contract —
     // a target chosen before this contract shipped may hold personal events,
     // and those must never be destroyed without an explicit user action.
-    var ownedAck = localStorage.getItem(CAL_OWNED_ACK_KEY) === '1';
+    var ownedAck = _calIsOwned(calId);
 
     var newMap = {};
     var victims = [];
@@ -698,18 +758,29 @@
    * calendar reflects current state — e.g., classes booked from the web
    * or swapped on another device. Returns the sync summary.
    */
-  window.psycleResyncCalendar = async function () {
+  window.psycleResyncCalendar = async function (opts) {
+    // Signed out / session expired: refuse BEFORE the refresh. fetchMyBookings'
+    // no-token branch empties _myBookings — the list expiry keeps on purpose —
+    // and the next foreground would then blank the widget and cancel the class
+    // reminders, all for a reconcile that skips itself anyway.
+    if (typeof getBearerToken === 'function' && !getBearerToken()) {
+      return { added: 0, removed: 0, kept: 0, error: 'Sign in to sync' };
+    }
     _calSynced = false;
-    // An explicit user-triggered resync (Settings button) confirms the
-    // full-ownership contract for the current target.
-    if (hasChosenCalendar()) {
-      try { localStorage.setItem(CAL_OWNED_ACK_KEY, '1'); } catch (e) {}
+    // The full-ownership contract is confirmed ONLY when the caller has just
+    // shown the ownership dialog and the member said yes. A bare resync (or
+    // "Remove duplicates") must never grant it: a target picked before the
+    // contract shipped may be a personal calendar.
+    if (opts && opts.ownedAck === true && hasChosenCalendar()) {
+      try { localStorage.setItem(CAL_OWNED_ACK_KEY, '2:' + localStorage.getItem(CAL_TARGET_KEY)); } catch (e) {}
     }
     if (typeof fetchMyBookings === 'function') {
       try { await fetchMyBookings(); } catch (e) {}
     }
     clearTimeout(_calReconcileTimer); // fetchMyBookings armed a debounced run — run once here instead
-    return _runCalSync();
+    // _runCalSync answers undefined when a pass is already in flight (it queues
+    // a re-run) — report that as not-done-yet, never as a finished sync.
+    return (await _runCalSync()) || { added: 0, removed: 0, kept: 0, skipped: 'busy' };
   };
 
   /**
@@ -722,7 +793,9 @@
     if (!Calendar) return { scanned: 0, removed: 0, error: 'Calendar plugin unavailable' };
     var res = await window.psycleResyncCalendar();
     res = res || {};
-    return { scanned: (res.kept || 0) + (res.removed || 0), removed: res.removed || 0, error: res.error };
+    // `skipped` must survive: a reconcile that never ran removed 0 events, and
+    // the Settings button would otherwise call that "No duplicates".
+    return { scanned: (res.kept || 0) + (res.removed || 0), removed: res.removed || 0, error: res.error, skipped: res.skipped };
   };
 
   window.syncAllBookingsToCalendar = syncAllBookingsToCalendar;
@@ -754,7 +827,31 @@
       mode: localStorage.getItem(CAL_MODE_KEY) || 'unset',
       targetId: localStorage.getItem(CAL_TARGET_KEY) || null,
       psycleCalendarId: localStorage.getItem(CAL_ID_KEY) || null,
+      // Has the member handed the current target over (ownership dialog)? The
+      // Settings UI asks before "Re-sync now" while this is false.
+      ownedAck: _calIsOwned(localStorage.getItem(CAL_TARGET_KEY)),
     };
+  };
+
+  /**
+   * READ-ONLY: how many upcoming events in calendar `calId` are NOT Psycle
+   * bookings — what handing that calendar over would destroy on the first
+   * reconcile (same 120-day window, same attribution rule). The Settings
+   * ownership dialog quotes it. null = can't tell (no plugin/permission, the
+   * query failed, or the plugin attributes no event to a calendar) — the
+   * dialog then warns without a number. Never writes, never deletes.
+   */
+  window.psycleCountForeignEvents = async function (calId) {
+    if (!Calendar || !calId) return null;
+    try {
+      if (!(await _ensureCalendarPermission())) return null;
+      var now = Date.now();
+      var evs = await _listNativeEvents(now, now + 120 * 86400000);
+      if (evs.length && !evs.some(function (ev) { return ev && ev.calendarId != null; })) return null;
+      return _calForeignEvents(evs, calId, _markerEventId).length;
+    } catch (e) {
+      return null;
+    }
   };
 
   /**
@@ -763,12 +860,19 @@
    * EventKit's deleteEvent works by id) and wipe the local mapping, so the
    * next re-sync cleanly re-adds bookings into the new target.
    *
+   * `cfg.ownedAck: true` = the caller has just shown the ownership dialog for
+   * `cfg.targetId` and the member agreed. Without it the new target is NOT
+   * handed over: the reconcile only ever touches events carrying our marker.
+   *
    * Returns { movedFromOld: N } so callers (the Settings UI) can show a hint.
    */
   window.psycleSetCalendarConfig = async function (cfg) {
     cfg = cfg || {};
     var prevMode = localStorage.getItem(CAL_MODE_KEY) || 'unset';
     var prevTarget = localStorage.getItem(CAL_TARGET_KEY) || '';
+    // The ack as it stood for the OLD target — read before this pick rewrites
+    // it, because the sweep below must judge the old calendar by its own ack.
+    var prevOwnedAck = _calIsOwned(prevTarget);
 
     if (typeof cfg.enabled === 'boolean') {
       localStorage.setItem(CAL_ENABLED_KEY, cfg.enabled ? '1' : '0');
@@ -776,9 +880,15 @@
     if (cfg.mode) localStorage.setItem(CAL_MODE_KEY, cfg.mode);
     if (cfg.mode === 'custom' && cfg.targetId) {
       localStorage.setItem(CAL_TARGET_KEY, String(cfg.targetId));
-      // Picking a calendar in the Settings UI (which states the ownership
-      // contract) is the explicit consent for full-ownership reconciles.
-      localStorage.setItem(CAL_OWNED_ACK_KEY, '1');
+      // Consent is the caller's confirmed ownership dialog — never the pick
+      // itself (one tap on "Home" used to wipe four months of personal events).
+      // A different calendar without it starts un-owned: the old ack was for
+      // the old calendar and must not carry over.
+      if (cfg.ownedAck === true) {
+        localStorage.setItem(CAL_OWNED_ACK_KEY, '2:' + String(cfg.targetId));
+      } else if (String(cfg.targetId) !== prevTarget) {
+        localStorage.removeItem(CAL_OWNED_ACK_KEY);
+      }
     }
 
     var targetChanged =
@@ -790,6 +900,10 @@
       // The OLD calendar was fully Psync-owned while it was the target —
       // clear every future event out of it (mapped ids AND anything the map
       // lost track of), so switching never strands duplicates behind.
+      // …but only if it really WAS handed over (prevOwnedAck). A target picked
+      // before the ownership contract shipped may be the member's personal
+      // calendar: there, only events carrying our marker (and the ids we
+      // created) go — switching away must never wipe it.
       if (Calendar) {
         await _ensureCalendarPermission();
         var oldIds = Object.values(_loadCalMap()).map(String);
@@ -799,17 +913,11 @@
           try {
             var now = Date.now();
             var evs = await _listNativeEvents(now, now + 120 * 86400000);
-            evs.forEach(function (ev) {
-              if (!ev) return;
-              // Same attribution guard as the reconcile: without a reported
-              // calendarId, only delete events carrying our marker.
-              if (ev.calendarId != null) {
-                if (String(ev.calendarId) !== String(prevTarget)) return;
-              } else if (!_markerEventId(ev)) {
-                return;
-              }
-              var nid = ev.id || ev.eventId;
-              if (nid) victims[String(nid)] = true;
+            // Same attribution + ownership guards as the reconcile (see
+            // _calSweepVictimIds): without a reported calendarId, or without
+            // the old target's ack, only events carrying our marker go.
+            _calSweepVictimIds(evs, prevTarget, prevOwnedAck, _markerEventId).forEach(function (nid) {
+              victims[nid] = true;
             });
           } catch (e) { /* fall back to mapped ids only */ }
         }
@@ -900,8 +1008,10 @@
         notifications: mondays.map(function (at, i) {
           return {
             id: REMINDER_IDS[i],
-            title: 'New booking week opens now',
-            body: 'Psycle classes for next week are available — grab your favourite spots!',
+            // Fires at 11:59, a minute BEFORE the release — so it says when the
+            // week opens, not that it has (and still reads true if seen later).
+            title: 'New booking week opens at 12:00',
+            body: "Next week's Psycle classes open at noon UK time — get ready to grab your favourite spots.",
             schedule: { at: at, allowWhileIdle: true },
             sound: 'default',
           };
@@ -974,11 +1084,30 @@
   var TAP_ROUTE_WAIT_MS = 10000;
   var _cancelTapRoute = null; // only the latest tap may still open a sheet
 
+  // The Monday reminder exists for one moment: the new week's release. A
+  // timetable loaded at 11:50 still counts as fresh (15 min) at noon, so the
+  // tap landed on last week's classes and nothing refreshed them. Ask Discover
+  // for a fresh one. The freshness rule itself lives in js/app.js — use its
+  // hook (_onBookingWeekOpened) when it is there, and ONLY it: it runs its own
+  // search, and a second loader would race that. Else the plain silent refresh
+  // (which no-ops without a token, offline, mid-search, or on a cold start
+  // before studios load — the launch search covers that). GETs only; never
+  // throws, sync or async.
+  function _askDiscoverToRefresh() {
+    try {
+      var asked = null;
+      if (typeof window._onBookingWeekOpened === 'function') asked = window._onBookingWeekOpened();
+      else if (typeof window.revalidateWindow === 'function') asked = window.revalidateWindow({ silent: true });
+      if (asked && typeof asked.catch === 'function') asked.catch(function () {});
+    } catch (e) {}
+  }
+
   function _routeNotificationTap(eventId) {
     if (typeof window.switchTab !== 'function') return;
     if (_cancelTapRoute) _cancelTapRoute();
     if (eventId === null || eventId === undefined || eventId === '') {
       window.switchTab('discover');
+      _askDiscoverToRefresh();
       return;
     }
     var key = String(eventId);
@@ -1174,10 +1303,78 @@
     _appGroupSet(key, value);
   }
 
-  // Resolve a display-ready event object from the cache, or null.
-  function _snapshotEventFor(eventId) {
+  // ── pure:ios-polish:start ── (DOM-free; tests/suites/ios-polish.js evaluates this block)
+  // Widget / class-reminder decisions that need nothing native — keep the block
+  // free of Capacitor, DOM and app globals (the suite evaluates it on its own).
+
+  // The widget timeline shows the next few classes; reminders cover every
+  // class held. They shared ONE list capped at 5, so the 6th class of a booked
+  // week got no reminder, and booking an earlier class pushed an armed one out
+  // of the list — cancelling it for a class still held. 40 + the 8 weekly ids
+  // + snoozes stays under iOS's 64 pending requests; the input is
+  // soonest-first, so the cap only ever drops the furthest classes.
+  var WIDGET_UPCOMING_MAX = 5;
+  var CLASS_REMINDER_MAX = 40;
+
+  // A real seat, as opposed to a waitlist place — true even when the class's
+  // details failed to load this pass (that makes it unknown, not gone).
+  function _isHeldSeat(booking) {
+    return !!booking && !booking.waitlisted;
+  }
+
+  // Stand-in for an _eventCache entry, built from app.js's saved copy of My
+  // Bookings (psycle_bookings_snapshot), which RETAINS a held class whose
+  // GET /events/{id} failed. Only the class's own facts are taken — the seats
+  // always come from the live booking. start_at is passed through untouched so
+  // a reminder armed from the cache is not re-armed when the fallback is used.
+  function _evtFromSavedItem(item) {
+    if (!item || !item.start_at) return null;
+    return {
+      start_at: item.start_at,
+      _typeName: item.type || 'Class',
+      _instrName: item.instructor || '',
+      _locName: item.location || '',
+      _studioName: item.studio || '',
+    };
+  }
+
+  // Event ids whose armed reminder should go: the class is no longer wanted, or
+  // its time moved (it is re-armed for the new time). `keep` = held seats whose
+  // details could not be resolved this pass — absent from `wanted` only because
+  // nothing is known about them, so their reminder stays. The calendar
+  // reconcile has the same rule ("NEVER delete a live booking's event over
+  // missing metadata"). Once T-90 has passed a reminder is never re-armed, so a
+  // wrong cancel here is permanent.
+  function _staleReminderIds(map, wanted, keep) {
+    return Object.keys(map || {}).filter(function (evtId) {
+      var w = (wanted || {})[evtId];
+      if (!w) return !(keep && keep[evtId]);
+      return w.startAt !== map[evtId].startAt;
+    });
+  }
+  // ── pure:ios-polish:end ──
+
+  // app.js's saved copy of My Bookings, by event id ({} when there is none).
+  // Read-only here, and only ever consulted for an id the live _myBookings
+  // holds — it never decides WHAT is held, only when/what that class is.
+  function _savedItemsById() {
+    var out = {};
     try {
-      var evt = (_eventCache || {})[String(eventId)];
+      if (typeof _readBookingsSnapshot !== 'function') return out;
+      var saved = _readBookingsSnapshot();
+      ((saved && saved.items) || []).forEach(function (it) {
+        if (it && it.id != null) out[String(it.id)] = it;
+      });
+    } catch (e) {}
+    return out;
+  }
+
+  // Resolve a display-ready event object from the cache, or null. `known` =
+  // the event already resolved by the caller (a cache entry, or the saved-copy
+  // stand-in for a held class whose details failed to load).
+  function _snapshotEventFor(eventId, known) {
+    try {
+      var evt = known || (_eventCache || {})[String(eventId)];
       if (!evt || !evt.start_at) return null;
       var booking = (_myBookings || {})[String(eventId)];
       var slots = (booking && Array.isArray(booking.slots)) ? booking.slots.slice() : [];
@@ -1210,12 +1407,21 @@
   // card that was just correctly started. That was exactly the "opened the
   // app in the window, no card" failure.
   var _snapServerConfirmed = false;
+  // True only while the clearToken wrapper (a deliberate sign-out) runs its pass.
+  var _signOutPass = false;
 
   function updateWidgetSnapshot() {
     try {
       var bookings = (typeof _myBookings !== 'undefined' && _myBookings) ? _myBookings : {};
       var cache = (typeof _eventCache !== 'undefined' && _eventCache) ? _eventCache : {};
       if (Object.keys(bookings).length === 0 && !_snapServerConfirmed) return;
+      // Empty AND no token, but not a sign-out: the session expired and some
+      // refetch ran fetchMyBookings' no-token branch, which empties the map.
+      // Those classes are still booked — expiry keeps the snapshot serving the
+      // widget / Live Activity / T-90 reminders until re-login, and an empty
+      // write here ended the activity and cancelled every armed reminder.
+      if (Object.keys(bookings).length === 0 && !_signOutPass &&
+          typeof getBearerToken === 'function' && !getBearerToken()) return;
       var now = Date.now();
 
       // Collect upcoming booked events (have a cache entry + future start).
@@ -1223,33 +1429,53 @@
       // one as "Next class". start_at may be 'YYYY-MM-DD HH:MM:SS', which
       // iOS WebKit won't parse without the space→T normalization.
       var upcoming = [];
+      // A held seat whose GET /events/{id} failed (weak signal at launch) has
+      // no cache entry — that read as "not booked": widget blanked, its T-90
+      // reminder cancelled, a running Live Activity retracted, while My
+      // Bookings still held the seat. Fall back to the saved copy for when/what
+      // the class is; with nothing known, remember it so its reminder survives.
+      var savedById = null; // read lazily — the usual pass has every class cached
+      var unknownSeats = {};
       for (var id in bookings) {
         if (!Object.prototype.hasOwnProperty.call(bookings, id)) continue;
         if (bookings[id] && bookings[id].waitlisted) continue;
         var evt = cache[String(id)];
-        if (!evt || !evt.start_at) continue;
+        if (!evt || !evt.start_at) {
+          if (!savedById) savedById = _savedItemsById();
+          evt = _evtFromSavedItem(savedById[String(id)]);
+          if (!evt) {
+            if (_isHeldSeat(bookings[id])) unknownSeats[String(id)] = true;
+            continue;
+          }
+        }
         var ts = new Date(String(evt.start_at).replace(' ', 'T')).getTime();
         if (isNaN(ts) || ts < now) continue;
-        upcoming.push({ id: id, ts: ts });
+        upcoming.push({ id: id, ts: ts, evt: evt });
       }
       upcoming.sort(function (a, b) { return a.ts - b.ts; });
 
       // 1) Next class snapshot (or null when nothing upcoming).
-      var next = upcoming.length ? _snapshotEventFor(upcoming[0].id) : null;
+      var next = upcoming.length ? _snapshotEventFor(upcoming[0].id, upcoming[0].evt) : null;
       _writeSnapshotKey(WIDGET_NEXT_KEY, JSON.stringify(next));
 
-      // 1b) The next few classes for the widget's self-advancing timeline.
+      // 1b) The next few classes for the widget's self-advancing timeline —
+      // and, from the same walk, EVERY class held for the reminders (see
+      // CLASS_REMINDER_MAX). The widget key keeps its 5, so the Swift timeline
+      // is untouched.
       var upcomingList = [];
-      for (var ui = 0; ui < upcoming.length && upcomingList.length < 5; ui++) {
-        var snap = _snapshotEventFor(upcoming[ui].id);
-        if (snap) upcomingList.push(snap);
+      var reminderList = [];
+      for (var ui = 0; ui < upcoming.length && reminderList.length < CLASS_REMINDER_MAX; ui++) {
+        var snap = _snapshotEventFor(upcoming[ui].id, upcoming[ui].evt);
+        if (!snap) continue;
+        reminderList.push(snap);
+        if (upcomingList.length < WIDGET_UPCOMING_MAX) upcomingList.push(snap);
       }
       _writeSnapshotKey(WIDGET_UPCOMING_KEY, JSON.stringify(upcomingList));
 
       // Backstop for the Live Activity's foreground-only constraint: a
       // local notification 90 minutes before each class. Tapping it opens
       // the app, which starts the countdown card.
-      _scheduleClassReminders(upcomingList);
+      _scheduleClassReminders(reminderList, unknownSeats);
 
       // 2) This-week buckets: next 7 days from now, one entry per day that
       //    has >=1 booking, with the day's first start time.
@@ -1263,8 +1489,9 @@
           String(d.getMonth() + 1).padStart(2, '0') + '-' +
           String(d.getDate()).padStart(2, '0');
         if (!byDay[dayKey]) {
-          // Same space→T normalization as startAt above.
-          byDay[dayKey] = { day: dayKey, count: 0, firstStart: String(cache[String(u.id)].start_at).replace(' ', 'T') };
+          // Same space→T normalization as startAt above. u.evt, not the cache:
+          // a saved-copy class has no cache entry to read.
+          byDay[dayKey] = { day: dayKey, count: 0, firstStart: String(u.evt.start_at).replace(' ', 'T') };
         }
         byDay[dayKey].count++;
       }
@@ -1337,14 +1564,17 @@
   // succession) must not interleave the load-reconcile-save cycle, or a
   // cancelled class's reminder can be resurrected by an in-flight pass.
   var _reminderChain = Promise.resolve();
-  function _scheduleClassReminders(upcomingList) {
+  // `unknownSeats` = {eventId: true} for held seats this pass knew nothing
+  // about (see _staleReminderIds) — captured with the list, so a queued pass
+  // reconciles against the state it was computed from.
+  function _scheduleClassReminders(upcomingList, unknownSeats) {
     _reminderChain = _reminderChain
-      .then(function () { return _scheduleClassRemindersInner(upcomingList); })
+      .then(function () { return _scheduleClassRemindersInner(upcomingList, unknownSeats); })
       .catch(function () {});
     return _reminderChain;
   }
 
-  async function _scheduleClassRemindersInner(upcomingList) {
+  async function _scheduleClassRemindersInner(upcomingList, unknownSeats) {
     if (!LocalNotifications || !_classRemindersEnabled()) return;
     try {
       var perm = await LocalNotifications.checkPermissions();
@@ -1354,14 +1584,12 @@
       var wanted = {}; // eventId -> entry
       (upcomingList || []).forEach(function (c) { wanted[String(c.eventId)] = c; });
 
-      // Cancel reminders for classes no longer upcoming or whose time moved.
+      // Cancel reminders for classes no longer upcoming or whose time moved —
+      // never for a held seat that is merely unknown this pass.
       var toCancel = [];
-      Object.keys(map).forEach(function (evtId) {
-        var w = wanted[evtId];
-        if (!w || w.startAt !== map[evtId].startAt) {
-          toCancel.push({ id: map[evtId].id });
-          delete map[evtId];
-        }
+      _staleReminderIds(map, wanted, unknownSeats).forEach(function (evtId) {
+        toCancel.push({ id: map[evtId].id });
+        delete map[evtId];
       });
       if (toCancel.length) {
         try { await LocalNotifications.cancel({ notifications: toCancel }); } catch (e) {}
@@ -1538,7 +1766,8 @@
     window.clearToken = function () {
       var result = _origClearTokenNative.apply(this, arguments);
       _snapServerConfirmed = true; // empty is now the truth
-      try { updateWidgetSnapshot(); } catch (e) {}
+      _signOutPass = true; // …and the one tokenless-and-empty pass that MUST blank
+      try { updateWidgetSnapshot(); } catch (e) {} finally { _signOutPass = false; }
       return result;
     };
   }

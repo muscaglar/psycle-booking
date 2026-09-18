@@ -23,15 +23,30 @@
 
   // ── Data Persistence ───────────────────────────────────────────
 
-  function loadTiers() {
-    try { return JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch { return {}; }
+  // Reads are coerced (app.js, pure:stored-data — both keys can come out of an
+  // imported file); writes go through _saveSetting, which frees the app's own
+  // caches and retries when localStorage is full, and says so if it still
+  // cannot save — a throw here used to kill the tap with nothing saved.
+  function _store(key, value) {
+    if (typeof _saveSetting === 'function') { _saveSetting(key, JSON.stringify(value)); return; }
+    localStorage.setItem(key, JSON.stringify(value));
   }
-  function saveTiers(t) { localStorage.setItem(TIER_KEY, JSON.stringify(t)); }
+
+  function loadTiers() {
+    try {
+      var t = JSON.parse(localStorage.getItem(TIER_KEY) || '{}');
+      return typeof _cleanStoredTiers === 'function' ? _cleanStoredTiers(t) : t;
+    } catch { return {}; }
+  }
+  function saveTiers(t) { _store(TIER_KEY, t); }
 
   function loadBikePrefs() {
-    try { return JSON.parse(localStorage.getItem(BIKE_PREF_KEY) || '{}'); } catch { return {}; }
+    try {
+      var p = JSON.parse(localStorage.getItem(BIKE_PREF_KEY) || '{}');
+      return typeof _cleanStoredBikePrefs === 'function' ? _cleanStoredBikePrefs(p) : p;
+    } catch { return {}; }
   }
-  function saveBikePrefs(p) { localStorage.setItem(BIKE_PREF_KEY, JSON.stringify(p)); }
+  function saveBikePrefs(p) { _store(BIKE_PREF_KEY, p); }
 
   // ── Public API ─────────────────────────────────────────────────
 
@@ -355,6 +370,8 @@
     var historyInstrIds = new Set();
     try {
       var history = JSON.parse(localStorage.getItem('psycle_class_history') || '[]');
+      // Coerced where it is read (app.js, pure:stored-data), like every other history reader.
+      if (typeof _cleanStoredHistory === 'function') history = _cleanStoredHistory(history);
       history.forEach(function (h) {
         if (h.cancelledAt) return;
         if (h.instrId) { historyInstrIds.add(String(h.instrId)); return; }
@@ -424,12 +441,15 @@
   window.toggleFavFromSettings = function (instrId) {
     var sid = String(instrId);
     if (typeof favouriteInstructors === 'undefined') return;
-    if (favouriteInstructors.has(sid)) {
-      favouriteInstructors.delete(sid);
+    // app.js applies the one change to the STORED list (setFavourite): saving
+    // this page's Set wholesale could overwrite a list restored after it was read.
+    if (typeof setFavourite === 'function') {
+      setFavourite(sid, !favouriteInstructors.has(sid));
     } else {
-      favouriteInstructors.add(sid);
+      if (favouriteInstructors.has(sid)) favouriteInstructors.delete(sid);
+      else favouriteInstructors.add(sid);
+      if (typeof saveFavourites === 'function') saveFavourites(favouriteInstructors);
     }
-    if (typeof saveFavourites === 'function') saveFavourites(favouriteInstructors);
     renderTierList();
   };
 
@@ -453,6 +473,7 @@
   // Calendar Sync UI (iOS only)
   // ═══════════════════════════════════════════════════════════════════
 
+  // ── pure:calendar-sync:start
   async function renderCalendarSync() {
     var panel = document.getElementById('calendarSyncPanel');
     if (!panel) return;
@@ -507,22 +528,92 @@
     renderCalendarSync();
   };
 
+  /**
+   * The ownership dialog. Handing a calendar to Psync means the reconcile
+   * deletes every upcoming event in it that is not a Psycle booking — on this
+   * device and, through the calendar's own sync, every other one, with no
+   * undo. The list offers the member's REAL calendars (Home, Work, Family…),
+   * so a pick alone is never consent: count what would go, say so, and ask.
+   * Resolves true only on an explicit "Use this calendar".
+   */
+  async function _confirmCalendarOwnership(calId, name, cancelText) {
+    if (typeof window.confirmModal !== 'function') return false; // can't ask → never assume yes
+    var n = null; // null = couldn't count → warn without a number
+    if (typeof window.psycleCountForeignEvents === 'function') {
+      try { n = await window.psycleCountForeignEvents(calId); } catch (e) { n = null; }
+    }
+    var q = '"' + name + '"'; // confirmModal escapes title/body itself
+    var body;
+    if (typeof n === 'number' && n > 0) {
+      body = q + ' has ' + n + ' upcoming event' +
+        (n === 1 ? ' that is not a Psycle booking' : 's that are not Psycle bookings') +
+        '. Psync will delete ' + (n === 1 ? 'it' : 'them') +
+        ' now, and anything else that appears in this calendar on every sync. Past events are untouched.';
+    } else if (n === 0) {
+      body = 'Psync will delete anything in ' + q + ' that is not one of your Psycle bookings, on every sync. ' +
+        'It has no other upcoming events right now. Past events are untouched.';
+    } else {
+      body = 'Psync will delete every upcoming event in ' + q + ' that is not one of your Psycle bookings — ' +
+        'now and on every sync. Past events are untouched.';
+    }
+    return !!(await window.confirmModal({
+      title: 'Let Psync manage ' + q + '?',
+      body: body,
+      warn: 'This can\'t be undone. Pick a calendar made just for Psycle, not your personal one.',
+      confirmText: 'Use this calendar',
+      cancelText: cancelText || 'Choose another',
+      danger: true,
+    }));
+  }
+
+  // Why a sync did NOT happen, in the member's words — '' when it really ran.
+  // A skipped reconcile (signed out, bookings not loaded yet, a pass already
+  // running) added and removed nothing: that is not "Synced ✓" / "No duplicates".
+  function _calSyncProblem(r) {
+    if (!r) return 'Sync failed';
+    if (r.error) return r.error;
+    if (r.skipped === 'signed out') return 'Sign in to sync';
+    if (r.skipped === 'busy') return 'Already syncing';
+    return r.skipped ? 'Bookings not loaded' : '';
+  }
+
   window.onCalendarTargetChange = async function (select) {
     var val = select.value;
     if (!val) return; // placeholder ("Choose a calendar…") — nothing picked yet
-    // Prevent rapid re-entry while delete/sync is in flight
+    // Prevent rapid re-entry while the confirm/delete/sync is in flight
     select.disabled = true;
     try {
-      var result = await window.psycleSetCalendarConfig({ mode: 'custom', targetId: val });
-      if (typeof window.psycleResyncCalendar === 'function') {
-        await window.psycleResyncCalendar();
+      // Switching sweeps our events out of the old calendar, and a signed-out
+      // session can't write them into the new one — they would just vanish.
+      var prev = window.psycleGetCalendarConfig();
+      if (prev.mode === 'custom' && prev.targetId &&
+          typeof getBearerToken === 'function' && !getBearerToken()) {
+        if (typeof toast === 'function') toast('Sign in to switch calendars', 'error');
+        return;
       }
-      if (result && result.movedFromOld > 0 && typeof toast === 'function') {
+      var picked = select.options && select.options[select.selectedIndex];
+      if (!(await _confirmCalendarOwnership(val, (picked && picked.text) || 'this calendar'))) return;
+      var result = await window.psycleSetCalendarConfig({ mode: 'custom', targetId: val, ownedAck: true });
+      var r = null;
+      if (typeof window.psycleResyncCalendar === 'function') {
+        r = await window.psycleResyncCalendar({ ownedAck: true });
+      }
+      // 'busy' = a pass was already running and has queued the re-run that
+      // fills the new calendar — nothing the member needs to act on.
+      var problem = r && r.skipped !== 'busy' ? _calSyncProblem(r) : '';
+      if (problem) {
+        if (typeof toast === 'function') toast('Calendar saved, not synced yet — ' + problem, 'info');
+      } else if (result && result.movedFromOld > 0 && typeof toast === 'function') {
         toast('Moved ' + result.movedFromOld + ' event' +
           (result.movedFromOld !== 1 ? 's' : '') + ' to new calendar', 'info');
       }
     } finally {
       select.disabled = false;
+      // Repaint from the STORED config: after "Choose another" the select must
+      // snap back to the calendar still in use (the placeholder on a first
+      // pick — there is no previous value to restore), not keep showing a
+      // calendar that was never handed over.
+      renderCalendarSync();
     }
   };
 
@@ -533,8 +624,9 @@
     btn.textContent = 'Scanning…';
     try {
       var res = await window.psycleCleanupDuplicates();
-      if (res.error) {
-        btn.textContent = res.error;
+      var problem = _calSyncProblem(res);
+      if (problem) {
+        btn.textContent = problem; // incl. a reconcile that never ran — not "No duplicates"
       } else if (res.removed === 0) {
         btn.textContent = 'No duplicates';
       } else {
@@ -550,11 +642,28 @@
     if (!window.psycleResyncCalendar) return;
     var old = btn.textContent;
     btn.disabled = true;
+    // A target picked before the ownership dialog existed was never handed
+    // over, and this button used to grant that silently — so its first sync
+    // wiped the calendar. Ask first; only a yes lets the resync confirm the
+    // contract. (Signed out: nothing will run, so there is nothing to ask.)
+    var opts;
+    var cfg = typeof window.psycleGetCalendarConfig === 'function' ? window.psycleGetCalendarConfig() : {};
+    if (cfg.mode === 'custom' && cfg.targetId && cfg.ownedAck === false &&
+        !(typeof getBearerToken === 'function' && !getBearerToken())) {
+      var sel = document.getElementById('calSyncTarget');
+      var cur = sel && sel.options && sel.options[sel.selectedIndex];
+      var name = cur && String(cur.value) === String(cfg.targetId) ? cur.text : 'this calendar';
+      var agreed = false;
+      try { agreed = await _confirmCalendarOwnership(cfg.targetId, name, 'Not now'); } catch (e) {}
+      if (!agreed) { btn.disabled = false; return; }
+      opts = { ownedAck: true };
+    }
     btn.textContent = 'Syncing…';
     try {
-      var r = await window.psycleResyncCalendar();
-      if (r && r.error) {
-        btn.textContent = r.error;
+      var r = await window.psycleResyncCalendar(opts);
+      var problem = _calSyncProblem(r);
+      if (problem) {
+        btn.textContent = problem; // incl. a reconcile that never ran — not "Synced ✓"
       } else if (r && (r.added || r.removed)) {
         var parts = [];
         if (r.added) parts.push('+' + r.added);
@@ -570,6 +679,7 @@
     }
     setTimeout(function () { btn.textContent = old; btn.disabled = false; }, 2200);
   };
+  // ── pure:calendar-sync:end
 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -686,8 +796,10 @@
       var id = Number(slot.id);
       var label = slot.label ?? slot.id;
       var cls = avoidSet.has(id) ? 'pref-avoid' : preferSet.has(id) ? 'pref-prefer' : '';
+      // As the bike picker: only NUMBERS go into the handler, and the label
+      // (free text in Psycle's layout editor) is escaped — this is innerHTML.
       return '<g class="bike-pref-svg-slot ' + cls + '" data-slot="' + id + '" ' +
-        'onclick="toggleBikePref(' + studioId + ',' + id + ')" style="cursor:pointer">' +
+        'onclick="toggleBikePref(' + Number(studioId) + ',' + id + ')" style="cursor:pointer">' +
         '<rect x="' + sx(slot.x) + '" y="' + sy(slot.y) + '" width="' + SLOT + '" height="' + SLOT + '"' +
         ' rx="6" stroke-width="1.5"/>' +
         '<text x="' + (sx(slot.x) + SLOT / 2) + '" y="' + (sy(slot.y) + SLOT / 2 + 4) + '"' +
@@ -906,38 +1018,241 @@
   }
   // ── pure:settings-export:end
 
+  // ── pure:import-validate:start ── (DOM-free; tests/suites/import-validate.js evaluates this block)
+  // What an import file may do. It used to be written into localStorage as it
+  // came — every key it named, unchecked, over whatever the device held, with
+  // no question asked: an old backup silently replaced months of history,
+  // rankings and favourites (and on iOS the Preferences mirror made that
+  // permanent), and a file made by someone else could plant markup in keys that
+  // are later printed.
+  //
+  // Now: only the keys an export writes, each a string of bounded size whose
+  // JSON has that key's shape (cleaned by app.js's pure:stored-data helpers,
+  // handed in as `clean`). And the file only ever ADDS: classes this device has
+  // no record of, rankings / bike prefs for instructors / studios it has none
+  // for, favourites and spot alerts it lacks; theme, filters and the sync stamp
+  // only where the device has none. Nothing the member already has is replaced.
+  var IMPORT_MAX_FILE = 5242880;  // bytes — a full 2,000-class export is under 1 MB
+  var IMPORT_MAX_VALUE = 1048576; // chars per key
+
+  // data: the parsed file. deviceGet(key) → this device's raw stored string.
+  // opts: { clean: {history, tiers, idList, bikePrefs}, themes: [ids], historyMax }
+  // → { writes: {key: string}, added: {…counts}, accepted (keys that passed), skipped: [{key, reason}],
+  //     exportedAt, deviceHasData }
+  function _planSettingsImport(data, deviceGet, opts) {
+    opts = opts || {};
+    var clean = opts.clean || {};
+    var plan = { writes: {}, added: {}, accepted: 0, skipped: [], exportedAt: '', deviceHasData: false };
+    var skip = function (key, reason) { plan.skipped.push({ key: key, reason: reason }); };
+    if (!data || typeof data !== 'object' || Array.isArray(data)) { skip('*', 'not a settings file'); return plan; }
+    var own = function (k) { return Object.prototype.hasOwnProperty.call(data, k); };
+    if (own('_exported_at') && typeof data._exported_at === 'string' && data._exported_at.length < 40 &&
+        !isNaN(Date.parse(data._exported_at))) plan.exportedAt = data._exported_at;
+
+    // The file's raw string for a key (undefined = absent or refused).
+    var rawOf = function (key) {
+      if (!own(key)) return undefined;
+      var raw = data[key];
+      if (typeof raw !== 'string' || raw === '') { skip(key, 'not text'); return undefined; }
+      if (raw.length > IMPORT_MAX_VALUE) { skip(key, 'too large'); return undefined; }
+      return raw;
+    };
+    var jsonOf = function (key) {
+      var raw = rawOf(key);
+      if (raw === undefined) return undefined;
+      try { return JSON.parse(raw); } catch (e) { skip(key, 'unreadable'); return undefined; }
+    };
+    var deviceRaw = function (key) { try { return deviceGet(key) || ''; } catch (e) { return ''; } };
+    var deviceJson = function (key, fallback) {
+      var raw = deviceRaw(key);
+      if (!raw) return fallback;
+      try { return JSON.parse(raw); } catch (e) { return fallback; }
+    };
+    var isMap = function (v) { return !!v && typeof v === 'object' && !Array.isArray(v); };
+
+    // Class history — by class: where this device has ANY record of a class
+    // (booked or cancelled) it knows better than a backup; otherwise every row
+    // the file holds for it comes in (a cancel + rebook is two rows).
+    var fileHist = jsonOf('psycle_class_history');
+    var devHist = clean.history(deviceJson('psycle_class_history', []));
+    if (devHist.length) plan.deviceHasData = true;
+    if (fileHist !== undefined) {
+      if (!Array.isArray(fileHist)) skip('psycle_class_history', 'wrong shape');
+      else {
+        plan.accepted++;
+        var known = Object.create(null), taken = Object.create(null), add = [];
+        devHist.forEach(function (h) { known[h.eventId] = true; });
+        clean.history(fileHist).forEach(function (h) {
+          if (!h.eventId || typeof h.date !== 'string' || !h.date || known[h.eventId]) return;
+          var rowKey = h.eventId + '|' + (h.cancelledAt ? 'x' : '');
+          if (taken[rowKey]) return;
+          taken[rowKey] = true;
+          add.push(h);
+        });
+        if (add.length) {
+          var merged = devHist.concat(add);
+          merged.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+          if (opts.historyMax > 0 && merged.length > opts.historyMax) merged.length = opts.historyMax;
+          plan.writes.psycle_class_history = JSON.stringify(merged);
+          plan.added.classes = add.length;
+        }
+      }
+    }
+
+    // Rankings and bike prefs — per instructor / studio, the device's kept.
+    var fillMap = function (key, cleaner, isEmpty, label) {
+      var fileVal = jsonOf(key);
+      var dev = cleaner(deviceJson(key, {}));
+      if (Object.keys(dev).length) plan.deviceHasData = true;
+      if (fileVal === undefined) return;
+      if (!isMap(fileVal)) { skip(key, 'wrong shape'); return; }
+      plan.accepted++;
+      var incoming = cleaner(fileVal), n = 0;
+      Object.keys(incoming).forEach(function (id) {
+        if (isEmpty(incoming[id]) || (Object.prototype.hasOwnProperty.call(dev, id) && !isEmpty(dev[id]))) return;
+        dev[id] = incoming[id];
+        n++;
+      });
+      if (n) { plan.writes[key] = JSON.stringify(dev); plan.added[label] = n; }
+    };
+    fillMap('psycle_instructor_tiers', clean.tiers, function (v) { return !v; }, 'rankings');
+    fillMap('psycle_bike_prefs', clean.bikePrefs, function (v) { return !v || !(v.avoid.length || v.prefer.length); }, 'bikeStudios');
+
+    // Favourites and spot alerts — set union.
+    var unionList = function (key, label, countsAsData) {
+      var fileVal = jsonOf(key);
+      var dev = clean.idList(deviceJson(key, []));
+      if (countsAsData && dev.length) plan.deviceHasData = true;
+      if (fileVal === undefined) return;
+      if (!Array.isArray(fileVal)) { skip(key, 'wrong shape'); return; }
+      plan.accepted++;
+      var n = 0;
+      clean.idList(fileVal).forEach(function (id) {
+        if (dev.indexOf(id) === -1) { dev.push(id); n++; }
+      });
+      if (n) { plan.writes[key] = JSON.stringify(dev); plan.added[label] = n; }
+    };
+    unionList('psycle_fav_instructors', 'favourites', true);
+    unionList('psycle_notify_watchlist', 'alerts', false);
+
+    // Theme, last filters, sync stamp — only where this device has none.
+    var theme = rawOf('psycle_theme');
+    if (theme !== undefined) {
+      if ((opts.themes || []).indexOf(theme) === -1) skip('psycle_theme', 'unknown theme');
+      else {
+        plan.accepted++;
+        if ((opts.themes || []).indexOf(deviceRaw('psycle_theme')) === -1) { plan.writes.psycle_theme = theme; plan.added.theme = 1; }
+      }
+    }
+    var filters = jsonOf('psycle_saved_filters');
+    if (filters !== undefined) {
+      if (!isMap(filters)) skip('psycle_saved_filters', 'wrong shape');
+      else if (deviceRaw('psycle_saved_filters')) plan.accepted++;
+      else {
+        plan.accepted++;
+        // Flat copy: text, numbers, booleans and lists of those — nothing nested.
+        var flat = {};
+        var prim = function (v) { return (typeof v === 'string' && v.length <= 100) || typeof v === 'boolean' || (typeof v === 'number' && isFinite(v)); };
+        Object.keys(filters).forEach(function (k) {
+          if (k === '__proto__' || k === 'constructor' || k === 'prototype') return;
+          var v = filters[k];
+          if (v === null || prim(v)) flat[k] = v;
+          else if (Array.isArray(v) && v.length <= 200) flat[k] = v.filter(prim);
+        });
+        plan.writes.psycle_saved_filters = JSON.stringify(flat);
+        plan.added.filters = 1;
+      }
+    }
+    var synced = rawOf('psycle_history_synced');
+    if (synced !== undefined) {
+      if (synced.length > 40 || isNaN(Date.parse(synced))) skip('psycle_history_synced', 'not a date');
+      // Only alongside the history it vouches for, and never over this device's own stamp.
+      else if (!deviceRaw('psycle_history_synced') && plan.writes.psycle_class_history) plan.writes.psycle_history_synced = synced;
+    }
+    return plan;
+  }
+
+  // "120 classes, 4 rankings and 2 favourites" — what the plan adds, in words.
+  function _importSummary(added) {
+    added = added || {};
+    var n = function (count, one, many) { return count + ' ' + (count === 1 ? one : many); };
+    var parts = [];
+    if (added.classes) parts.push(n(added.classes, 'class', 'classes'));
+    if (added.rankings) parts.push(n(added.rankings, 'ranking', 'rankings'));
+    if (added.favourites) parts.push(n(added.favourites, 'favourite', 'favourites'));
+    if (added.bikeStudios) parts.push('bike preferences for ' + n(added.bikeStudios, 'studio', 'studios'));
+    if (added.alerts) parts.push(n(added.alerts, 'spot alert', 'spot alerts'));
+    if (added.theme) parts.push('your theme');
+    if (added.filters) parts.push('your last search filters');
+    if (parts.length < 2) return parts.join('');
+    return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+  }
+  // ── pure:import-validate:end ──
+
+  // Writes an accepted plan, says what changed, reloads (the app reads most of
+  // these keys once, at launch).
+  function _applySettingsImport(plan) {
+    var failed = 0;
+    Object.keys(plan.writes).forEach(function (key) {
+      var ok = false;
+      try {
+        if (typeof window._psycleSafeSetItem === 'function') ok = window._psycleSafeSetItem(key, plan.writes[key]);
+        else { localStorage.setItem(key, plan.writes[key]); ok = true; }
+      } catch (e) {}
+      if (!ok) failed++;
+    });
+    if (failed) {
+      toast("Some of that backup couldn't be saved — this device's storage is full", 'error');
+      return;
+    }
+    toast('Imported ' + _importSummary(plan.added) + ' — reloading', 'success');
+    setTimeout(function () { location.reload(); }, 1200);
+  }
+
   window.importSettings = function (input) {
-    var status = document.getElementById('importStatus');
     var file = input.files && input.files[0];
     if (!file) return;
     // Logged here for the same reason as the export above.
     if (typeof window.pushAction === 'function') window.pushAction('settings:import');
 
     var reader = new FileReader();
+    if (file.size > IMPORT_MAX_FILE) {
+      toast("That file is too large to be a Psync backup", 'error');
+      input.value = '';
+      return;
+    }
+    reader.onerror = function () { toast("Couldn't read that file", 'error'); input.value = ''; };
     reader.onload = function (e) {
       try {
         var data = JSON.parse(e.target.result);
-        var count = 0;
-        EXPORT_KEYS.forEach(function (key) {
-          if (data[key]) {
-            localStorage.setItem(key, data[key]);
-            count++;
-          }
+        var plan = _planSettingsImport(data, function (key) { return localStorage.getItem(key); }, {
+          clean: { history: _cleanStoredHistory, tiers: _cleanStoredTiers, idList: _cleanStoredIdList, bikePrefs: _cleanStoredBikePrefs },
+          themes: (window.APP_THEMES || []).map(function (t) { return t.id; }),
+          historyMax: window.PSYCLE_HISTORY_MAX || 2000,
         });
-        if (status) {
-          status.style.display = '';
-          status.style.color = '#5dba5d';
-          status.textContent = 'Restored ' + count + ' settings. Reloading…';
+        var summary = _importSummary(plan.added);
+        if (!summary) {
+          // Nothing usable in it at all — or nothing this device lacks.
+          if (!plan.accepted) toast("That doesn't look like a Psync backup — nothing was imported", 'error');
+          else toast('Nothing new in that backup — everything in it is already on this device', 'info');
+        } else if (!plan.deviceHasData) {
+          _applySettingsImport(plan); // an empty device: nothing to weigh the file against
+        } else {
+          var when = plan.exportedAt ? new Date(plan.exportedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+          confirmModal({
+            title: 'Import this backup?',
+            // (body, not warn: that slot is the red ⚠ box, and this is a reassurance.)
+            body: (when ? 'This backup was saved on ' + when + '. ' : '') + 'Importing adds ' + summary +
+              '. Nothing already on this device is replaced — where both have something, this device\'s is kept.',
+            confirmText: 'Import',
+            cancelText: 'Cancel',
+          }).then(function (ok) {
+            if (ok) _applySettingsImport(plan);
+            else toast('Import cancelled — nothing was changed', 'info');
+          });
         }
-        toast('Settings restored — reloading', 'success');
-        setTimeout(function () { location.reload(); }, 1000);
       } catch (err) {
-        if (status) {
-          status.style.display = '';
-          status.style.color = '#e94560';
-          status.textContent = 'Invalid file: ' + err.message;
-        }
-        toast('Import failed — invalid file', 'error');
+        toast('Import failed — that file isn\'t a readable Psync backup', 'error');
       }
       input.value = '';
     };

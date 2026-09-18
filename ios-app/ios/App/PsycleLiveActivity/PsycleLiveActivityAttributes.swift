@@ -24,10 +24,18 @@ public struct PsycleClassActivityAttributes: ActivityAttributes {
         public var startAt: Date
         /// Free-form status line, e.g. "Starting soon" or "In progress".
         public var status: String
+        /// Seats as held NOW ("Bike 12", "Bikes 12 & 14"). Lives in the state,
+        /// not only the attributes below, because seats change while the card
+        /// is up ("+ Add spot", a single-seat cancel) and attributes are fixed
+        /// at start. Optional so a card started by a build without it still
+        /// decodes (synthesized Codable uses decodeIfPresent) — the view then
+        /// falls back to attributes.slotSummary.
+        public var slotSummary: String?
 
-        public init(startAt: Date, status: String) {
+        public init(startAt: Date, status: String, slotSummary: String? = nil) {
             self.startAt = startAt
             self.status = status
+            self.slotSummary = slotSummary
         }
     }
 

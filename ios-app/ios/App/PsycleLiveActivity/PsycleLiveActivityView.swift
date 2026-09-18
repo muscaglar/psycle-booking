@@ -54,7 +54,7 @@ struct PsycleLiveActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(subtitle(context.attributes))
+                    Text(subtitle(context))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -76,11 +76,14 @@ struct PsycleLiveActivityWidget: Widget {
         }
     }
 
-    private func subtitle(_ a: PsycleClassActivityAttributes) -> String {
+    // Takes the context, not just the attributes: the seats come from the
+    // state (current) before the attributes (as they were at start).
+    private func subtitle(_ context: ActivityContext<PsycleClassActivityAttributes>) -> String {
+        let a = context.attributes
         var parts: [String] = []
         if !a.instrName.isEmpty { parts.append(a.instrName) }
         if !a.locName.isEmpty { parts.append(a.locName) }
-        if let slot = a.slotSummary { parts.append(slot) }
+        if let slot = context.state.slotSummary ?? a.slotSummary { parts.append(slot) }
         return parts.joined(separator: " · ")
     }
 }
@@ -130,7 +133,8 @@ private struct LockScreenLiveActivityView: View {
         var parts: [String] = []
         if !context.attributes.instrName.isEmpty { parts.append(context.attributes.instrName) }
         if !context.attributes.locName.isEmpty { parts.append(context.attributes.locName) }
-        if let slot = context.attributes.slotSummary { parts.append(slot) }
+        // State first: seats can change while the card is up (see ContentState).
+        if let slot = context.state.slotSummary ?? context.attributes.slotSummary { parts.append(slot) }
         return parts.joined(separator: " · ")
     }
 }

@@ -404,11 +404,16 @@ module.exports = async function (t) {
   function similarWorld(o) {
     o = o || {};
     const log = { calls: [], toasts: [], docClick: [] };
-    const inputs = { startDate: { value: '' }, daysAhead: { value: '' } };
+    const inputs = { startDate: { value: '' }, daysAhead: { value: '' }, instrSearch: { value: 'al' } };
     const trigger = fakeEl();
     fakeEl().appendChild(trigger); // gives the trigger a parentElement (.booking-actions)
     let popup = null;
-    const ctx = t.loadPure('js/app.js', 'bookings-card', {
+    // o.now: a fixed clock (new Date() and Date.now()) for the branches that count from today.
+    class Clock extends Date {
+      constructor(...a) { if (a.length) super(...a); else super(o.now); }
+      static now() { return o.now; }
+    }
+    const ctx = t.loadPure('js/app.js', 'bookings-card', Object.assign(o.now == null ? {} : { Date: Clock }, {
       URLSearchParams,
       window: {},
       _eventCache: { 77: { start_at: o.startAt || '2026-09-22 07:00:00', instructor_id: 31, event_type_id: 7, studio_id: 4, _instrName: 'Alex', _typeName: o.typeName || 'Ride 45' } },
@@ -424,6 +429,7 @@ module.exports = async function (t) {
       refreshFacetCounts: () => log.calls.push('facets'),
       escapeHTML: (s) => String(s),
       localDateStr: (d) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'),
+      _dateModeWindow: t.loadPure('js/app.js', 'filters')._dateModeWindow, // _focusSearch derives its presets from the real one
       toast: (msg) => log.toasts.push(msg),
       renderInstrChips: () => log.calls.push('chips'),
       updateFiltersSummary: () => log.calls.push('summary'),
@@ -440,12 +446,13 @@ module.exports = async function (t) {
         addEventListener: (type, fn, capture) => { if (type === 'click' && capture === true) log.docClick.push(fn); },
         removeEventListener: (type, fn) => { log.docClick = log.docClick.filter((f) => f !== fn); },
       },
-    });
+    }));
     // The REAL category map / sub-type list: what render() filters the alternatives by.
-    t.vm.runInContext("var _dateQuickMode = 'today';\n" + sliceFn(src, 'const CATEGORY_MAP = [', '];') + '\n' + sliceFn(src, 'function getCategory(', '}') + '\n' +
+    t.vm.runInContext("var _dateQuickMode = 'today', _availableOnly = " + (o.availableOnly ? 'true' : 'false') + ";\n" + sliceFn(src, 'const CATEGORY_MAP = [', '];') + '\n' + sliceFn(src, 'function getCategory(', '}') + '\n' +
       sliceFn(src, 'const REFORMER_SUBS = [', '];') + '\n' + sliceFn(src, 'async function rebookNextWeek(', '}') + '\n' +
       // The REAL Time-row bands, and the helper that lets a time-targeted flow through them.
       sliceFn(src, 'const TIME_BANDS = [', '];') + '\n' + sliceFn(src, 'function _timeBandOf(', '}') + '\n' + sliceFn(src, 'function _admitTimeBands(', '}') + '\n' +
+      sliceFn(src, 'function _focusSearch(', '}') + '\n' +
       sliceFn(src, 'window.findSimilar = function(eventId) {', '};'), ctx);
     return {
       ctx, log, inputs, trigger,
@@ -465,14 +472,75 @@ module.exports = async function (t) {
     w.pick('same-instructor');
     t.eq([w.inputs.daysAhead.value, w.ctx._dateQuickMode], [7, 'week'], '"Same instructor, any time": today + 7 days IS the week preset — the stale "today" mode is replaced');
     t.eq([...w.ctx.selectedInstructors], ['31'], 'filtered to that instructor only');
-    t.ok(w.log.calls.indexOf('summary') !== -1 && w.log.calls.indexOf('summary') < w.log.calls.indexOf('search'), 'the filters summary is refreshed before the search (search() never does it)');
+    // Both branches go through _focusSearch now: _syncFilterUI repaints chips,
+    // pills, date row and the summary in one go.
+    t.ok(w.log.calls.indexOf('syncUI') !== -1 && w.log.calls.indexOf('syncUI') < w.log.calls.indexOf('search'), 'chips, pills and the filters summary are re-synced before the search (search() never does it)');
     t.ok(w.log.calls.indexOf('tab:discover') < w.log.calls.indexOf('search'), 'Discover is shown before the search runs');
 
     w = similarWorld();
     w.open();
     w.pick('same-time');
-    t.eq([w.inputs.daysAhead.value, w.ctx._dateQuickMode], [8, null], '"Same time, any instructor": an 8-day custom range carries NO preset');
-    t.ok(w.log.calls.includes('summary'), 'summary refreshed for the custom range too');
+    t.eq([w.inputs.daysAhead.value, w.ctx._dateQuickMode], [1, null], '"Same time, any instructor": that ONE day (it was 8 days of every class), and a picked day carries NO preset');
+    t.ok(/^\d{4}-\d{2}-\d{2}$/.test(w.inputs.startDate.value) && new Date(w.inputs.startDate.value + 'T12:00:00').getDay() === 2, "…the next occurrence of the class's own weekday (a Tuesday)");
+    // Monday 14 Sep 13:00 (next week has just opened), holding Tue 22 Sep 07:00:
+    // the nearest Tuesday is the 15th — with ONE day shown, the class being
+    // swapped was not even listed. Every booking 7–13 days out hit this.
+    const MON_1PM = new Date(2026, 8, 14, 13, 0, 0).getTime();
+    w = similarWorld({ now: MON_1PM, startAt: '2026-09-22 07:00:00' });
+    w.open();
+    w.pick('same-time');
+    t.eq([w.inputs.startDate.value, w.inputs.daysAhead.value], ['2026-09-22', 1], '"Same time" for a class 8 days out shows the class\'s OWN day (it showed the Tuesday before it)');
+    t.ok(/Tue,? 22 Sep/.test(w.log.toasts[w.log.toasts.length - 1]), '…and the toast names that day');
+    w = similarWorld({ now: MON_1PM, startAt: '2026-09-15 07:00:00' });
+    w.open();
+    w.pick('same-time');
+    t.eq(w.inputs.startDate.value, '2026-09-15', 'a class inside the week lands on its own date, as before');
+    // A class already gone (history / a stale card): the next occurrence of its weekday.
+    w = similarWorld({ now: MON_1PM, startAt: '2026-09-08 07:00:00' });
+    w.open();
+    w.pick('same-time');
+    t.eq(w.inputs.startDate.value, '2026-09-15', 'a class in the past falls back to the next occurrence of its weekday');
+    w = similarWorld({ now: MON_1PM, startAt: 'garbage' });
+    w.open();
+    w.pick('same-time');
+    t.ok(!/garbage/.test(String(w.inputs.startDate.value)), 'an unreadable start never reaches the date input');
+    t.ok(w.log.calls.includes('syncUI'), 'the UI is re-synced for the picked day too');
+  }
+
+  // The reviewer's reproduction: Discover was left on "studio 5 · Ride · Upper
+  // only" (+ a typed instructor search and a text query); Similar is opened on
+  // a STRENGTH class at location 2.
+  t.section('Find similar: a shortcut keeps none of the filters Discover was left on');
+  {
+    const left = { instructors: ['99'], locations: ['5'], categories: ['RIDE'], strengthSubs: ['UPPER'], reformerSubs: ['SIGNATURE'], typeName: 'STRENGTH: Lower Body' };
+    const state = (w) => ({
+      instr: [...w.ctx.selectedInstructors], locs: [...w.ctx.selectedLocations], cats: [...w.ctx.selectedCategories],
+      strength: [...w.ctx.selectedStrengthSubs].sort(), reformer: [...w.ctx.selectedReformerSubs].sort(),
+      typed: w.inputs.instrSearch.value, query: w.ctx.window._discoverQuery,
+    });
+    let w = similarWorld(left);
+    w.ctx.window._discoverQuery = 'spin';
+    w.open();
+    w.pick('same-instructor');
+    t.eq(state(w), { instr: ['31'], locs: [], cats: [], strength: ['FULL', 'LOWER', 'UPPER'], reformer: ['SIGNATURE', 'STRENGTH'], typed: '', query: '' },
+      '"Same instructor": that instructor at ANY studio, in ANY class type (studio 5 · Ride · Upper stayed on, and render() hid what the toast announced)');
+    t.eq(w.log.toasts, ['Showing classes with Alex'], 'the toast says what the list now shows');
+
+    w = similarWorld(left);
+    w.open();
+    w.pick('same-time');
+    t.eq(state(w), { instr: [], locs: ['2'], cats: ['STRENGTH'], strength: ['FULL', 'LOWER', 'UPPER'], reformer: ['SIGNATURE', 'STRENGTH'], typed: '', query: '' },
+      "\"Same time\": the class's OWN studio and class type, any instructor, sub-types back to all");
+    t.ok(w.log.toasts.length === 1 && !/around|\d:\d\d/.test(w.log.toasts[0]) && /any instructor$/.test(w.log.toasts[0]),
+      'the toast no longer claims "around 7:00am" — nothing filters by hour (got: ' + w.log.toasts[0] + ')');
+
+    // Only the cache's 'Class' placeholder is known: no class type is guessed.
+    w = similarWorld(Object.assign({}, left, { typeName: 'Class' }));
+    w.open();
+    w.pick('same-time');
+    t.eq([[...w.ctx.selectedCategories], [...w.ctx.selectedLocations]], [[], ['2']], "a placeholder type filters nothing (it would hide the class being looked for); the studio still narrows");
+    t.ok(!/saveFilters/.test(sliceFn(src, 'function _focusSearch(', '}').replace(/\/\/.*$/gm, '')),
+      '_focusSearch never saves: a shortcut must not replace the filters the next launch restores');
   }
 
   t.section('Find similar: "Same class next week" with no exact match shows its alternatives');
@@ -538,7 +606,9 @@ module.exports = async function (t) {
     b.open();
     b.pick('same-time');
     t.eq([...b.ctx.selectedTimeBands].sort(), ['early', 'evening'], '"Same time": the class\'s own band comes on beside the saved one');
-    t.ok(b.log.calls.indexOf('timePills') !== -1 && b.log.calls.indexOf('timePills') < b.log.calls.indexOf('summary'), 'before the filters summary is rewritten');
+    // _focusSearch repaints chips, pills and the summary in one go (_syncFilterUI), then searches.
+    t.ok(b.log.calls.indexOf('timePills') !== -1 && b.log.calls.indexOf('timePills') < b.log.calls.indexOf('syncUI') && b.log.calls.indexOf('syncUI') < b.log.calls.indexOf('search'),
+      'before the filters UI (summary included) is re-synced and the search runs');
     b = similarWorld();
     b.open();
     b.pick('same-time');

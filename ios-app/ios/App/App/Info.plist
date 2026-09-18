@@ -29,9 +29,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Psycle Finder adds your booked classes to your calendar and removes them when you cancel.</string>
+	<string>Psync keeps the calendar you choose in step with your Psycle bookings — adding classes and removing events that are not bookings.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Psycle Finder adds your booked classes to your calendar and removes them when you cancel.</string>
+	<string>Psync keeps the calendar you choose in step with your Psycle bookings — adding classes and removing events that are not bookings.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIBackgroundModes</key>

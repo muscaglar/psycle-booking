@@ -14,6 +14,11 @@ module.exports = async function (t) {
     return lines.slice(from, to).join('\n');
   };
 
+  const appSrc = t.readSource('js/app.js');
+  const copyFrom = appSrc.indexOf('// ── pure:copy:start'), copyTo = appSrc.indexOf('// ── pure:copy:end');
+  if (copyFrom === -1 || copyTo < copyFrom) throw new Error('history-sync suite: cannot slice pure:copy out of js/app.js (markers moved?)');
+  const copyRegion = appSrc.slice(copyFrom, copyTo);
+
   const DAY = 86400000;
   const NOW = Date.UTC(2026, 8, 21, 9, 30);
   const iso = (ms) => new Date(ms).toISOString();
@@ -27,7 +32,7 @@ module.exports = async function (t) {
       constructor(...a) { if (a.length) super(...a); else super(clock.now); }
       static now() { return clock.now; }
     }
-    const log = { gets: [], toasts: [], insights: 0, dirty: 0, events: [], timers: [], calls: [] };
+    const log = { gets: [], toasts: [], insights: 0, dirty: 0, events: [], timers: [], calls: [], paints: [] };
     const store = t.makeFakeLocalStorage();
     if (o.history) store.setItem('psycle_class_history', JSON.stringify(o.history));
     if (o.synced !== undefined) store.setItem('psycle_history_synced', o.synced);
@@ -48,6 +53,7 @@ module.exports = async function (t) {
       getBearerToken: () => token,
       PsycleEvents: { emit: (e) => log.events.push(e), on: () => {} },
       _eventCache: {},
+      _paints: log.paints,
     });
     ctx.window = ctx;
     // features.js's owner check (tests/suites/history.js): is the stored history this member's?
@@ -67,7 +73,12 @@ module.exports = async function (t) {
       return { ok: false, status: 404, json: async () => ({}) };
     };
     t.vm.runInContext([
-      "var HISTORY_KEY = 'psycle_class_history'; var SYNC_KEY = 'psycle_history_synced'; var _syncing = false;",
+      "var HISTORY_KEY = 'psycle_class_history'; var SYNC_KEY = 'psycle_history_synced'; var _syncing = false; var _syncLabel = '';",
+      // The banner is DRAWN from _syncing/_syncLabel (renderSyncBanner) — the sync
+      // no longer captures #syncHistoryBtn. Each paint is recorded as it would look.
+      'function renderSyncBanner() { _paints.push(_syncing ? _syncLabel : "idle"); }',
+      // The result toasts word their counts with app.js's _plural (pure:copy) — the real one.
+      copyRegion,
       "function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; } }",
       region('  var TOPUP_MAX_NEW', '  // ═══'),
     ].join('\n'), ctx);
@@ -156,6 +167,7 @@ module.exports = async function (t) {
     eq([w.log.toasts, w.log.insights, w.log.dirty, w.log.events], [[], 0, 0, []], 'nothing said, nothing repainted under the member\'s thumb');
     eq([w.store.getItem('psycle_history_synced'), w.history().length], [iso(NOW), 2], 'the sync stamp moves on (next top-up in a week); history intact');
     eq([w.btn.disabled, w.btn.textContent], [false, 'Re-sync'], 'the banner button is never driven by a top-up (it used to come back reading "Sync now")');
+    eq(w.log.paints.filter((x) => x !== 'idle'), [], '…and the banner is never DRAWN busy by one either (only the idle repaint on the way out — same HTML, so setHtml skips it)');
   }
   {
     const w = world({ synced: iso(NOW - 8 * DAY), history: [entry(100)], previous: past(2) });
@@ -170,6 +182,7 @@ module.exports = async function (t) {
       '61 unknown classes is not a top-up (another account on this device, a wiped history): no detail requests, nothing written, not marked synced');
     await w.ctx._explore_syncHistory();
     eq(w.log.toasts.some((x) => /Already syncing/.test(x[0])), false, '…and it let go of the sync lock on its way out');
+    eq(w.log.paints[0], 'idle', '…repainting the banner idle (a section rebuilt mid-top-up had drawn it busy)');
     eq(w.history().length, 61, 'the member\'s own Re-sync tap still imports them all');
   }
   {
@@ -194,7 +207,8 @@ module.exports = async function (t) {
     const w = world({ history: [entry(100)], previous: past(2) });
     await w.ctx._explore_syncHistory();
     eq([w.log.toasts.map((x) => x[1]), w.log.insights, w.log.dirty], [['success'], 1, 1], 'no arguments (every existing caller) → the result toast and the repaint, as always');
-    eq(w.btn.textContent, 'Sync now', '…and the banner button is driven as always');
+    eq([w.log.paints[0], w.log.paints[w.log.paints.length - 1], w.btn.textContent], ['Syncing...', 'idle', 'Re-sync'],
+      '…and the banner is drawn busy, then idle again — from state, never by writing to a captured button');
     const quiet = world({ history: [entry(100), entry(101)], previous: past(2) });
     await quiet.ctx._explore_syncHistory();
     eq([quiet.log.toasts.length, quiet.log.insights], [1, 1], 'a manual sync that finds nothing new still says so and repaints');

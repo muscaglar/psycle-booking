@@ -423,21 +423,29 @@ select:focus, input:focus {
   transition: all var(--transition-fast);
 }
 
-.bike-slot.available rect { fill: #1a1a1a; stroke: #444; }
-.bike-slot.available:hover rect { fill: #2a2a2a; stroke: #888; }
-.bike-slot.taken rect { fill: #2a0a0a; stroke: #4a1a1a; cursor: not-allowed; }
+/* Every seat state is tokenised at source, hovers included (a hover sticks
+   after a tap on iOS), so the map matches the legend swatches in all seven
+   themes — the same recipe as the prefs map in settings.css. The old Noir
+   literals painted black and maroon tiles on Handheld / Blueprint / Synthwave
+   and left your own seat old-brand pink on Cloud / Linen. A taken seat is a
+   ghost tile: the map's own --bg-deep with the available outline. */
+.bike-slot.available rect { fill: var(--bg-input); stroke: var(--border-light); }
+.bike-slot.available:hover rect { stroke: var(--text-dim); }
+.bike-slot.taken rect { fill: var(--bg-deep); stroke: var(--border-light); cursor: not-allowed; }
 /* "Your pick" follows the theme accent (and its paired ink below) so the
    map matches the legend swatch and the Confirm button in every theme. */
 .bike-slot.selected rect { fill: var(--accent, #e94560); stroke: var(--accent-hover, #c73650); }
-.bike-slot.mine rect { fill: #1a0a12; stroke: #4a1a2a; cursor: pointer; }
-.bike-slot.mine:hover rect { fill: #3a0a0a; stroke: #8a2020; }
-.bike-slot.mine:hover text { fill: #e94560; }
+/* A seat you already hold: the booked-card pair (accent ring + accent number,
+   ≥4.5:1 in every theme). Hovering previews what a tap does — it cancels. */
+.bike-slot.mine rect { fill: var(--booked-bg); stroke: var(--booked-border); stroke-width: 2; cursor: pointer; }
+.bike-slot.mine:hover rect { fill: var(--badge-full-bg); stroke: var(--danger); }
+.bike-slot.mine:hover text { fill: var(--danger); }
 
 .bike-slot text { fill: var(--text-dim, #888); font-size: var(--text-xs); pointer-events: none; }
-.bike-slot.taken text { fill: #4a1a1a; }
+.bike-slot.taken text { fill: var(--text-off); }
 .bike-slot.selected text { fill: var(--accent-ink, #fff); }
-.bike-slot.available:hover text { fill: #fff; }
-.bike-slot.mine text { fill: #e94560; }
+.bike-slot.available:hover text { fill: var(--text-heading); }
+.bike-slot.mine text { fill: var(--accent); }
 
 /* "Your usual" spot — thin gold ring overlay, layered over any selected/available fill */
 .bike-slot.usual rect { stroke: #d4af37; stroke-width: 2; }
@@ -484,6 +492,29 @@ select:focus, input:focus {
   background: var(--badge-waitlist-bg);
   color: var(--badge-waitlist-text);
 }
+/* The late-cancel warning is the one fact that costs a member a credit, so it
+   wears that same caution chip wherever it appears — picker line (above), My
+   Bookings chip, Booked! sheet — not a grey chip here and a dim line there.
+   .late-cancel-note is the shared hook (the markup decides which element
+   carries it); the compound forms outrank theme.css's later .badge colours
+   and .bc-detail's own ink. On a .confirm-warn the dialog's box wins: it is
+   already this amber (below) and keeps heading ink for a full sentence. */
+.late-cancel-note,
+.badge.late-cancel-note, .badge.caution,
+.bc-detail.late-cancel-note {
+  border: 1px solid var(--badge-waitlist-border);
+  background: var(--badge-waitlist-bg);
+  color: var(--badge-waitlist-text);
+}
+/* Box metrics at zero specificity: a .badge / .modal-policy keeps its own. */
+:where(.late-cancel-note) {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+}
+.bc-detail.late-cancel-note { display: inline-block; margin-top: var(--space-1); }
+/* If the hook lands on an element INSIDE the dialog's .confirm-warn (already
+   this amber box), it is plain text there: no chip in a chip. */
+.confirm-warn .late-cancel-note { padding: 0; border: 0; background: none; color: inherit; }
 .modal-clash {
   display: block;
   margin-top: var(--space-3);
@@ -896,6 +927,22 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 }
 
 .toast.show { opacity: 1; transform: translateY(0); }
+/* toast(msg, type) has always set the type as a class; nothing styled it, so
+   "Can't reach Psycle" and "You're booked in" were the same neutral panel.
+   An edge stripe AND a glyph, because the two inks are the same hue in Linen,
+   Synthwave and Handheld. Two classes, so these outrank theme.css's later
+   .toast border colour. The second `content` gives the glyph empty alt text
+   (a screen reader hears the message only); an engine without that syntax
+   keeps the first. 'info' stays plain. */
+.toast.error, .toast.success { border-left-width: 3px; }
+.toast.error { border-left-color: var(--badge-full-text); }
+.toast.success { border-left-color: var(--accent); }
+.toast.error::before, .toast.success::before {
+  margin-right: var(--space-3);
+  font-weight: var(--weight-bold);
+}
+.toast.error::before { content: '!'; content: '!' / ''; color: var(--badge-full-text); }
+.toast.success::before { content: '\2713\FE0E'; content: '\2713\FE0E' / ''; color: var(--accent); }
 
 /* For assistive tech only: the #srStatus / #srAlert live regions that
    announce() (js/app.js) writes toasts and the Booked! line into. Clipped, not
@@ -912,6 +959,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
 .date-quick-btn {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
@@ -1078,14 +1126,15 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 .up-seat-chip button {
   background: none;
   border: none;
-  color: rgba(233,69,96,0.7);
+  /* Cancels that seat: the themed danger ink (≥5.4:1 on the chip). The old
+     70% pink was under 2.9:1 everywhere, and its hover flipped red to the
+     accent (jade on Cloud) — the ink is full strength now, so no hover rule. */
+  color: var(--danger);
   cursor: pointer;
   font-size: var(--text-lg);
   line-height: 1;
   padding: 0 1px;
 }
-
-.up-seat-chip button:hover { color: var(--accent, #e94560); }
 
 /* My Bookings day groups */
 .mb-day-group { margin-bottom: var(--space-5); }
@@ -1242,8 +1291,16 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 .pull-indicator {
   position: fixed;
   top: 0;
+  /* The app draws under the status bar (viewport-fit=cover, contentInset
+     'never'): parked at y=10 the pill sat behind the notch / Dynamic Island,
+     so "Refreshing..." was never seen. The translateY maths in
+     interactions.js is relative to this. No env() support keeps the 0 above. */
+  top: env(safe-area-inset-top, 0px);
   left: 50%;
   transform: translateX(-50%) translateY(-50px);
+  /* As resetPullIndicator (interactions.js): lifted by the inset too, or the
+     parked pill sits beside the Dynamic Island. Plain -50px above is the fallback. */
+  transform: translateX(-50%) translateY(calc(-50px - env(safe-area-inset-top, 0px)));
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -1293,15 +1350,15 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   touch-action: pan-y;
 }
 
-/* Accent fill + --accent-ink, like .confirm-btn-danger: readable in every
-   theme without a per-theme red. */
+/* Danger fill + --danger-ink, like .confirm-btn-danger: each theme's own
+   tuned red (theme.css --danger), not the accent that also means "Book". */
 .swipe-cancel-bg {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   left: 0;
-  background: var(--accent);
+  background: var(--danger);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1318,7 +1375,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 }
 
 .swipe-cancel-bg span {
-  color: var(--accent-ink);
+  color: var(--danger-ink);
   font-size: var(--text-md);
   font-weight: var(--weight-bold);
   text-transform: uppercase;
@@ -1804,9 +1861,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
     border-bottom: 1px solid var(--border, #222);
     margin-bottom: var(--space-1);
   }
-  #tab-discover #discoverExploreWrap {
-    padding: var(--space-3) 0 0;
-  }
   #tab-discover .controls {
     flex-direction: column;
     align-items: stretch;
@@ -1996,6 +2050,9 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  /* The circle exists before the bytes do — and is all that is left when the
+     photo cannot load (js/app.js swaps the <img> for a div of this class). */
+  background: var(--border, #222);
 }
 
 .cds-photo-placeholder {
@@ -2206,19 +2263,22 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 }
 
 .confirm-warn {
-  background: rgba(233, 69, 96, 0.12);
-  border: 1px solid rgba(233, 69, 96, 0.35);
+  /* The caution pair every theme tunes (the picker's late-cancel chip, the
+     session banner) — the old-brand pink box clashed with jade / terracotta.
+     Heading ink, not the amber: this is a full sentence at 11px. */
+  background: var(--badge-waitlist-bg);
+  border: 1px solid var(--badge-waitlist-border);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-sm);
-  color: var(--text);
+  color: var(--text-heading);
   line-height: 1.45;
   margin-bottom: var(--space-5);
 }
 
 .confirm-warn::before {
   content: '⚠ ';
-  color: var(--accent, #e94560);
+  color: var(--badge-waitlist-text);
   font-weight: var(--weight-bold);
   margin-right: var(--space-1);
 }
@@ -2252,10 +2312,12 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 
 .confirm-btn-primary:hover { filter: brightness(1.08); }
 
+/* The costly choice must not wear the same fill as "Book": danger:true had
+   no visual effect while this matched .confirm-btn-primary. */
 .confirm-btn-danger {
-  background: var(--accent, #e94560);
-  border-color: var(--accent, #e94560);
-  color: var(--accent-ink, #fff);
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .confirm-btn-danger:hover { filter: brightness(1.08); }
@@ -2486,7 +2548,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   margin: 0 auto var(--space-4, 16px);
   max-width: 1100px;
   padding: var(--space-4, 14px) var(--space-5, 18px);
-  background: linear-gradient(135deg, rgba(233,69,96,0.10), rgba(74,158,255,0.06));
+  background: var(--accent-soft);
   border: 1px solid var(--border, #333);
   border-radius: var(--radius-lg, 12px);
 }
@@ -2812,7 +2874,7 @@ label.usual-week-pick { cursor: pointer; }
   height: 76px;
   margin: 0 auto var(--space-6, 14px);
   border-radius: var(--radius-full, 9999px);
-  background: rgba(233, 69, 96, 0.12);
+  background: var(--accent-soft);
   color: var(--accent, #e94560);
   display: flex;
   align-items: center;

@@ -23,10 +23,35 @@
   var SYNC_KEY = 'psycle_history_synced';
   var _exploreDirty = true;
   var _syncing = false;
+  var _syncLabel = ''; // the progress line renderSyncBanner draws while _syncing
 
   /** Parse class history from localStorage. Shared across all explore functions. */
   function getHistory() {
-    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; }
+    try {
+      var arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      // Coerced where it is read (app.js, pure:stored-data): an imported
+      // settings file can put anything in this key.
+      return typeof _cleanStoredHistory === 'function' ? _cleanStoredHistory(arr) : (Array.isArray(arr) ? arr : []);
+    } catch (e) { return []; }
+  }
+
+  // The one door for every write to the four explore sections. bookings:loaded
+  // fires on each return to the app (booking events on top of it) and the
+  // sections were rebuilt with byte-identical HTML: the carousel jumped back to
+  // its first card and the row faded in again. Same HTML → nothing to do; a
+  // real change keeps the row's scroll offset. EVERY write has to come through
+  // here — empty states and "Loading…" too — or the remembered string goes
+  // stale and the section sticks.
+  function setHtml(el, html) {
+    if (el._lastHtml === html) return;
+    var grid = el.querySelector('.explore-grid');
+    var left = grid ? grid.scrollLeft : 0;
+    el.innerHTML = html;
+    el._lastHtml = html;
+    if (left) {
+      grid = el.querySelector('.explore-grid');
+      if (grid) grid.scrollLeft = left;
+    }
   }
 
   /**
@@ -256,17 +281,26 @@
     return results.slice(0, 20);
   }
 
+  // Signed out with nothing on record — the state renderInsights shows its one
+  // sign-in hero for. The two suggestion rows live under that hero now, and
+  // "New to you" would otherwise list every instructor there is beneath it.
+  function signedOutBlank() {
+    if (typeof currentUser !== 'undefined' && currentUser) return false;
+    return !getHistory().some(function (h) { return h && !h.cancelledAt; });
+  }
+
   function renderNewToYou(container, profiles) {
+    if (signedOutBlank()) { container.style.display = 'none'; return; }
     var list = computeNewToYou(profiles);
     if (list.length === 0) {
       var booked = getBookedInstructorIds(profiles);
       var total = Object.keys(profiles).length;
       if (total > 0 && booked.size >= total) {
-        container.innerHTML = '<div class="explore-title">New to you</div>' +
-          '<div class="explore-empty">You\'ve booked with every instructor — impressive range!</div>';
+        setHtml(container, '<div class="explore-title">New to you</div>' +
+          '<div class="explore-empty">You\'ve booked with every instructor — impressive range!</div>');
       } else {
-        container.innerHTML = '<div class="explore-title">New to you</div>' +
-          '<div class="explore-empty">Book some classes to see who you haven\'t tried yet.</div>';
+        setHtml(container, '<div class="explore-title">New to you</div>' +
+          '<div class="explore-empty">Book some classes to see who you haven\'t tried yet.</div>');
       }
       container.style.display = '';
       return;
@@ -279,7 +313,7 @@
       html += instrCard(list[i], null);
     }
     html += '</div>';
-    container.innerHTML = html;
+    setHtml(container, html);
     container.style.display = '';
   }
 
@@ -462,18 +496,19 @@
   }
 
   function renderYouMightLike(container, profiles) {
+    if (signedOutBlank()) { container.style.display = 'none'; return; }
     var data = computeYouMightLike(profiles);
 
     if (data.noRefs) {
-      container.innerHTML = '<div class="explore-title">You might like</div>' +
-        '<div class="explore-empty">Star some favourite instructors or rank them on the Membership tab to get personalised recommendations.</div>';
+      setHtml(container, '<div class="explore-title">You might like</div>' +
+        '<div class="explore-empty">Star some favourite instructors or rank them on the Membership tab to get personalised recommendations.</div>');
       container.style.display = '';
       return;
     }
 
     if (data.results.length === 0) {
-      container.innerHTML = '<div class="explore-title">You might like</div>' +
-        '<div class="explore-empty">Run a search to help us find instructors similar to your favourites.</div>';
+      setHtml(container, '<div class="explore-title">You might like</div>' +
+        '<div class="explore-empty">Run a search to help us find instructors similar to your favourites.</div>');
       container.style.display = '';
       return;
     }
@@ -486,7 +521,7 @@
       html += instrCard(c.profile, buildWhyLine(c));
     }
     html += '</div>';
-    container.innerHTML = html;
+    setHtml(container, html);
     container.style.display = '';
   }
 
@@ -627,8 +662,8 @@
         container.style.display = 'none';
         return;
       }
-      container.innerHTML = '<div class="explore-title">Your instructor map</div>' +
-        '<div class="explore-empty">Book your first class to start building your instructor map.</div>';
+      setHtml(container, '<div class="explore-title">Your instructor map</div>' +
+        '<div class="explore-empty">Book your first class to start building your instructor map.</div>');
       container.style.display = '';
       return;
     }
@@ -724,7 +759,7 @@
       html += '</div>';
     }
 
-    container.innerHTML = html;
+    setHtml(container, html);
     container.style.display = '';
   }
 
@@ -809,24 +844,30 @@
     var history = getHistory();
     var historyCount = history.length;
 
+    // A sync in flight is part of what the banner shows, not something written
+    // onto a button afterwards: a bookings event mid-sync re-rendered this
+    // section, the progress kept going to the detached button, and a fresh,
+    // enabled "Sync now" that did nothing (_syncing) sat in its place.
+    var btnState = _syncing ? ' disabled>' + escapeHtml(_syncLabel || 'Syncing...') : null;
+
     if (synced) {
-      container.innerHTML =
+      setHtml(container,
         '<div class="explore-sync-banner explore-sync-done">' +
           '<div class="explore-sync-text">' +
-            '<strong>' + historyCount + ' bookings in history</strong>' +
+            '<strong>' + _plural(historyCount, 'booking') + ' in history</strong>' +
             (dateLabel ? '<br><span>Last synced ' + dateLabel + '</span>' : '') +
           '</div>' +
-          '<button class="explore-sync-btn explore-sync-btn-secondary" id="syncHistoryBtn" onclick="window._explore_syncHistory()">Re-sync</button>' +
-        '</div>';
+          '<button class="explore-sync-btn explore-sync-btn-secondary" id="syncHistoryBtn" onclick="window._explore_syncHistory()"' + (btnState || '>Re-sync') + '</button>' +
+        '</div>');
     } else {
-      container.innerHTML =
+      setHtml(container,
         '<div class="explore-sync-banner">' +
           '<div class="explore-sync-text">' +
             '<strong>Sync your full booking history</strong><br>' +
-            '<span>Import all past bookings from your Psycle account so Explore can give accurate recommendations.</span>' +
+            '<span>Import all past bookings from your Psycle account so your Stats and suggestions are accurate.</span>' +
           '</div>' +
-          '<button class="explore-sync-btn" id="syncHistoryBtn" onclick="window._explore_syncHistory()">Sync now</button>' +
-        '</div>';
+          '<button class="explore-sync-btn" id="syncHistoryBtn" onclick="window._explore_syncHistory()"' + (btnState || '>Sync now') + '</button>' +
+        '</div>');
     }
   }
 
@@ -873,19 +914,22 @@
     }
     _syncing = true;
 
-    // A top-up never drives the banner button: it would come back reading
-    // "Sync now" on a banner that is not repainted when nothing was found.
-    var btn = silent ? null : document.getElementById('syncHistoryBtn');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Syncing...';
-    }
+    // The banner's button is DRAWN busy (renderSyncBanner, while _syncing), not
+    // captured here and written to: a bookings event mid-sync rebuilds the
+    // section, and a captured node would be the detached one from then on.
+    // A top-up never drives it — nothing is repainted for a sync the member
+    // did not start. (A section rebuilt mid-top-up still draws busy, _syncing
+    // being true; every way out below repaints it idle.)
+    var paintBanner = function () { renderSyncBanner(document.getElementById('exploreSyncSection')); };
+    _syncLabel = 'Syncing...';
+    if (!silent) paintBanner();
 
     // The first-run welcome prompt (app.js) has its own button — progress goes
     // to whichever of the two is on screen, so neither sits on "Syncing...".
     var promptBtn = document.getElementById('syncPromptBtn');
     var setLabel = function (text) {
-      if (btn) btn.textContent = text;
+      _syncLabel = text;
+      if (!silent) paintBanner();
       if (promptBtn) promptBtn.textContent = text;
     };
 
@@ -960,6 +1004,7 @@
         // above failed or threw). Only Psycle actually saying "none" counts as
         // a finished sync — then it IS complete, and recording it stops the
         // first-run prompt re-arming on every launch for a brand-new member.
+        _syncing = false; // before any repaint below, or the banner is drawn busy for good
         if (_confirmedEmpty) {
           localStorage.setItem(SYNC_KEY, new Date().toISOString());
           if (!silent && typeof toast === 'function') toast('No past bookings on your Psycle account yet — your history is up to date.', 'info');
@@ -967,13 +1012,12 @@
         } else if (!silent && typeof toast === 'function') {
           toast("Couldn't reach Psycle to sync your history — try again in a moment.", 'error');
         }
-        _syncing = false;
-        if (btn) { btn.disabled = false; btn.textContent = 'Sync now'; }
+        paintBanner(); // idle again ("Sync now" / "Re-sync"), whichever tab is up
         return;
       }
 
       // Update button with progress
-      setLabel('Fetching details (' + allBookings.length + ' bookings)...');
+      setLabel('Fetching details (' + _plural(allBookings.length, 'booking') + ')...');
 
       // Fetch event details for each booking to get instructor/type/location
       var existing = getHistory();
@@ -992,6 +1036,7 @@
 
       if (silent && uniqueBookings.length > TOPUP_MAX_NEW) {
         _syncing = false;
+        paintBanner(); // a section rebuilt mid-top-up drew it busy; same HTML otherwise (setHtml skips it)
         return;
       }
 
@@ -1069,7 +1114,13 @@
       // different caps made every in-app booking shed synced history.
       var historyMax = window.PSYCLE_HISTORY_MAX || 2000;
       if (merged.length > historyMax) merged.length = historyMax;
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+      // The biggest write the app makes, into a bucket its own timetable cache
+      // nearly fills: free that cache and retry before giving up (security.js).
+      if (typeof window._psycleSafeSetItem === 'function') {
+        if (!window._psycleSafeSetItem(HISTORY_KEY, JSON.stringify(merged))) throw new Error("this device's storage is full");
+      } else {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+      }
 
       // Only mark the sync complete when nothing was dropped — a partial sync
       // (failed page / failed detail fetches) must stay retryable, not
@@ -1088,6 +1139,9 @@
         }
       }
 
+      // _syncing off first: the repaint below is the one that puts the idle
+      // "Re-sync" button back.
+      _syncing = false;
       // A top-up that found nothing has nothing to show: repainting Stats or
       // Discover under the member's thumb for no change is only a flicker.
       if (!silent || newEntries.length > 0) {
@@ -1105,7 +1159,7 @@
     }
 
     _syncing = false;
-    if (btn) { btn.disabled = false; btn.textContent = 'Sync now'; }
+    paintBanner(); // idle again, also after a failure and when no explore tab was up to repaint it
   };
 
   // ── Silent weekly top-up ───────────────────────────────────────────
@@ -1180,8 +1234,8 @@
 
     // Loading state if data not ready
     if (!instrs || instrs.length === 0) {
-      newSection.innerHTML = '<div class="explore-loading">Loading instructors...</div>';
-      newSection.style.display = '';
+      setHtml(newSection, '<div class="explore-loading">Loading instructors...</div>');
+      newSection.style.display = signedOutBlank() ? 'none' : ''; // nothing under the signed-out Stats hero
       likeSection.style.display = 'none';
       mapSection.style.display = 'none';
       _exploreDirty = true; // retry on next switch
@@ -1200,9 +1254,10 @@
 
   function markDirtyAndMaybeRender() {
     _exploreDirty = true;
-    // Re-render if discover or stats tab is active (explore sections live in both)
+    // Re-render only while Stats is showing — every explore section lives there
+    // now. Anywhere else the dirty flag waits for switchTab('stats').
     var activePanel = document.querySelector('.tab-panel.active');
-    if (activePanel && (activePanel.id === 'tab-discover' || activePanel.id === 'tab-stats' || activePanel.id === 'tab-profile' || activePanel.id === 'tab-explore')) {
+    if (activePanel && (activePanel.id === 'tab-stats' || activePanel.id === 'tab-profile' || activePanel.id === 'tab-explore')) {
       window.renderExplore();
     }
   }
@@ -1216,6 +1271,9 @@
     PsycleEvents.on('booking:complete', markDirtyAndMaybeRender);
     PsycleEvents.on('booking:cancelled', markDirtyAndMaybeRender);
     PsycleEvents.on('seat:cancelled', markDirtyAndMaybeRender);
+    // The suggestion rows hide with the signed-out Stats hero, and a sign-out
+    // has no bookings:loaded to say so.
+    PsycleEvents.on('auth:changed', markDirtyAndMaybeRender);
   }
 
 })();

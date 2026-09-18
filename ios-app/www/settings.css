@@ -385,17 +385,25 @@
 .bike-pref-svg-slot.pref-prefer text { fill: var(--badge-highlight-text, #5dba5d); }
 
 /* Bike picker: preferences shown via text color only.
-   Rect fill/stroke stays controlled by booking state (available/taken/selected/mine). */
-.bike-slot.pref-prefer text { fill: #5dba5d !important; font-weight: 900; }
-.bike-slot.pref-avoid text { fill: #e94560 !important; }
+   Rect fill/stroke stays controlled by booking state (available/taken/selected/mine).
+   The same status inks as the prefs map above: the seat tiles are themed now
+   (--bg-input), where the fixed green / pink drop as low as 2.0:1 (Linen) and
+   2.6:1 (Handheld) — theme.css's light-theme patch for them is gone. */
+.bike-slot.pref-prefer text { fill: var(--badge-highlight-text, #5dba5d) !important; font-weight: 900; }
+.bike-slot.pref-avoid text { fill: var(--badge-full-text, #e94560) !important; }
 /* Taken slots: dim the preference text */
 .bike-slot.taken.pref-prefer text { fill: #2a5a2a !important; }
 .bike-slot.taken.pref-avoid text { fill: #5a1a2a !important; }
 /* Selected or mine: the state's own label ink always wins. A selected slot
    is accent-filled, so its ink is --accent-ink (white is ~2:1 on the pale
-   Graphite/Handheld/Blueprint accents); "mine" is a fixed red/maroon tile. */
+   Graphite/Handheld/Blueprint accents); "mine" is the booked-card tile
+   (--booked-bg), whose number is the accent. */
 .bike-slot.selected.pref-prefer text, .bike-slot.selected.pref-avoid text { fill: var(--accent-ink, #fff) !important; }
-.bike-slot.mine.pref-prefer text, .bike-slot.mine.pref-avoid text { fill: #fff !important; }
+.bike-slot.mine.pref-prefer text, .bike-slot.mine.pref-avoid text { fill: var(--accent) !important; }
+/* …and its hover (styles.css turns the tile danger: a tap cancels) needs the
+   same !important, or the accent above stays on the red tint — 3.8:1 on Linen
+   and Handheld. */
+.bike-slot.mine.pref-prefer:hover text, .bike-slot.mine.pref-avoid:hover text { fill: var(--danger) !important; }
 
 
 /* ═══════════════════════════════════════════════════════════════════

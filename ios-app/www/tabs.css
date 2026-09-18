@@ -1289,6 +1289,11 @@
 .tab-empty-btn:active { transform: scale(0.96); }
 .tab-empty-btn:disabled { opacity: 0.6; cursor: default; } /* "Retrying…" on the can't-reach-Psycle hero */
 
+/* Signed out, Stats is the Sign-in hero and nothing else: the history on the
+   device belongs to the last member, not to whoever holds it now. A rule, not
+   a render flag — several modules (tabs, explore) un-hide sections in here. */
+#tab-stats.stats-signed-out > :not(#statsEmpty) { display: none !important; }
+
 /* ═══════════════════════════════════════════════════════════════════
    Membership: App section rows + about block
    ═══════════════════════════════════════════════════════════════════ */
@@ -1523,6 +1528,9 @@
    refresh landed, a resume) rebuilds cards that were already up. No entrance
    then — the top of the list blinked with nobody having touched it. */
 #results[data-quiet] .class-card { animation: none; }
+/* Same for My Bookings (_commitBookingsHtml, js/app.js): cards replacing cards
+   that were already up — a cancel, a changed list landing on resume. */
+#upcomingList[data-quiet] .class-card { animation: none; }
 
 /* Bottom-bar icon springs when its tab activates */
 @keyframes tabIconPop {

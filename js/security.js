@@ -45,8 +45,12 @@
   // backslash+quote FIRST, then HTML-escape — the attribute parser decodes
   // entities before the JS parser runs, so the decoded text must be a valid
   // single-quoted JS string. Use this instead of hand-rolling the two steps.
+  // Line breaks too: a raw newline (a stored name can come out of an imported
+  // file) ends the string literal early — not a way out of it, but the handler
+  // no longer parses and the control goes dead.
   window.escapeForJsString = function (str) {
-    return window.escapeHTML(String(str == null ? '' : str).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+    return window.escapeHTML(String(str == null ? '' : str).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+      .replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'));
   };
 
 
@@ -203,6 +207,62 @@
     } catch (e) { /* logging must never break token storage */ }
   }
 
+  // ── Storage-full handling ──────────────────────────────────────
+  // localStorage is one small bucket (~5 MB; about half that on WebKit, which
+  // counts UTF-16) and the app's own timetable cache is by far its biggest
+  // tenant. A sign-in must never be what loses out to a cache: when a write
+  // fails, free what the app can rebuild by itself — the timetable first, the
+  // reference lists only if that was not enough — and try again. Returns
+  // false, never throws. localStorage.setItem is looked up at call time, not
+  // cached: on iOS native-bridge replaces it to mirror keys into Preferences.
+  function _freeAppCaches(deep) {
+    try {
+      localStorage.removeItem('psycle_window_cache');
+      try { sessionStorage.removeItem('psycle_last_results'); } catch (e) {}
+      if (!deep) return;
+      var doomed = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && (k.indexOf('psycle_cache_') === 0 || k.indexOf('psycle_swr_') === 0)) doomed.push(k);
+      }
+      doomed.forEach(function (key) { localStorage.removeItem(key); });
+    } catch (e) {}
+  }
+
+  function _safeSetItem(key, value) {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt) _freeAppCaches(attempt === 2);
+      try { localStorage.setItem(key, value); return true; } catch (e) {}
+    }
+    return false;
+  }
+  window._psycleSafeSetItem = _safeSetItem;
+
+  // The token could not be written even with the caches gone. This session
+  // still works (_token is in memory) — but an OLDER stored token must not
+  // outlive it, or the next launch signs in with that one (after an account
+  // switch: as the previous member). A copy of THIS token stays where it is:
+  // the blob it was decoded from, or the plaintext key login.html just wrote
+  // (the next launch migrates it).
+  var _storedToken = null; // the token ENC_TOKEN_KEY is known to hold
+  function _tokenNotSaved(token) {
+    var kept = false;
+    try {
+      if (_storedToken === token) kept = true;
+      else { localStorage.removeItem(ENC_TOKEN_KEY); _storedToken = null; }
+    } catch (e) {}
+    try {
+      if (localStorage.getItem(LEGACY_TOKEN_KEY) === token) kept = true;
+      else localStorage.removeItem(LEGACY_TOKEN_KEY);
+    } catch (e) {}
+    if (kept) return;
+    console.warn('[security] Token NOT saved — localStorage is full. Signed in for this session only.');
+    _logSecurityError('Token not saved — storage full; signed in for this session only');
+    try {
+      if (typeof toast === 'function') toast("You're signed in — but this device's storage is full, so you'll be asked again next time", 'info');
+    } catch (e) {}
+  }
+
   // ── Secure Token Store ─────────────────────────────────────────
 
   window._secureTokenStore = {
@@ -215,14 +275,19 @@
         // Values carry a format marker ('aes:' / 'xor:') so startup always
         // decodes with the right scheme — a crypto-availability flip between
         // launches must never feed one format into the other decoder.
+        // A write that fails for lack of room is NOT an encryption failure: it
+        // never takes the plaintext fallback below (that write would fail the
+        // same way, and this used to reject — so the caller's checkAuth never ran).
         if (_cryptoAvailable && _cryptoKey) {
           var enc = await _encrypt(token);
-          localStorage.setItem(ENC_TOKEN_KEY, 'aes:' + enc);
+          if (!_safeSetItem(ENC_TOKEN_KEY, 'aes:' + enc)) { _tokenNotSaved(token); return; }
+          _storedToken = token;
           localStorage.removeItem(LEGACY_TOKEN_KEY);
         } else {
           console.warn('[security] Crypto unavailable — token stored XOR-obfuscated (NOT encrypted) at rest.');
           _logSecurityError('Crypto unavailable — token stored XOR-obfuscated, not encrypted');
-          localStorage.setItem(ENC_TOKEN_KEY, 'xor:' + _xorEncode(token));
+          if (!_safeSetItem(ENC_TOKEN_KEY, 'xor:' + _xorEncode(token))) { _tokenNotSaved(token); return; }
+          _storedToken = token;
           localStorage.removeItem(LEGACY_TOKEN_KEY);
         }
       } catch (e) {
@@ -233,12 +298,13 @@
         console.warn('[security] Token encryption FAILED (' + reason + ') — '
           + 'falling back to PLAINTEXT localStorage. The bearer token is NOT encrypted at rest.');
         _logSecurityError('Token encryption failed (' + reason + ') — plaintext localStorage fallback used');
-        localStorage.setItem(LEGACY_TOKEN_KEY, token);
+        if (!_safeSetItem(LEGACY_TOKEN_KEY, token)) _tokenNotSaved(token);
       }
     },
 
     clear: function () {
       _token = null;
+      _storedToken = null;
       localStorage.removeItem(ENC_TOKEN_KEY);
       localStorage.removeItem(LEGACY_TOKEN_KEY);
     }
@@ -324,8 +390,12 @@
             _token = _xorDecode(enc) || null;
           }
           if (_token && !/^[\x20-\x7E]+$/.test(_token)) _token = null;
+          // (Known-good BEFORE the re-store: if that write fails for lack of
+          // room, the blob this token came from must not be thrown away.)
+          _storedToken = _token;
           if (_token) window._secureTokenStore.set(_token);
         }
+        _storedToken = _token;
       } catch (e) {
         // Decrypt failed — most likely the AES key was lost/rotated. KEEP the
         // blob: deleting it here would also propagate into the native
@@ -401,6 +471,17 @@
       var exp = getTokenExpiry();
       if (!exp) return; // token gone or no longer parseable — nothing to expire
       if (exp.getTime() - Date.now() > 60 * 1000) { window.scheduleTokenExpiryCheck(); return; }
+      // This device's clock is not what ends a session — Psycle is. Ending it
+      // here deleted the stored token and, with it, the offline saved copy of
+      // My Bookings: a cold launch in a basement studio showed "Sign in"
+      // instead of the bike number. Ask instead (single-flight; at launch the
+      // check is already running): a 401 expires the session exactly as
+      // before, no answer leaves it "unverified" — token and saved copy kept,
+      // Retry offered, re-checked when the signal returns.
+      if (typeof checkAuth === 'function') {
+        try { Promise.resolve(checkAuth()).catch(function () {}); } catch (e) {}
+        return;
+      }
       if (typeof showSessionExpired === 'function') showSessionExpired();
     }
 
@@ -449,10 +530,13 @@
     var token = e.data.token;
     if (!token || typeof token !== 'string' || token.length < 10) return;
 
-    window._secureTokenStore.set(token).then(function () {
+    // Both outcomes: the token is in memory either way, and a save that failed
+    // must never leave the app looking signed out after a successful sign-in.
+    var _afterSave = function () {
       if (typeof checkAuth === 'function') checkAuth();
       scheduleTokenExpiryCheck();
-    });
+    };
+    window._secureTokenStore.set(token).then(_afterSave, _afterSave);
   });
 
 

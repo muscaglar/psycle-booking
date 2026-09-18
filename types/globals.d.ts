@@ -74,6 +74,12 @@ declare global {
   /** Resolves once security.js has finished bootstrapping. */
   var securityReady: Promise<any>;
 
+  /** Quota-aware localStorage.setItem (security.js): frees the app's own caches and retries. false = not saved; never throws. */
+  var _psycleSafeSetItem: ((key: string, value: string) => boolean) | undefined;
+
+  /** iOS only (security.js creates it, native-bridge resolves it): the Preferences → localStorage restore has settled. */
+  var _psycleNativeRestoreReady: Promise<void> | undefined;
+
   // ───────────────────────────────────────────────────────────────────────────
   // Shared mutable state (exposed on window via property accessors in state.js)
   // ───────────────────────────────────────────────────────────────────────────

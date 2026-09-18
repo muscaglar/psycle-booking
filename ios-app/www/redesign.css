@@ -147,9 +147,6 @@ header .theme-toggle {
    (Was 120px: ~200px of empty scroll under the last card on a phone.) */
 #tab-discover { padding: 18px 22px 72px; }
 #tab-discover .results { padding-left: 0; padding-right: 0; }
-/* …and the discovery rows under the results: their own side padding stacked
-   on the gutter (38px in on a phone). At every width, not just desktop. */
-#tab-discover #discoverExploreWrap .explore-section { padding-left: 0; padding-right: 0; }
 .disc-title, .disc-search, .disc-count { margin-left: 0; margin-right: 0; }
 .controls-toggle { display: none; } /* design shows filters inline — no collapse header */
 /* flex-wrap:nowrap is critical — the max-width:640px base rule sets
@@ -607,7 +604,9 @@ header .theme-toggle {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e7e5df);
   border-radius: var(--radius-5xl);
-  color: #b3261e;
+  /* Themed (theme.css --danger): the fixed #b3261e was 1.8–2.9:1 on the five
+     dark themes' cards. */
+  color: var(--danger);
   font: 700 15px/1 var(--font-body);
   text-align: center; cursor: pointer;
   margin-bottom: 18px;

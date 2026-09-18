@@ -133,6 +133,15 @@ module.exports = async function (t) {
     w.sb._features_filterByInstructor(31);
     eq([...w.sb.selectedInstructors], ['31'], 'the filter is this instructor alone');
     eq(w.log.calls, ['chips', 'dropdown', 'tab:discover', 'search'], 'Discover is shown BEFORE the search runs (from My Bookings / Stats it filled a hidden tab)');
+    // In the app, app.js's _focusSearch is there and takes over whole: it also
+    // drops the studio / class-type filters that hid this instructor's classes
+    // (tests/suites/discover-journeys.js runs the real one).
+    const routed = featuresWorld();
+    const asked = [];
+    routed.sb._focusSearch = (o) => asked.push(o);
+    routed.sb._features_filterByInstructor(31);
+    eq([asked, routed.log.calls, [...routed.sb.selectedInstructors]], [[{ instructorId: '31' }], [], ['1', '2']],
+      'with _focusSearch present it is handed the instructor and nothing else is touched here (no second search, no second tab switch)');
     const explore = t.readSource('js/explore.js');
     const chipFn = grab(explore, '  window._explore_openSettingsForInstructor = function (name) {', '  };');
     ok(/switchTab\('membership'\)/.test(chipFn) && !/openSettings\(/.test(chipFn), "Stats' Unranked chips open the Membership tab (where #tierSearch lives), not the Settings sheet");

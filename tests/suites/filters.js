@@ -89,7 +89,7 @@ module.exports = async function (t) {
     { mode: null, startDate: '2026-09-19', daysAhead: 1 }, 'garbage mode + future date → the date, mode cleared');
   t.eq(F._restoredDateState({}, TODAY), { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'nothing saved about dates → week');
   t.eq(F._restoredDateState(null, TODAY), { mode: 'week', startDate: TODAY, daysAhead: 7 }, 'null → week (no throw)');
-  ['today', 'tomorrow', 'week', '2week'].forEach((mode) => {
+  ['today', 'tomorrow', 'week', 'nextweek', '2week'].forEach((mode) => {
     const r = F._restoredDateState({ dateQuickMode: mode }, TODAY);
     t.eq(F._datePillState(r.mode, r.startDate, r.daysAhead, TODAY).label, F._dateModeWindow(mode, TODAY).label,
       'round trip: a restored "' + mode + '" lights its own pill');
@@ -238,6 +238,7 @@ module.exports = async function (t) {
     const SAT = '2026-09-19';
     const cases = [
       ['14 days', { dateQuickMode: '2week', startDate: '2026-09-10', daysAhead: '14' }, { mode: '2week', startDate: TODAY, daysAhead: 14, lit: { label: '14 days', picked: null } }],
+      ['Next week', { dateQuickMode: 'nextweek', startDate: '2026-09-14', daysAhead: '6' }, { mode: 'nextweek', startDate: '2026-09-21', daysAhead: 6, lit: { label: 'Next week', picked: null } }],
       ['Tomorrow', { dateQuickMode: 'tomorrow', startDate: '2026-09-11', daysAhead: '1' }, { mode: 'tomorrow', startDate: '2026-09-18', daysAhead: 1, lit: { label: 'Tomorrow', picked: null } }],
       ['Today', { dateQuickMode: 'today', startDate: '2026-09-10', daysAhead: '1' }, { mode: 'today', startDate: TODAY, daysAhead: 1, lit: { label: 'Today', picked: null } }],
       ['a picked Saturday', { dateQuickMode: null, startDate: SAT, daysAhead: '1' }, { mode: null, startDate: SAT, daysAhead: 1, lit: { label: null, picked: SAT } }],

@@ -163,6 +163,14 @@
   --line:        var(--border);
   --accent-ink:  #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
+  /* Destructive actions (Sign out, the seat ×, "Cancel booking", the swipe
+     fill). Every theme already tunes a red for its Full chip, so the pair
+     aliases it: --danger is ≥6:1 as ink on --bg-panel (≥5.4:1 on --bg-input)
+     and --danger-ink is the same ratio as a label on a --danger fill. One
+     fixed red was 1.8–2.9:1 on the five dark themes. Handheld resolves to its
+     heading lime, so it stays in palette. */
+  --danger:      var(--badge-full-text);
+  --danger-ink:  var(--bg-panel);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -331,16 +339,15 @@ header span { color: var(--text-faint); }
 .class-time { font-family: var(--font-display); }
 .modal-title, .instructor-name-title { font-family: var(--font-display); }
 .reco-class, .discover-empty-title { font-family: var(--font-display); }
-.mb-period-header { font-family: var(--font-display); }
-.insights-title, .explore-title, .reco-title, .heatmap-title, .cost-title, .week-title { font-family: var(--font-display); }
+/* The 12px uppercase section eyebrows (.insights-title, .cost-title, …) are
+   small UI labels: they stay on the body face, like .ms-section-title. */
 
 /* Bricolage Grotesque is a variable display face — give headlines real
    weight (the prior AppDisplay-only face shipped a single 400 weight and
    had to be pinned; that's no longer the case). */
 header h1, .stat-value, .cost-value, .explore-map-stat-value,
 .class-time, .modal-title, .instructor-name-title, .reco-class,
-.discover-empty-title, .mb-period-header, .insights-title, .explore-title,
-.reco-title, .heatmap-title, .cost-title, .week-title {
+.discover-empty-title {
   font-weight: 700;
 }
 
@@ -643,6 +650,7 @@ select:focus, input:focus { border-color: var(--accent); }
    the accent, so the brand --accent itself stays as designed. */
 [data-theme="linen"] .mb-countdown,
 [data-theme="linen"] .cds-duration-badge,
+[data-theme="linen"] .rebook-hint-eyebrow,
 [data-theme="linen"] .bc-slot { color: var(--accent-hover); }
 
 /* Skeleton in light mode */
@@ -1083,29 +1091,14 @@ select:focus, input:focus { border-color: var(--accent); }
   background: var(--bg);
 }
 
-/* ── styles.css: Bike slot light mode — high contrast, distinct states ── */
+/* ── styles.css: Bike slot light mode ────────────────────────────── */
 
-/* Available: white, clickable */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.available rect { fill: #fff; stroke: #bbb; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.available:hover rect { fill: #e8e8e8; stroke: #666; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.available text { fill: #555; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.available:hover text { fill: #111; }
-
-/* Taken: grayed out, clearly unavailable */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken rect { fill: #e8e8e8; stroke: #ddd; cursor: not-allowed; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken text { fill: #bbb; }
-
-/* Your pick: accent fill + --accent-ink, tokenised at source (styles.css)
-   so it matches the legend swatch in every theme. */
-
-/* Your existing booking: solid red */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.mine rect { fill: #e94560; stroke: #c73650; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.mine:hover rect { fill: #c73650; stroke: #a02a40; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.mine text { fill: #fff; }
-
-/* Light mode: preference text colors (no fill/stroke override) */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.pref-prefer text { fill: #1a7a1a !important; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.pref-avoid text { fill: #c73650 !important; }
+/* Every seat state (available / taken / your pick / your booking, hovers
+   included) and the fav / avoid number inks are tokenised at source
+   (styles.css, settings.css), so the map matches the legend swatches in every
+   theme — the light patches that lived here kept your own seat old-brand pink
+   on Cloud / Linen. Only the dimmed fav / avoid number on a TAKEN seat still
+   needs a light value. */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken.pref-prefer text { fill: #8ac08a !important; }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken.pref-avoid text { fill: #e0a0a0 !important; }
 
@@ -1128,7 +1121,6 @@ select:focus, input:focus { border-color: var(--accent); }
 
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .upcoming-header h2 { color: var(--text-muted); }
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-cancel:hover { background: #f5f5f5; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-seat-chip button { color: rgba(233,69,96,0.7); }
 
 /* ── tabs.css: Membership status ─────────────────────────────────── */
 
@@ -1189,6 +1181,10 @@ select:focus, input:focus { border-color: var(--accent); }
 /* ═══════════════════════════════════════════════════════════════════
    Flavour themes — picked in Membership → Theme (?theme=id deep link).
    Each block only overrides tokens; component styles cascade for free.
+   Same text ladder as the premium themes: muted → ghost carry real copy
+   (picker hints, status lines, chart labels), so each holds ≥4.5:1 on --bg
+   and --bg-panel, raised within the theme's own hue. Handheld's four shades
+   have nothing darker that passes, so dim/faint/ghost share the muted lime.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Terminal: green phosphor CRT ─────────────────────────────── */
@@ -1196,7 +1192,7 @@ select:focus, input:focus { border-color: var(--accent); }
   --bg: #060906; --bg-panel: #0a120a; --bg-input: #0e1a0e; --bg-deep: #040604;
   --border: #16341a; --border-light: #1f4a25; --border-subtle: #1a3f1f;
   --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c;
-  --text-dim: #6da86d; --text-faint: #538a53; --text-ghost: #3f6b3f; --text-off: #2c4c2c;
+  --text-dim: #6da86d; --text-faint: #5d9b5d; --text-ghost: #518a51; --text-off: #2c4c2c;
   --accent: #16a34a; --accent-hover: #15803d;
   --badge-bg: #0e1a0e; --badge-border: #1f4a25; --badge-text: #8cc78c;
   --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d;
@@ -1243,7 +1239,7 @@ select:focus, input:focus { border-color: var(--accent); }
   --bg: #140a24; --bg-panel: #1c1133; --bg-input: #251746; --bg-deep: #0e0719;
   --border: #322055; --border-light: #44307a; --border-subtle: #3a2866;
   --text: #efe6ff; --text-heading: #ffffff; --text-muted: #c2a9e8;
-  --text-dim: #a489cf; --text-faint: #8169ad; --text-ghost: #64508a; --text-off: #483a64;
+  --text-dim: #a489cf; --text-faint: #9783bb; --text-ghost: #8b78b1; --text-off: #483a64;
   --accent: #ff2d95; --accent-hover: #e0187d;
   --badge-bg: #251746; --badge-border: #44307a; --badge-text: #c2a9e8;
   --badge-full-bg: #3c1030; --badge-full-text: #ff7eb9; --badge-full-border: #6e2257;
@@ -1284,7 +1280,7 @@ select:focus, input:focus { border-color: var(--accent); }
   --bg: #0f380f; --bg-panel: #133f13; --bg-input: #1b4d1b; --bg-deep: #0a2a0a;
   --border: #306230; --border-light: #3f7a3f; --border-subtle: #2a572a;
   --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f;
-  --text-dim: #79991c; --text-faint: #648224; --text-ghost: #527029; --text-off: #3f5c28;
+  --text-dim: #8bac0f; --text-faint: #8bac0f; --text-ghost: #8bac0f; --text-off: #3f5c28;
   --accent: #9bbc0f; --accent-hover: #8bac0f; --accent-ink: #0f380f;
   --badge-bg: #1b4d1b; --badge-border: #306230; --badge-text: #8bac0f;
   --badge-full-bg: #2a572a; --badge-full-text: #c6e034; --badge-full-border: #3f7a3f;
@@ -1321,13 +1317,26 @@ select:focus, input:focus { border-color: var(--accent); }
    --badge-waitlist-text would make Waitlist and Full identical chips. */
 [data-theme="gameboy"] .app-banner:not(.app-banner-danger),
 [data-theme="gameboy"] .safe-mode-banner { color: var(--text-heading); }
+/* Same pair, same fix, for the late-cancel caution chips and the dialog
+   warning's glyph (styles.css). */
+[data-theme="gameboy"] .modal-policy.is-late,
+[data-theme="gameboy"] .late-cancel-note,
+[data-theme="gameboy"] .badge.caution,
+[data-theme="gameboy"] .confirm-warn::before { color: var(--text-heading); }
+/* Seat numbers sit on --bg-input, where the muted lime is 3.77:1; the body
+   lime is 4.52:1. The rebook hint drops its accent tint for the same reason:
+   its accent eyebrow (4.47:1) and dim sub-line miss 4.5:1 on the tint, and a
+   four-shade screen has no tints anyway. */
+[data-theme="gameboy"] .bike-slot.available text { fill: var(--text); }
+[data-theme="gameboy"] .bike-slot.available:hover text { fill: var(--text-heading); }
+[data-theme="gameboy"] .rebook-hint { background: var(--bg-panel); }
 
 /* ── Blueprint: engineering drawing ───────────────────────────── */
 [data-theme="blueprint"] {
   --bg: #0a1c30; --bg-panel: #0e2440; --bg-input: #132d4e; --bg-deep: #071525;
   --border: #1c3d61; --border-light: #295380; --border-subtle: #224870;
   --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0;
-  --text-dim: #84a8c8; --text-faint: #6589a8; --text-ghost: #4d6d89; --text-off: #364f66;
+  --text-dim: #84a8c8; --text-faint: #7e9cb6; --text-ghost: #6e90ad; --text-off: #364f66;
   --accent: #38bdf8; --accent-hover: #1ba2dd; --accent-ink: #06283f;
   --badge-bg: #132d4e; --badge-border: #295380; --badge-text: #a4c4e0;
   --badge-full-bg: #3a1525; --badge-full-text: #ff8097; --badge-full-border: #66293f;

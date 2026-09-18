@@ -611,12 +611,12 @@ module.exports = async function (t) {
   // nothing (revalidateWindow needs a token) but refreshWindow()'s promise is
   // truthy, so the pill said "Refreshing..." for ~400ms over a no-op.
   const pullWorld = (o) => {
-    const pw = { refreshed: 0 };
+    const pw = { refreshed: 0, fetched: 0 };
     const c = t.vm.createContext({
       document: { querySelector: () => ({ id: o.tab || 'tab-discover' }) },
       window: { _windowEvents: o.noWindow ? null : [] },
       refreshWindow: () => { pw.refreshed++; return Promise.resolve(); },
-      fetchMyBookings: () => Promise.resolve(),
+      fetchMyBookings: () => { pw.fetched++; return Promise.resolve(); },
       getBearerToken: () => (o.signedOut ? '' : 'tok'),
     });
     t.vm.runInContext(pull, c, { filename: 'js/interactions.js[pullRefreshAction]' });
@@ -629,6 +629,13 @@ module.exports = async function (t) {
   t.eq([pulled.result, pulled.refreshed], [null, 0], 'signed out over the public window: nothing to do, so the pill resets at once (it showed "Refreshing..." over no request)');
   pulled = pullWorld({ noWindow: true });
   t.eq([pulled.result, pulled.refreshed], [null, 0], 'before a first load: nothing to refresh');
+  // My Bookings with the session expired: the list is kept on purpose, and
+  // fetchMyBookings' no-token branch would empty it (the next foreground then
+  // blanked the widget and cancelled every armed class reminder).
+  pulled = pullWorld({ tab: 'tab-bookings', signedOut: true });
+  t.eq([pulled.result, pulled.fetched], [null, 0], 'a pull on My Bookings without a token fetches nothing — the pill just resets');
+  pulled = pullWorld({ tab: 'tab-bookings' });
+  t.ok(!!pulled.result && pulled.fetched === 1, '…signed in it refreshes the bookings as before');
   const themeSrc = t.readSource('js/theme.js');
   const empty = themeSrc.slice(themeSrc.indexOf('const EMPTY_STATE_ACTIONS'), themeSrc.indexOf('// ── D. Haptic Feedback'));
   t.ok(/const msg = escapeHTML\(/.test(empty) && /const sub = escapeHTML\(/.test(empty), 'renderEmptyState escapes its title and subtitle');

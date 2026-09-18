@@ -166,6 +166,8 @@
   object-fit: cover;
   flex-shrink: 0;
   border: 2px solid var(--border, #222);
+  /* As .cds-photo: a circle while the photo loads, and when it cannot. */
+  background: var(--border, #222);
 }
 
 .instructor-profile-info {

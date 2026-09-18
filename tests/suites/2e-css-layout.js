@@ -165,12 +165,21 @@ module.exports = function (t) {
   t.eq(panelPad.split(' ')[2], (noComments(styles).match(/\.tab-panel \{\s*padding-bottom:\s*calc\((\d+px)/) || [])[1],
     'Discover bottom padding is the .tab-panel pill clearance, not more');
 
-  const exploreSel = '#tab-discover #discoverExploreWrap .explore-section';
-  t.ok(noComments(styles).indexOf(exploreSel) === -1, 'explore-section gutter reset no longer lives in the desktop-only block');
-  const firstMedia = noComments(redesign).indexOf('@media');
-  const exploreAt = noComments(redesign).indexOf(exploreSel);
-  t.ok(exploreAt !== -1 && exploreAt < firstMedia && /padding-left:\s*0;\s*padding-right:\s*0/.test(ruleBody(redesign, exploreSel) || ''),
-    'explore rows drop their own side padding at every width (no 22+16px double inset on phones)');
+  // "New to you" / "You might like" moved to Stats (they sat under the whole
+  // pre-loaded timetable). Stats has no gutter of its own, so there the rows
+  // KEEP .explore-section's side padding, like the instructor map beside them —
+  // and the Discover-only wrapper rules went with the wrapper.
+  const tabsJs = t.readSource('js/tabs.js');
+  t.ok([styles, redesign, fix, tabsCss, tabsJs].every((src) => src.indexOf('discoverExploreWrap') === -1),
+    '#discoverExploreWrap is gone from tabs.js and from every stylesheet (no rule left pointing at nothing)');
+  const statsHtml = tabsJs.slice(tabsJs.indexOf("statsPanel.id = 'tab-stats';"), tabsJs.indexOf('// ── Membership tab'));
+  const sectionAt = (id) => statsHtml.indexOf('<div id="' + id + '" class="explore-section"');
+  t.ok(sectionAt('exploreLikeSection') > statsHtml.indexOf('id="recoSection"') && sectionAt('exploreNewSection') > sectionAt('exploreLikeSection') &&
+    sectionAt('exploreNewSection') < statsHtml.indexOf('id="classTypeSection"'),
+    'both instructor-suggestion sections are created in the Stats panel, right after "Your routine"');
+  t.eq((tabsJs.match(/id="explore(New|Like)Section"/g) || []).length, 2, '…once each (renderExplore finds them by id)');
+  t.ok(/padding:\s*0 var\(--space-9\) var\(--space-7\)/.test(ruleBody(t.readSource('css/explore.css'), '.explore-section') || ''),
+    '.explore-section still brings its own side padding for them');
 
   const chrome = (noComments(fix).match(/header,\s*\.tab-bar \{([^}]*)\}/) || [])[1] || '';
   t.ok(/padding-inline:\s*max\(var\(--space-9\),\s*calc\(\(100% - 1080px\) \/ 2 \+ var\(--space-9\)\)\)/.test(chrome),

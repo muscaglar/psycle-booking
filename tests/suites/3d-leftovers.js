@@ -300,7 +300,8 @@ module.exports = async function (t) {
         getFullHistory: () => [], escapeHTML: (x) => String(x), formatSlots: (l, n) => l + ' ' + n.join(' & '),
         _pillEl: pill, _pillA11y: (label) => { pill.label = label; },
       });
-      let src = inner(tabsSrc, '  function _stillToCome(') + '\n' + inner(tabsSrc, '  function updateTabBadge(') + '\n' + inner(tabsSrc, '  function renderQuickStats(') + '\n' + inner(settingsSrc, '  function updatePill(');
+      // renderQuickStats words its counts with app.js's _plural (pure:copy) — the real one.
+      let src = pureRegion(appSrc, 'copy') + '\n' + inner(tabsSrc, '  function _stillToCome(') + '\n' + inner(tabsSrc, '  function updateTabBadge(') + '\n' + inner(tabsSrc, '  function renderQuickStats(') + '\n' + inner(settingsSrc, '  function updatePill(');
       if (resolver !== null) {
         src = pureRegion(appSrc, 'gym-time') + '\n' + pureRegion(appSrc, 'bookings-started') + '\n' + src;
         if (resolver) src += '\n_gymClassStartMs = ' + resolver + ';';

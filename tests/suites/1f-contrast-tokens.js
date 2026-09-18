@@ -88,6 +88,31 @@ module.exports = function (t) {
     t.ok(rb >= 4.5, id + ': --badge-text on --badge-bg is ' + rb.toFixed(2) + ':1 (≥4.5)');
   });
 
+  // ── Text ladder: the four flavour themes ─────────────────────────────────
+  // They never got the ladder: --text-ghost was 2.1–3.1:1 on their cards, and
+  // it carries the bike-picker hint and the Discover status line. Same floor;
+  // the tiers must still run loudest → quietest. Handheld's four-shade palette
+  // has nothing darker than its muted lime that passes, so its tiers may tie.
+  ['terminal', 'synthwave', 'gameboy', 'blueprint'].forEach((id) => {
+    t.section('Text tokens — ' + id);
+    const tk = themeTokens(id);
+    ['--bg', '--bg-panel'].forEach((surface) => {
+      LADDER.forEach((name) => {
+        const r = contrast(tk[name], tk[surface]);
+        t.ok(HEX.test(tk[name]) && r >= 4.5,
+          id + ': ' + name + ' ' + tk[name] + ' on ' + surface + ' is ' + r.toFixed(2) + ':1 (needs ≥4.5 — it carries real copy)');
+      });
+      const chain = ['--text'].concat(LADDER, ['--text-off']).map((n) => contrast(tk[n], tk[surface]));
+      let ordered = true;
+      for (let i = 1; i < chain.length; i++) {
+        const tie = id === 'gameboy' && i > 1 && i < chain.length - 1 && chain[i] === chain[i - 1];
+        if (!(chain[i] < chain[i - 1]) && !tie) ordered = false;
+      }
+      t.ok(ordered, id + ': text > muted ≥ dim ≥ faint ≥ ghost > off on ' + surface + (id === 'gameboy' ? ' (ties allowed)' : ' (strict)') +
+        ' (' + chain.map((c) => c.toFixed(2)).join(' > ') + ')');
+    });
+  });
+
   // ── --accent-ink is the label colour for every accent fill ───────────────
   t.section('Accent ink');
   const themeJs = t.readSource('js/theme.js');
@@ -147,6 +172,46 @@ module.exports = function (t) {
     const r = contrast(tk['--text'], tk['--text-off']);
     t.ok(r >= 3, id + ': disabled button label (--text on --text-off) is ' + r.toFixed(2) + ':1 (≥3)');
   });
+
+  // ── --danger: one themed destructive colour ──────────────────────────────
+  // Sign out was a fixed #b3261e (1.8–2.9:1 on the five dark themes), the seat
+  // × a 70% pink (<2.9:1 everywhere) and the cancel dialog's danger button the
+  // same accent fill as "Book". The pair aliases tokens every theme already
+  // tunes; tokensOf returns raw var() strings, so they are resolved by hand.
+  t.section('Danger pair');
+  t.eq([root['--danger'], root['--danger-ink']], ['var(--badge-full-text)', 'var(--bg-panel)'],
+    '--danger / --danger-ink alias the Full-chip red and the panel in :root');
+  themeIds.forEach((id) => {
+    const own = tokensOf('[data-theme="' + id + '"]');
+    t.ok(!('--danger' in own) && !('--danger-ink' in own), id + ': does not re-declare the pair (a literal there would dodge the checks below)');
+    const tk = themeTokens(id);
+    // As ink on either surface; on --bg-panel the same ratio is the --danger-ink label on a --danger fill.
+    ['--bg-panel', '--bg-input'].forEach((surface) => {
+      const r = contrast(tk['--badge-full-text'], tk[surface]);
+      t.ok(HEX.test(tk['--badge-full-text']) && HEX.test(tk[surface]) && r >= 4.5,
+        id + ': --danger ' + tk['--badge-full-text'] + ' on ' + surface + ' is ' + r.toFixed(2) + ':1 (≥4.5)');
+    });
+  });
+  const dangerRules = rules(t.readSource('css/styles.css')).concat(rules(t.readSource('css/redesign.css')), rules(themeCss));
+  function declOf(selector, prop) {
+    const hits = dangerRules.filter((x) => x.selector.split(',').some((part) => part.trim() === selector));
+    const vals = hits.map((x) => (new RegExp('(?:^|[;\\s])' + prop + '\\s*:\\s*([^;]+)').exec(x.body) || [])[1]).filter(Boolean);
+    return vals.map((v) => v.trim());
+  }
+  [
+    ['.ms-signout', 'color', 'var(--danger)'],
+    ['.up-seat-chip button', 'color', 'var(--danger)'],
+    ['.confirm-btn-danger', 'background', 'var(--danger)'],
+    ['.confirm-btn-danger', 'color', 'var(--danger-ink)'],
+    ['.swipe-cancel-bg', 'background', 'var(--danger)'],
+    ['.swipe-cancel-bg span', 'color', 'var(--danger-ink)'],
+  ].forEach((row) => {
+    // Every declaration, in every sheet: a later light/dark patch must not bring a fixed red back.
+    t.eq(declOf(row[0], row[1]), [row[2]], row[0] + ' { ' + row[1] + ' } is ' + row[2] + ' and nothing re-colours it');
+  });
+  t.ok(declOf('.confirm-btn-primary', 'background')[0] !== declOf('.confirm-btn-danger', 'background')[0],
+    'the dialog\'s costly button no longer wears the same fill as the primary one');
+  t.eq(declOf('.up-seat-chip button:hover', 'color'), [], 'the seat × has no hover colour (it used to flip red → accent)');
 
   // ── Dead theme selectors ────────────────────────────────────────────────
   // js/theme.js rejects any id outside APP_THEMES, so a [data-theme="x"] rule

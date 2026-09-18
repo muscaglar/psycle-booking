@@ -63,8 +63,14 @@ window.getAppTheme = _resolveTheme;
 
 window.setAppTheme = function (id) {
   if (!_themeById(id)) return;
-  localStorage.setItem(THEME_KEY, id);
+  // Applied first, saved second: with localStorage full the save threw and
+  // the tap did nothing at all. security.js's setter frees the app's own
+  // caches and retries, so the choice nearly always sticks as well.
   _applyTheme(id);
+  try {
+    if (typeof window._psycleSafeSetItem === 'function') window._psycleSafeSetItem(THEME_KEY, id);
+    else localStorage.setItem(THEME_KEY, id);
+  } catch (e) {}
   updateThemeIcon();
   haptic('tap');
   if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('theme:changed', id);
@@ -89,6 +95,19 @@ function initTheme() {
         _applyTheme(_resolveTheme());
         updateThemeIcon();
       }
+    });
+  }
+
+  // iOS: after a storage purge the saved theme is only back in localStorage
+  // once native-bridge (the last script) has restored it from Preferences —
+  // after the lines above ran, so that launch wore the system default. Only
+  // when it actually differs: no repaint on an ordinary launch.
+  if (window._psycleNativeRestoreReady) {
+    window._psycleNativeRestoreReady.then(function () {
+      var id = _resolveTheme();
+      if (document.documentElement.getAttribute('data-theme') === id) return;
+      _applyTheme(id);
+      updateThemeIcon();
     });
   }
 }

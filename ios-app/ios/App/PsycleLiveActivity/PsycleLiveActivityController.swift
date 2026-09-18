@@ -86,11 +86,13 @@ public final class PsycleLiveActivityController {
 
         let state = PsycleClassActivityAttributes.ContentState(
             startAt: start,
-            status: "Starting soon"
+            status: "Starting soon",
+            slotSummary: next.slotSummary
         )
 
         if let activity = current, activity.attributes.eventId == next.eventId {
-            // Same class — push the (possibly moved) start time into it.
+            // Same class — push the (possibly moved) start time and the seats
+            // as held now into it (attributes.slotSummary is fixed at start).
             update(activity, state: state)
         } else {
             // Different class than what's showing. Synchronous in-flight

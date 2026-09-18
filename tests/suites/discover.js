@@ -561,7 +561,7 @@ module.exports = async function (t) {
     const body = html.slice(html.indexOf('id="controlsBody"'), html.indexOf('id="upcomingPanel"'));
     ok(/<div id="timePills" class="location-chips"><\/div>/.test(body), '#timePills sits in #controlsBody with the pill-row class redesign.css / discover-layout-fix.css already style');
     ok(body.indexOf('id="timePills"') > body.indexOf('id="daysAhead"') && body.indexOf('id="timePills"') < body.indexOf('id="locationChips"'), '…right after Date');
-    eq((body.match(/class="date-quick-btn" aria-pressed="false"/g) || []).length, 4, 'the four date presets start un-pressed (JS mirrors .active from there)');
+    eq((body.match(/class="date-quick-btn" aria-pressed="false"/g) || []).length, 5, 'the five date presets (Today · Tomorrow · 7 days · Next week · 14 days) start un-pressed (JS mirrors .active from there)');
     ok(/id="pickDateBtn"[^>]*aria-expanded="false"[^>]*aria-controls="datePicker"/.test(body), 'the calendar button says expanded/collapsed instead');
     const mirror = slice('function _mirrorDatePillAria() {', '// Paint the date row from state');
     ok(/b\.id === 'pickDateBtn'\) b\.setAttribute\('aria-expanded'/.test(mirror) && /b\.setAttribute\('aria-pressed', String\(b\.classList\.contains\('active'\)\)\)/.test(mirror),

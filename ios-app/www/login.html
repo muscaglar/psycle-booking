@@ -2,6 +2,24 @@
 <html lang="en" data-theme="cloud">
 <head>
 <meta charset="UTF-8">
+<!-- The one page that sees the Psycle password gets the tightest policy in the
+     app: nothing loads from anywhere but this origin, the only host it can
+     talk to is Psycle, and form-action 'none' makes "this form can never
+     submit natively" structural (it already relies on preventDefault() and
+     name-less fields). 'unsafe-inline' because the page is self-contained:
+     inline script and style, inline handlers. No frame-ancestors: browsers
+     ignore it in a <meta> policy — the framebust below does that job. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src https://psycle.codexfit.com; form-action 'none'; base-uri 'none';">
+<!-- What every current browser does by default, pinned for older WebKit:
+     cross-origin requests (the sign-in POST) see this origin, never the URL. -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script data-framebust>
+// Same framebust as psycle-finder.html. (The attribute is deliberate:
+// tests/suites/offline.js runs the page's first attribute-less script block
+// as the sign-in logic.)
+try { if (window.top !== window.self) window.top.location = window.location; }
+catch (e) { document.documentElement.style.display = 'none'; }
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Sign in &middot; Psync</title>
 <meta name="theme-color" content="#efeee9">
@@ -62,7 +80,7 @@
   }
   [data-theme="terminal"] {
     --bg: #060906; --bg-panel: #0a120a; --bg-input: #0e1a0e; --border: #16341a; --border-light: #1f4a25;
-    --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c; --text-dim: #6da86d; --text-ghost: #3f6b3f; --text-off: #2c4c2c;
+    --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c; --text-dim: #6da86d; --text-ghost: #518a51; --text-off: #2c4c2c;
     --accent: #16a34a; --accent-hover: #15803d; --accent-ink: #ffffff; --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
     --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d;
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 32px rgba(22,163,74,0.12);
@@ -70,14 +88,14 @@
   }
   [data-theme="synthwave"] {
     --bg: #140a24; --bg-panel: #1c1133; --bg-input: #251746; --border: #322055; --border-light: #44307a;
-    --text: #efe6ff; --text-heading: #ffffff; --text-muted: #c2a9e8; --text-dim: #a489cf; --text-ghost: #64508a; --text-off: #483a64;
+    --text: #efe6ff; --text-heading: #ffffff; --text-muted: #c2a9e8; --text-dim: #a489cf; --text-ghost: #8b78b1; --text-off: #483a64;
     --accent: #ff2d95; --accent-hover: #e0187d; --accent-ink: #ffffff; --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
     --badge-full-bg: #3c1030; --badge-full-text: #ff7eb9; --badge-full-border: #6e2257;
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 40px rgba(255, 45, 149, 0.18);
   }
   [data-theme="gameboy"] {
     --bg: #0f380f; --bg-panel: #133f13; --bg-input: #1b4d1b; --border: #306230; --border-light: #3f7a3f;
-    --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f; --text-dim: #79991c; --text-ghost: #527029; --text-off: #3f5c28;
+    --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f; --text-dim: #8bac0f; --text-ghost: #8bac0f; --text-off: #3f5c28;
     --accent: #9bbc0f; --accent-hover: #8bac0f; --accent-ink: #0f380f; --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
     --badge-full-bg: #2a572a; --badge-full-text: #c6e034; --badge-full-border: #3f7a3f;
     --shadow-lg: 0 4px 0 rgba(0, 0, 0, 0.25);
@@ -86,7 +104,7 @@
   }
   [data-theme="blueprint"] {
     --bg: #0a1c30; --bg-panel: #0e2440; --bg-input: #132d4e; --border: #1c3d61; --border-light: #295380;
-    --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0; --text-dim: #84a8c8; --text-ghost: #4d6d89; --text-off: #364f66;
+    --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0; --text-dim: #84a8c8; --text-ghost: #6e90ad; --text-off: #364f66;
     --accent: #38bdf8; --accent-hover: #1ba2dd; --accent-ink: #06283f; --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
     --badge-full-bg: #3a1525; --badge-full-text: #ff8097; --badge-full-border: #66293f;
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.35), 0 12px 40px rgba(0,0,0,0.5);
@@ -279,6 +297,21 @@ function hideError() {
   document.getElementById('errMsg').style.display = 'none';
 }
 
+// localStorage is full: drop what the app rebuilds by itself (its timetable
+// and reference-list caches — the same keys as _freeAppCaches in security.js)
+// so the sign-in has room. Never anything the member entered.
+function freeAppCaches() {
+  try {
+    var doomed = ['psycle_window_cache'];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && (k.indexOf('psycle_cache_') === 0 || k.indexOf('psycle_swr_') === 0)) doomed.push(k);
+    }
+    doomed.forEach(function(key) { localStorage.removeItem(key); });
+  } catch (e) {}
+  try { sessionStorage.removeItem('psycle_last_results'); } catch (e) {}
+}
+
 var _loginInFlight = false;
 
 async function doLogin() {
@@ -335,7 +368,26 @@ async function doLogin() {
             ? location.origin : '*';
           window.opener.postMessage({ type: 'PSYCLE_LOGIN_TOKEN', token: token }, target);
         }
-        localStorage.setItem('psycle_bearer_token', token);
+        // Its own try: a full localStorage used to land in the catch below and
+        // read "Network error" AFTER Psycle had accepted the password — and
+        // every retry was another real sign-in that ended the same way.
+        var saved = false;
+        try {
+          localStorage.setItem('psycle_bearer_token', token);
+          saved = true;
+        } catch (eStore) {
+          freeAppCaches();
+          try { localStorage.setItem('psycle_bearer_token', token); saved = true; } catch (eStore2) {}
+        }
+        // With an opener the app already holds the token (postMessage above)
+        // and saves it itself; without one this page's copy is the only one.
+        if (!saved && !window.opener) {
+          showError('Psycle accepted your details, but this device could not save the sign-in — its storage is full. Free up some space, then sign in again.');
+          btn.disabled = false;
+          btn.textContent = 'Sign in';
+          _loginInFlight = false;
+          return;
+        }
         document.getElementById('password').value = '';
         document.getElementById('sLogin').style.display = 'none';
         document.getElementById('sDone').style.display = '';

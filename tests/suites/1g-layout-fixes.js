@@ -85,13 +85,19 @@ module.exports = function (t) {
   const rowStart = html.indexOf('<div class="date-presets">');
   const rowHtml = html.slice(rowStart, html.indexOf('</div>', rowStart));
   const buttons = rowHtml.match(/<button [^>]*>/g) || [];
-  t.eq(buttons.length, 5, 'date row has the calendar + four presets');
+  t.eq(buttons.length, 6, 'date row has the calendar + five presets');
   t.ok(/id="pickDateBtn"/.test(buttons[0] || ''), '#pickDateBtn is the first pill, so it is on screen before any scrolling');
   t.ok(/class="date-quick-btn date-pick"/.test(buttons[0] || '') && /aria-label="Pick a date"/.test(buttons[0] || ''),
     'calendar pill keeps both classes and its accessible name');
   // app.js / interactions.js highlight presets by exact textContent.
   const labels = (rowHtml.match(/>([^<>]+)<\/button>/g) || []).map((s) => s.slice(1, -9));
-  t.eq(labels, ['Today', 'Tomorrow', '7 days', '14 days'], 'preset labels and order unchanged');
+  // 'Next week' sits BEFORE '14 days': the row already clips at 390px, and the
+  // Monday-noon ritual needs it more than the fortnight.
+  t.eq(labels, ['Today', 'Tomorrow', '7 days', 'Next week', '14 days'], 'preset labels and order');
+  const F1g = t.loadPure('js/app.js', 'filters');
+  const modeOf = (label) => (rowHtml.match(new RegExp("setDateQuick\\('([^']+)'\\)\"[^>]*>" + label + '<')) || [])[1];
+  t.ok(labels.every((label) => (F1g._dateModeWindow(modeOf(label), '2026-09-17') || {}).label === label),
+    "every pill's setDateQuick mode is a preset whose label IS the pill's text (that is how _syncDatePills lights it)");
   t.ok(/\.date-quick-btn\.date-pick\s*\{[^}]*padding:\s*0 11px/.test(redesign),
     'calendar padding uses a two-class selector');
   t.ok(redesign.indexOf('.date-quick-btn.date-pick') !== -1 && !/^\.date-pick\s*\{[^}]*padding/m.test(redesign),
