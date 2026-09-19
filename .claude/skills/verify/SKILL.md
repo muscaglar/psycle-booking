@@ -22,7 +22,28 @@ cancel/swap flows against it — that includes the waitlist verbs (`PUT /waitlis
 `DELETE /waitlists/{entryId}`, `POST /waitlist/{entryId}` which BOOKS a seat). Read-only GETs
 (/instructors, /locations, /event-types) are public and fine — the app loads live Discover data with no token.
 
-Stub at one of two boundaries inside the page:
+**Fastest: the committed fake server, `tests/tools/fake-psycle.js`** (whole-app runs: Discover, booking, My Bookings, Stats).
+Navigate to a blank same-origin page (`http://127.0.0.1:8080/__blank__` — the 404 page is fine), then in ONE evaluate:
+```js
+for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+for (const k of await caches.keys()) await caches.delete(k);
+localStorage.clear(); sessionStorage.clear();
+localStorage.setItem('psycle_onboarded_v1', '1');             // else a fresh profile starts behind the full-screen welcome
+localStorage.setItem('psycle_history_prompt_dismissed', '1'); // else the sync prompt (a dialog) blocks swipes and taps
+localStorage.setItem('psycle_hint_dayswipe', '1');
+(0, eval)(await fetch('/tests/tools/fake-psycle.js', { cache: 'reload' }).then(r => r.text()));
+const H = window.__H; await H.boot({});                       // writes the REAL app into this page; fetch is already the fake server
+await window.securityReady; await window._secureTokenStore.set('faketoken-123456789'); await window.checkAuth();
+```
+- `H.boot()` may answer `'app did not load'` although the app is up — check for `#results` yourself.
+- `H.writes` (every write, with its body), `H.leaked`, `H.liveHits()` (must both stay empty), `H.swipe(x0,y0,x1,y1)` (a real touch sequence), `H.discover()` (day pager state), `H.until(fn, ms)`, `H.sleep(ms)`.
+- Discover over several days is ONE day at a time: click "7 days", wait for `#dayStrip .day-pill`, and pick a day — only the visible day's cards are in the DOM.
+- A booking = click the card's Book → wait for `#bikeModal` → (pick a `.bike-slot` if none is `.selected`) → `#confirmBookBtn`.click() → expect exactly ONE `POST /bookings` with ONE slot in `H.writes`.
+- End each evaluate with `document.body.style.display='none'` (and undo it at the start of the next) — it keeps the attached page snapshot tiny.
+- Native bridge code can be driven in a browser too: define a fake `window.Capacitor` (`isNativePlatform: () => true`, `Plugins` as a Proxy of recording stubs) BEFORE boot, then append `/ios-app/www/native-bridge.js` as the last script, as the iOS build does.
+- App Store screenshots: `node tests/tools/appstore-shots.mjs` (needs sandbox-off for headless Chrome).
+
+For one scripted odd response, stub at one of two boundaries inside the page:
 - `window.apiFetch = async (path, opts) => ({ ok, status, json: async () => body })` — scripted per-call responses; app code calls the bare global so the stub wins.
 - `window.fetch = ...` — use this to exercise the REAL `apiFetchWithRetry` in reliability.js (retry counts, 401/403 policy).
 
@@ -60,7 +81,11 @@ as "late": bookings render with the last known places and the list re-merges whe
 - Live entry shape (for realistic stubs): `{id, status:'waiting', added_at, expires_at, cancelled_at, allocated_at, event:{id, start_at:'YYYY-MM-DD HH:MM:SS', duration, event_type:{id,name}, instructor:{id,full_name}, studio:{id,name,has_layout,location:{name,address}}, is_class_full, available_slot_count, required_credits}}`.
 
 ## Quick checks
-- `tests/smoke.html` → page title must be `SMOKE: PASS` (32 global checks). Console errors on that page are harness noise (modules loaded without full DOM).
+- `tests/smoke.html` → page title must be `SMOKE: PASS` (50 checks in September 2026; the list grows). Console errors on that page are harness noise (modules loaded without full DOM).
+- `env(safe-area-inset-*)` is 0 in a desktop browser. To check a safe-area rule, re-inject the app's stylesheets IN ORDER as `<style>` elements with `env(safe-area-inset-top)` replaced by `59px` (disable the `<link>`s) and measure; tests/suites/13-safe-area.js guards the cascade.
+- Playwright's HTTP cache can serve a stale stylesheet after an edit: swap the `<link>` for one with a `?v=` query, or re-fetch with `{cache:'reload'}`.
+- Navigating the browser to a `.md` / `.json` URL downloads it into `.playwright-mcp/` (git-ignored) instead of showing it.
+- Native (Swift / asset catalogue) changes: build a scratch copy outside the repo (rsync without `.git`, keep `ios-app/node_modules` and `Pods`, copy `ios-app/www` into `ios/App/App/public`, `pod install`) and run `xcodebuild -workspace App.xcworkspace -scheme App -sdk iphonesimulator … CODE_SIGNING_ALLOWED=NO build` with the sandbox off; then `xcrun simctl boot / install / launch` and screenshot. The first launch after a simulator boot lands behind SpringBoard — launch, terminate, launch again.
 - Known pre-existing console noise on psycle-finder.html: theme.js `injectThemeToggle` insertBefore NotFoundError, favicon 404, CSP frame-ancestors meta warning.
 - Playwright `browser_evaluate` results can be huge (page snapshot attached) — keep returned objects small; results over the cap land in a file you must head/grep.
 

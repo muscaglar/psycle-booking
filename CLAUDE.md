@@ -67,7 +67,9 @@ psycle-booking/
 ├── tests/                  # Dependency-free tests (see tests/README.md)
 │   ├── unit.js             # Node runner: built-in checks, then every tests/suites/*.js
 │   ├── suites/             # One file per feature area, auto-loaded in filename order
-│   └── smoke.html          # Whole-app load check in a browser (answers every fetch itself)
+│   ├── smoke.html          # Whole-app load check in a browser (answers every fetch itself)
+│   └── tools/              # Browser tooling, not run by CI: fake-psycle.js (a fake Psycle server for a page — see tests/README.md),
+│                           #   appstore-capture.html + appstore-shots.mjs (rebuild the six App Store screenshots over Chrome's DevTools protocol)
 ├── types/globals.d.ts      # Ambient declarations for the advisory typecheck
 │
 ├── README.md · SETUP.md · CLAUDE.md   # Overview · iOS toolchain · this architecture guide
@@ -84,7 +86,7 @@ psycle-booking/
     ├── ios/                # Xcode project — COMMITTED (App, widget extension, Live Activity, intents)
     ├── NATIVE_FEATURES.md · CICD.md · PRECOMMIT.md · APP_STORE_LISTING.md
     ├── UPGRADE-CAPACITOR-8.md  # Step-by-step Capacitor 6 → 8 upgrade (not run yet; it has to be run where the lockfile is generated)
-    └── appstore-assets/    # Screenshots, icons for App Store
+    └── appstore-assets/    # App Store screenshots (rebuilt by tests/tools/appstore-shots.mjs) and icon sizes (assets/render-icons.sh)
 ```
 
 ## Script Load Order (critical!)
@@ -254,6 +256,10 @@ tokens instead. ios-app/build.js discovers it and the fonts by itself. Marked se
 - **Text on a class tint** is only `--ct-ink`, `--ct-ink-2` (= `--text-muted`) or `--ct-deep` — the three the contrast
   matrix holds for every swatch × intensity × theme; never `--text-dim / -faint / -ghost`.
 - It wins a TIE with the older sheets (it is last) but not a higher specificity — see Theming for the light-base trap.
+- **A shorthand here can drop a safe-area inset.** The Settings header's `padding` shorthand once replaced the older
+  sheet's `padding-top: calc(… + env(safe-area-inset-top))`, and on a phone the title sat under the status bar.
+  tests/suites/13-safe-area.js finds every selector + property an older sheet gives an inset and fails if this file sets
+  it (or its shorthand) without carrying the inset; a deliberate move to another part is listed in that test.
 
 ### Colour Hierarchy
 Each theme sets its own values; the ladder is the same everywhere. Cloud's, for reference (the Crisp Colour boards'

@@ -208,6 +208,27 @@ node tests/unit.js        # exits non-zero on failure
 
 ## Driving the app against a stubbed API
 
+**The quick way: `tests/tools/fake-psycle.js`.** A ready-made fake Psycle server for a browser. Serve the repo,
+open a blank same-origin page (`http://127.0.0.1:8080/__blank__` — a 404 is fine), clear storage, service workers
+and caches, then:
+
+```js
+(0, eval)(await fetch('/tests/tools/fake-psycle.js', { cache: 'reload' }).then(r => r.text()));
+await __H.boot({});                       // writes the REAL psycle-finder.html into this page
+await window.securityReady; await window._secureTokenStore.set('faketoken-123456789'); await window.checkAuth();
+```
+
+`window.fetch` is the fake server from the app's first line: a 7-day timetable (3 studios, 5 class types, one empty
+day), bookings and waitlists kept in memory. `__H.writes` records every write, `__H.leaked` anything that tried to
+leave, `__H.liveHits()` what the browser's own resource log saw; `__H.swipe(x0, y0, x1, y1)` sends a real touch
+sequence and `__H.discover()` reports the day pager. `boot()` can answer "app did not load" when the app is up —
+look for `#results` yourself. A fresh profile starts behind the first-run welcome: seed `psycle_onboarded_v1='1'`
+(and `psycle_history_prompt_dismissed='1'`) unless the welcome is what you are checking. The same server drives
+`tests/tools/appstore-capture.html` and `node tests/tools/appstore-shots.mjs`, which rebuild the App Store
+screenshots over Chrome's DevTools protocol (true device metrics, no dependencies).
+
+The rest of this section is the by-hand recipe the tool was built from — still the way to script one odd response.
+
 Unit tests cannot see layout, focus order, a dialog stacking over a picker, or a whole booking flow. Those are
 checked in a real browser — with the API replaced inside the page. This is the recipe that works.
 

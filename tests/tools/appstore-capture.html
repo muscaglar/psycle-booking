@@ -1,0 +1,78 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>capture</title></head>
+<body>
+<script>
+// App Store capture harness: the REAL app on the fake Psycle server (nothing leaves this machine, the stub
+// refuses nothing but records every write; no live host is ever contacted). ?view=discover|picker|bookings|stats|colours&theme=cloud|graphite
+(async function () {
+  const q = new URLSearchParams(location.search); const view = q.get('view') || 'discover'; const theme = q.get('theme') || 'cloud';
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); for (const k of await caches.keys()) await caches.delete(k); } catch (e) {}
+  localStorage.clear(); sessionStorage.clear();
+  const set = (k, v) => localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+  set('psycle_onboarded_v1', '1'); set('psycle_history_prompt_dismissed', '1'); set('psycle_hint_dayswipe', '1'); set('psycle_class_reminder_asked', '1');
+  set('psycle_theme', theme); set('psycle_history_synced', new Date().toISOString()); set('psycle_class_history_owner', '1'); set('psycle_data_owner', '1');
+  // A plausible half-year of training: mostly early rides and evening strength, a little of everything else.
+  const people = [[101, 'Alex Hart'], [102, 'Bea Collins'], [103, 'Cam Reyes'], [104, 'Dee Okoro'], [105, 'Eli Novak']];
+  const kinds = [['RIDE 45', 'Psycle Oxford Circus', '07:00'], ['STRENGTH: Full Body', 'Psycle Shoreditch', '18:30'], ['RIDE 45', 'Psycle Shoreditch', '07:30'], ['REFORMER Pilates', 'Psycle Clapham', '12:15'], ['YOGA Flow', 'Psycle Oxford Circus', '09:30'], ['RIDE 45', 'Psycle Oxford Circus', '18:30'], ['BARRE', 'Psycle Clapham', '17:30']];
+  const hist = []; const pad = (n) => String(n).padStart(2, '0');
+  for (let w = 0; w < 26; w++) {
+    const perWeek = [3, 4, 3, 2, 4, 3][w % 6];
+    for (let k = 0; k < perWeek; k++) {
+      const d = new Date(); d.setDate(d.getDate() - (w * 7 + [1, 3, 5, 6][k % 4] + 1)); const kind = kinds[(w + k * 2) % kinds.length]; const p = people[(w + k) % 3 === 0 ? 0 : (w * 3 + k) % 5];
+      const day = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+      hist.push({ eventId: String(900000 + w * 10 + k), typeName: kind[0], instrName: p[1], instrId: p[0], locName: kind[1], date: day + ' ' + kind[2] + ':00', slots: [4 + ((w + k) % 8)], bookedAt: day + 'T06:00:00.000Z' });
+    }
+  }
+  set('psycle_saved_filters', { instructorIds: [], locationIds: [], categories: [], strengthSubs: [], reformerSubs: [], timeBands: [], availableOnly: false, dateQuickMode: 'week' }); // its existence ends the first-run favourites pre-selection
+  set('psycle_class_history', hist); set('psycle_instructor_tiers', { 101: 'S', 102: 'A', 104: 'A', 103: 'B' }); set('psycle_fav_instructors', [101, 104]);
+
+  (0, eval)(await fetch('/tests/tools/fake-psycle.js', { cache: 'reload' }).then((r) => r.text()));
+  const H = window.__H;
+  await H.boot({}); await H.until(() => document.getElementById('results') && window.securityReady, 10000);
+  window.confirmModal = async () => true;
+  await window.securityReady; await window._secureTokenStore.set('faketoken-123456789'); await window.checkAuth(); await wait(1200);
+  const style = document.createElement('style'); style.textContent = '#toast,.toast,#updateBanner,#sessionBanner{display:none!important} *{caret-color:transparent!important}'; document.head.appendChild(style);
+
+  const pills = () => [...document.querySelectorAll('#dayStrip .day-pill')];
+  const sevenDays = async () => { [...document.querySelectorAll('.date-quick-btn')].find((b) => b.textContent.trim() === '7 days').click(); await H.until(() => pills().length > 0 && !document.querySelector('#results .skeleton-card'), 9000); await wait(900); };
+  const top = () => { const tc = document.querySelector('.tab-content'); if (tc) tc.scrollTop = 0; window.scrollTo(0, 0); };
+  const bookOn = async (dayIdx, cardIdx, seat) => {
+    pills()[dayIdx].click(); await wait(600);
+    const cards = [...document.querySelectorAll('#dayPager .class-card')].filter((c) => [...c.querySelectorAll('button')].some((b) => /^book$/i.test(b.textContent.trim())));
+    const card = cards[Math.min(cardIdx, cards.length - 1)]; if (!card) return;
+    [...card.querySelectorAll('button')].find((b) => /^book$/i.test(b.textContent.trim())).click();
+    await H.until(() => getComputedStyle(document.getElementById('bikeModal')).display !== 'none', 6000); await wait(500);
+    const pick = document.querySelector('#bikeSvg .bike-slot[data-slot="' + seat + '"]:not(.taken)') || [...document.querySelectorAll('#bikeSvg .bike-slot')].find((g) => !g.classList.contains('taken'));
+    if (!document.querySelector('#bikeSvg .bike-slot.selected')) { pick.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(200); }
+    document.getElementById('confirmBookBtn').click(); await wait(2600);
+    document.querySelectorAll('#bookingConfirmation').forEach((c) => { const dn = [...c.querySelectorAll('button')].find((b) => /done/i.test(b.textContent)); if (dn) dn.click(); }); await wait(900);
+  };
+
+  await sevenDays();
+  if (view === 'discover') {
+    pills()[5].click(); await wait(900); top();
+  } else if (view === 'picker') {
+    pills()[5].click(); await wait(700);
+    const ride = [...document.querySelectorAll('#dayPager .class-card[data-ct="ride"]')][0];
+    const id = ride && (ride.dataset.eventId || (ride.querySelector('[data-event-id]') || {}).dataset?.eventId);
+    const evt = id && window._eventCache && window._eventCache[id];
+    if (evt) { const bh = {}; bh[evt.studio_id] = {}; bh[evt.studio_id][evt.instructor_id] = { 9: 6, 4: 1 }; set('psycle_bike_history', bh); }
+    [...ride.querySelectorAll('button')].find((b) => /^book$/i.test(b.textContent.trim())).click();
+    await H.until(() => getComputedStyle(document.getElementById('bikeModal')).display !== 'none', 6000); await wait(1200);
+  } else if (view === 'bookings') {
+    await bookOn(1, 1, 9); await bookOn(2, 3, 5); await bookOn(5, 0, 12);
+    window.switchTab('bookings'); await wait(1800); top();
+  } else if (view === 'stats') {
+    window.switchTab('stats'); await wait(2200); top();
+  } else if (view === 'colours') {
+    window.switchTab('membership'); await wait(1600);
+    const cc = document.querySelector('.cc-control') || document.querySelector('[class*="cc-preview"]');
+    if (cc) { const host = cc.closest('section, .card, .panel') || cc; host.scrollIntoView({ block: 'start' }); const tc = document.querySelector('.tab-content'); if (tc) tc.scrollTop = Math.max(0, tc.scrollTop - 16); }
+    await wait(600);
+  }
+  const pill = document.querySelector('.next-class-pill'); if (pill && view !== 'bookings') pill.style.display = 'none';
+  document.title = 'READY ' + view + ' writes=' + H.writes.length + ' leaks=' + H.leaked.length + ' live=' + H.liveHits().length;
+})();
+</script>
+</body></html>

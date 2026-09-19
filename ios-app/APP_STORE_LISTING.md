@@ -119,23 +119,29 @@ https://github.com/yourusername/psycle-booking/issues
 
 ## Screenshots
 
-Files in `ios-app/appstore-assets/` at 1290x2796 (6.7" iPhone):
+Files in `ios-app/appstore-assets/` at 1290x2796 (6.7" iPhone). Each is the real app on a fake Psycle server, framed
+with a caption in the app's own typeface. Rebuild all six with one command — serve the repo on :8080, then
+`node tests/tools/appstore-shots.mjs` (captions and the list of screens live in that file).
 
 | Order | File | Caption |
 |-------|------|---------|
-| 1 | `01-ss1-discover-dark.png` | Discover & Book |
-| 2 | `02-ss2-stats-dark.png` | Your Fitness Journey |
-| 3 | `03-ss3-stats-bottom-dark.png` | Deep Analytics |
-| 4 | `04-ss4-membership-dark.png` | Membership |
-| 5 | `05-ss5-discover-light.png` | Light & Dark Mode |
-| 6 | `06-ss6-stats-light.png` | Beautiful in Any Theme |
+| 1 | `01-discover.png` | Find your class — One day at a time. Swipe to change day. |
+| 2 | `02-book.png` | Book in two taps — Your usual spot is ready to confirm. |
+| 3 | `03-bookings.png` | Everything you hold — Seats, waitlists and free-cancel times in one place. |
+| 4 | `04-stats.png` | Your training at a glance — Streaks, habits and the instructors you book most. |
+| 5 | `05-class-colours.png` | Colour by class type — Choose the colours, and how strong they are. |
+| 6 | `06-light-and-dark.png` | Light and dark — Follows your phone, or pick your own. |
+
+The names and studios in them are the fake server's; no member data is shown.
 
 ## App Icon
 
-File: `ios-app/appstore-assets/AppIcon-1024.png` (1024x1024)
-Minimal dark background, white "P" letterform, red accent line.
+File: `ios-app/appstore-assets/AppIcon-1024.png` (1024x1024, opaque)
+Two slipped half-discs with growing arcs engraved in them — ink over graphite on a near-white tile. The app ships a
+dark and a tinted appearance of the same drawing (Xcode asset catalogue). Sources: `assets/psync-logo*.svg`;
+`sh assets/render-icons.sh` rebuilds every size here and in the asset catalogue.
 
-Additional sizes for Xcode asset catalog in `ios-app/appstore-assets/`:
+Other sizes kept in `ios-app/appstore-assets/` (the Xcode project itself needs only the 1024px files):
 - AppIcon-180.png (60@3x — iPhone)
 - AppIcon-120.png (60@2x — iPhone, 40@3x)
 - AppIcon-167.png (83.5@2x — iPad Pro)

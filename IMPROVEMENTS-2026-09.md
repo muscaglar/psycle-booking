@@ -185,6 +185,39 @@ small visual leftovers it shipped with.
 
 Assertions: 6,919 → 7,178.
 
+### Follow-up: a new mark, the widgets in the new look, and the App Store set
+
+**The mark** (`11a0ee8`). The owner chose it from two rounds of options: two slipped half-discs with growing arcs
+engraved in them, with no hue of its own. It is the app icon (with the dark and tinted appearances iOS 18 offers),
+the launch screen (mark over the wordmark on the app's ground, light and dark — there was no dark launch screen
+before), the web icons, and the mark in the header, the welcome and the sign-in page, where it is drawn in the
+theme's two inks and replaces the five class-coloured bars. Sources and a rebuild script live in `assets/`; a test
+holds every drawn copy to one geometry.
+
+**Widgets and Live Activity** (`3e7ad33`). The Home Screen and Lock Screen widgets and the Live Activity now share
+the app's language: the time leads, always 24-hour; the class type's pictogram in a tile; the class tint as the card
+ground; the seat chip in the class colour; a countdown that turns to "Now". Colour follows the member's own
+choices — the app writes the class type, its colours for light and dark and the chosen intensity into the widget
+snapshot and rewrites it when they change. Every new field is optional, and a Live Activity started by the previous
+build still decodes (checked by decode tests that run, `ios-app/native-checks`).
+- **A bug older than this work was fixed with it.** The Swift date parser followed the phone's locale and its
+  12 / 24-hour setting. On a UK phone set to a 12-hour clock it returned nothing for the snapshot's times: every
+  widget read "No upcoming class", no Live Activity started and Siri said there were no classes. One fixed-format
+  parser and formatter is now used everywhere (the device's time zone is kept, by the owner's decision).
+
+**The Settings header sat under the status bar** (`19508b3`). Reported by the owner from a phone: on the bike
+preferences screen the title and close button overlapped iOS's "back to app" link. On a phone the Settings panel is
+a full-screen sheet and its older stylesheet pads the header past the status bar; the new-look stylesheet, which
+loads last, set that header's `padding` as a shorthand and silently dropped the inset. It is re-stated, and
+`tests/suites/13-safe-area.js` now fails if the last stylesheet ever again sets a property an older sheet gave a
+safe-area inset without carrying the inset too. An audit of all 20 inset rules found no other casualty.
+
+**The App Store set.** Six new 1290 × 2796 screenshots in the new look and the store icon sizes, rebuilt by one
+command from the real app running on a fake Psycle server (`node tests/tools/appstore-shots.mjs`). The old set
+showed an app that no longer exists.
+
+Assertions: 7,255 → 7,429.
+
 ## How it was done
 
 A multi-pass review: discovery, independent verification of each finding, implementation in small patches,
@@ -515,7 +548,19 @@ read the App Group).
 - [ ] Terminal and Handheld: the date row's two rows fit with nothing clipped; the Time row's wrapped second line
       looks intended.
 
+**The new mark**
+- [ ] The Home Screen icon is the two engraved halves; with the Home Screen set to Dark or Tinted icons
+      (long-press → Edit → Customise) it switches to the dark / tinted version.
+- [ ] The launch screen shows the mark over "Psync" on the app's ground, and its dark version in Dark appearance
+      (iOS caches launch screens hard: delete and reinstall to see a change).
+- [ ] Settings (Membership → Bike / spot preferences): the "Settings" title and the close button sit BELOW the
+      status bar, clear of the "◀ TestFlight" return link.
+
 **Widgets**
+- [ ] The widgets are in the new look: time first as "18:30", pictogram tile, class tint, seat chip in the class
+      colour — and they follow a colour or intensity change made in Membership → Appearance within a second or two.
+      The full list (12-hour phone setting, tinted Home Screen, StandBy, the upgrade path for a running Live
+      Activity) is in `ios-app/NATIVE_FEATURES.md`.
 - [ ] Lock Screen **rectangular** and **inline** widgets render with no placeholder on iOS 17+.
 - [ ] The small Home Screen widget fits on an SE-class phone with a long class name (the instructor row is the
       one that should drop out).

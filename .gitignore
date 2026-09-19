@@ -16,3 +16,6 @@ ios-app/ios/App/Pods/
 
 # (Xcode build output and the generated config.xml are already covered by
 # ios-app/ios/.gitignore — iOS-specific ignores live there.)
+
+# Scratch folder of tests/tools/appstore-shots.mjs (raw captures + compose pages)
+tests/tools/.appstore-work/
