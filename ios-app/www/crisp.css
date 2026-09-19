@@ -3826,6 +3826,14 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 .settings-panel { border: 0; border-radius: var(--radius-sheet); box-shadow: var(--shadow-float); }
 .settings-header { padding: var(--space-5) var(--space-5) var(--space-5) var(--space-9); border-bottom: var(--hairline) solid var(--line); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; }
 .settings-title { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); }
+/* Phones: the panel is a full-screen sheet (css/settings.css), so its header starts under
+   the status bar. The `padding` shorthand above would drop that sheet's
+   `env(safe-area-inset-top)` — the title and the close button then sat under the clock and
+   the iOS "back to app" link. Re-stated here, with the square corners a full-screen sheet has. */
+@media (max-width: 640px) {
+  .settings-panel { border-radius: 0; }
+  .settings-header { padding-top: calc(var(--space-5) + env(safe-area-inset-top)); border-radius: 0; }
+}
 .settings-panel .settings-close {
   display: inline-flex;
   align-items: center;
