@@ -63,6 +63,7 @@ module.exports = async function (t) {
     const globals = {
       Date: FixedDate, getFullHistory: () => history,
       DAY_NAMES_FULL: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      _clock24: t.loadPure('js/app.js', 'clock')._clock24, // "Favourite time": app.js's ONE formatter (24-hour)
     };
     if (!o.noAppJs) globals._gymClassStartMs = london;
     const ctx = t.loadPure('js/tabs.js', 'year-review', globals);
@@ -78,8 +79,20 @@ module.exports = async function (t) {
     eq([s.total, s.uniqueInstrs, s.longestStreak, s.topInstr, s.topInstrCount], [1, 1, 1, 'Alex', 1],
       '"1 class · 1 instructor", a 1-week streak, top instructor from a class TAKEN (it read 3 · 2 · 3 weeks · Blake)');
     eq(world(history.slice(0, 2))._computeYearReview(2026), null, 'nothing taken yet this year → no wrap (the section hides; "No classes this year yet")');
+    eq(s.favTime, '07:00', 'the favourite time is the hour trained most, in 24-hour time (it read "7am")');
     const back = world(history, { noAppJs: true })._computeYearReview(2026);
     eq(back && back.total, 1, 'without app.js the device-local parse is the fallback, not a ReferenceError');
+  }
+  {
+    // Most Psycle slots are not on the hour. An hour bucket printed as HH:MM
+    // read "18:00" for a member who only ever trains at 18:30 — and Habits, a
+    // swipe away, said "Thursdays ~18:30".
+    const at1830 = [row(21, '2026-09-10 18:30:00'), row(22, '2026-09-03 18:30:00'), row(23, '2026-08-27 18:30:00')];
+    eq(world(at1830)._computeYearReview(2026).favTime, '18:30', 'always 18:30 → "18:30", a time they really train at (it read "18:00")');
+    // The busiest HOUR still decides; its most-voted minute is what is printed.
+    const mixed = at1830.concat([row(24, '2026-08-20 18:45:00'), row(25, '2026-08-13 07:15:00'), row(26, '2026-08-06 06:30:00')]);
+    eq(world(mixed)._computeYearReview(2026).favTime, '18:30', 'the 18 o\'clock hour wins (4 of 6); 18:30 outvotes 18:45 inside it');
+    eq(world([row(27, '2026-09-10 06:30:00')])._computeYearReview(2026).favTime, '06:30', 'a morning regular reads "06:30", zero-padded');
   }
   {
     // Three taken in three consecutive weeks + one booked for the next: the

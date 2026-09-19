@@ -13,7 +13,7 @@
 //      explore.js any more — components say WHICH type (data-ct) and
 //      css/crisp.css colours them; the heatmap and the rank tiles stay neutral.
 //   4. The 9e section of css/crisp.css: contrast of every ink it puts on a
-//      fill, in all seven themes; fingertip targets; focus rings.
+//      fill, in every theme; fingertip targets; focus rings.
 //   5. The share images and login.html wear the new chrome and faces.
 module.exports = function (t) {
   const { ok, eq } = t;
@@ -160,8 +160,8 @@ module.exports = function (t) {
     ok(html.indexOf('cc-time') === -1 && /typeof _ccTimeHTML === 'function' \? _ccTimeHTML\(\{ hours: 18, mins: 30, duration: 45 \}\) : ''/.test(tabsSrc), 'evaluated without app.js the time block is absent; in the app it is _ccTimeHTML\'s');
     const withTime = t.vm.createContext({ escapeHTML: (x) => String(x), classPictogram: () => '', _ccTimeHTML: t.loadPure('js/app.js', 'class-type', { getCategory: () => null })._ccTimeHTML });
     t.vm.runInContext(pureSrc + '\n' + tabsSrc.slice(from, to), withTime, { filename: 'js/tabs.js[class-colours + time]' });
-    ok(/<div class="cc-time"><span class="cc-time-h">6:30<\/span><span class="cc-dur"><span class="cc-ampm">pm<\/span> · 45 min<\/span><\/div><div class="cc-info">/.test(
-      withTime._ccControlHtml(withTime._ccControlModel(apiWith(null), CATS, { base: 'light' }, ''))), '…the very block a Discover card prints: the digits over "pm · 45 min"');
+    ok(/<div class="cc-time"><span class="cc-time-h">18:30<\/span><span class="cc-dur">45 min<\/span><\/div><div class="cc-info">/.test(
+      withTime._ccControlHtml(withTime._ccControlModel(apiWith(null), CATS, { base: 'light' }, ''))), '…the very block a Discover card prints: "18:30" over "45 min"');
     ok(/<button type="button" class="pill-btn pill-quiet cc-reset" data-cc-reset="1" data-cc-focus="reset">Reset colours<\/button>/.test(html), '"Reset colours" is offered while something differs from the defaults');
     const atDefault = ctx._ccControlHtml(ctx._ccControlModel(apiWith(null), CATS, { base: 'light' }, ''));
     ok(/data-cc-focus="reset" disabled>Reset colours/.test(atDefault) && !/cc-note/.test(atDefault), '…and disabled at the defaults; no note on an ordinary theme');
@@ -213,7 +213,7 @@ module.exports = function (t) {
   }
 
   // ── 4. The 9e stylesheet ─────────────────────────────────────────────────
-  t.section('css/crisp.css (9e): inks on fills hold in all seven themes');
+  t.section('css/crisp.css (9e): inks on fills hold in every theme');
   {
     const HEX = /^#[0-9a-f]{6}$/i;
     const lum = (hex) => {
@@ -231,7 +231,7 @@ module.exports = function (t) {
     const root = tokensOf(':root');
     const ids = [];
     themeJs.replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { ids.push(id); return m; });
-    eq(ids.length, 7, 'seven themes in the registry');
+    eq(ids.length, 5, 'five themes in the registry');
     // [ink, ground, what it is, the floor] — every pair the 9e rules put together.
     const PAIRS = [
       ['--bg-panel', '--text', 'rank S / a reached milestone: the surface on the ink', 4.5],
@@ -255,15 +255,15 @@ module.exports = function (t) {
         ok(r >= p[3], id + ': ' + p[0] + ' on ' + p[1] + ' is ' + r.toFixed(2) + ':1 (≥' + p[3] + ') — ' + p[2]);
       });
       // The chosen Stats page / the intensity segment: the accent pair, held to
-      // the app's existing floor (tests/suites/1f: 3:1 on Terminal and Synthwave).
-      const need = (id === 'terminal' || id === 'synthwave') ? 3 : 4.5;
+      // the app's existing floor (tests/suites/1f: 3:1 on Terminal).
+      const need = id === 'terminal' ? 3 : 4.5;
       const a = contrast(get('--accent-ink'), get('--accent'));
       ok(a >= need, id + ': --accent-ink on --accent is ' + a.toFixed(2) + ':1 (≥' + need + ') — the chosen segment');
     });
     const section = noComments(crispCss.slice(crispCss.indexOf('/* == crisp:9e-stats-membership == */')));
     const body = (sel) => { const at = section.indexOf('\n' + sel + ' {'); return at === -1 ? '' : section.slice(section.indexOf('{', at) + 1, section.indexOf('}', at)); };
     ok(/background: var\(--text\);/.test(body('.milestone-badge.earned')) && /color: var\(--bg-panel\);/.test(body('.milestone-badge.earned .milestone-num')),
-      'a small number on a fill uses the ink / surface pair (an accent fill is only 3.3:1 on Terminal and Synthwave)');
+      'a small number on a fill uses the ink / surface pair (an accent fill is only 3.3:1 on Terminal)');
     ok(/background: var\(--accent\);\s*color: var\(--accent-ink\);/.test(body('.stats-switcher-tab[aria-selected="true"]')), 'the chosen Stats page is the graphite segment of the board: accent + its own label ink');
     ok(/background: var\(--sunken\)/.test(body('#tab-membership .cost-card')) && /background: var\(--sunken\)/.test(body('.settings-panel .app-row')), 'wells inside a card are the sunken ground (muted captions fail on --bg-input in Handheld)');
   }

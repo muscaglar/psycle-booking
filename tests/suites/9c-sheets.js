@@ -4,7 +4,7 @@
 // modals. What is decided in code (pure:sheets in js/app.js) is tested as a
 // table; what is drawn is checked by running the SHIPPED functions, sliced out
 // of the source, over fake DOMs; and what css/crisp.css's 9c section paints is
-// held to 4.5:1 in all seven themes from the shipped token values. Nothing here
+// held to 4.5:1 in every theme from the shipped token values. Nothing here
 // can reach Psycle.
 module.exports = function (t) {
   const { ok, eq } = t;
@@ -46,7 +46,7 @@ module.exports = function (t) {
   // ── pure:sheets ──────────────────────────────────────────────────────────
   t.section('Sheets: line marks (_uiIcon) — the pictograms\' family, never an emoji');
   {
-    ['clock', 'clash', 'spots', 'calendar', 'person', 'again', 'tick'].forEach((name) => {
+    ['clock', 'caution', 'spots', 'calendar', 'person', 'again', 'tick'].forEach((name) => {
       const svg = p._uiIcon(name, 19);
       ok(/^<svg class="ui-icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"/.test(svg) && /aria-hidden="true" focusable="false"/.test(svg) &&
         /stroke-linecap="round" stroke-linejoin="round"/.test(svg) && !/\sid=|<title|<script|onload/i.test(svg), name + ': a decorative stroke mark in currentColor, round ends, no id / title');
@@ -153,6 +153,7 @@ module.exports = function (t) {
       slotLabelForEvent: () => 'Bike', escapeHTML, confirmBikeBooking: () => {},
       _usualSlotForEvent: () => (o.usual == null ? null : o.usual), _cancelDeadline: () => null, _syncBikeSlotsA11y: () => {},
       classTypeKey: classType.classTypeKey, classPictogram: classType.classPictogram, _pickerConfirmLabel: p._pickerConfirmLabel,
+      _clock24: classType._clock24, // pure:clock rides with pure:class-type: the header's 24-hour time
     });
     t.vm.runInContext('var _bookingContext = null, _selectedSlots = [], _usualPreselected = null, MAX_SEATS = 2;\n' +
       grab('function pluralizeSlotLabel(') + '\n' + grab('function showBikePicker(') + '\n' + grab('function _syncPickerConfirmLabel('), ctx);
@@ -230,7 +231,7 @@ module.exports = function (t) {
       _eventCache: Object.assign({ 77: Object.assign({ id: 77, start_at: '2030-09-24T19:00:00', duration: 45, instructor_id: 31, _typeName: 'Ride 45', _instrName: 'Priya', _locName: 'Shoreditch', _studioName: 'Studio 1' }, o.evt || {}) }, o.cache || {}),
       _countsFresh: () => true, _spotsLeft: () => (o.left == null ? 12 : o.left),
       _waitlistOfferPending: () => false,
-      _cancelDeadline: () => (o.deadline === undefined ? { insideWindow: false, label: 'Tue 7:00am' } : o.deadline),
+      _cancelDeadline: () => (o.deadline === undefined ? { insideWindow: false, label: 'Tue 07:00' } : o.deadline),
       classTypeKey: classType.classTypeKey, classPictogram: classType.classPictogram, _uiIcon: p._uiIcon, _sheetPlanNote: p._sheetPlanNote,
       parsePsycleDate: (v) => (v ? new Date(String(v).replace(' ', 'T')) : null),
       _activeSubscription: o.sub === undefined ? { status: 'active', max_bookings: 12, bookings_made: 8, period_start: '2030-09-01 00:00:00', period_end: '2030-10-01 00:00:00' } : o.sub,
@@ -245,11 +246,11 @@ module.exports = function (t) {
   {
     let html = sheetWorld();
     ok(/^<div class="class-detail-sheet" data-ct="ride" role="dialog" aria-modal="true" tabindex="-1" aria-label="Ride 45 with Priya">/.test(html), 'data-ct on the sheet; role, modality, focusable panel and its spoken name unchanged');
-    const order = ['class="cds-time t-time is-sheet">7:00<span class="cds-ampm">pm</span>', 'class="cds-date">', 'class="ct-tile cds-tile" aria-hidden="true"><svg class="ct-pic" width="38"', '<h2 class="cds-type">Ride 45</h2>', 'class="cds-instr-name">Priya', 'class="cds-where">&middot; Shoreditch, Studio 1<', 'class="cds-body"'].map((s) => html.indexOf(s));
+    const order = ['class="cds-time t-time is-sheet">19:00</span>', 'class="cds-date">', 'class="ct-tile cds-tile" aria-hidden="true"><svg class="ct-pic" width="38"', '<h2 class="cds-type">Ride 45</h2>', 'class="cds-instr-name">Priya', 'class="cds-where">&middot; Shoreditch, Studio 1<', 'class="cds-body"'].map((s) => html.indexOf(s));
     ok(order.every((i) => i !== -1) && order.every((i, n) => n === 0 || i > order[n - 1]), 'in the class-colour block: the TIME (display face, sheet size) → date · length → pictogram tile → class name → instructor → "· place" (the separator rides with the place); then the body (' + order.join(',') + ')');
     ok(/45 min/.test(html) && !/cds-duration-badge/.test(html), 'the length sits on the date line (no accent badge)');
     ok(!EMOJI.test(html), 'no emoji anywhere in the sheet');
-    ok(/<div class="cds-detail-row"><span class="cds-icon" aria-hidden="true"><svg class="ui-icon"[^>]*>.*?<\/svg><\/span><span>Free cancel until <strong>Tue 7:00am<\/strong><\/span><\/div>/.test(html), 'a bookable class says when cancelling stops being free — _cancelDeadline\'s own label');
+    ok(/<div class="cds-detail-row"><span class="cds-icon" aria-hidden="true"><svg class="ui-icon"[^>]*>.*?<\/svg><\/span><span>Free cancel until <strong>Tue 07:00<\/strong><\/span><\/div>/.test(html), 'a bookable class says when cancelling stops being free — _cancelDeadline\'s own label');
     ok(/<span class="cds-avail">12 spots left<\/span>/.test(html), 'availability keeps its words and its hook');
     eq((html.match(/glow-mine/g) || []).length, 1, 'ONE thing glows: the action');
     ok(/<button class="cds-book-btn pill-btn pill-primary is-block is-lg glow-mine" onclick="[^"]*_classDetailBookAction\(77\);">Book<\/button>/.test(html), 'Book: the filled pill, full width, tall');
@@ -281,7 +282,7 @@ module.exports = function (t) {
 
     // A clash: caution row, the other class's own tile at its end.
     html = sheetWorld({ bookings: { 10: seat() }, cache: { 10: { id: 10, start_at: '2030-09-24T18:30:00', duration: 45, _typeName: 'Strength 45', _locName: 'Shoreditch' } } });
-    ok(/<div class="cds-detail-row cds-clash"><span class="cds-icon" aria-hidden="true"><svg[^>]*>.*?<\/svg><\/span><span class="cds-avail-full">Clashes with your 6:30pm Strength 45 at Shoreditch<\/span><span class="ct-tile is-sm" data-ct="strength" aria-hidden="true"><svg class="ct-pic" width="15"/.test(html),
+    ok(/<div class="cds-detail-row cds-clash"><span class="cds-icon" aria-hidden="true"><svg[^>]*>.*?<\/svg><\/span><span class="cds-avail-full">Clashes with your 18:30 Strength 45 at Shoreditch<\/span><span class="ct-tile is-sm" data-ct="strength" aria-hidden="true"><svg class="ct-pic" width="15"/.test(html),
       'an overlap with a held seat: one caution row — mark, the sentence (hook kept), and the OTHER class\'s tile in its own colour');
     ok(html.indexOf('Free cancel until') < html.indexOf('12 spots left') && html.indexOf('12 spots left') < html.indexOf('cds-clash'), 'row order: free-cancel · availability · clash (the clash row closes the group)');
 
@@ -299,8 +300,8 @@ module.exports = function (t) {
     let made = null;
     const ctx = t.vm.createContext({
       _eventCache: { 10: { start_at: '2030-09-24T19:00:00', _typeName: 'Strength 45', _instrName: 'Jonas' } }, announce() {}, escapeHTML,
-      slotLabelForEvent: () => 'Bench', formatSlots: (l, s) => (s && s.length ? l + ' ' + s.join(' & ') : ''), _cancelDeadline: () => ({ insideWindow: false, label: 'Tue 7:00am' }), _waitlistPhase: () => 'auto',
-      classTypeKey: classType.classTypeKey, _uiIcon: p._uiIcon,
+      slotLabelForEvent: () => 'Bench', formatSlots: (l, s) => (s && s.length ? l + ' ' + s.join(' & ') : ''), _cancelDeadline: () => ({ insideWindow: false, label: 'Tue 07:00' }), _waitlistPhase: () => 'auto',
+      classTypeKey: classType.classTypeKey, _uiIcon: p._uiIcon, _clock24: classType._clock24,
       document: { body: { appendChild() {} }, activeElement: null, createElement: () => (made = { id: '', className: '', innerHTML: '', classList: { add() {} }, contains: () => false, isConnected: true }), querySelectorAll: () => [] },
       requestAnimationFrame: () => 0, setTimeout: () => 0, clearTimeout: () => {},
     });
@@ -312,7 +313,7 @@ module.exports = function (t) {
     const actions = made.innerHTML.slice(made.innerHTML.indexOf('<div class="bc-actions">'));
     ok(/class="bc-btn bc-btn-secondary pill-btn pill-neutral"[^>]*>View my bookings</.test(actions) && /class="bc-btn bc-btn-primary pill-btn pill-primary"[^>]*>Done</.test(actions) && !/data-ct/.test(actions),
       'the buttons are neutral pills OUTSIDE the data-ct block (the class colour stays on the tick and the seat)');
-    ok(/<div class="bc-title">Booked!<\/div>/.test(made.innerHTML) && /Free cancel until Tue 7:00am/.test(made.innerHTML), 'title and free-cancel line as before');
+    ok(/<div class="bc-title">Booked!<\/div>/.test(made.innerHTML) && /Free cancel until Tue 07:00/.test(made.innerHTML), 'title and free-cancel line as before');
     ctx.showBookingConfirmation(10, [], { waitlist: true });
     ok(/On the waitlist!/.test(made.innerHTML) && !/bc-slot/.test(made.innerHTML) && !/glow-mine/.test(made.innerHTML), 'a waitlist place: no seat, so nothing glows');
   }
@@ -354,7 +355,7 @@ module.exports = function (t) {
   }
 
   // ── css/crisp.css, section 9c ────────────────────────────────────────────
-  t.section('crisp:9c-sheets — shapes, the glow\'s four homes, and every ink on its ground in all seven themes');
+  t.section('crisp:9c-sheets — shapes, the glow\'s four homes, and every ink on its ground in every theme');
   {
     ok(section.length > 4000, 'the section is there');
     ok(/\.modal, \.confirm-dialog \{[^}]*border-radius: var\(--radius-sheet\);[^}]*box-shadow: var\(--shadow-float\);/.test(section) && /\.class-detail-sheet \{[^}]*border-radius: var\(--radius-sheet\) var\(--radius-sheet\) 0 0;/.test(section) &&
@@ -383,7 +384,9 @@ module.exports = function (t) {
     ok(!/\.app-banner[^{]*\{[^}]*padding/.test(section), 'the banners\' own spacing is left alone (discover-layout-fix.css owns the desktop inset)');
     ok(/\.confirm-btn-danger \{ --pill-fill: var\(--surface\); --pill-ink: var\(--danger\); --pill-line: var\(--danger\); \}/.test(section) &&
       /\.confirm-btn-danger\.is-solid \{ --pill-fill: var\(--danger\); --pill-ink: var\(--danger-ink\);/.test(section), 'danger = outline on the surface; .is-solid = the filled pair');
-    ok(/\.confirm-dialog \.confirm-warn::before \{\s*content: '!';/.test(section), 'the dialog\'s caution mark is a drawn "!" tile, not the warning-sign glyph iOS renders as an emoji');
+    // (Wave 10c: the mark moved from a generated "!" tile into the markup — a line mark, like every other on these sheets.)
+    ok(/\.confirm-dialog \.confirm-warn::before \{ content: none; \}/.test(section) && /const warnMark = typeof _uiIcon === 'function' \? _uiIcon\('caution', 16\) : '';/.test(appSrc),
+      'the dialog\'s caution mark is a drawn line mark in the markup (_uiIcon) — never the warning-sign glyph iOS renders as an emoji: the generated one is switched off');
 
     // Contrast, from the shipped tokens.
     const HEX = /^#[0-9a-f]{6}$/i;
@@ -406,7 +409,7 @@ module.exports = function (t) {
     };
     const ids = [];
     themeJs.replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { ids.push(id); return m; });
-    eq(ids.length, 7, 'seven themes read from the registry');
+    eq(ids.length, 5, 'five themes read from the registry');
     // [what, ink token, ground token] — each pair is one this section paints.
     const PAIRS = [
       ['an available seat number (soft / off)', '--text', '--surface'],
@@ -415,7 +418,10 @@ module.exports = function (t) {
       ['the note beside Book, dialog body', '--text-muted', '--surface'],
       ['a neutral pill / the × / a keyword chip', '--text', '--sunken'],
       ['keyword chips, the Cancelled tag', '--text-muted', '--sunken'],
-      ['the clash row and the picker\'s clash chip', '--text-heading', '--badge-waitlist-bg'],
+      // Wave 10c: a clash is ONE quiet line — the body ink on the ground it already sits on, no fill of its own.
+      ['the clash row: the body ink on the list\'s ground', '--text', '--ground'],
+      ['a dialog\'s warn line: the body ink on the dialog', '--text', '--surface'],
+      ['the late-cancel warn line — the one that keeps a ground', '--text-heading', '--badge-waitlist-bg'],
       ['a calm danger pill', '--danger', '--surface'],
       ['a filled danger pill', '--danger-ink', '--danger'],
     ];
@@ -436,8 +442,10 @@ module.exports = function (t) {
       [/--seat-free-fill: var\(--surface\);\s*--seat-free-line: var\(--line\);\s*--seat-free-ink: var\(--text\);/, 'available seat = --text on --surface with a hairline'],
       [/html\[data-ct-intensity="bold"\] #bikeModal\[data-ct\] \{\s*--seat-free-fill: var\(--ct-tint\);\s*--seat-free-line: var\(--ct-ring\);\s*--seat-free-ink: var\(--ct-deep\);/, 'at "bold": the boards\' seat — deep ink on the tint (≥7:1, 9a-foundation.js)'],
       [/--seat-mine-fill: var\(--ct-base, var\(--accent\)\);\s*--seat-mine-ink: var\(--ct-on-base, var\(--accent-ink\)\);/, 'your pick / your seat = the label ink on the class base (≥4.5:1, 9a-foundation.js), the accent pair as the fallback'],
-      [/\.cds-clash \.cds-avail-full, \.cds-clash \.cds-avail-waitlist \{[^}]*color: var\(--text-heading\);/, 'clash text = --text-heading'],
-      [/\.cds-detail-row\.cds-clash \{[^}]*background: var\(--badge-waitlist-bg\);/, 'clash ground = --badge-waitlist-bg'],
+      [/\.cds-detail-row \.cds-avail, \.cds-detail-row \.cds-avail-full, \.cds-detail-row \.cds-avail-waitlist \{[^}]*color: var\(--text\);/, 'clash text = --text (the availability rows\' own rule: it is a row like its neighbours)'],
+      [/\.cds-details \{[^}]*background: var\(--ground\);/, 'clash ground = the list\'s own --ground'],
+      [/\.confirm-warn \{[^}]*background: none;[^}]*color: var\(--text\);/, 'a dialog\'s warn line = --text, no ground'],
+      [/\.confirm-warn\.late-cancel-note \{[^}]*background: var\(--badge-waitlist-bg\);[^}]*color: var\(--text-heading\);/, 'the late-cancel warn = --text-heading on --badge-waitlist-bg'],
       [/\.cds-time \{ color: var\(--ct-ink\);/, 'the sheet time = --ct-ink on the class card'],
       [/\.cds-type \{[^}]*color: var\(--ct-deep\);/, 'the class name = --ct-deep'],
       [/\.cds-date \{[^}]*color: var\(--ct-ink-2\);/, 'the date line = --ct-ink-2'],

@@ -1606,7 +1606,7 @@
    Overview · Habits · Instructors (js/tabs.js, pure:stats-pages).
    Tokens only: a --bg-deep track with a --bg-panel thumb reads as "sunk
    track, raised thumb" in every theme (the panel is the lighter of the two in
-   all seven); Handheld squares it off through the radius tokens and has no
+   all of them); Handheld squares it off through the radius tokens and has no
    shadow, so the thumb also carries a border.
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -1726,4 +1726,11 @@
   .tab-content:has(> #tab-stats.active) { overflow: clip; }
   .stats-switcher-bar { top: var(--stats-pin-top, 0px); }
   .stats-switcher { max-width: 480px; }
+}
+/* The same for Discover's desktop filter column (css/crisp.css 9b.9), which
+   pins under the tab bar while the timetable scrolls. A rule of its own: an
+   engine without :has() or clip drops only this, and the column then scrolls
+   with the page. */
+@media (min-width: 1024px) {
+  .tab-content:has(> #tab-discover.active) { overflow: clip; }
 }

@@ -3,7 +3,7 @@
    Loaded LAST so it wins the cascade. Colours come from the existing theme
    tokens (--surface/--ink/--line/--accent/--accent-soft/--accent-ink, aliased
    in theme.css), so this file is layout + typography only and themes for free
-   across Cloud / Linen / Graphite and the flavour themes.
+   across Cloud / Graphite and the flavour themes.
    ============================================================================ */
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
@@ -205,7 +205,7 @@ header .theme-toggle {
   background: var(--accent-soft, #e2ede7);
   /* The top of the ink ladder: on Handheld --text IS the accent, and --text on
      its own soft tint measured 4.47:1. --text-heading holds >= 6.5:1 on
-     --accent-soft in all seven themes; the × takes --text (a glyph: >= 3:1). */
+     --accent-soft in every theme; the × takes --text (a glyph: >= 3:1). */
   color: var(--text-heading, #0e0f12);
   font: 600 13px/1 var(--font-body);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
@@ -434,7 +434,6 @@ header .theme-toggle {
   letter-spacing: -0.01em;
   color: var(--ink, #17181c);
 }
-.cc-ampm { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); margin-left: 2px; }
 .cc-dur { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
 
 /* 100px basis, not 0: it is the width below which the card wraps its action
@@ -639,7 +638,7 @@ header .theme-toggle {
 /* Sentence case, no tracking: `font:` doesn't reset the base chip name's
    uppercase + .05em, which is what made the names too wide. The ellipsis is
    only a backstop (mono themes on a 375px phone); line-height stays ≥1.2 so
-   overflow:hidden can't shave the descenders in Graphite / Synthwave. */
+   overflow:hidden can't shave the descenders in Graphite / Blueprint. */
 #tab-membership .theme-chip-name {
   font: 700 14px/1.25 var(--font-body);
   text-transform: none; letter-spacing: 0;
@@ -729,7 +728,7 @@ header .theme-toggle {
    A range of more than one day is a strip of days (#dayStrip, a tablist)
    over ONE day's cards (#dayPager). A single day keeps the plain heading
    and list above. Layout + type only: every colour, size, radius and
-   duration is a token, so all seven themes follow.
+   duration is a token, so every theme follows.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* The strip carries a count per day: once the load is over, the "N classes"

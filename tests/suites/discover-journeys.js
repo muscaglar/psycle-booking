@@ -319,7 +319,7 @@ module.exports = async function (t) {
     t.eq(w.calls.filter((c) => c === 'search').length, 1, 'no prediction: nothing happens');
 
     // The Time row is a filter like the rest. "After 5" saved + "Book again —
-    // Tuesdays at 7:00am": her 18:30 stayed listed, the 7:00 did not, and a list
+    // Tuesdays at 07:00": her 18:30 stayed listed, the 7:00 did not, and a list
     // that is not EMPTY never draws the "Show all times" rescue.
     const timeRow = (x) => [[...x.ctx.selectedTimeBands], t.vm.runInContext('_availableOnly', x.ctx)];
     w = focusWorld({ timeBands: ['evening'], availableOnly: true });
@@ -331,7 +331,7 @@ module.exports = async function (t) {
     t.eq(timeRow(w), [[], false], 'View schedule / "Same instructor, any time": any time means any time');
     w = focusWorld({ timeBands: ['evening'], availableOnly: true });
     w.ctx._focusSearch({ categoryKey: 'RIDE', startDate: '2099-03-03', daysAhead: 1 });
-    t.eq(timeRow(w), [[], false], 'habit "Find this week" (a ~7:00am slot): the same');
+    t.eq(timeRow(w), [[], false], 'habit "Find this week" (a ~07:00 slot): the same');
     w = focusWorld({ timeBands: ['early', 'evening'], availableOnly: true });
     w.ctx._focusSearch({ locationId: '2', typeName: 'Ride 45', startDate: '2099-03-03', daysAhead: 1, keepTimeRow: true });
     t.eq(timeRow(w), [['early', 'evening'], false], 'keepTimeRow ("Same time, any instructor" has just admitted the class\'s band): the bands stay; "Available only" still goes');

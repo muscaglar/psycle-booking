@@ -15,7 +15,8 @@ module.exports = async function (t) {
   // app.js's London resolver — what the browser hands the queue as
   // window._psycleClassStartMs (the suite runs in America/New_York).
   const gym = t.loadPure('js/app.js', 'gym-time', { window: {} });
-  const p = t.loadPure('js/reliability.js', 'offline-queue', { _psycleClassStartMs: gym._gymClassStartMs });
+  // …and its ONE time formatter (_clock24, pure:clock): a global in the page, handed in here.
+  const p = t.loadPure('js/reliability.js', 'offline-queue', { _psycleClassStartMs: gym._gymClassStartMs, _clock24: t.loadPure('js/app.js', 'clock')._clock24 });
 
   const NOW = utc(2026, 6, 1, 9, 30); // 10:30 in London (BST)
   const seatA = () => ({ 77: { bookingId: 'A', bookingIds: ['A'], slots: [5], slotBookings: { 5: 'A' }, waitlisted: false } });
@@ -79,8 +80,8 @@ module.exports = async function (t) {
   eq(p._offlineQueueIsLive(cancel(), false, 'online'), false, 'a restored cancel is checked against /bookings instead');
 
   t.section('Offline queue: naming a class nothing else can name');
-  eq(p._queueFallbackLabel('2026-06-01 07:05:00'), 'a class on Mon 1 at 7:05am', 'from the digits — the class\'s own wall clock');
-  eq(p._queueFallbackLabel('2026-06-06T18:30:00'), 'a class on Sat 6 at 6:30pm', 'T form, pm');
+  eq(p._queueFallbackLabel('2026-06-01 07:05:00'), 'a class on Mon 1 at 07:05', 'from the digits — the class\'s own wall clock');
+  eq(p._queueFallbackLabel('2026-06-06T18:30:00'), 'a class on Sat 6 at 18:30', 'T form, an evening class: 24-hour, never "6:30pm"');
   eq([p._queueFallbackLabel(''), p._queueFallbackLabel(null), p._queueFallbackLabel('soon')], ['a class', 'a class', 'a class'], 'unreadable → "a class"');
 
   // ── Wiring: section D, run whole ─────────────────────────────────────────
@@ -142,7 +143,7 @@ module.exports = async function (t) {
       fetchMyBookings: () => { log.fetches++; return Promise.resolve(true); },
       refreshUpcomingPanel: () => {},
       _psycleClassStartMs: gym._gymClassStartMs,
-      _waitlistClassLine: () => 'Ride 45 · Alex · Mon 1, 6:00pm',
+      _waitlistClassLine: () => 'Ride 45 · Alex · Mon 1, 18:00',
       slotLabelForEvent: () => 'Bike',
       formatSlots: (l, s) => l + ' ' + s.join(' & '),
       _dialogOpen: () => false,
@@ -174,7 +175,7 @@ module.exports = async function (t) {
     return typeof r === 'function' ? r() : r;
   };
   const oldCancel = () => ({ qid: 'c1', owner: 'u1', type: 'cancel', eventId: 77, bookingIds: ['A'], timestamp: '2026-05-31T08:00:00.000Z' });
-  const oldBooking = () => ({ qid: 'b1', owner: 'u1', eventId: 77, slots: [7], spaces: 0, startAt: '2099-06-01 18:00:00', label: 'Ride 45 · Alex · Mon 1, 6:00pm', timestamp: '2026-05-31T08:00:00.000Z' });
+  const oldBooking = () => ({ qid: 'b1', owner: 'u1', eventId: 77, slots: [7], spaces: 0, startAt: '2099-06-01 18:00:00', label: 'Ride 45 · Alex · Mon 1, 18:00', timestamp: '2026-05-31T08:00:00.000Z' });
 
   t.section('Offline queue: a cancel made offline in this session goes out on reconnect');
   {
@@ -183,7 +184,7 @@ module.exports = async function (t) {
     w.ctx.window.queueOfflineCancel(77, ['A', 'B']); // app.js has already dropped the class from _myBookings
     const item = w.queue()[0];
     eq([item.type, item.owner, item.bookingIds, item.startAt, item.label, typeof item.qid],
-      ['cancel', 'u1', ['A', 'B'], '2099-06-01 18:00:00', 'Ride 45 · Alex · Mon 1, 6:00pm', 'string'],
+      ['cancel', 'u1', ['A', 'B'], '2099-06-01 18:00:00', 'Ride 45 · Alex · Mon 1, 18:00', 'string'],
       'the item is stamped: owner, its own id, the class time + label');
     eq(w.els.offlineQueueStatus && w.els.offlineQueueStatus.textContent, '1 change waiting to sync with Psycle', 'My Bookings says a change is waiting');
     eq([w.els.offlineQueueStatus.className, w.els.offlineQueueStatus.attrs.role], ['mb-queue-status', 'status'], '…in its own element at the top of the tab (a polite live region)');
@@ -250,7 +251,7 @@ module.exports = async function (t) {
     eq(w.log.confirms.length, 1, 'once /bookings has landed the member is asked');
     const c = w.log.confirms[0];
     eq([c.confirmText, c.cancelText], ['Book it', 'Discard'], 'Book it / Discard');
-    ok(/You tried to book Ride 45 · Alex · Mon 1, 6:00pm \(Bike 7\) while offline/.test(c.body), 'the dialog names the class and the seat');
+    ok(/You tried to book Ride 45 · Alex · Mon 1, 18:00 \(Bike 7\) while offline/.test(c.body), 'the dialog names the class and the seat');
     ok(/12-hour cancellation policy/.test(c.warn), '…with the usual 12-hour policy line');
     eq(w.sent(/^POST/), ['POST /bookings {"event_id":77,"slots":[7]}'], '"Book it" → the booking is sent, once');
     eq(w.queue(), [], '…and leaves the queue');

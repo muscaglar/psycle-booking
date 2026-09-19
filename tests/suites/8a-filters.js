@@ -76,8 +76,8 @@ module.exports = function (t) {
     'a class-type key the map does not know (stored filters) is still removable — and "constructor" finds nothing on a prototype');
 
   eq(chips({ timeBands: ['evening', 'early'], availableOnly: true }),
-    [{ kind: 'time', id: 'early', label: 'Before 9' }, { kind: 'time', id: 'evening', label: 'After 5' }, { kind: 'available', id: '', label: 'Available only' }],
-    'the Time row: one chip per band in the row\'s order, then "Available only"');
+    [{ kind: 'time', id: 'early', label: 'Before 9:00' }, { kind: 'time', id: 'evening', label: 'After 17:00' }, { kind: 'available', id: '', label: 'Available only' }],
+    'the Time row: one chip per band in the row\'s order, then "Available only" — the bands read in 24-hour time, like every time in the app');
   eq(labels({ availableOnly: 'yes' }), [], '"Available only" is on only when it is exactly true');
 
   eq(chips({ instructorIds: ['3', '1'] }), [{ kind: 'instructor', id: '3', label: 'Casey Díaz' }, { kind: 'instructor', id: '1', label: 'Alex Morgan' }],
@@ -98,7 +98,7 @@ module.exports = function (t) {
   eq(labels({ instructorIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen'], 'no favourites / ranks passed (a single-instructor filter never asks): names');
 
   eq(chips({ instructorIds: ['2'], availableOnly: true, timeBands: ['day'], categories: ['RIDE'], locationIds: ['12'] }).map((c) => c.kind + ':' + c.label),
-    ['location:Oxford Circus', 'category:Ride', 'time:9–5', 'available:Available only', 'instructor:Blake Chen'],
+    ['location:Oxford Circus', 'category:Ride', 'time:9:00–17:00', 'available:Available only', 'instructor:Blake Chen'],
     'order: studios · class types · time bands · Available only · instructors');
   ok(chips({ locationIds: ['4', '30', '12'], categories: ['RIDE', 'STRENGTH'], timeBands: ['early'], instructorIds: ['1', '2'] })
     .every((c) => Object.keys(c).filter((k) => k !== 'name').join() === 'kind,id,label' && typeof c.label === 'string' && c.label),
@@ -166,7 +166,7 @@ module.exports = function (t) {
     w.ctx.updateFiltersSummary();
     eq([w.count.textContent, w.count.hidden, w.bar.attrs['aria-label']], ['3', false, 'Filters, 3 active'], 'restored filters: the count is right and part of the bar\'s name');
     eq(chipTags(w).map((tag) => [/data-kind="([^"]*)"/.exec(tag)[1], /data-id="([^"]*)"/.exec(tag)[1], /aria-label="([^"]*)"/.exec(tag)[1]]),
-      [['location', '4', 'Remove filter: Bank'], ['category', 'RIDE', 'Remove filter: Ride'], ['time', 'evening', 'Remove filter: After 5']],
+      [['location', '4', 'Remove filter: Bank'], ['category', 'RIDE', 'Remove filter: Ride'], ['time', 'evening', 'Remove filter: After 17:00']],
       'one real <button> per filter: kind + id as data, a spoken name that says what a tap does');
     ok(chipTags(w).every((tag) => /^<button type="button"/.test(tag) && /onclick="removeFilterChip\(this\)"/.test(tag)), 'each chip is a button that hands ITSELF to removeFilterChip (no id is quoted into a handler)');
     ok(/<span class="filter-chip-label">Bank<\/span><span class="filter-chip-x" aria-hidden="true">×<\/span>/.test(w.summary.innerHTML), 'label and × are separate spans: the label can truncate, the × cannot be pushed out');
@@ -417,7 +417,7 @@ module.exports = function (t) {
     const root = tokensOf(':root');
     const ids = [];
     t.readSource('js/theme.js').replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { ids.push(id); return m; });
-    ok(ids.length >= 7, 'theme ids parsed from APP_THEMES (' + ids.join(', ') + ')');
+    ok(ids.length >= 5, 'theme ids parsed from APP_THEMES (' + ids.join(', ') + ')');
     const labelToken = (/(?:^|[;\s])color:\s*var\((--[a-z-]+)/.exec(chip) || [])[1];
     const fillToken = (/background:\s*var\((--[a-z-]+)/.exec(chip) || [])[1];
     eq([labelToken, fillToken], ['--text-heading', '--accent-soft'], 'the chip: the top of the ink ladder on the soft accent tint');

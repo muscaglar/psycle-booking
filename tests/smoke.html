@@ -185,6 +185,10 @@
   checkType('clearTimeFilters', 'function');
   checkType('setTimeFilters', 'function');
 
+  // ── The ONE time formatter (app.js pure:clock — called BY NAME, unguarded, from tabs / features / reliability) ──
+  checkType('_clock24', 'function');
+  checkType('_clockOf', 'function');
+
   // ── Weekly template + recent searches + insights (tabs/app/explore) ──
   checkType('bookWeeklyTemplate', 'function');
   checkType('getRecentSearches', 'function');

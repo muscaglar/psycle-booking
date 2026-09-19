@@ -6,6 +6,7 @@
 > `npm run ci` is green at `a9d4a9b`. **Nothing here has been run on a physical iPhone yet** — the
 > [on-device checklist](#on-device-checklist--still-owed) at the end is still owed. The items under
 > [Deliberately NOT changed](#deliberately-not-changed--owner-decisions) are decisions, not omissions.
+> What shipped after that range is recorded as follow-ups at the end of the [Summary](#summary).
 
 This file is the audit trail for the programme. CLAUDE.md describes the resulting architecture; this file records
 what moved, why a few things did not, and what still has to be looked at on a real device.
@@ -58,6 +59,131 @@ manifest in `Info.plist`, a `SceneDelegate` that hands URL opens and user activi
 active / background moments to the AppDelegate's handlers, and a version-pinned patch so Capacitor's temporary
 presentation window (the in-app browser) joins the scene. Details in `ios-app/CICD.md` → Notes / gotchas.
 **A green archive proves nothing about launch — open the TestFlight build on a phone.**
+
+### Follow-up: the Lock Screen widget cut its text off (`177fca3`)
+
+On a phone the rectangular Lock Screen widget ended long lines in "…" — "STRENGTH: FULL B…", "Westbourne Grove ·
+Bed…" — because every line had one fixed font and a one-line limit. Each line now picks the largest of three sizes
+that shows all of its text; only the smallest may tighten, shrink and finally truncate. The seat moved up beside the
+time ("Wed 18:30 · Bike 12"), so the location has a line to itself — "location · seat" was the line most often cut.
+The inline widget above the clock uses a system font, so length is its only lever: it drops the weekday for a class
+today, and a long class name keeps the part before its colon. Rendered in the simulator at the three accessory sizes
+(172×76, 160×72, 148×66) with long class names, several seats and long locations, only a 29-character class name
+still truncates, and only at the smallest size.
+
+### Follow-up: a product designer's review of the iPhone app (`da07956`)
+
+- **Discover shows one day at a time.** A day strip under the date row carries each day of the range with its class
+  count. Swipe the list left or right, tap a day, or use the arrow / Home / End keys in the strip; every change is
+  announced, and the heading carries no previous / next buttons. The list follows the finger, snaps or springs back,
+  and resists at the ends; a swipe never fights vertical scrolling, pull-to-refresh, the scrolling pill rows, an open
+  dialog or a busy Book button, and pinch-zoom still works. The chosen day survives filter changes, background
+  refreshes and streamed results. An empty day says so once and offers the next day with classes; a day Psycle has
+  not released yet, or that a partial timetable has not loaded, says that instead of "no classes". Only the visible
+  day's cards are in the page, so a 14-day range is much lighter. A single day looks as before.
+- **"7 days" means seven days and "14 days" fourteen** (they drew 8 and 15). Saved filters are re-derived from the
+  preset, so old saves still restore.
+- **The date row is always on screen.** Time, Location, Class type and Instructor sit behind one Filters button,
+  collapsed at launch, with a count of active filters and removable chips that clear through the panel's own
+  controls.
+- **Stats is three sub-pages** — Overview, Habits, Instructors — behind a segmented switcher: a real tab list with
+  arrow keys, swipeable, remembered for the session. An empty page says so in one line; signed out shows only the
+  sign-in hero.
+- **A full-screen welcome** with a short swipeable tour replaces the four-card modal. It is illustrated with the
+  app's own components, says that Psync is independent and not affiliated with Psycle, and always offers Skip.
+  Members who finished the old tour, or who are signed in, never see it; Settings can show it again. The one-time
+  "Swipe to change day" hint is not shown to someone who has just been through the welcome.
+- **Leaner copy.** Subtitles that restate a heading or explain how something is worked out, instructions for obvious
+  controls, exclamation marks and cheerleading were removed. Everything about credits, the late-cancel window,
+  waitlist charges, the calendar hand-over, offline actions, sign-out, import / export and error recovery is
+  unchanged.
+
+Assertions: 4,859 → 5,691.
+
+### Follow-up: the new look (`2b17154`)
+
+The direction the owner and their designer chose after three rounds of concepts: clear, time-led rows and
+pictograms, soft round shapes, colour that means something, and a sparing glow on what is yours.
+
+- **Type and chrome.** Sofia Sans Condensed for times, numerals, headings and the wordmark, Sofia Sans for
+  everything else; both self-hosted (two 40 KB files). Cloud, the default, became a cool graphite chrome and Graphite
+  its dark counterpart; the flavour themes kept their palettes and took the same shapes, type and components.
+  Generous radii (Handheld stays square), one soft shadow, no offset shadows or gradient washes. Buttons, chips,
+  segmented controls, badges and toasts are one set of shared parts in css/crisp.css, which loads last.
+- **Colour means class type, and is adjustable.** Ride, Strength, Yoga, HIIT, Pilates, Lagree, Barre and Other each
+  have a colour set and a pictogram; cards, tiles, the class sheet, the seat map, seat chips, the glow and the Stats
+  breakdown read the same tokens, and the old hard-coded category colours are gone. Membership → Appearance → Class
+  colours sets the intensity — Off, Soft (the default, much paler than the concept) or Bold — and a colour per class
+  type from a curated palette. Every swatch ships precomputed light and dark values, so text contrast holds whatever
+  is chosen, with no colour maths at runtime. The choice applies everywhere at once, persists
+  (`psycle_class_colours`), is mirrored on iOS and travels with settings export / import. Terminal and Handheld stay
+  near-monochrome unless Bold is chosen.
+- **One class card** on Discover, My Bookings and the usual-week card: time first, pictogram tile, class,
+  "instructor · studio", availability, one action. Booked classes and your seats glow; the chosen day is a graphite
+  pill with a glow. My Bookings keeps Cancel and Change spot on the card and moves Add spot, Find similar, Map and
+  Share into a More menu; Cancel is a calm outline, red only inside the late-cancel window. The floating next-class
+  pill no longer covers the last card's actions.
+- **Sheets, picker, Stats, welcome, sign-in.** Round seats with clear available / taken / yours / usual states, the
+  class type's colour, one full-width primary pill, and a confirm bar that stays on screen on small phones. Stats
+  has a hero all-time numeral, streak bars, a neutral heatmap and class-type bars in the class colours; the share
+  image is redrawn in the new faces. The welcome, instructor profile, history, dialogs and the sign-in page follow.
+
+Behaviour was unchanged — booking, cancelling, waitlist, offline queue, calendar sync, search, the day pager and
+filters work as before — apart from a light haptic on a day change by swipe and a focus ring that is visible again
+on accent-filled controls. Assertions: 5,691 → 6,919.
+
+### Follow-up: the owner's notes on the new look
+
+Three decisions after living with the new look — 24-hour times, a quieter clash warning, two themes fewer — and the
+small visual leftovers it shipped with.
+
+- **24-hour times everywhere.** Every time the app prints or speaks is "HH:MM" — "06:30", "18:30" — through one
+  formatter (`_clock24` / `_clockOf`, js/app.js `pure:clock`), read from the class's wall-clock digits exactly as
+  before: cards, the class sheet, the picker, dialogs, toasts and spoken labels, "Free cancel until Sun 19:30",
+  waitlist "accept by 17:45", Stats ("Mondays ~07:00"), the usual week, history, the share text and the welcome's
+  illustrations. The class card shows the time over the duration alone ("18:30" / "45 min"). The Time row reads
+  "Before 9:00 · 9:00–17:00 · After 17:00" and wraps: in those words its four controls are wider than a phone, and
+  "Available only" sat half off the edge. A test fails if a 12-hour marker comes back into shipped source.
+  **Not covered:** the widget and the Live Activity format their times in Swift and still follow the phone's own
+  12 / 24-hour setting.
+- **The clash warning is one quiet line** — the sentence in the body ink, led by a small ringed "!" in the theme's
+  caution colour; no amber band, no chip — in the class sheet, the seat picker, confirm dialogs and the usual-week
+  sheet, and readable in every theme. The wording is unchanged and it is still advisory. The late-cancel warning
+  keeps its caution ground on purpose: that one costs a credit.
+- **Linen and Synthwave were retired.** A saved, deep-linked or imported id of theirs reads as Cloud / Graphite and
+  is rewritten once, so nobody is dropped onto the system scheme. Five themes remain: Cloud, Graphite, Terminal,
+  Handheld, Blueprint.
+- **Terminal and Handheld lay the date row's five ranges out in two rows on a phone** — the leftover the new look
+  shipped with ("14 days" sat clipped at rest). The favourite star is a per-theme token (`--fav`, ≥ 3:1 as a graphic)
+  instead of one hard-coded gold, which was 1.2–1.6:1 on Cloud.
+- **The floating next-class pill steps aside** while a list is scrolled down and comes back on scroll up, at the top
+  and at the end of the list — on every tab, never while a dialog is open. Tucked away it lets a tap through to the
+  card under it, and it is reachable by keyboard and screen reader exactly as before (focus brings it back). At rest
+  it never sits on a Book button either: on a phone, the top of a Discover day used to leave the fourth card's Book
+  button under the pill's seat badge before any scroll, and a tap there opened My Bookings. It now stands aside
+  while the middle of a Book button is under it and returns when nothing is (a button with only its edge under the
+  pill is left alone); a scroll up still calls it back wherever it lands.
+- **Desktop (≥ 1024px).** Discover is two columns — the filters pinned on the left, the day strip and the cards in a
+  readable column on the right — so the first class is on screen without scrolling (it sat about 710px down, under
+  always-open filters, and a card ran 1,032px wide). The class sheet is a centred dialog 520px wide (it used to
+  shrink to its content, about 293px — narrower than on a phone) and the seat picker 560px. "Clear filters" shows
+  only while a filter is on. Phones and tablets are unchanged.
+- **Found in review of the above, fixed before it shipped.** Year in review's "Favourite time" is the busiest hour at
+  its most common minute ("18:30" — as a bare hour in HH:MM it read "18:00", a time an 18:30 regular never trains
+  at). A waitlist offer's "accept by 17:45" is London wall clock like the class time above it (through the phone's
+  own clock it could read later than the class starts). Desktop: a short list no longer opens blank bands above the
+  travel notice and the first card; the filter column hands its scroll on to the page, so its last control is never
+  stuck under the window's edge at the top of the page; "Clear filters" is shown on a warm launch with favourites
+  pre-selected, and pressing it from the keyboard moves the focus to the date row instead of dropping it. Handheld:
+  the next-class pill wears a hairline, so at rest it no longer merges with the card under it.
+- **`ios-app/UPGRADE-CAPACITOR-8.md`** is a step-by-step Capacitor 6 → 8 upgrade for this project: versions, the
+  order of commands, what replaces the hand-written scene forwarding, what happens to each plugin patch, a device
+  checklist and the rollback. It has not been run — it needs `npm install`, a regenerated lockfile and a phone.
+  Its most important finding: the calendar plugin's call shapes change between 6 and 8 in ways that fail silently
+  (`notes` → `description`, `alertOffsetInMinutes` → `alerts` with the sign flipped, `listEventsInRange`
+  `{startDate, endDate}` → `{from, to}`), so the bridge and its tests have to change with the packages.
+
+Assertions: 6,919 → 7,178.
 
 ## How it was done
 
@@ -358,6 +484,7 @@ These were looked at and left alone on purpose. Please do not "fix" them in pass
 - **Linen's accent as text, and Terminal / Synthwave accent-ink contrast.** Linen's terracotta accent used as text
   on the page background is about 3.7:1. Terminal and Synthwave define no `--accent-ink`, so labels on their accent
   fill are white at about 3.3:1 and 3.5:1. Readable, below AA for small text, and part of those themes' look.
+  (Linen and Synthwave were retired afterwards — see the last follow-up under Summary; the Terminal part stands.)
 - **The `file://` CORS-proxy development path** in js/app.js (`IS_FILE` / `PROXY`, with its red warning banner) was
   kept as it is. (Note that the page's content security policy lists only the app's own origin and
   `psycle.codexfit.com` under `connect-src`.)
@@ -376,10 +503,17 @@ Activity lines cannot be exercised in an unsigned build at all: without entitlem
 read the App Group).
 
 **Appearance**
-- [ ] Status bar glyph colour is right in a light theme (dark glyphs on Cloud / Linen) and in a dark theme (light
-      glyphs on Graphite and the flavour themes), including straight after switching theme.
+- [ ] Status bar glyph colour is right in the light theme (dark glyphs on Cloud) and in a dark theme (light glyphs
+      on Graphite and the flavour themes), including straight after switching theme.
 - [ ] The pull-to-refresh pill sits below the Dynamic Island / status bar on Discover and My Bookings.
 - [ ] Cold-launch time feels right, and the first paint is in the member's theme with no flash.
+- [ ] A phone that was on Linen or Synthwave opens on Cloud / Graphite with no flash, and keeps it after an iOS
+      storage purge (the Preferences mirror is re-saved after the restore — unit-tested only).
+- [ ] The floating next-class pill tucks away on a scroll down and returns on a scroll up, at the top and at the
+      end of a list, without flickering on the rubber-band at either end. At the top of a Discover day it is not
+      drawn over a Book button, and it does not blink while days are paged or a filter is tapped.
+- [ ] Terminal and Handheld: the date row's two rows fit with nothing clipped; the Time row's wrapped second line
+      looks intended.
 
 **Widgets**
 - [ ] Lock Screen **rectangular** and **inline** widgets render with no placeholder on iOS 17+.

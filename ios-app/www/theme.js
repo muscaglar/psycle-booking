@@ -25,16 +25,30 @@ const THEME_KEY = 'psycle_theme';
 // theme's own accent ladder there unless the member chose "bold" (section A2).
 const APP_THEMES = [
   { id: 'cloud',     name: 'Cloud',     base: 'light', bg: '#e6e9ee', accent: '#1b2130' },
-  { id: 'linen',     name: 'Linen',     base: 'light', bg: '#e8e1d5', accent: '#b5573c' },
   { id: 'graphite',  name: 'Graphite',  base: 'dark',  bg: '#12161f', accent: '#dde3ec' },
   { id: 'terminal',  name: 'Terminal',  base: 'dark',  bg: '#060906', accent: '#2bd96b', mono: true },
-  { id: 'synthwave', name: 'Synthwave', base: 'dark',  bg: '#140a24', accent: '#ff2d95' },
   { id: 'gameboy',   name: 'Handheld',  base: 'dark',  bg: '#0f380f', accent: '#9bbc0f', mono: true },
   { id: 'blueprint', name: 'Blueprint', base: 'dark',  bg: '#0a1c30', accent: '#38bdf8' },
 ];
 
 const DEFAULT_THEME = 'cloud';
 window.APP_THEMES = APP_THEMES;
+
+// ── pure:theme-retired:start ── (DOM-free; tests/suites/10b-themes.js evaluates this block)
+// Two themes were retired in September 2026. An id of theirs that is still
+// SAVED, deep-linked (?theme=) or named by a settings backup keeps its meaning
+// — the member chose a light or a dark look — so it reads as the theme on the
+// same base. Left alone it would have stopped being a registry id, which
+// _resolveTheme treats as "no choice": the app would suddenly have followed the
+// system scheme instead. Own keys only (an id is untrusted text); the map is
+// handed to the settings import and mirrored by both first-paint scripts.
+var RETIRED_THEMES = { linen: 'cloud', synthwave: 'graphite' };
+function _currentThemeId(id) {
+  if (typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(RETIRED_THEMES, id)) return id;
+  return RETIRED_THEMES[id];
+}
+// ── pure:theme-retired:end ──
+window.RETIRED_THEMES = RETIRED_THEMES;
 
 function _themeById(id) {
   for (var i = 0; i < APP_THEMES.length; i++) {
@@ -56,8 +70,22 @@ function _applyTheme(id) {
   _applyClassColours();
 }
 
+// The saved id. A retired one is rewritten — once: what is stored afterwards is
+// a registry id, so the first-paint script, the settings export and the iOS
+// mirror all read the same thing from then on. A write that fails (private
+// mode) changes nothing about the answer.
+let _themeRewrittenTo = null;
+function _savedThemeId() {
+  const raw = localStorage.getItem(THEME_KEY);
+  const id = _currentThemeId(raw);
+  if (id !== raw) {
+    try { localStorage.setItem(THEME_KEY, id); _themeRewrittenTo = id; } catch (e) {}
+  }
+  return id;
+}
+
 function _resolveTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
+  const saved = _savedThemeId();
   if (_themeById(saved)) return saved;
   // No (valid) preference — follow the system (dark → Graphite, else Cloud)
   if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'graphite';
@@ -82,9 +110,10 @@ window.setAppTheme = function (id) {
 };
 
 function initTheme() {
-  // ?theme=synthwave deep link (also handy for testing)
+  // ?theme=blueprint deep link (also handy for testing). An old link to a
+  // retired theme opens the one that replaced it.
   try {
-    const param = new URLSearchParams(location.search).get('theme');
+    const param = _currentThemeId(new URLSearchParams(location.search).get('theme'));
     if (param && _themeById(param)) localStorage.setItem(THEME_KEY, param);
   } catch (e) {}
 
@@ -95,7 +124,7 @@ function initTheme() {
   // Listen for system theme changes (auto-follows when no manual override)
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
-      var saved = localStorage.getItem(THEME_KEY);
+      var saved = _savedThemeId();
       if (!_themeById(saved)) {
         _applyTheme(_resolveTheme());
         updateThemeIcon();
@@ -117,6 +146,18 @@ function initTheme() {
     // Same purge, same cure for the class colours (psycle_class_colours is
     // mirrored too). A no-op when what is on screen is already right.
     window._psycleNativeRestoreReady.then(function () { _applyClassColours(); });
+    // A retired theme id rewritten by the lines above was written before
+    // native-bridge had patched setItem, so the Preferences mirror still holds
+    // the old one and would hand it back after the next purge. Said again once
+    // the bridge is up, it is mirrored. (An id the restore itself brings back
+    // is rewritten through the patched setter already.)
+    var early = _themeRewrittenTo;
+    if (early) {
+      window._psycleNativeRestoreReady.then(function () {
+        if (localStorage.getItem(THEME_KEY) !== early) return;
+        try { localStorage.setItem(THEME_KEY, early); } catch (e) {}
+      });
+    }
   }
 }
 
@@ -502,7 +543,7 @@ function skeletonCardHTML() {
   return `<div class="skeleton-card" aria-hidden="true">
     <div class="skeleton-time">
       <div class="skeleton-bar sk-time-hour"></div>
-      <div class="skeleton-bar sk-time-ampm"></div>
+      <div class="skeleton-bar sk-time-dur"></div>
     </div>
     <div class="skeleton-info">
       <div class="skeleton-bar sk-type"></div>

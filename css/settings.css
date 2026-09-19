@@ -176,7 +176,8 @@
 
 /* No light-mode block: the panel rules above read the theme tokens. (The old
    [data-theme="light"] overrides in this file never matched — "light" is not
-   a registered theme id — and would have forced #fff panels onto Linen.) */
+   a registered theme id — and would have forced #fff panels over a theme's own
+   surface.) */
 
 /* Mobile: full-screen sheet, no wasted margin, respects home indicator. */
 @media (max-width: 640px) {
@@ -283,7 +284,7 @@
 .tier-fav::before { content: '★'; color: var(--text-dim, #888); }
 .tier-fav:hover { opacity: 0.6; }
 .tier-fav.is-fav { opacity: 1; }
-.tier-fav.is-fav::before { color: #f5c518; }
+.tier-fav.is-fav::before { color: var(--fav, #f5c518); }
 
 .tier-btns {
   display: flex;
@@ -398,8 +399,8 @@
 /* Bike picker: preferences shown via text color only.
    Rect fill/stroke stays controlled by booking state (available/taken/selected/mine).
    The same status inks as the prefs map above: the seat tiles are themed now
-   (--bg-input), where the fixed green / pink drop as low as 2.0:1 (Linen) and
-   2.6:1 (Handheld) — theme.css's light-theme patch for them is gone. */
+   (--bg-input), where the fixed green / pink drop as low as 2.6:1
+   (Handheld) — theme.css's light-theme patch for them is gone. */
 .bike-slot.pref-prefer text { fill: var(--badge-highlight-text, #5dba5d) !important; font-weight: 900; }
 .bike-slot.pref-avoid text { fill: var(--badge-full-text, #e94560) !important; }
 /* Taken slots: dim the preference text */
@@ -412,8 +413,8 @@
 .bike-slot.selected.pref-prefer text, .bike-slot.selected.pref-avoid text { fill: var(--accent-ink, #fff) !important; }
 .bike-slot.mine.pref-prefer text, .bike-slot.mine.pref-avoid text { fill: var(--accent) !important; }
 /* …and its hover (styles.css turns the tile danger: a tap cancels) needs the
-   same !important, or the accent above stays on the red tint — 3.8:1 on Linen
-   and Handheld. */
+   same !important, or the accent above stays on the red tint — 3.8:1 on
+   Handheld. */
 .bike-slot.mine.pref-prefer:hover text, .bike-slot.mine.pref-avoid:hover text { fill: var(--danger) !important; }
 
 

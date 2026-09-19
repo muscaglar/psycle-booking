@@ -16,17 +16,17 @@ module.exports = async function (t) {
   t.section('Bookings card: _cancelDeadline (12h late-cancel rule) — no resolver (device-local fallback)');
   t.ok(typeof pure._cancelDeadline === 'function', 'pure:bookings-card exposes _cancelDeadline (evaluated with no DOM / app globals)');
 
-  // BST date (July). 19h out → free to cancel, deadline printed as Mon 7:00pm.
+  // BST date (July). 19h out → free to cancel, deadline printed as Mon 19:00.
   const bstStart = '2026-07-14T07:00:00'; // Tuesday
   let d = pure._cancelDeadline(bstStart, local('2026-07-13T12:00:00'));
   t.eq(d.insideWindow, false, 'BST date, 19h before class: outside the late-cancel window');
-  t.eq(d.label, 'Mon 7:00pm', 'BST date: deadline label is the class wall-clock minus 12h');
+  t.eq(d.label, 'Mon 19:00', 'BST date: deadline label is the class wall-clock minus 12h');
   t.eq(d.hoursUntil, 19, 'hoursUntil is measured to the class start');
   t.eq(d.deadlineMs, local(bstStart) - 12 * HOUR, "deadline = the card's own new Date(start_at) minus 12h, so card and dialog agree");
 
   // GMT date (January): same digits — no zone offset leaks into the label.
   d = pure._cancelDeadline('2026-01-13T07:00:00', local('2026-01-12T09:00:00'));
-  t.eq(d.label, 'Mon 7:00pm', 'GMT date: same wall-clock digits as the BST case');
+  t.eq(d.label, 'Mon 19:00', 'GMT date: same wall-clock digits as the BST case');
   t.eq(d.insideWindow, false, 'GMT date, 22h before class: outside the window');
 
   // Less than 12h away.
@@ -45,9 +45,9 @@ module.exports = async function (t) {
   t.ok(d.insideWindow === true && d.hoursUntil < 0, 'a class that has started reads inside the window with negative hoursUntil');
 
   // Label formatting edges.
-  t.eq(pure._cancelDeadline('2026-07-14T12:00:00', 0).label, 'Tue 12:00am', 'noon class → deadline 12:00am the same day');
-  t.eq(pure._cancelDeadline('2026-07-14T00:15:00', 0).label, 'Mon 12:15pm', 'just-after-midnight class → deadline 12:15pm the day before');
-  t.eq(pure._cancelDeadline('2026-07-14 18:30:00', 0).label, 'Tue 6:30am', "a space-separated start_at parses like the 'T' form (Safari rejects the raw string)");
+  t.eq(pure._cancelDeadline('2026-07-14T12:00:00', 0).label, 'Tue 00:00', 'noon class → deadline 00:00 the same day');
+  t.eq(pure._cancelDeadline('2026-07-14T00:15:00', 0).label, 'Mon 12:15', 'just-after-midnight class → deadline 12:15 the day before');
+  t.eq(pure._cancelDeadline('2026-07-14 18:30:00', 0).label, 'Tue 06:30', "a space-separated start_at parses like the 'T' form (Safari rejects the raw string)");
   t.eq(pure._cancelDeadline('2026-07-14 18:30:00', 0).deadlineMs, local('2026-07-14T18:30:00') - 12 * HOUR, 'space-separated start_at resolves to the same instant');
 
   // Unreadable input never throws and never invents a deadline.
@@ -63,10 +63,10 @@ module.exports = async function (t) {
   const prevTz = process.env.TZ;
   try {
     process.env.TZ = 'Europe/London';
-    t.eq(pure._cancelDeadline('2026-10-25T07:00:00', 0).label, 'Sat 8:00pm', 'UK device, clocks went back overnight: 7am GMT class → free until Sat 8:00pm BST');
-    t.eq(pure._cancelDeadline('2026-03-29T07:00:00', 0).label, 'Sat 6:00pm', 'UK device, clocks went forward overnight: 7am BST class → free until Sat 6:00pm GMT');
-    t.eq(pure._cancelDeadline('2026-07-14T07:00:00', 0).label, 'Mon 7:00pm', 'UK device, ordinary BST day');
-    t.eq(pure._cancelDeadline('2026-01-13T07:00:00', 0).label, 'Mon 7:00pm', 'UK device, ordinary GMT day');
+    t.eq(pure._cancelDeadline('2026-10-25T07:00:00', 0).label, 'Sat 20:00', 'UK device, clocks went back overnight: 7am GMT class → free until Sat 20:00 BST');
+    t.eq(pure._cancelDeadline('2026-03-29T07:00:00', 0).label, 'Sat 18:00', 'UK device, clocks went forward overnight: 7am BST class → free until Sat 18:00 GMT');
+    t.eq(pure._cancelDeadline('2026-07-14T07:00:00', 0).label, 'Mon 19:00', 'UK device, ordinary BST day');
+    t.eq(pure._cancelDeadline('2026-01-13T07:00:00', 0).label, 'Mon 19:00', 'UK device, ordinary GMT day');
   } finally {
     process.env.TZ = prevTz;
   }
@@ -86,19 +86,19 @@ module.exports = async function (t) {
   d = web._cancelDeadline(abroad, utc(2026, 9, 17, 20));
   t.eq(d.deadlineMs, utc(2026, 9, 17, 18), 'web, New York: the deadline is 12h before the LONDON start (18:00Z), not the New York one (23:00Z)');
   t.eq([d.insideWindow, d.hoursUntil], [true, 10], 'web, New York: inside the window with 10h to go (was: free, 15h)');
-  t.eq(d.label, 'Thu 7:00pm', 'web, New York: the printed deadline is UK wall clock');
+  t.eq(d.label, 'Thu 19:00', 'web, New York: the printed deadline is UK wall clock');
   t.eq(web._cancelDeadline(abroad, utc(2026, 9, 17, 18) - 1).insideWindow, false, 'web: 1ms before the London cutoff is still free');
-  t.eq(web._cancelDeadline('2026-11-01T07:00:00', 0).label, 'Sat 7:00pm', "web: US clocks change overnight, the UK's do not → Sat 7:00pm (device-local said 8:00pm)");
-  t.eq(web._cancelDeadline('2027-03-28T07:00:00', 0).label, 'Sat 6:00pm', 'web: UK clocks go forward overnight → Sat 6:00pm GMT (device-local said 7:00pm)');
-  t.eq(web._cancelDeadline('2026-10-25T07:00:00', 0).label, 'Sat 8:00pm', 'web: UK clocks go back overnight → Sat 8:00pm BST');
+  t.eq(web._cancelDeadline('2026-11-01T07:00:00', 0).label, 'Sat 19:00', "web: US clocks change overnight, the UK's do not → Sat 19:00 (device-local said 20:00)");
+  t.eq(web._cancelDeadline('2027-03-28T07:00:00', 0).label, 'Sat 18:00', 'web: UK clocks go forward overnight → Sat 18:00 GMT (device-local said 19:00)');
+  t.eq(web._cancelDeadline('2026-10-25T07:00:00', 0).label, 'Sat 20:00', 'web: UK clocks go back overnight → Sat 20:00 BST');
   t.eq([web._cancelDeadline(null), web._cancelDeadline(''), web._cancelDeadline('not a date')], [null, null, null], 'web: unreadable input is still null');
   try {
     process.env.TZ = 'Asia/Tokyo';
     d = web._cancelDeadline(abroad, utc(2026, 9, 17, 20));
-    t.eq([d.insideWindow, d.hoursUntil, d.label], [true, 10, 'Thu 7:00pm'], 'web, Tokyo: the same instant and label (device-local read 2h to go)');
+    t.eq([d.insideWindow, d.hoursUntil, d.label], [true, 10, 'Thu 19:00'], 'web, Tokyo: the same instant and label (device-local read 2h to go)');
     process.env.TZ = 'Europe/London';
     d = web._cancelDeadline(abroad, utc(2026, 9, 17, 20));
-    t.eq([d.insideWindow, d.hoursUntil, d.label], [true, 10, 'Thu 7:00pm'], 'web, UK device: unchanged');
+    t.eq([d.insideWindow, d.hoursUntil, d.label], [true, 10, 'Thu 19:00'], 'web, UK device: unchanged');
   } finally {
     process.env.TZ = prevTz;
   }
@@ -131,31 +131,31 @@ module.exports = async function (t) {
   d = ios._cancelDeadline(abroad, utc(2026, 9, 17, 20));
   t.eq(d.deadlineMs, utc(2026, 9, 17, 18), 'deadline is 12h before the LONDON start (18:00Z), not the New York one (23:00Z)');
   t.eq([d.insideWindow, d.hoursUntil], [true, 10], 'two hours past the real cutoff: inside the window, 10h to class');
-  t.eq(d.label, 'Thu 7:00pm', 'the printed deadline is UK wall clock, like the class time next to it');
+  t.eq(d.label, 'Thu 19:00', 'the printed deadline is UK wall clock, like the class time next to it');
   t.eq(pure._cancelDeadline(abroad, utc(2026, 9, 17, 20)).insideWindow, false, '(same input with NO resolver at all still reads free — the device-local last resort; this is the branch that differs)');
   t.eq(ios._cancelDeadline(abroad, utc(2026, 9, 17, 18) - 1).insideWindow, false, '1ms before the London cutoff is still free');
   t.eq(ios._cancelDeadline(abroad, utc(2026, 9, 17, 18)).insideWindow, true, 'AT the London cutoff counts as inside');
 
   // Clock-change nights, seen from New York. The digits are London's: 12 REAL
   // hours before class, which is an hour off "start minus 12" on the UK nights.
-  t.eq(ios._cancelDeadline('2026-11-01T07:00:00', 0).label, 'Sat 7:00pm', 'US clocks change overnight, the UK\'s do not: 7am GMT class → free until Sat 7:00pm (device-local said 8:00pm)');
-  t.eq(ios._cancelDeadline('2027-03-28T07:00:00', 0).label, 'Sat 6:00pm', 'UK clocks go forward overnight: 7am BST class → free until Sat 6:00pm GMT (device-local said 7:00pm)');
-  t.eq(ios._cancelDeadline('2026-10-25T07:00:00', 0).label, 'Sat 8:00pm', 'UK clocks go back overnight: 7am GMT class → free until Sat 8:00pm BST');
-  t.eq(ios._cancelDeadline('2026-03-29T07:00:00', 0).label, 'Sat 6:00pm', 'UK spring change 2026, same rule');
-  t.eq(ios._cancelDeadline('2026-07-14T07:00:00', 0).label, 'Mon 7:00pm', 'ordinary BST day');
-  t.eq(ios._cancelDeadline('2026-01-13T07:00:00', 0).label, 'Mon 7:00pm', 'ordinary GMT day');
-  t.eq(ios._cancelDeadline('2026-07-14T00:15:00', 0).label, 'Mon 12:15pm', 'just-after-midnight class → 12:15pm the day before (weekday from the London date)');
-  t.eq(ios._cancelDeadline('2026-07-14T12:00:00', 0).label, 'Tue 12:00am', 'noon class → 12:00am the same London day');
+  t.eq(ios._cancelDeadline('2026-11-01T07:00:00', 0).label, 'Sat 19:00', 'US clocks change overnight, the UK\'s do not: 7am GMT class → free until Sat 19:00 (device-local said 20:00)');
+  t.eq(ios._cancelDeadline('2027-03-28T07:00:00', 0).label, 'Sat 18:00', 'UK clocks go forward overnight: 7am BST class → free until Sat 18:00 GMT (device-local said 19:00)');
+  t.eq(ios._cancelDeadline('2026-10-25T07:00:00', 0).label, 'Sat 20:00', 'UK clocks go back overnight: 7am GMT class → free until Sat 20:00 BST');
+  t.eq(ios._cancelDeadline('2026-03-29T07:00:00', 0).label, 'Sat 18:00', 'UK spring change 2026, same rule');
+  t.eq(ios._cancelDeadline('2026-07-14T07:00:00', 0).label, 'Mon 19:00', 'ordinary BST day');
+  t.eq(ios._cancelDeadline('2026-01-13T07:00:00', 0).label, 'Mon 19:00', 'ordinary GMT day');
+  t.eq(ios._cancelDeadline('2026-07-14T00:15:00', 0).label, 'Mon 12:15', 'just-after-midnight class → 12:15 the day before (weekday from the London date)');
+  t.eq(ios._cancelDeadline('2026-07-14T12:00:00', 0).label, 'Tue 00:00', 'noon class → 00:00 the same London day');
 
   // An explicit offset is already an absolute instant; it is still PRINTED in UK time.
   d = ios._cancelDeadline('2026-07-14T06:00:00Z', 0);
-  t.eq([d.deadlineMs, d.label], [utc(2026, 7, 13, 18), 'Mon 7:00pm'], 'a Z start keeps its instant and prints as London wall clock');
+  t.eq([d.deadlineMs, d.label], [utc(2026, 7, 13, 18), 'Mon 19:00'], 'a Z start keeps its instant and prints as London wall clock');
   t.eq([ios._cancelDeadline(null), ios._cancelDeadline(''), ios._cancelDeadline('not a date')], [null, null, null], 'unreadable input is still null with the bridge present');
 
   // A bridge that cannot resolve (NaN) must not take the helper down with it.
   const nanBridge = t.loadPure('js/app.js', 'bookings-card', { window: { _psycleClassStartMs: () => NaN } });
   d = nanBridge._cancelDeadline(bstStart, 0);
-  t.eq([d.deadlineMs, d.label], [local(bstStart) - 12 * HOUR, 'Mon 7:00pm'], 'resolver returns NaN → the device-local parse and digits, as with no resolver');
+  t.eq([d.deadlineMs, d.label], [local(bstStart) - 12 * HOUR, 'Mon 19:00'], 'resolver returns NaN → the device-local parse and digits, as with no resolver');
 
   t.section('Bookings card: _eventCacheEntry (rebook-next-week cache seed)');
   const relations = {
@@ -236,7 +236,7 @@ module.exports = async function (t) {
     t.eq(chip('2026-09-17T18:00:00', '2026-09-17T17:00:20'), 'In 1h', 'chip, 59m40s to go: "In 1h" (was "In 60min")');
     t.eq([chip('2026-09-17T18:00:00', '2026-09-17T15:45:00'), chip('2026-09-17T18:00:00', '2026-09-17T17:15:00')], ['In 2h 15m', 'In 45min'], 'chip: ordinary times unchanged');
     t.eq([chip('2026-09-18T07:00:00', '2026-09-17T20:00:00'), chip('2026-09-19T07:00:00', '2026-09-17T20:00:00'), chip('2026-09-17T07:00:00', '2026-09-17T20:00:00')],
-      ['Tomorrow 7:00am', null, null], 'chip: tomorrow, later and past classes unchanged');
+      ['Tomorrow 07:00', null, null], 'chip: tomorrow, later and past classes unchanged');
 
     // The REAL confirmCancelWithPolicy, with the clock pinned (it asks _cancelDeadline for "now").
     const warnAt = (startAt, nowAt) => {
@@ -536,7 +536,7 @@ module.exports = async function (t) {
     t.eq(state(w), { instr: [], locs: ['2'], cats: ['STRENGTH'], strength: ['FULL', 'LOWER', 'UPPER'], reformer: ['SIGNATURE', 'STRENGTH'], typed: '', query: '' },
       "\"Same time\": the class's OWN studio and class type, any instructor, sub-types back to all");
     t.ok(w.log.toasts.length === 1 && !/around|\d:\d\d/.test(w.log.toasts[0]) && /any instructor$/.test(w.log.toasts[0]),
-      'the toast no longer claims "around 7:00am" — nothing filters by hour (got: ' + w.log.toasts[0] + ')');
+      'the toast no longer claims "around 07:00" — nothing filters by hour (got: ' + w.log.toasts[0] + ')');
 
     // Only the cache's 'Class' placeholder is known: no class type is guessed.
     w = similarWorld(Object.assign({}, left, { typeName: 'Class' }));
@@ -605,7 +605,7 @@ module.exports = async function (t) {
     await b.ctx.rebookNextWeek(77);
     t.eq([[...b.ctx.selectedTimeBands], b.log.calls.includes('facets')], [['early'], false], 'a band that already admits them is left alone');
 
-    // "Same time, any instructor" says "around 7:00am": the same row hid exactly those.
+    // "Same time, any instructor" says "around 07:00": the same row hid exactly those.
     b = similarWorld({ timeBands: ['evening'] });
     b.open();
     b.pick('same-time');

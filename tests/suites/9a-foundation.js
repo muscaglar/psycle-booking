@@ -6,7 +6,7 @@
 // iOS mirror.
 //
 // Why a contrast matrix: the member may give ANY class type ANY swatch at any
-// intensity in any of seven themes, and nothing fails when a colour is merely
+// intensity in any of the five themes, and nothing fails when a colour is merely
 // unreadable. So every swatch × role × base is checked against the ink it
 // carries, from the shipped values — no sampling.
 module.exports = function (t) {
@@ -177,7 +177,7 @@ module.exports = function (t) {
   t.section('Class colours: every swatch × role × base against the ink it carries');
   {
     const light = registry.filter((th) => th.base === 'light'), dark = registry.filter((th) => th.base === 'dark');
-    ok(light.length >= 2 && dark.length >= 5, 'registry read (' + registry.map((x) => x.id + ':' + x.base).join(', ') + ')');
+    ok(light.length >= 1 && dark.length >= 4, 'registry read (' + registry.map((x) => x.id + ':' + x.base).join(', ') + ')');
     const ON_BASE = cc.CLASS_COLOUR_ON_BASE;
     let pairs = 0;
     const worst = { v: 99, what: '' };
@@ -314,8 +314,8 @@ module.exports = function (t) {
       return out;
     };
     eq(block(/\nhtml \{\n(\s*--ct-ride-tint[^}]*)\}/), j(soft.props), 'css/theme.css `html { --ct-* }` = the default plan on a light base, value for value');
-    eq(block(/\nhtml:is\(\[data-theme="graphite"\], \[data-theme="synthwave"\], \[data-theme="blueprint"\]\) \{([^}]*)\}/), j(dark.props), '…and the dark block = the default plan on a dark base');
-    eq(registry.filter((th) => th.base === 'dark' && !th.mono).map((th) => th.id), ['graphite', 'synthwave', 'blueprint'], 'that block lists every dark theme that is not mono');
+    eq(block(/\nhtml:is\(\[data-theme="graphite"\], \[data-theme="blueprint"\]\) \{([^}]*)\}/), j(dark.props), '…and the dark block = the default plan on a dark base');
+    eq(registry.filter((th) => th.base === 'dark' && !th.mono).map((th) => th.id), ['graphite', 'blueprint'], 'that block lists every dark theme that is not mono');
     ok(themeCss.indexOf('\nhtml {\n  --ct-ride-tint') > themeCss.lastIndexOf('\n[data-theme="blueprint"] {'), 'the --ct-* defaults come AFTER every theme token block (suites find a theme block as the first "[data-theme=…] {")');
   }
 
@@ -389,12 +389,12 @@ module.exports = function (t) {
       'storage full: set() does not throw and the choice is still shown for this page');
     // garbage in storage
     w = boot({ store: { psycle_class_colours: '{"v":1,"intensity":"bold","map":{"ride":"<script>"}' } });
-    t.vm.runInContext('_applyTheme("linen")', w.ctx);
+    t.vm.runInContext('_applyTheme("cloud")', w.ctx);
     eq([w.attrs['data-ct-intensity'], w.style.props['--ct-ride-base']], ['soft', PALETTE.cobalt.light.base], 'unparseable JSON in the key → the defaults, no throw');
     // wiring
     ok(/function _applyTheme\(id\) \{[\s\S]*?_applyClassColours\(\);\n\}/.test(themeJs), '_applyTheme ends by applying the class colours (light ↔ dark, mono themes)');
     ok(/_psycleNativeRestoreReady\.then\(function \(\) \{ _applyClassColours\(\); \}\);/.test(themeJs), 'iOS: re-applied once the Preferences → localStorage restore has settled');
-    eq((themeJs.match(/\{\s*id:\s*'/g) || []).length, 7, 'theme.js still has exactly seven "{ id: \'…\' }" literals (a dozen suites read the registry with that pattern)');
+    eq((themeJs.match(/\{\s*id:\s*'/g) || []).length, 5, 'theme.js still has exactly five "{ id: \'…\' }" literals — one per theme (a dozen suites read the registry with that pattern)');
   }
 
   // ── Mapping block + primitives ───────────────────────────────────────────

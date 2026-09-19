@@ -92,8 +92,8 @@ module.exports = async function (t) {
   // the painter, like the pictogram; with the real helper in reach:
   const timed = t.loadPure('js/app.js', 'offline', { escapeHTML: esc, slotLabel, _ccTimeHTML: t.loadPure('js/app.js', 'class-type', { getCategory: () => null })._ccTimeHTML });
   const timedHtml = timed._savedBookingsHTML([item({ start_at: '2026-09-18 19:05:00' }), item({ id: '9', waitlisted: true, slots: [], start_at: '2026-09-19 00:15:00', type: 'Yoga' })], 'Saved copy · 14:05', false);
-  t.ok(/<span class="cc-time-h">7:05<\/span><span class="cc-dur"><span class="cc-ampm">pm<\/span>/.test(timedHtml) && /<span class="cc-time-h">12:15<\/span><span class="cc-dur"><span class="cc-ampm">am<\/span>/.test(timedHtml),
-    'painter: the class time is the string\'s own wall-clock digits (7:05 pm, 12:15 am), in the shared time block');
+  t.ok(/<span class="cc-time-h">19:05<\/span><span class="cc-dur">/.test(timedHtml) && /<span class="cc-time-h">00:15<\/span>/.test(timedHtml) && !/cc-ampm/.test(timedHtml),
+    'painter: the class time is the string\'s own wall-clock digits, 24-hour (19:05, 00:15), in the shared time block');
   t.ok(html.indexOf('cc-time') === -1 && html.indexOf('NaN') === -1, 'painter: evaluated on its own there is no time block — never a ReferenceError');
   t.ok(/up-seat-chip">Spot 7</.test(html), 'painter: the seat chip carries the class type\'s noun');
   const waitingHtml = pure._savedBookingsHTML([item({})], 'Saved copy · 14:05', true);
@@ -652,7 +652,7 @@ module.exports = async function (t) {
     t.ok(/color:\s*var\(--text-muted/.test(rule('.mb-saved-note')) && !/background/.test(rule('.mb-saved-note')), '.mb-saved-note: --text-muted copy straight on the bookings panel (no fill of its own)');
     const ids = [];
     t.readSource('js/theme.js').replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { ids.push(id); return m; });
-    t.ok(ids.length >= 7, 'theme ids parsed (' + ids.join(', ') + ')');
+    t.ok(ids.length >= 5, 'theme ids parsed (' + ids.join(', ') + ')');
     ids.forEach((id) => {
       const tk = Object.assign({}, tokensOf(':root'), tokensOf('[data-theme="' + id + '"]'));
       const note = contrast(tk['--text-muted'], tk['--upcoming-bg']);

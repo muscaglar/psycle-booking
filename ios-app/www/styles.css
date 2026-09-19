@@ -280,14 +280,6 @@ select:focus, input:focus {
   line-height: 1;
 }
 
-.class-time-ampm {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-normal);
-  color: var(--text-faint, #666);
-  display: block;
-  margin-top: 2px;
-}
-
 .class-info { flex: 1; }
 
 .class-type {
@@ -430,10 +422,10 @@ select:focus, input:focus {
 }
 
 /* Every seat state is tokenised at source, hovers included (a hover sticks
-   after a tap on iOS), so the map matches the legend swatches in all seven
-   themes — the same recipe as the prefs map in settings.css. The old Noir
-   literals painted black and maroon tiles on Handheld / Blueprint / Synthwave
-   and left your own seat old-brand pink on Cloud / Linen. A taken seat is a
+   after a tap on iOS), so the map matches the legend swatches in every
+   theme — the same recipe as the prefs map in settings.css. The old Noir
+   literals painted black and maroon tiles on Handheld / Blueprint
+   and left your own seat old-brand pink on Cloud. A taken seat is a
    ghost tile: the map's own --bg-deep with the available outline. */
 .bike-slot.available rect { fill: var(--bg-input); stroke: var(--border-light); }
 .bike-slot.available:hover rect { stroke: var(--text-dim); }
@@ -659,7 +651,7 @@ select:focus, input:focus {
   transition: color 0.1s;
   flex-shrink: 0;
 }
-.fav-star:hover, .fav-star.fav-on { color: #f5a623; }
+.fav-star:hover, .fav-star.fav-on { color: var(--fav, #f5a623); }
 
 .fav-btn {
   font-size: var(--text-xs);
@@ -935,8 +927,8 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 .toast.show { opacity: 1; transform: translateY(0); }
 /* toast(msg, type) has always set the type as a class; nothing styled it, so
    "Can't reach Psycle" and "You're booked in" were the same neutral panel.
-   An edge stripe AND a glyph, because the two inks are the same hue in Linen,
-   Synthwave and Handheld. Two classes, so these outrank theme.css's later
+   An edge stripe AND a glyph, because the two inks are the same hue in
+   Handheld. Two classes, so these outrank theme.css's later
    .toast border colour. The second `content` gives the glyph empty alt text
    (a screen reader hears the message only); an engine without that syntax
    keeps the first. 'info' stays plain. The two inks are the toast's OWN tokens
@@ -1414,7 +1406,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   color: var(--accent);
 }
 
-/* "Free cancel until Tue 7:00pm" — sits just above the card's Cancel button */
+/* "Free cancel until Tue 19:00" — sits just above the card's Cancel button */
 .mb-cancel-deadline {
   margin-top: var(--space-3);
   font-size: var(--text-xs);
@@ -3086,13 +3078,6 @@ label.usual-week-pick { cursor: pointer; }
   font-weight: var(--weight-bold);
   line-height: 1;
   color: var(--text-heading);
-}
-.onboard-mini-time span {
-  margin-left: 2px;
-  font-family: var(--font-body);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  color: var(--text-faint);
 }
 .onboard-mini-rule {
   flex: none;

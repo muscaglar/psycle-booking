@@ -261,25 +261,24 @@ function classPictogram(key, size) {
 
 // THE TIME BLOCK of the class card — built here, ONCE, for every wearer of the
 // full-size component: Discover's eventCard, My Bookings' live card and its
-// saved copy, and the Class colours preview (js/tabs.js). The digits lead in
-// the display face, over ONE small line: am/pm, then the duration. am/pm sits
-// UNDER the digits, not beside them, so every time is one narrow column and
-// every card's text starts on the same grid line ("12:30" beside "pm" was
-// wider than "6:30pm"). A held class says its day first. css/crisp.css 9b.7
-// styles all of it from `.class-card[data-ct] .cc-time…`.
+// saved copy, and the Class colours preview (js/tabs.js). The 24-hour time
+// ("18:30", from _clock24 — pure:clock) leads in the display face, over ONE
+// small line: the duration alone ("45 min"), as on the approved boards. Every
+// time is five tabular digits wide, so every card's text starts on the same
+// grid line. A held class says its day first. css/crisp.css 9b.7 styles all
+// of it from `.class-card[data-ct] .cc-time…`.
 //   o.hours 0–23 · o.mins 0–59 (a number or "05") · o.duration minutes (optional)
 //   o.dayHtml  "Thu 24", ALREADY escaped by the caller (optional)
 //   o.hook     a wearer's own layout hook on the block ("mb-when")
 // Apart from dayHtml only numbers reach the markup.
 function _ccTimeHTML(o) {
   o = o || {};
-  var h = Math.floor(Number(o.hours)), m = Math.floor(Number(o.mins)), dur = Number(o.duration);
-  var known = h >= 0 && h <= 23 && m >= 0 && m <= 59;
+  var clock = _clock24(o.hours, o.mins), dur = Number(o.duration);
   var hook = String(o.hook == null ? '' : o.hook).replace(/[^\w -]/g, '');
   return '<div class="cc-time' + (hook ? ' ' + hook : '') + '">' +
     (o.dayHtml ? '<span class="mb-day">' + o.dayHtml + '</span>' : '') +
-    '<span class="cc-time-h">' + (known ? (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m : '--:--') + '</span>' +
-    '<span class="cc-dur">' + (known ? '<span class="cc-ampm">' + (h >= 12 ? 'pm' : 'am') + '</span>' : '') + (dur > 0 ? (known ? ' · ' : '') + dur + ' min' : '') + '</span>' +
+    '<span class="cc-time-h">' + (clock || '--:--') + '</span>' +
+    (dur > 0 ? '<span class="cc-dur">' + dur + ' min</span>' : '') +
   '</div>';
 }
 // ── pure:class-type:end ──
@@ -2270,6 +2269,22 @@ function updateFiltersSummary() {
   const count = document.getElementById('controlsCount');
   if (count) { count.textContent = chips.length ? String(chips.length) : ''; count.hidden = !chips.length; }
   if (bar) bar.setAttribute('aria-label', _filtersBarName(chips.length));
+  // The header's "Clear filters" (>=1024px, where this bar is hidden) follows
+  // the same rule as the bar's own "Clear" below: there only while a filter is on.
+  const clearAll = document.getElementById('discClearBtn');
+  if (clearAll) {
+    // Enter on it clears the last filter, and hiding (display: none) the button
+    // that holds the focus drops the focus to <body> — a keyboard or screen-
+    // reader user lost their place. It is handed on, as a removed chip's is
+    // below: to the lit date range, the first stop of the filter column and
+    // always on screen there.
+    const held = document.activeElement === clearAll;
+    clearAll.hidden = !chips.length;
+    if (held && clearAll.hidden) {
+      const to = document.querySelector('#controlsPanel .date-quick-btn.active') || document.querySelector('#controlsPanel .date-quick-btn');
+      if (to && typeof to.focus === 'function') { try { to.focus(); } catch (e) {} }
+    }
+  }
 
   // kind + id ride on the button as data: an id can come out of storage, and an
   // attribute is escaped once where a quoted handler argument needs it twice.
@@ -3771,6 +3786,53 @@ function _busyLabel(btn) {
 }
 
 // ── pure:clash:start ── (DOM-free; tests/suites/clash.js evaluates this block)
+// ── pure:clock:start ── (DOM-free; tests/suites/10a-time24.js evaluates this block)
+// THE CLOCK. Every time the app prints or speaks is 24-hour "HH:MM", zero-
+// padded — "06:30", "18:30", never "6:30pm" — and this is the ONE place that
+// says so: cards, sheets, dialogs, toasts, announce() lines, the share image,
+// and the other modules (js/tabs.js, js/features.js, js/reliability.js call
+// these two as globals, the way they call _plural). tests/suites/10a-time24.js
+// fails if a 12-hour marker comes back anywhere in shipped source. Nothing
+// here parses a date or asks the device zone: the digits are the caller's — a
+// class's own wall-clock digits (see Gym time), or the getters of a Date it
+// already holds.
+// The region ALSO answers to pure:class-type, pure:bookings-card,
+// pure:day-pager and pure:offline (the markers around the two functions), so
+// each of those blocks can still be evaluated on its own with the formatter in
+// reach; and it sits at the head of pure:clash because several suites cut that
+// block out by its FIRST marker. function declarations only (a suite may
+// evaluate two of these blocks in one context).
+// ── pure:class-type:start ──
+// ── pure:bookings-card:start ──
+// ── pure:day-pager:start ──
+// ── pure:offline:start ──
+// _clock24(18, 30) → "18:30" · _clock24(6, '05') → "06:05". Whole hours 0–23
+// and minutes 0–59, as numbers or as one or two digits of text; anything else
+// (NaN, null, '', 25, markup) → '' and the caller says what it prints instead.
+function _clock24(hours, mins) {
+  var part = function (v, max) {
+    if (typeof v === 'string' && /^\s*\d{1,2}\s*$/.test(v)) v = Number(v);
+    return (typeof v === 'number' && v >= 0 && v <= max) ? Math.floor(v) : -1;
+  };
+  var h = part(hours, 23), m = part(mins, 59);
+  if (h < 0 || m < 0) return '';
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+
+// The time of an API class time, cut from its DIGITS: '2026-09-21 18:30:00',
+// the 'T' form, or a bare '18:30' → "18:30". Never through Date ('YYYY-MM-DD
+// HH:MM:SS' is Invalid Date on iOS WebKit), never the device zone. '' when
+// there is no time to read.
+function _clockOf(startAt) {
+  var m = /(?:^|[T ])(\d{2}):(\d{2})(?![\d])/.exec(String(startAt == null ? '' : startAt));
+  return m ? _clock24(+m[1], +m[2]) : '';
+}
+// ── pure:offline:end ──
+// ── pure:day-pager:end ──
+// ── pure:bookings-card:end ──
+// ── pure:class-type:end ──
+// ── pure:clock:end ──
+
 // Nothing stopped a member booking a 7:15 Ride at Bank while holding a 7:00 at
 // Oxford Circus — they found out at the door, or paid a late-cancel fee to undo
 // it. Every start_at is the same naive UK wall clock, so two classes compare
@@ -3833,20 +3895,13 @@ function _findClash(evt, bookings, cache, opts) {
   return found;
 }
 
-// "7:00am", from the digits again (see _clashStartMin).
-function _clashTimeLabel(startAt) {
-  const m = /[T ](\d{2}):(\d{2})/.exec(String(startAt == null ? '' : startAt));
-  if (!m) return '';
-  const h = +m[1];
-  return `${h % 12 || 12}:${m[2]}${h >= 12 ? 'pm' : 'am'}`;
-}
-
 // One member-facing sentence for a _findClash result, no trailing full stop
-// (callers append their own copy). Names are API text: callers escape.
+// (callers append their own copy). Names are API text: callers escape. The
+// time ("07:00") is cut from the digits again (see _clashStartMin): _clockOf.
 function _clashLabel(clash) {
   if (!clash) return '';
   const type = clash.typeName && clash.typeName !== 'Class' ? clash.typeName : 'class';
-  const what = ['your', _clashTimeLabel(clash.start_at), type].filter(Boolean).join(' ') +
+  const what = ['your', _clockOf(clash.start_at), type].filter(Boolean).join(' ') +
     (clash.locName ? ` at ${clash.locName}` : '');
   // A waitlist place is a possible seat, never a hard clash — and not "your" class yet.
   if (clash.place) return `You're also on the waitlist for ${what.replace(/^your /, 'the ')} — if Psycle books you in, you'd hold both`;
@@ -4224,7 +4279,10 @@ async function bookClass(eventId, btn, studioId) {
 // caller-supplied reaches the markup.
 var UI_ICONS = {
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-  clash: '<rect x="3.5" y="4.5" width="12" height="9" rx="3"/><rect x="8.5" y="10.5" width="12" height="9" rx="3"/>',
+  // The caution mark of every advisory line (a clash, a dialog's warn text): a
+  // ringed "!" — css/crisp.css inks it in the theme's caution colour, the
+  // sentence beside it stays in the body ink. The dot is a zero-length stroke.
+  caution: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5"/><path d="M12 16.4v.01"/>',
   spots: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c0-3 2.4-5 5.5-5s5.5 2 5.5 5"/><circle cx="17.5" cy="9.5" r="2.3"/><path d="M17.5 14.2c1.9.4 3 1.9 3 4.3"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
   person: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>',
@@ -4306,10 +4364,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     const _d = new Date(_evt.start_at);
     const _days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const _h = _d.getHours(), _m = _d.getMinutes();
-    const _ampm = _h >= 12 ? 'pm' : 'am';
-    const _h12 = _h % 12 || 12;
-    const _timeStr = `${_h12}:${String(_m).padStart(2,'0')}${_ampm}`;
+    const _timeStr = _clock24(_d.getHours(), _d.getMinutes());
     const _dateStr = `${_days[_d.getDay()]} ${_d.getDate()} ${_months[_d.getMonth()]}`;
     const line1 = [_evt._typeName, _evt._instrName, `${_dateStr}, ${_timeStr}`].filter(Boolean).join(' \u00b7 ');
     const line2 = [_evt._locName, _evt._studioName].filter(Boolean).join(' \u00b7 ');
@@ -4324,9 +4379,14 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   // above on every open, so no earlier class's line can linger.
   const _swapOpen = !!window._changeSpotContext;
   if (!_swapOpen && opts && opts.clashLine) {
+    // ONE quiet line, as on the class sheet and in the dialogs: the caution mark
+    // (our own static markup) and the sentence in the header's ink.
     const _clashEl = document.createElement('span');
     _clashEl.className = 'modal-clash';
-    _clashEl.textContent = opts.clashLine; // class / studio names are API text
+    _clashEl.innerHTML = typeof _uiIcon === 'function' ? _uiIcon('caution', 16) : '';
+    const _clashText = document.createElement('span');
+    _clashText.textContent = opts.clashLine; // class / studio names are API text
+    _clashEl.appendChild(_clashText);
     document.getElementById('modalSubtitle').appendChild(_clashEl);
   }
 
@@ -5256,12 +5316,11 @@ function _waitlistClassLine(eventId) {
   if (!isNaN(d.getTime())) {
     const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const h = d.getHours(), m = d.getMinutes();
     // "Fri 18" only places a class within the week. A waitlist place can be
     // held weeks ahead (and an ended one is read about weeks later): more than
-    // 6 days off either way, the month is said too — "Fri 18 Sep, 11:33am".
+    // 6 days off either way, the month is said too — "Fri 18 Sep, 11:33".
     const far = Math.abs(d.getTime() - Date.now()) > 6 * 24 * 60 * 60 * 1000;
-    when = `${days[d.getDay()]} ${d.getDate()}${far ? ' ' + months[d.getMonth()] : ''}, ${h % 12 || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`;
+    when = `${days[d.getDay()]} ${d.getDate()}${far ? ' ' + months[d.getMonth()] : ''}, ${_clock24(d.getHours(), d.getMinutes())}`;
   }
   return [evt._typeName, evt._instrName, when].filter(Boolean).join(' · ');
 }
@@ -6122,10 +6181,7 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
     const d = new Date(evt.start_at);
     const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const h = d.getHours(), m = d.getMinutes();
-    const ampm = h >= 12 ? 'pm' : 'am';
-    const h12 = h % 12 || 12;
-    dateTimeStr = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}, ${h12}:${String(m).padStart(2,'0')}${ampm}`;
+    dateTimeStr = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}, ${_clock24(d.getHours(), d.getMinutes())}`;
   }
 
   // Seats only (a waitlist place has nothing to late-cancel): say up front
@@ -6261,11 +6317,15 @@ function confirmModal(opts) {
     // (.is-solid) is kept for the two confirms that cost something for good —
     // see _confirmTone, right under this function.
     const tone = _confirmTone(opts);
+    // The warn line leads with the caution mark (decorative: the sentence says
+    // it, and aria-describedby reads the sentence). typeof: suites run this
+    // function without the pure:sheets block that holds _uiIcon.
+    const warnMark = typeof _uiIcon === 'function' ? _uiIcon('caution', 16) : '';
     overlay.innerHTML = `
       <div class="confirm-dialog" role="dialog" aria-modal="true" tabindex="-1"${opts.title ? ' aria-labelledby="psycleConfirmTitle"' : ''}${describedBy ? ` aria-describedby="${describedBy}"` : ''}>
         ${opts.title ? `<div class="confirm-title" id="psycleConfirmTitle">${escapeHTML(opts.title)}</div>` : ''}
         ${opts.body ? `<div class="confirm-body" id="psycleConfirmBody">${escapeHTML(opts.body)}</div>` : ''}
-        ${opts.warn ? `<div class="confirm-warn${opts.warnClass ? ' ' + escapeHTML(opts.warnClass) : ''}" id="psycleConfirmWarn">${escapeHTML(opts.warn)}</div>` : ''}
+        ${opts.warn ? `<div class="confirm-warn${opts.warnClass ? ' ' + escapeHTML(opts.warnClass) : ''}" id="psycleConfirmWarn">${warnMark}<span>${escapeHTML(opts.warn)}</span></div>` : ''}
         <div class="confirm-actions">
           <button class="confirm-btn confirm-btn-cancel">${escapeHTML(opts.cancelText || 'Keep booking')}</button>
           <button class="confirm-btn ${tone === 'primary' ? 'confirm-btn-primary' : 'confirm-btn-danger' + (tone === 'danger-solid' ? ' is-solid' : '')}">${escapeHTML(opts.confirmText || 'Confirm')}</button>
@@ -6655,6 +6715,46 @@ function _friendlyError(e, fallback) {
 // device-local — which is right on a UK device.
 // Returns null when the start can't be read.
 let _londonPartsFmt = null; // lazy: every booking card asks, on every render
+
+// What London's clocks read at an absolute instant: {dow, hour, minute} — or
+// null when the engine has no Europe/London data (or the instant can't be
+// read), and the caller keeps the device's getters. Numeric parts only, the
+// weekday derived from the date: weekday and am/pm TEXT from Intl varies
+// between engines.
+function _londonParts(ms) {
+  try {
+    if (!_londonPartsFmt) {
+      _londonPartsFmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London', hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      });
+    }
+    const p = {};
+    _londonPartsFmt.formatToParts(new Date(ms)).forEach(x => { if (x.type !== 'literal') p[x.type] = Number(x.value); });
+    if ([p.year, p.month, p.day, p.hour, p.minute].every(n => !isNaN(n))) {
+      return {
+        dow: new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay(),
+        hour: p.hour % 24, // some engines print midnight as 24
+        minute: p.minute,
+      };
+    }
+  } catch (e) { /* no London data: the caller's device-local digits stand */ }
+  return null;
+}
+
+// "17:45" — an instant that has a London meaning (a waitlist accept-by time,
+// resolved through the London resolver) printed as LONDON wall clock, like the
+// class time on the card beside it. Through the device's getters a phone on
+// CET read "accept by 18:45" under its 18:30 class: a deadline after the start,
+// an hour past the real one. No Europe/London data in the engine → the
+// resolver fell back to a device-local parse too, so the local getters match.
+function _londonClock(ms) {
+  const p = _londonParts(ms);
+  if (p) return _clock24(p.hour, p.minute);
+  const d = new Date(ms);
+  return _clock24(d.getHours(), d.getMinutes());
+}
+
 function _cancelDeadline(startAt, nowMs) {
   if (startAt == null || startAt === '') return null;
   const raw = typeof startAt === 'string' ? startAt.trim() : startAt;
@@ -6671,34 +6771,17 @@ function _cancelDeadline(startAt, nowMs) {
   const deadlineMs = startMs - 12 * 3600000;
   const d = new Date(deadlineMs);
   let dow = d.getDay(), h = d.getHours(), min = d.getMinutes();
-  if (london) {
-    // Numeric parts only, the weekday derived from the date: weekday and am/pm
-    // TEXT from Intl varies between engines. No Europe/London data in the
-    // engine → the bridge fell back to a device-local parse too, so the local
-    // getters above already match.
-    try {
-      if (!_londonPartsFmt) {
-        _londonPartsFmt = new Intl.DateTimeFormat('en-GB', {
-          timeZone: 'Europe/London', hourCycle: 'h23',
-          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-        });
-      }
-      const p = {};
-      _londonPartsFmt.formatToParts(d).forEach(x => { if (x.type !== 'literal') p[x.type] = Number(x.value); });
-      if ([p.year, p.month, p.day, p.hour, p.minute].every(n => !isNaN(n))) {
-        dow = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
-        h = p.hour % 24; // some engines print midnight as 24
-        min = p.minute;
-      }
-    } catch (e) { /* keep the device-local digits */ }
-  }
+  // No Europe/London data in the engine → the bridge fell back to a
+  // device-local parse too, so the local getters above already match.
+  const lp = london ? _londonParts(deadlineMs) : null;
+  if (lp) { dow = lp.dow; h = lp.hour; min = lp.minute; }
   const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow];
   return {
     deadlineMs,
     hoursUntil: (startMs - now) / 3600000,
     // AT the cutoff counts as inside — never promise a free cancel we can't be sure of.
     insideWindow: now >= deadlineMs,
-    label: `${day} ${h % 12 || 12}:${String(min).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`,
+    label: `${day} ${_clock24(h, min)}`, // "Sun 19:30"
   };
 }
 
@@ -7000,10 +7083,12 @@ function _spotsHtml(evt, held, fresh) {
 // Time-of-day bands (the Time filter row). The hour is cut from the start_at
 // STRING — the gym's own wall clock, in the 'T' and the space form alike —
 // never read through Date, which moves it on a device that is not on UK time.
+// The labels are 24-hour like every other time in the app ("After 17:00", never
+// "After 5"); the keys, the hours and everything that filters are unchanged.
 const TIME_BANDS = [
-  { key: 'early', label: 'Before 9', from: 0, to: 9 },
-  { key: 'day', label: '9–5', from: 9, to: 17 },
-  { key: 'evening', label: 'After 5', from: 17, to: 24 },
+  { key: 'early', label: 'Before 9:00', from: 0, to: 9 },
+  { key: 'day', label: '9:00–17:00', from: 9, to: 17 },
+  { key: 'evening', label: 'After 17:00', from: 17, to: 24 },
 ];
 function _timeBandOf(startAt) {
   const h = parseInt(String(startAt).slice(11, 13), 10);
@@ -7138,16 +7223,15 @@ function _pagerHeldDays(bookings, cache, days, o) {
     const tod = startAt.slice(11, 19);
     if (Object.prototype.hasOwnProperty.call(first, day) && !(tod < first[day])) return;
     first[day] = tod;
-    const h = parseInt(startAt.slice(11, 13), 10), mm = startAt.slice(14, 16);
     const name = String(evt._typeName || 'a class');
     let ct = 'other';
     try { if (typeof o.typeKey === 'function') ct = String(o.typeKey(evt._typeName) || 'other'); } catch (e) {}
-    out[day] = { ct, name, time: (isNaN(h) || !/^\d\d$/.test(mm)) ? '' : ((h % 12) || 12) + ':' + mm + (h >= 12 ? 'pm' : 'am') };
+    out[day] = { ct, name, time: _clock24(startAt.slice(11, 13), startAt.slice(14, 16)) };
   });
   return out;
 }
 
-// "…, 14 classes. You have Strength 45 at 6:30pm" — the dot, said.
+// "…, 14 classes. You have Strength 45 at 18:30" — the dot, said.
 function _pagerHeldSpoken(held) {
   if (!held) return '';
   return '. You have ' + held.name + (held.time ? ' at ' + held.time : '');
@@ -7325,9 +7409,9 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   // `.class-card[data-ct]`, so any card built this way looks the same:
   //   root      .class-card.ct-card + data-ct (classTypeKey: the class type is
   //             the card's COLOUR) + .is-booked (glows) / .is-waitlisted (dashed)
-  //   .cc-time  the time leads, in the display face: .cc-time-h over the small
-  //             line .cc-dur = .cc-ampm · duration — _ccTimeHTML (pure:class-type),
-  //             the ONE builder every wearer of the card calls
+  //   .cc-time  the 24-hour time leads, in the display face: .cc-time-h ("18:30")
+  //             over the small line .cc-dur ("45 min") — _ccTimeHTML
+  //             (pure:class-type), the ONE builder every wearer of the card calls
   //   .cc-info  .cc-head = .ct-tile pictogram + .cc-name · .cc-sub = .cc-who
   //             (instructor + rank) and .cc-loc (the studio, plain text) ·
   //             .cc-spots (availability) · .cc-meta (a label such as Online)
@@ -7500,7 +7584,7 @@ function render(events, relations, filters, done) {
     // Classes DO match everything else — only the Time row hides them. Say so,
     // with the one tap that lifts just that row: Find similar, Rebook and Book
     // again search FOR the member (an instructor, a day) and must not dead-end
-    // on an "After 5" saved last week, and Clear filters would throw away what
+    // on an "After 17:00" saved last week, and Clear filters would throw away what
     // they just set. Not .no-results: theme.js flattens that block to its text,
     // so a button cannot ride in it (same markup as its renderEmptyState).
     if (hiddenByTimeRow > 0) {
@@ -7761,7 +7845,7 @@ function _heldDaysFor(m) {
 }
 
 // One pill's dot, in place: added, re-coloured or taken off. Decorative — the
-// pill's aria-label says it ("You have Ride 45 at 9:30am"). It hangs off the
+// pill's aria-label says it ("You have Ride 45 at 09:30"). It hangs off the
 // date numeral, not the pill's corner: a corner dot ran into the word above it
 // ("Today" fills the pill's width).
 function _paintDayDot(pill, held) {
@@ -8732,7 +8816,7 @@ function setTimeFilters(bands, availableOnly) {
 
 // A flow that searches FOR the member around one time of day ("Same class
 // next week", "Same time, any instructor") lands on a list the Time row still
-// filters: with "After 5" on, every 7am class the toast announced is hidden —
+// filters: with "After 17:00" on, every 7am class the toast announced is hidden —
 // and the list is rarely EMPTY, so the "Show all times" rescue never shows.
 // Additive, like the studio and class-type filters there: a row with nothing
 // on gains nothing, and an hour that cannot be read adds no band.
@@ -8849,11 +8933,7 @@ function getCountdownText(eventDate, now, startAt) {
     if (mins === 0) return `In ${hrs}h`;
     return `In ${hrs}h ${mins}m`;
   } else if (eventDayStr === tomorrowStr) {
-    const h = eventDate.getHours();
-    const m = eventDate.getMinutes().toString().padStart(2, '0');
-    const ampm = h >= 12 ? 'pm' : 'am';
-    const h12 = h % 12 || 12;
-    return `Tomorrow ${h12}:${m}${ampm}`;
+    return `Tomorrow ${_clock24(eventDate.getHours(), eventDate.getMinutes())}`;
   }
   return null; // not today or tomorrow
 }
@@ -8951,7 +9031,7 @@ function _snapshotItemsToShow(items, nowMs, startMsOf) {
 // "Saved copy · 14:05" — with the day once it is no longer today's.
 function _snapshotLabel(savedAt, nowMs) {
   const d = new Date(savedAt), now = new Date(nowMs);
-  const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const hhmm = _clock24(d.getHours(), d.getMinutes());
   const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   return 'Saved copy · ' + (sameDay ? '' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ') + hhmm;
 }
@@ -9547,8 +9627,10 @@ function renderMyBookings() {
         } else if (offerOpen) {
           let by = '';
           if (place.expiresAt) {
-            const ex = new Date(_waitlistTimeMs(place.expiresAt));
-            if (!isNaN(ex.getTime())) by = ` — accept by ${ex.getHours() % 12 || 12}:${String(ex.getMinutes()).padStart(2, '0')}${ex.getHours() >= 12 ? 'pm' : 'am'}`;
+            // London wall clock, like the class time above it — never the
+            // device zone (_londonClock says what that read abroad).
+            const exMs = _waitlistTimeMs(place.expiresAt);
+            if (!isNaN(exMs)) by = ` — accept by ${_londonClock(exMs)}`;
           }
           statusText = spotFree
             ? `A spot is free right now${by} — it isn't held for you, claim it before someone else does`
@@ -9797,7 +9879,7 @@ function _anyInstantBetween(times, sinceMs, nowMs) {
 // ── The minute tick ──────────────────────────────────────────────
 // Nothing on the page followed the clock except the floating pill (settings.js,
 // its own 30s timer). With My Bookings left open the card said "In 1h 10m"
-// under a pill reading "40m", "Free cancel until 6:30am" outlived 6:30, a class
+// under a pill reading "40m", "Free cancel until 06:30" outlived 06:30, a class
 // that had started kept its Cancel button, and Discover read "Updated just now"
 // for as long as it stayed open. ONE timer: stopped while the page is hidden
 // (the foreground refetch covers the way back), caught up at once on return.
@@ -9808,7 +9890,7 @@ let _minuteTimer = null;
 // Has a card changed by itself since the list was last known right? A class
 // started (by the card's own device-local test, or the real London start the
 // chip counts to), its free-cancel cutoff passed, a waitlist offer ran out — or
-// the day turned, which puts "Tomorrow 7:00am" on a card that had no chip.
+// the day turned, which puts "Tomorrow 07:00" on a card that had no chip.
 function _bookingsFlipDue(sinceMs, nowMs) {
   if (localDateStr(new Date(sinceMs)) !== localDateStr(new Date(nowMs))) return true;
   try { if (_gymDayKey(sinceMs, 0) !== _gymDayKey(nowMs, 0)) return true; } catch (e) { /* no Europe/London data */ }
@@ -10132,7 +10214,7 @@ async function rebookNextWeek(eventId) {
     ['UPPER', 'LOWER', 'FULL'].forEach(k => selectedStrengthSubs.add(k));
     selectedReformerSubs.clear();
     REFORMER_SUBS.forEach(s => selectedReformerSubs.add(s.key));
-    // And the Time row: "After 5" left on hides every alternative to a 7am
+    // And the Time row: "After 17:00" left on hides every alternative to a 7am
     // class. Each alternative's OWN band — the ±2h window straddles them (a
     // 07:00 class has 09:00 alternatives), so the target hour is not enough.
     if (typeof _admitTimeBands === 'function') _admitTimeBands(similar.map(e => e.start_at));
@@ -10508,10 +10590,7 @@ window.findSimilar = function(eventId) {
 
   const origDate = new Date(evt.start_at);
   const dayName = origDate.toLocaleDateString('en-GB', { weekday: 'long' });
-  const h = origDate.getHours() % 12 || 12;
-  const m = origDate.getMinutes().toString().padStart(2, '0');
-  const ap = origDate.getHours() >= 12 ? 'pm' : 'am';
-  const timeLabel = `${h}:${m}${ap}`;
+  const timeLabel = _clock24(origDate.getHours(), origDate.getMinutes());
   const instrName = evt._instrName || 'this instructor';
   const typeName = evt._typeName || 'Class';
 
@@ -10640,7 +10719,7 @@ window.findSimilar = function(eventId) {
       // left on. The shortcut does not narrow by hour, so the toast no longer
       // claims "around 7:00am" — the day's classes list in time order.
       // The Time row is kept here (keepTimeRow — every other shortcut clears
-      // it), with this class's band admitted: "After 5" alone would hide the
+      // it), with this class's band admitted: "After 17:00" alone would hide the
       // day's 7am classes.
       if (typeof _admitTimeBands === 'function') _admitTimeBands([evt.start_at]);
       const studio = _studioMap[evt.studio_id];
@@ -10684,10 +10763,7 @@ window.shareClass = function(eventId) {
   const dayName = dt.toLocaleDateString('en-GB', { weekday: 'long' });
   const dayNum = dt.getDate();
   const monthName = dt.toLocaleDateString('en-GB', { month: 'short' });
-  const h = dt.getHours() % 12 || 12;
-  const m = dt.getMinutes().toString().padStart(2, '0');
-  const ap = dt.getHours() >= 12 ? 'pm' : 'am';
-  const timeLabel = `${h}:${m}${ap}`;
+  const timeLabel = _clock24(dt.getHours(), dt.getMinutes());
 
   const typeName = evt._typeName || 'Class';
   const instrName = evt._instrName || '';
@@ -11026,10 +11102,7 @@ window.openClassDetail = function (eventId) {
   // Format date/time
   const dt = new Date(evt.start_at);
   const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  const hours = dt.getHours();
-  const mins = dt.getMinutes().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  const h12 = hours % 12 || 12;
+  const clock = _clock24(dt.getHours(), dt.getMinutes()); // "19:00"
 
   const typeName = evt._typeName || 'Class';
   const locName = evt._locName || '';
@@ -11064,19 +11137,21 @@ window.openClassDetail = function (eventId) {
   const isPast = dt <= new Date();
   if (isPast) availHtml = '';
 
-  // A seat already held at this time, said before the member taps Book. The
-  // status inks are the ones .cds-avail* already carries on this surface.
+  // A seat already held at this time, said before the member taps Book — as ONE
+  // quiet line: a row like its neighbours (body ink, no ground of its own) that
+  // leads with the caution mark (css/crisp.css inks it in the theme's caution
+  // colour). .cds-avail-full / -waitlist stay as hooks: overlap vs. squeeze / place.
   // Advisory: a cache entry of an odd shape must not stop the sheet opening.
   let clashHtml = '';
   if (!isPast) {
     try {
       // Places too, here: the usual waitlist pattern is a fallback booked for
-      // the same time. A place is only a possible seat, so it gets the amber ink.
+      // the same time. A place is only a possible seat: it keeps the -waitlist hook.
       const clash = _clashFor(eventId, null, { includePlaces: true });
       if (clash) {
         // The other class closes the row as its own small tile (its type's colour).
         const otherKey = clash.typeName && typeof classTypeKey === 'function' ? classTypeKey(clash.typeName) : '';
-        clashHtml = '<div class="cds-detail-row cds-clash">' + rowIcon('clash') + '<span class="' +
+        clashHtml = '<div class="cds-detail-row cds-clash">' + rowIcon('caution') + '<span class="' +
           (clash.kind === 'overlap' && !clash.place ? 'cds-avail-full' : 'cds-avail-waitlist') + '">' + escapeHTML(_clashLabel(clash)) + '</span>' +
           (otherKey ? '<span class="ct-tile is-sm" data-ct="' + otherKey + '" aria-hidden="true">' + pictogram(otherKey, 15) + '</span>' : '') + '</div>';
       }
@@ -11205,7 +11280,7 @@ window.openClassDetail = function (eventId) {
         '<button class="modal-close cds-close" onclick="document.getElementById(\'classDetailOverlay\').remove()" aria-label="Close">&times;</button>' +
         '<div class="cds-when">' +
           '<div class="cds-when-text">' +
-            '<span class="cds-time t-time is-sheet">' + h12 + ':' + mins + '<span class="cds-ampm">' + ampm + '</span></span>' +
+            '<span class="cds-time t-time is-sheet">' + clock + '</span>' +
             '<span class="cds-date">' + escapeHTML(dayStr) + (duration ? ' &middot; ' + escapeHTML(String(duration)) + ' min' : '') + '</span>' +
           '</div>' +
           '<span class="ct-tile cds-tile" aria-hidden="true">' + pictogram(ctKey, 38) + '</span>' +
@@ -12109,8 +12184,8 @@ function _restoreFocusStash() {
 //          (or one already gone) widens to the week — one instructor on one
 //          arbitrary day is mostly an empty list.
 //   keepTimeRow — leave the Time row as the caller set it (same-time admits
-//          its own band first). Everyone else gets any time: with "After 5"
-//          saved, "Book again — Tuesdays at 7:00am" listed her 18:30 and not
+//          its own band first). Everyone else gets any time: with "After 17:00"
+//          saved, "Book again — Tuesdays at 07:00" listed her 18:30 and not
 //          the 7:00 — a list that is not EMPTY, so no "Show all times" rescue.
 //          "Available only" always goes: it hid a full-but-waitlistable usual
 //          class the same way.
@@ -12193,7 +12268,7 @@ function applySavedSearch(obj) {
   ((obj.reformerSubs && obj.reformerSubs.length) ? obj.reformerSubs : REFORMER_SUBS.map(s => s.key))
     .forEach(k => selectedReformerSubs.add(k));
   // An entry saved before the Time row existed has neither field: the row is
-  // reset, or the pill would bring back its list minus whatever "After 5"
+  // reset, or the pill would bring back its list minus whatever "After 17:00"
   // happens to hide today. (setTimeFilters keeps known band keys only.)
   setTimeFilters(obj.timeBands, obj.availableOnly);
 
@@ -12485,9 +12560,9 @@ function _onboardPic(ct, size) {
   // (typeof: tests run this block on its own, without the pictograms.)
   return typeof classPictogram === 'function' ? classPictogram(ct, size) : '';
 }
-function _onboardMiniCard(cls, ct, time, ampm, name, sub, extra, action) {
+function _onboardMiniCard(cls, ct, time, name, sub, extra, action) {
   return `<div class="onboard-mini-card ct-card${cls ? ' ' + cls : ''}" data-ct="${ct}">` +
-    `<div class="onboard-mini-time t-time is-compact">${time}<span>${ampm}</span></div>` +
+    `<div class="onboard-mini-time t-time is-compact">${time}</div>` +
     `<div class="onboard-mini-info"><div class="onboard-mini-name"><span class="ct-tile is-sm">${_onboardPic(ct, 15)}</span>${name}</div><div class="onboard-mini-sub">${sub}</div>${extra}</div>` +
     action +
   '</div>';
@@ -12500,7 +12575,7 @@ function _onboardArt(id) {
     // its own colour with its pictogram — and that the time comes first.
     const tile = (ct, name) => `<div class="onboard-tile ct-card" data-ct="${ct}"><span class="ct-tile is-xl">${_onboardPic(ct, 28)}</span><span class="onboard-tile-name">${name}</span></div>`;
     inner = tile('ride', 'Ride') + tile('strength', 'Strength') + tile('pilates', 'Reformer') + tile('yoga', 'Yoga') + tile('barre', 'Barre') +
-      '<div class="onboard-tile is-time"><span class="onboard-tile-day">Thursday</span><span class="onboard-tile-time t-time">6:30<span>pm</span></span></div>';
+      '<div class="onboard-tile is-time"><span class="onboard-tile-day">Thursday</span><span class="onboard-tile-time t-time">18:30</span></div>';
   } else if (id === 'find') {
     const now = new Date();
     const days = _welcomeDayLabels(now.getFullYear(), now.getMonth() + 1, now.getDate(), 5);
@@ -12511,12 +12586,12 @@ function _onboardArt(id) {
       // Two days side by side, the next one peeking in: what a swipe brings.
       '<div class="onboard-mini-lane">' +
         '<div class="onboard-mini-col">' +
-          _onboardMiniCard('', 'ride', '7:00', 'am', 'Ride 45', 'Oxford Circus', '', book) +
-          _onboardMiniCard('', 'strength', '6:30', 'pm', 'Strength 50', 'Shoreditch', '', book) +
+          _onboardMiniCard('', 'ride', '07:00', 'Ride 45', 'Oxford Circus', '', book) +
+          _onboardMiniCard('', 'strength', '18:30', 'Strength 50', 'Shoreditch', '', book) +
         '</div>' +
         '<div class="onboard-mini-col">' +
-          _onboardMiniCard('', 'yoga', '6:45', 'am', 'Yoga Flow', 'Clapham', '', book) +
-          _onboardMiniCard('', 'pilates', '12:15', 'pm', 'Reformer 50', 'Oxford Circus', '', book) +
+          _onboardMiniCard('', 'yoga', '06:45', 'Yoga Flow', 'Clapham', '', book) +
+          _onboardMiniCard('', 'pilates', '12:15', 'Reformer 50', 'Oxford Circus', '', book) +
         '</div>' +
       '</div>';
   } else if (id === 'book') {
@@ -12527,13 +12602,13 @@ function _onboardArt(id) {
     }
     // The seat map wears the class it is for: your seat is its colour, with the glow.
     inner = `<div class="onboard-mini-map" data-ct="ride">${seats}</div>` +
-      '<div class="onboard-mini-caution">Clashes with your 7:00am Ride 45</div>';
+      '<div class="onboard-mini-caution">Clashes with your 07:00 Ride 45</div>';
   } else if (id === 'keep') {
     // My Bookings cards: a seat (chip + free-cancel line) and a waitlist place.
     inner =
-      _onboardMiniCard('is-held glow-mine-card', 'ride', '7:00', 'am', 'Ride 45', 'Oxford Circus · Studio 1',
-        '<span class="onboard-mini-chip ct-badge is-seat">Bike 9</span><div class="onboard-mini-deadline">Free cancel until Mon 7:00pm</div>', '') +
-      _onboardMiniCard('is-waitlisted is-dashed', 'strength', '6:30', 'pm', 'Strength 50', 'Shoreditch',
+      _onboardMiniCard('is-held glow-mine-card', 'ride', '07:00', 'Ride 45', 'Oxford Circus · Studio 1',
+        '<span class="onboard-mini-chip ct-badge is-seat">Bike 9</span><div class="onboard-mini-deadline">Free cancel until Mon 19:00</div>', '') +
+      _onboardMiniCard('is-waitlisted is-dashed', 'strength', '18:30', 'Strength 50', 'Shoreditch',
         '<span class="onboard-mini-badge ct-badge is-dashed">Waitlisted</span>', '');
   }
   return inner ? `<div class="onboard-art onboard-art-${id}" aria-hidden="true">${inner}</div>` : '';
@@ -12987,9 +13062,7 @@ function renderRebookHint() {
   if (!pred) return;
 
   const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][pred.dayOfWeek];
-  const ampm = pred.hour >= 12 ? 'pm' : 'am';
-  const h12 = pred.hour % 12 || 12;
-  const timeStr = h12 + ':' + String(pred.minute).padStart(2, '0') + ampm;
+  const timeStr = _clock24(pred.hour, pred.minute);
 
   // Its class type, as a pictogram tile in the class colour. pred.label is
   // "Type · Instructor": only the type decides the colour. (typeof + innerHTML,
@@ -13054,9 +13127,7 @@ if (typeof PsycleEvents !== 'undefined') {
           (pred.instructorId == null || evt.instructor_id === pred.instructorId)) return;
 
       const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][pred.dayOfWeek];
-      const ampm = pred.hour >= 12 ? 'pm' : 'am';
-      const h12 = pred.hour % 12 || 12;
-      const timeStr = h12 + ':' + String(pred.minute).padStart(2, '0') + ampm;
+      const timeStr = _clock24(pred.hour, pred.minute);
 
       const btn = document.createElement('button');
       btn.className = 'find-similar-option find-similar-predicted';

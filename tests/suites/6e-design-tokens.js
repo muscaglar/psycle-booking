@@ -46,7 +46,7 @@ module.exports = function (t) {
   }
   const themeIds = [];
   t.readSource('js/theme.js').replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { themeIds.push(id); return m; });
-  t.ok(themeIds.length >= 7, 'theme ids parsed from APP_THEMES (' + themeIds.join(', ') + ')');
+  t.ok(themeIds.length >= 5, 'theme ids parsed from APP_THEMES (' + themeIds.join(', ') + ')');
 
   function rules(css) {
     const out = [];

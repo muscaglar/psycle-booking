@@ -628,7 +628,7 @@ module.exports = async function (t) {
   }
 
   // ── Wiring: Change spot (DELETE old seat, then POST the new one) ─────────
-  const swapFns = [grab(appSrc, 'function _cancelDeadline(', '}'), grab(appSrc, 'window.changeSpot = async function(eventId) {', '};'), grab(appSrc, 'function _repaintKeepingFocus(', '}'), grab(appSrc, 'function renderChangeSpotHint(', '}'),
+  const swapFns = [grab(appSrc, 'function _clock24(', '}'), grab(appSrc, 'function _cancelDeadline(', '}'), grab(appSrc, 'window.changeSpot = async function(eventId) {', '};'), grab(appSrc, 'function _repaintKeepingFocus(', '}'), grab(appSrc, 'function renderChangeSpotHint(', '}'),
     grab(appSrc, 'window.setChangeSpotTarget = function (slot) {', '};'), grab(appSrc, 'async function executeSpotSwap(', '}')].join('\n');
   // `script`: call → a status, an Error to throw (the request never answered),
   // or { status, body }. Unscripted: DELETE 204, POST 201.

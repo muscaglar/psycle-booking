@@ -48,7 +48,7 @@ module.exports = async function (t) {
   {
     // 20:00 Wednesday in New York is already 01:00 Thursday in London.
     eq(chip(london, '2026-09-18 07:00:00', '2026-09-17T20:00:00'), 'In 6h', "Thursday 7am, asked on London's Thursday → a countdown, not \"Tomorrow\"");
-    eq(chip(london, '2026-09-18 07:00:00', '2026-09-17T10:00:00'), 'Tomorrow 7:00am', "asked on London's Wednesday afternoon → Tomorrow, with the class's own wall-clock time");
+    eq(chip(london, '2026-09-18 07:00:00', '2026-09-17T10:00:00'), 'Tomorrow 07:00', "asked on London's Wednesday afternoon → Tomorrow, with the class's own wall-clock time");
     eq(chip(london, '2026-09-19 07:00:00', '2026-09-17T10:00:00'), null, 'the day after tomorrow → no chip');
     // Clocks go back on Sun 25 Oct 2026: that London day is 25 hours long.
     eq(london._gymDayKey(Date.UTC(2026, 9, 24, 23, 30), 1), '2026-10-26', 'tomorrow is calendar arithmetic (+24h from 00:30 on the 25-hour day would still be the 25th)');

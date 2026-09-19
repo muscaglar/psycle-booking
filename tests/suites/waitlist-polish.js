@@ -299,7 +299,7 @@ module.exports = async function (t) {
     const el = (id) => els[id] || (els[id] = { style: {}, textContent: '', innerHTML: '' });
     const ctx = t.loadPure('js/app.js', 'bookings-card', {
       Date: pinnedDate(new Date(nowIso).getTime()),
-      window: {},
+      window: o.window || {},
       document: { getElementById: el },
       localStorage: { getItem: () => null },
       currentUser: { id: 7 },
@@ -352,6 +352,20 @@ module.exports = async function (t) {
     c = cardWorld('2026-09-21T16:30:00', { bookingId: 'A', bookingIds: ['A'], slots: [7], slotBookings: { 7: 'A' }, waitlisted: false, waitlist: { id: 900, status: 'waiting', expiresAt: null } });
     ok(/You also hold a waitlist place/.test(c.status) && c.primary.fn === 'upcomingCancel', 'a place held on top of a seat: copy and Cancel button untouched by the phase');
 
+    // "accept by" is LONDON wall clock, like the class time above it. With the
+    // resolver the app ships, 17:45 London is 16:45Z — 12:45 on this New York
+    // runner; through the device's getters a phone on CET read "accept by
+    // 18:45" under its 18:30 class. 16:00Z: the offer is open, class not begun.
+    const abroad = { window: gym.window };
+    c = cardWorld('2026-09-21T16:00:00Z', placeOnly({ status: 'offered', expiresAt: '2026-09-21 17:45:00' }), abroad);
+    eq([c.status, c.badge], ['A spot has opened up — accept by 17:45', 'Spot offered'], 'a naive (London) accept-by time prints its own digits, whatever zone the device is in (it read 12:45 here)');
+    c = cardWorld('2026-09-21T16:00:00Z', placeOnly({ status: 'offered', expiresAt: '2026-09-21T16:45:00Z', offer: { available: true, checkedAt: 0 } }), abroad);
+    ok(/^A spot is free right now — accept by 17:45 — /.test(c.status), 'an expiry that carries its own offset is an instant: said as London reads it (16:45Z = 17:45 BST)');
+    const lc = t.loadPure('js/app.js', 'bookings-card');
+    eq([lc._londonClock(utc(2026, 9, 21, 16, 45)), lc._londonClock(utc(2026, 12, 7, 17, 45)), lc._londonClock(utc(2026, 9, 20, 23, 5)), lc._londonClock(NaN)], ['17:45', '17:45', '00:05', ''],
+      '_londonClock: an instant as London wall clock — BST, GMT (London IS UTC in winter), across midnight; an unreadable instant prints nothing');
+    eq(lc._londonParts(utc(2026, 9, 20, 23, 5)), { dow: 1, hour: 0, minute: 5 }, '_londonParts (what _cancelDeadline reads as well): 23:05Z on Sunday is 00:05 on MONDAY in London');
+
     c = cardWorld('2026-09-21T13:00:00', placeOnly({ unverified: true }), { unavailable: 'failed' });
     ok(c.note && /couldn't re-check with Psycle just now/.test(c.status), '/waitlists failed: the note and "couldn\'t re-check" — unchanged');
     c = cardWorld('2026-09-21T13:00:00', placeOnly({ unverified: true }), { unavailable: 'late' });
@@ -380,21 +394,21 @@ module.exports = async function (t) {
       'default unchanged: a place is ignored (the headless sweep and the join dialog stay on seats)');
     const c = p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld() }, cacheOf(), WITH);
     eq([c && c.kind, c && c.place, c && c.eventId], ['overlap', true, '10'], 'opted in: the overlapping place is reported, flagged place:true');
-    eq(p._clashLabel(c), "You're also on the waitlist for the 7:00am Ride at Oxford Circus — if Psycle books you in, you'd hold both", 'said as a possibility ("also on the waitlist for the…"), never "Clashes with your…"');
+    eq(p._clashLabel(c), "You're also on the waitlist for the 07:00 Ride at Oxford Circus — if Psycle books you in, you'd hold both", 'said as a possibility ("also on the waitlist for the…"), never "Clashes with your…"');
     eq(p._findClash(evt('2026-09-21 08:00:00'), { 10: placeHeld() }, cacheOf(), WITH), null, 'a travel squeeze with a mere place is not worth a word');
     eq(p._findClash(evt('2026-09-21 07:00:00', { id: 10 }), { 10: placeHeld() }, cacheOf(), WITH), null, "the place's own class never clashes with itself");
 
     // A real seat always outranks a place — whichever comes first, whatever its kind.
     const both = cacheOf({ 11: { id: 11, start_at: '2026-09-21 07:30:00', duration: 45, _typeName: 'Barre', _locName: 'Bank' } });
     let r = p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld(), 11: seat() }, both, WITH);
-    eq([r.eventId, r.place, p._clashLabel(r)], ['11', false, 'Clashes with your 7:30am Barre at Bank'], 'place 7:00 + seat 7:30: the SEAT is named though the place starts earlier');
+    eq([r.eventId, r.place, p._clashLabel(r)], ['11', false, 'Clashes with your 07:30 Barre at Bank'], 'place 7:00 + seat 7:30: the SEAT is named though the place starts earlier');
     r = p._findClash(evt('2026-09-21 07:15:00'), { 11: seat(), 10: placeHeld() }, both, WITH);
     eq(r.eventId, '11', '…in either key order');
     const squeeze = cacheOf({ 12: { id: 12, start_at: '2026-09-21 08:15:00', duration: 45, _typeName: 'Yoga', _locName: 'Oxford Circus' } });
     r = p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld(), 12: seat() }, squeeze, WITH);
     eq([r.eventId, r.kind, r.place], ['12', 'travel', false], 'even a seat that is only a travel squeeze outranks an overlapping place (the seat is real)');
     r = p._findClash(evt('2026-09-21 07:15:00'), { 10: seat() }, cacheOf(), WITH);
-    eq([r.place, p._clashLabel(r)], [false, 'Clashes with your 7:00am Ride at Oxford Circus'], 'seats read exactly as before, opted in or not');
+    eq([r.place, p._clashLabel(r)], [false, 'Clashes with your 07:00 Ride at Oxford Circus'], 'seats read exactly as before, opted in or not');
 
     // _clashFor hands its third argument on; the class sheet is the caller that opts in.
     const ctx = t.loadPure('js/app.js', 'clash', {
@@ -441,7 +455,7 @@ module.exports = async function (t) {
       },
       confirmModal: async (opts) => { log.confirms.push(opts); return false; }, // the member declines
       toast: (msg) => log.toasts.push(msg),
-      _waitlistClassLine: () => 'Ride · Alex · Mon 21, 6:00pm',
+      _waitlistClassLine: () => 'Ride · Alex · Mon 21, 18:00',
       _recordShape: () => {}, refreshUpcomingPanel: () => {}, fetchMyBookings: async () => true, // (_recordWaitlistShape became _recordShape upstream)
     });
     // The claim dialog counts free spots with _plural (pure:copy) and a thrown
@@ -457,7 +471,7 @@ module.exports = async function (t) {
     let w = claimWorld(fallback);
     eq(await w.ctx.claimWaitlistSpot(77, null), false, 'declined → resolves false');
     eq(w.log.confirms.map((c) => c.title), ['Claim this spot?'], 'still the one explicit confirm');
-    eq(w.log.confirms[0].warn, 'Clashes with your 5:45pm Ride 45 at Oxford Circus. This class starts in 1h 45m — once claimed, cancelling is usually charged by Psycle.',
+    eq(w.log.confirms[0].warn, 'Clashes with your 17:45 Ride 45 at Oxford Circus. This class starts in 1h 45m — once claimed, cancelling is usually charged by Psycle.',
       'warn: the held seat it overlaps, then "starts in 1h 45m — once claimed, cancelling is usually charged" (was: a generic "12-hour policy applies once you\'re booked")');
     eq(w.log.calls, [['GET', '/waitlist/900']], 'nothing but the GET went out: a declined confirm books nothing');
 
@@ -468,7 +482,7 @@ module.exports = async function (t) {
     // The entry's own (fresh) class time wins over the cache: Psycle says it moved to tomorrow 18:00 → a free-cancel deadline exists.
     w = claimWorld({ event: { start_at: '2026-09-22 18:00:00' } });
     await w.ctx.claimWaitlistSpot(77, null);
-    eq(w.log.confirms[0].warn, "Free cancel until Tue 6:00am — after that Psycle's 12-hour cancellation policy applies.", 'outside 12h (fresh time from the entry): the actual deadline');
+    eq(w.log.confirms[0].warn, "Free cancel until Tue 06:00 — after that Psycle's 12-hour cancellation policy applies.", 'outside 12h (fresh time from the entry): the actual deadline');
     w = claimWorld({ event: { start_at: 'TBC' }, cache: { 77: { id: 77, start_at: 'TBC', duration: 45 } } });
     await w.ctx.claimWaitlistSpot(77, null);
     eq(w.log.confirms[0].warn, "Psycle's normal 12-hour cancellation policy applies once you're booked.", "a time that can't be read keeps today's sentence");
@@ -520,13 +534,13 @@ module.exports = async function (t) {
     const fallback = { bookings: { 10: seat() }, cache: { 10: { id: 10, start_at: '2026-09-21T17:45:00', duration: 45, _typeName: 'Ride 45', _locName: 'Oxford Circus' } } };
     let w = announceWorld(fallback);
     w.ctx._announceAllocations([77]);
-    eq(w.log.confirms[0].warn, 'Clashes with your 5:45pm Ride 45 at Oxford Circus. This class starts in 9h — cancelling it now is usually charged by Psycle.',
+    eq(w.log.confirms[0].warn, 'Clashes with your 17:45 Ride 45 at Oxford Circus. This class starts in 9h — cancelling it now is usually charged by Psycle.',
       'found 9h out, fallback held: both said (was: "the 12-hour policy applies to it from now on" — read as time to decide)');
     eq([w.log.confirms[0].title, w.log.events], ["You're in — Psycle gave you a spot", ['waitlist:allocated']], 'same dialog, same event');
 
     w = announceWorld({ now: '2026-09-20T09:00:00' }); // 33h out
     w.ctx._announceAllocations([77]);
-    eq(w.log.confirms[0].warn, "Free cancel until Mon 6:00am — after that Psycle's 12-hour cancellation policy applies.", 'outside 12h: the actual deadline');
+    eq(w.log.confirms[0].warn, "Free cancel until Mon 06:00 — after that Psycle's 12-hour cancellation policy applies.", 'outside 12h: the actual deadline');
     w = announceWorld({ now: '2026-09-21T18:10:00' }); // already started
     w.ctx._announceAllocations([77]);
     eq(w.log.confirms[0].warn, "Psycle's normal 12-hour cancellation policy applies to it from now on.", "a class that has started keeps today's sentence");
@@ -577,10 +591,10 @@ module.exports = async function (t) {
 
     // Opening a class that overlaps a held PLACE: amber, worded as a possibility.
     html = sheetWorld(null, { bookings: { 10: placeHeld() }, cache: { 10: { id: 10, start_at: '2026-09-21T17:45:00', duration: 45, _typeName: 'Ride 45', _locName: 'Oxford Circus' } } });
-    ok(/<span class="cds-avail-waitlist">You&#39;re also on the waitlist for the 5:45pm Ride 45 at Oxford Circus|<span class="cds-avail-waitlist">You're also on the waitlist for the 5:45pm Ride 45 at Oxford Circus/.test(html),
+    ok(/<span class="cds-avail-waitlist">You&#39;re also on the waitlist for the 17:45 Ride 45 at Oxford Circus|<span class="cds-avail-waitlist">You're also on the waitlist for the 17:45 Ride 45 at Oxford Circus/.test(html),
       'sheet for a class overlapping a held place: amber "You\'re also on the waitlist for the…" row');
     html = sheetWorld(null, { bookings: { 10: seat() }, cache: { 10: { id: 10, start_at: '2026-09-21T17:45:00', duration: 45, _typeName: 'Ride 45', _locName: 'Oxford Circus' } } });
-    ok(/<span class="cds-avail-full">Clashes with your 5:45pm Ride 45 at Oxford Circus/.test(html), '…a held SEAT is still the red "Clashes with your…"');
+    ok(/<span class="cds-avail-full">Clashes with your 17:45 Ride 45 at Oxford Circus/.test(html), '…a held SEAT is still the red "Clashes with your…"');
   }
   {
     // _classDetailClaimAction: which button it drives, and that one tap is one claim.

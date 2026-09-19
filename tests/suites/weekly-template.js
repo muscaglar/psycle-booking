@@ -431,7 +431,7 @@ module.exports = async function (t) {
 
     const held = planWorld({ bookings: { 55: seat() }, cache: { 55: { id: 55, start_at: '2099-01-05 07:30:00', duration: 45, _typeName: 'Ride', _locName: 'Bank' } }, template: [entry()] });
     const clashPlan = await held.plan('2099-01-05');
-    eq([clashPlan.rows[0].state, clashPlan.rows[0].clashLine], ['clash', 'Clashes with your 7:30am Ride at Bank'], 'a held 7:30 turns the 7:00 row into a named clash');
+    eq([clashPlan.rows[0].state, clashPlan.rows[0].clashLine], ['clash', 'Clashes with your 07:30 Ride at Bank'], 'a held 7:30 turns the 7:00 row into a named clash');
 
     eq((await planWorld({ state: 'failed' }).plan('2099-01-05')).reason, 'bookings', 'bookings never loaded and unreadable → no plan (every held class would read as bookable)');
     eq((await planWorld({ online: false }).plan('2099-01-05')).reason, 'offline', 'offline → no plan');

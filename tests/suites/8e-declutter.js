@@ -158,10 +158,11 @@ module.exports = function (t) {
       escapeHTML: (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'),
       getCategory: (name) => (name === 'Ride 45' ? { key: 'RIDE' } : null),
       getFullHistory: () => ['2026-08-31', '2026-09-07', '2026-09-14'].map((d, i) => ({ eventId: String(i), date: d + ' 07:00:00', typeName: 'Ride 45' })),
+      _clock24: t.loadPure('js/app.js', 'clock')._clock24, // the app's ONE time formatter (24-hour)
     });
     t.vm.runInContext(dayLine + '\n' + grab(tabsSrc, '  function _nextWeekdayDateStr(', '  }') + '\n' + grab(tabsSrc, '  function renderHabitSlots() {', '  }'), ctx, { filename: 'js/tabs.js[habits]' });
     ctx.renderHabitSlots();
-    eq(text(box.innerHTML), 'Your usual slots Mondays ~7:00am Ride 45 3x in your history Find this week',
+    eq(text(box.innerHTML), 'Your usual slots Mondays ~07:00 Ride 45 3x in your history Find this week',
       'heading, slot, class, count, button — no subtitle, and no "You usually book" in front of what the heading already says');
     ok(/<button class="habit-find-btn" data-date="2026-09-21" data-cat="RIDE">Find this week<\/button>/.test(box.innerHTML), 'the button is untouched (next Monday, the category key)');
   }

@@ -83,6 +83,22 @@
     _pillEl.onclick = function () {
       if (typeof switchTab === 'function') switchTab('bookings');
     };
+    // Out of the way while a list is read, back the moment it takes focus — see
+    // "The pill steps aside" below. Installed with the pill: no pill, no listener.
+    _pillEl.addEventListener('focus', _pillUntuck);
+    document.addEventListener('scroll', _pillScrollEvent, { capture: true, passive: true });
+    // …and at rest it never sits on a Book button ("At rest" below). Whatever can
+    // change what lies under it asks again, once things have settled: a render
+    // (a day paged, a search landing after the pill), a tap (the Filters bar
+    // opening moves the cards and no DOM), an entrance animation ending (cards
+    // and tab panels slide 8px into place — measured mid-slide, a button read as
+    // clear of the pill that was about to be under it), a turn of the phone,
+    // focus moving on. The scroll path asks for itself.
+    _pillEl.addEventListener('blur', _pillRestQueue);
+    document.addEventListener('click', _pillRestQueue, true);
+    document.addEventListener('animationend', _pillRestQueue, true);
+    window.addEventListener('resize', _pillRestQueue);
+    if (typeof MutationObserver === 'function') new MutationObserver(_pillRendered).observe(document.body, { childList: true, subtree: true });
     document.body.appendChild(_pillEl);
   }
 
@@ -190,6 +206,10 @@
     _pillEl.classList.remove('hidden');
     _pillA11y('Next class in ' + countdown + ': ' + (next._typeName || 'Class') +
       (next._instrName ? ' with ' + next._instrName : '') + (slots ? ', ' + slots : '') + '. View my bookings');
+    // Shown — but never ON a Book button ("At rest" below). Asked at once, not
+    // queued: a pill that has to stand aside is then never painted first.
+    // (typeof: suites run updatePill on its own.)
+    if (typeof _pillRestCheck === 'function') _pillRestCheck();
   }
 
   function startPillTimer() {
@@ -229,6 +249,256 @@
         clearInterval(_pollPill);
       }
     }, 1000);
+  }
+
+  // ── The pill steps aside ─────────────────────────────────────────────
+  // It floats over whatever is scrolling, so mid-list it sat on top of a card.
+  // On the way DOWN a list it gets out of the way (css/crisp.css `.is-tucked`:
+  // faded and slid down, pointer-events none — a tap goes to the card under
+  // it); it comes back on the way up, at the top, and where the list ends (the
+  // panels end a pill higher there: has-next-pill) — unless, at rest, that puts
+  // it ON a Book button ("At rest" below). Only what is DRAWN changes.
+  // Tucked, it is the same button to a keyboard and a screen reader — role,
+  // tabindex and name are untouched — and taking focus brings it straight back.
+
+  // ── pure:pill-scroll:start ── (DOM-free; tests/suites/10c-polish.js evaluates this block)
+  var PILL_TUCK_AFTER = 24; // px travelled DOWN in one run before it steps aside
+  var PILL_SHOW_AFTER = 8;  // px travelled UP before it is back (sooner: the member is looking for it)
+  var PILL_EDGE = 24;       // this close to the top, or to the end of the list, the SCROLL never hides it
+
+  // One scroll position in, the pill's next state out.
+  //   prev: { y, anchor, dir, tucked } — anchor = where the current run in one direction began
+  //   f:    { y, max, dialogOpen }     — max = scrollHeight - clientHeight of the scroller that moved
+  function _pillScrollStep(prev, f) {
+    prev = prev || {};
+    f = f || {};
+    var max = Number(f.max);
+    if (!(max > 0)) max = 0;
+    var y = Number(f.y);
+    if (!(y > 0)) y = 0;
+    if (y > max) y = max; // iOS rubber band: never past either end
+    var lastY = Number(prev.y);
+    if (!(lastY >= 0)) lastY = 0;
+    var tucked = prev.tucked === true;
+    // A dialog is up: whatever moves behind it is not the member reading the
+    // list. Follow the offset (no jump in travel once it closes), change nothing.
+    if (f.dialogOpen) return { y: y, anchor: y, dir: 0, tucked: tucked };
+    // Nothing worth tucking for, the top, or the end of the list: it shows.
+    if (max <= PILL_EDGE * 2 || y <= PILL_EDGE || max - y <= PILL_EDGE) return { y: y, anchor: y, dir: 0, tucked: false };
+    var dir = y > lastY ? 1 : (y < lastY ? -1 : 0);
+    if (!dir) return { y: y, anchor: Number(prev.anchor) >= 0 ? Number(prev.anchor) : y, dir: prev.dir || 0, tucked: tucked };
+    // A turn: the run starts over from where the last one ended.
+    var anchor = (dir === prev.dir && Number(prev.anchor) >= 0) ? Number(prev.anchor) : lastY;
+    var travel = y - anchor;
+    if (dir > 0 && travel >= PILL_TUCK_AFTER) tucked = true;
+    else if (dir < 0 && -travel >= PILL_SHOW_AFTER) tucked = false;
+    return { y: y, anchor: anchor, dir: dir, tucked: tucked };
+  }
+
+  // A state in, "did the member just call it back?" out: mid-list, a run UP of
+  // PILL_SHOW_AFTER — the run that un-tucks it, asked the same way when it was
+  // standing aside for another reason ("At rest" below). At the top and at the
+  // end there is no run (dir 0): it is there anyway.
+  function _pillCalledBack(s) {
+    return !!s && s.dir < 0 && s.tucked !== true && Number(s.anchor) - Number(s.y) >= PILL_SHOW_AFTER;
+  }
+  // ── pure:pill-scroll:end ──
+
+  // ── At rest it never sits on a Book button ───────────────────────────
+  // "At the top it always shows" put it ON a card before the first scroll: on a
+  // phone the top of a Discover day leaves the fourth card's Book button under
+  // the pill's seat badge, and a tap on that button opened My Bookings. Handing
+  // the tap on would be the wrong cure — the badge is what is drawn there, and
+  // a tap on it would start a booking. So what is DRAWN changes: while the list
+  // is at rest where the pill always shows (the top, the end, a list too short
+  // to scroll) and a Book button really lies under it (more than a sliver), it stands aside
+  // exactly as it does on the way down (.is-tucked — the tap reaches the
+  // button), and it is back as soon as nothing is under it. Called back by a
+  // scroll UP it stays: the member asked for it, and the next scroll down
+  // clears it. One measurement, only once things have settled — never in the
+  // scroll frame.
+
+  // ── pure:pill-rest:start ── (DOM-free; tests/suites/10c-polish.js evaluates this block)
+  var PILL_REST_MS = 150;       // quiet for this long = settled (a scroll has stopped, a render has finished)
+  var PILL_REST_AGAIN_MS = 400; // the second look before it comes back: past the cards' entrance (0.17s + 0.3s from the render)
+
+  var PILL_OVERLAP_MIN = 8;     // px of a Book button under the pill, on BOTH axes, before it counts as covered
+
+  // box: where the pill rests; rects: the Book buttons' boxes — { left, top, right, bottom },
+  // same space. Covered = the two boxes really OVERLAP: more than PILL_OVERLAP_MIN of the
+  // button lies under the pill both ways. (A centre-only test left up to half a button under
+  // the pill, where a tap meant for Book opened My Bookings.) A sliver of an edge is left
+  // alone — the whole button can still be seen, and hit. A box with no size is a button that
+  // is not laid out (another tab's): at 0,0 it is under nothing.
+  function _pillCoversBook(box, rects) {
+    if (!box || !rects || !(rects.length > 0)) return false;
+    for (var i = 0; i < rects.length; i++) {
+      var r = rects[i];
+      if (!r || !(r.right > r.left) || !(r.bottom > r.top)) continue;
+      var ox = Math.min(r.right, box.right) - Math.max(r.left, box.left);
+      var oy = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+      if (ox > PILL_OVERLAP_MIN && oy > PILL_OVERLAP_MIN) return true;
+    }
+    return false;
+  }
+
+  // Is the question asked at all? Only while the pill shows because the list is AT REST
+  // (dir 0: the top, the end, nothing to scroll — or no scroll yet). Not while it is tucked
+  // (nothing to decide), not after a scroll up called it back (dir -1), not while it has
+  // focus (a keyboard or a screen reader is ON it), not while hidden. (Nor under a dialog:
+  // that one reads the page, so the caller asks it, last.)
+  function _pillRestApplies(tuck, f) {
+    f = f || {};
+    return !!tuck && tuck.tucked !== true && !tuck.dir && !f.hidden && !f.focused;
+  }
+
+  // One look in, the next state out. Standing aside is believed at once. Coming BACK
+  // takes two clear looks in a row: the first may have caught cards still sliding into
+  // place (their entrance moves them 8px — a button about to be under the pill read as
+  // clear of it, and the pill blinked on top of it after every filter tap and day change).
+  //   s: { rest, clear } — clear = the look before this one was already clear
+  //   → { rest, clear, again } — again = look once more, PILL_REST_AGAIN_MS on
+  function _pillRestStep(s, covers) {
+    s = s || {};
+    if (covers) return { rest: true, clear: false, again: false };
+    if (s.rest === true && s.clear !== true) return { rest: true, clear: true, again: true };
+    return { rest: false, clear: false, again: false };
+  }
+  // ── pure:pill-rest:end ──
+
+  // Where the pill RESTS, whatever is drawn right now (tucked it is slid down,
+  // hovered it is scaled): its layout size about the used `left` / `top` of a
+  // fixed box — it is centred on its `left` by a transform.
+  function _pillBox() {
+    var cs = getComputedStyle(_pillEl);
+    var w = _pillEl.offsetWidth, h = _pillEl.offsetHeight;
+    var left = parseFloat(cs.left), top = parseFloat(cs.top);
+    if (!(w > 0) || !(h > 0) || isNaN(left) || isNaN(top)) return null;
+    return { left: left - w / 2, top: top, right: left + w / 2, bottom: top + h };
+  }
+
+  // The card's ONE pill, on both tabs (Book / Join waitlist, Cancel booking / Leave
+  // waitlist). A disabled one ("Full") takes no tap: nothing to keep clear.
+  function _pillBookRects() {
+    var out = [];
+    var btns = document.querySelectorAll('.book-btn');
+    for (var i = 0; i < btns.length; i++) if (!btns[i].disabled) out.push(btns[i].getBoundingClientRect());
+    return out;
+  }
+
+  // Focus a KEYBOARD put there (a tap focuses the pill too, and must not pin it
+  // over a button for as long as nothing else is tapped). Where the engine has
+  // no :focus-visible (iOS < 15.4) any focus counts: it errs towards showing.
+  function _pillKeyFocused() {
+    if (document.activeElement !== _pillEl) return false;
+    try { return _pillEl.matches(':focus-visible'); } catch (e) { return true; }
+  }
+
+  function _pillRestCheck() {
+    if (!_pillEl) return;
+    var f = { hidden: _pillEl.classList.contains('hidden'), focused: _pillKeyFocused() };
+    if (f.hidden) { _pillRest = false; _pillRestClear = false; } // nothing showing: the next pill decides afresh (updatePill asks)
+    else if (_pillRestApplies(_pillTuck, f) && !_pillDialogUp()) {
+      var s = _pillRestStep({ rest: _pillRest, clear: _pillRestClear }, _pillCoversBook(_pillBox(), _pillBookRects()));
+      _pillRest = s.rest;
+      _pillRestClear = s.clear;
+      if (s.again) _pillRestQueue(PILL_REST_AGAIN_MS);
+    }
+    _pillDraw();
+  }
+
+  var _pillTuck = { y: 0, anchor: 0, dir: 0, tucked: false };
+  var _pillRest = false;      // at rest it would sit on a Book button (_pillRestCheck) — drawn like tucked
+  var _pillRestClear = false; // …and the last look found it clear: one more like it and it is back (_pillRestStep)
+  var _pillRestTimer = 0;
+  var _pillScrollSrc = null; // the scroller that moved last: .tab-content on a phone, else the document
+  var _pillScrollQueued = false;
+
+  // A dialog, sheet or panel is up. Every one of them is a modal dialog (it says
+  // so with aria-modal — tests/suites/a11y.js counts them, so not spelt out here);
+  // seven are built on open and removed on close, the two that live in the page
+  // (token dialog, seat picker) are switched by an inline `display` on their
+  // wrapper — read off the style attribute, so asking costs no layout.
+  function _pillDialogUp() {
+    var nodes = document.querySelectorAll('[aria-modal="true"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var shown = true;
+      while (n && n !== document.body) {
+        if (n.style && n.style.display === 'none') { shown = false; break; }
+        n = n.parentElement;
+      }
+      if (shown) return true;
+    }
+    return false;
+  }
+
+  // Out of the way for either reason: on the way down a list, or at rest on a
+  // Book button. The class is only touched when it changes.
+  function _pillDraw() {
+    var on = _pillTuck.tucked || _pillRest;
+    if (_pillEl && _pillEl.classList.contains('is-tucked') !== on) _pillEl.classList.toggle('is-tucked', on);
+  }
+
+  // "Ask again once things have settled" — every caller re-arms the one timer,
+  // so a run of scroll frames or of DOM writes ends in ONE measurement. (It is a
+  // listener too: whatever an event hands it is not a delay.)
+  function _pillRestQueue(ms) {
+    if (_pillRestTimer) clearTimeout(_pillRestTimer);
+    _pillRestTimer = setTimeout(_pillRestCheck, typeof ms === 'number' ? ms : PILL_REST_MS);
+  }
+
+  // The page was written to (a search streams its studios in, one render after
+  // another): what the last look saw is gone, so the two clear looks that bring
+  // the pill back start over — each render slides its cards in afresh.
+  function _pillRendered() {
+    _pillRestClear = false;
+    _pillRestQueue();
+  }
+
+  // Once per frame at most. Three reads, then at most ONE class write — nothing
+  // is written before a read, so no layout is forced twice. The dialog check
+  // runs only when the pill is about to change.
+  function _pillOnScroll() {
+    _pillScrollQueued = false;
+    var el = _pillScrollSrc;
+    if (!_pillEl || !el) return;
+    var f = { y: el.scrollTop, max: el.scrollHeight - el.clientHeight, dialogOpen: false };
+    var next = _pillScrollStep(_pillTuck, f);
+    if (next.tucked !== _pillTuck.tucked && _pillDialogUp()) {
+      f.dialogOpen = true;
+      next = _pillScrollStep(_pillTuck, f);
+    }
+    // Called back: it stays, whatever is under it. Back because the list reached the
+    // top or its end: not before the look that follows (ONE will do: nothing is
+    // sliding in) — never a flash on top of a button.
+    if (_pillCalledBack(next)) _pillRest = false;
+    else if (_pillTuck.tucked && !next.tucked) { _pillRest = true; _pillRestClear = true; }
+    _pillTuck = next;
+    _pillDraw();
+    _pillRestQueue(); // where the list comes to rest is looked at once it HAS — not in this frame
+  }
+
+  // Capture: `scroll` does not bubble, and .tab-content (the scroller at
+  // <=640px) is built by tabs.js. Only the LIST counts — that scroller, or the
+  // document on wider screens; a row scrolling sideways, a sheet, the desktop
+  // filter column are none of the pill's business. Passive: it never blocks a scroll.
+  function _pillScrollEvent(e) {
+    var t = e && e.target;
+    if (t === document || t === window) _pillScrollSrc = document.scrollingElement || document.documentElement;
+    else if (t && t.classList && t.classList.contains('tab-content')) _pillScrollSrc = t;
+    else return;
+    if (_pillScrollQueued) return;
+    _pillScrollQueued = true;
+    requestAnimationFrame(_pillOnScroll);
+  }
+
+  // Focus landed on it (Tab, a screen reader): it has to be on screen. The next
+  // run down the list starts from here.
+  function _pillUntuck() {
+    _pillTuck = { y: _pillTuck.y, anchor: _pillTuck.y, dir: 0, tucked: false };
+    _pillRest = false; // while it has focus it is not asked to stand aside either (_pillRestApplies)
+    _pillDraw();
   }
 
 
@@ -1093,7 +1363,7 @@
   var IMPORT_MAX_VALUE = 1048576; // chars per key
 
   // data: the parsed file. deviceGet(key) → this device's raw stored string.
-  // opts: { clean: {history, tiers, idList, bikePrefs, classColours}, themes: [ids], historyMax }
+  // opts: { clean: {history, tiers, idList, bikePrefs, classColours}, themes: [ids], retiredThemes: {oldId: id}, historyMax }
   // → { writes: {key: string}, added: {…counts}, accepted (keys that passed), skipped: [{key, reason}],
   //     exportedAt, deviceHasData }
   function _planSettingsImport(data, deviceGet, opts) {
@@ -1193,12 +1463,21 @@
     unionList('psycle_notify_watchlist', 'alerts', false);
 
     // Theme, last filters, sync stamp — only where this device has none.
+    // A backup from before a theme was retired names an id this build no longer
+    // has: it is read as the theme that replaced it (opts.retiredThemes — the
+    // map js/theme.js keeps), then held to the registry like any other id.
+    var themeNow = function (id) {
+      var retired = opts.retiredThemes;
+      if (!retired || typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(retired, id)) return id;
+      return retired[id];
+    };
     var theme = rawOf('psycle_theme');
     if (theme !== undefined) {
+      theme = themeNow(theme);
       if ((opts.themes || []).indexOf(theme) === -1) skip('psycle_theme', 'unknown theme');
       else {
         plan.accepted++;
-        if ((opts.themes || []).indexOf(deviceRaw('psycle_theme')) === -1) { plan.writes.psycle_theme = theme; plan.added.theme = 1; }
+        if ((opts.themes || []).indexOf(themeNow(deviceRaw('psycle_theme'))) === -1) { plan.writes.psycle_theme = theme; plan.added.theme = 1; }
       }
     }
     // Class colours — like the theme: only where this device has no choice of
@@ -1306,6 +1585,7 @@
             classColours: window.PsycleClassColours ? window.PsycleClassColours.clean : null,
           },
           themes: (window.APP_THEMES || []).map(function (t) { return t.id; }),
+          retiredThemes: window.RETIRED_THEMES || null,
           historyMax: window.PSYCLE_HISTORY_MAX || 2000,
         });
         var summary = _importSummary(plan.added);

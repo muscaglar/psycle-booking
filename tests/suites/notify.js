@@ -111,7 +111,7 @@ module.exports = async function (t) {
     ctx._studioMap = o.studios || {};
     ctx.getBearerToken = () => token;
     ctx._dialogOpen = () => !!o.dialogOpen && o.dialogOpen();
-    ctx._waitlistClassLine = (id) => { const e = ctx._eventCache[id]; return e ? [e._typeName, e._instrName, 'Fri 25, 6:30pm'].filter(Boolean).join(' · ') : ''; };
+    ctx._waitlistClassLine = (id) => { const e = ctx._eventCache[id]; return e ? [e._typeName, e._instrName, 'Fri 25, 18:30'].filter(Boolean).join(' · ') : ''; };
     ctx.openClassDetail = (id) => log.opened.push(id);
     ctx.confirmModal = (opts) => new Promise((resolve) => { log.modals.push({ opts, resolve }); });
     ctx.apiFetch = async (path, opts) => {
@@ -233,7 +233,7 @@ module.exports = async function (t) {
     eq(w.log.modals.length, 1, 'one dialog');
     const m = w.log.modals[0].opts;
     eq([m.title, m.confirmText, m.cancelText, m.danger], ['Spot opened', 'View class', 'Not now', undefined], 'Spot opened → View class / Not now (never the default "Keep booking")');
-    ok(m.body.indexOf('Ride · Alex · Fri 25, 6:30pm') === 0 && /not held/i.test(m.body), 'it names the class and says the spot is not held');
+    ok(m.body.indexOf('Ride · Alex · Fri 25, 18:30') === 0 && /not held/i.test(m.body), 'it names the class and says the spot is not held');
     eq(w.log.toasts, [], 'no 3.5-second toast (the old alert: gone before it was read)');
     eq(w.ctx._eventCache['10'].is_fully_booked, false, 'the class sheet reads availability from the cache → it is updated, or "View class" would open on "Full"');
     eq(w.watch(), ['10'], 'STILL watched until the member answers: closing the app now loses nothing');

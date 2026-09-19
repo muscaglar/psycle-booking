@@ -87,19 +87,20 @@ module.exports = function (t) {
 
   t.section('9f: ONE time block and ONE title row — Discover, My Bookings, the saved copy and the Class colours preview');
   {
-    // The same class used to read "6:30 / pm · 45 min" on Discover and "6:30pm / 45 min" on My Bookings
-    // (and its text started 14px further right): two builders, each pinned by its own suite.
+    // The same class used to read differently on Discover and on My Bookings (and its text started
+    // 14px further right): two builders, each pinned by its own suite. Since wave 10 the ONE builder
+    // prints 24-hour time ("18:30") over the duration alone — the approved boards' form.
     const app = t.readSource('js/app.js');
     const ct = t.loadPure('js/app.js', 'class-type', { getCategory: () => null });
-    eq(ct._ccTimeHTML({ hours: 18, mins: 30, duration: 45 }), '<div class="cc-time"><span class="cc-time-h">6:30</span><span class="cc-dur"><span class="cc-ampm">pm</span> · 45 min</span></div>',
-      '_ccTimeHTML: the digits in the display face over ONE small line — am/pm, then the duration');
+    eq(ct._ccTimeHTML({ hours: 18, mins: 30, duration: 45 }), '<div class="cc-time"><span class="cc-time-h">18:30</span><span class="cc-dur">45 min</span></div>',
+      '_ccTimeHTML: the 24-hour time in the display face over ONE small line — the duration alone');
     eq(ct._ccTimeHTML({ hours: 18, mins: 30, duration: 45, dayHtml: 'Thu 24', hook: 'mb-when' }),
-      '<div class="cc-time mb-when"><span class="mb-day">Thu 24</span><span class="cc-time-h">6:30</span><span class="cc-dur"><span class="cc-ampm">pm</span> · 45 min</span></div>',
+      '<div class="cc-time mb-when"><span class="mb-day">Thu 24</span><span class="cc-time-h">18:30</span><span class="cc-dur">45 min</span></div>',
       'a held class: the SAME block, led by its day, with its wearer\'s layout hook');
     eq([ct._ccTimeHTML({ hours: 0, mins: '05' }), ct._ccTimeHTML({ hours: 12, mins: 0, duration: 0 }), ct._ccTimeHTML({ hours: '7', mins: '5', duration: '50' })].map((h) => h.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|')),
-      ['|12:05|am|', '|12:00|pm|', '|7:05|am| · 50 min|'], 'midnight is 12am, noon 12pm; minutes are two digits; no duration → am/pm alone; numbers may arrive as strings');
+      ['|00:05|', '|12:00|', '|07:05|50 min|'], 'five past midnight is 00:05, noon 12:00; hours and minutes are two digits; no duration → the time alone; numbers may arrive as strings');
     eq([ct._ccTimeHTML({ hours: NaN, mins: NaN, duration: 45 }), ct._ccTimeHTML(), ct._ccTimeHTML({ hours: 25, mins: 61 })].map((h) => h.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|')),
-      ['|--:--|45 min|', '|--:--|', '|--:--|'], 'a time nobody can read is dashes — never "NaN:NaN", never a made-up am/pm');
+      ['|--:--|45 min|', '|--:--|', '|--:--|'], 'a time nobody can read is dashes — never "NaN:NaN", never a made-up time');
     ok(ct._ccTimeHTML({ hours: '18"><img src=x>', mins: '<b>', duration: '<i>', hook: 'mb-when"><script>' }).indexOf('<img') === -1 &&
       !/<b>|<i>|<script/.test(ct._ccTimeHTML({ hours: '18"><img src=x>', mins: '<b>', duration: '<i>', hook: 'mb-when"><script>' })),
       'only numbers (and a hook reduced to class-name characters) reach the markup; dayHtml is the caller\'s to escape');

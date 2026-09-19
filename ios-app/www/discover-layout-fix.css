@@ -71,3 +71,14 @@
     overflow-x: visible;
   }
 }
+
+/* The Time row wraps at EVERY width. It is four controls — three bands and
+   "Available only" — and in 24-hour words ("9:00–17:00") one line of them is
+   about 416px: on a phone the last one, a primary toggle, sat half off the edge
+   of a row nobody expects to scroll. Wrapped, all four are on screen at 375 and
+   390, inside a panel that is collapsed by default. Two ids, so it outranks the
+   row rules above and redesign.css's; !important for the same reason as above. */
+#tab-discover #timePills {
+  flex-wrap: wrap !important;
+  overflow-x: visible;
+}

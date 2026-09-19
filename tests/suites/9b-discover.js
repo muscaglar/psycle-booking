@@ -71,12 +71,12 @@ module.exports = function (t) {
     };
     const o = { typeKey: classType.classTypeKey };
     const held = (bookings, opts) => JSON.parse(JSON.stringify(P._pagerHeldDays(bookings, cache, DAYS, opts || o)));
-    eq(held({ 101: { slots: [7] }, 102: { slots: [12] } }), { '2026-09-19': { ct: 'ride', name: 'RIDE: 45', time: '7:00am' } },
+    eq(held({ 101: { slots: [7] }, 102: { slots: [12] } }), { '2026-09-19': { ct: 'ride', name: 'RIDE: 45', time: '07:00' } },
       'two classes on one day: ONE dot, the earliest class\'s (the T- and the space-form of start_at alike)');
-    eq(held({ 103: { slots: [] , bookingIds: ['A'] } }), { '2026-09-21': { ct: 'yoga', name: 'YOGA: Flow', time: '12:30am' } },
-      'a class at 00:30 stays on ITS day and reads 12:30am — cut from the digits, in a process running on New York time');
-    eq(held({ 104: { slots: [3] } })['2026-09-22'].time, '12:05pm', 'noon is 12pm');
-    eq(held({ 106: { slots: [3] } })['2026-09-23'].time, '11:15pm', '23:15 is 11:15pm');
+    eq(held({ 103: { slots: [] , bookingIds: ['A'] } }), { '2026-09-21': { ct: 'yoga', name: 'YOGA: Flow', time: '00:30' } },
+      'a class at 00:30 stays on ITS day and reads 00:30 — cut from the digits, in a process running on New York time');
+    eq(held({ 104: { slots: [3] } })['2026-09-22'].time, '12:05', 'five past noon is 12:05');
+    eq(held({ 106: { slots: [3] } })['2026-09-23'].time, '23:15', '23:15 stays 23:15 — 24-hour, never "11:15pm"');
     eq(held({ 104: { slots: [], waitlisted: true, waitlist: { id: 5 } } }), {}, 'a waitlist PLACE marks nothing: it is not yours yet');
     eq(held({ 105: { slots: [1] } }), {}, 'a class outside the strip\'s days marks nothing');
     eq(held({ 999: { slots: [1] } }), {}, 'a held class the cache cannot describe marks nothing (and nothing is fetched to find out)');
@@ -94,8 +94,8 @@ module.exports = function (t) {
     const noTime = P._pagerHeldDays({ 1: { slots: [1] } }, { 1: { start_at: '2026-09-20', _typeName: '' } }, DAYS, o)['2026-09-20'];
     eq([noTime.time, noTime.name, noTime.ct], ['', 'a class', 'other'], 'a date with no time, a class with no name: a dot, "a class", no time');
 
-    eq([P._pagerHeldSpoken({ name: 'RIDE: 45', time: '7:00am' }), P._pagerHeldSpoken({ name: 'a class', time: '' }), P._pagerHeldSpoken(null), P._pagerHeldSpoken(undefined)],
-      ['. You have RIDE: 45 at 7:00am', '. You have a class', '', ''], 'the dot is SAID: it rides on the end of the pill\'s spoken name');
+    eq([P._pagerHeldSpoken({ name: 'RIDE: 45', time: '07:00' }), P._pagerHeldSpoken({ name: 'a class', time: '' }), P._pagerHeldSpoken(null), P._pagerHeldSpoken(undefined)],
+      ['. You have RIDE: 45 at 07:00', '. You have a class', '', ''], 'the dot is SAID: it rides on the end of the pill\'s spoken name');
     const block = app.slice(app.indexOf('function _pagerHeldDays('), app.indexOf('function _pagerHeldSpoken('));
     ok(!/new Date|Date\.parse|getHours|toLocale/.test(block), '_pagerHeldDays never reads start_at through Date (the device is not always on UK time)');
   }
@@ -162,10 +162,11 @@ module.exports = function (t) {
     let ctx = mk();
     let html = card(ctx);
     ok(/^<div class="class-card ct-card" data-ct="ride" data-id="501" data-studio-id="7"/.test(html), 'the root: .class-card.ct-card wearing its class type as data-ct (ids kept as data, as before)');
-    ok(/<div class="cc-time">\s*<span class="cc-time-h">6:30<\/span>\s*<span class="cc-dur"><span class="cc-ampm">pm<\/span> · 45 min<\/span>\s*<\/div>/.test(html),
-      'the TIME leads: the digits alone in the display face, over ONE small line — am/pm, then the duration (every time is then one narrow column: "12:30" beside "pm" pushed that card\'s text off the grid)');
-    ok(/<span class="cc-time-h">12:05<\/span>\s*<span class="cc-dur"><span class="cc-ampm">pm<\/span> · 45 min<\/span>/.test(card(ctx, { start_at: '2026-09-17T12:05:00' })) &&
-      /<span class="cc-time-h">12:30<\/span>\s*<span class="cc-dur"><span class="cc-ampm">am<\/span>/.test(card(ctx, { start_at: '2026-09-17T00:30:00' })), 'noon is 12pm, half past midnight 12:30am');
+    ok(/<div class="cc-time">\s*<span class="cc-time-h">18:30<\/span>\s*<span class="cc-dur">45 min<\/span>\s*<\/div>/.test(html),
+      'the TIME leads: 24-hour ("18:30", never "6:30pm") in the display face, over ONE small line — the duration alone, as on the boards (every time is five tabular digits: one narrow column)');
+    ok(/<span class="cc-time-h">12:05<\/span>\s*<span class="cc-dur">45 min<\/span>/.test(card(ctx, { start_at: '2026-09-17T12:05:00' })) &&
+      /<span class="cc-time-h">00:30<\/span>\s*<span class="cc-dur">45 min<\/span>/.test(card(ctx, { start_at: '2026-09-17T00:30:00' })) && !/cc-ampm|\b(am|pm)\b/.test(html),
+      'five past noon is 12:05, half past midnight 00:30 — and no am / pm is printed anywhere on the card');
     ok(/<span class="cc-head"><span class="ct-tile" aria-hidden="true"><svg class="ct-pic" width="18" height="18"[^>]*aria-hidden="true"[^>]*>/.test(html), 'the title is led by the type\'s pictogram tile — decorative, the name says the class');
     ok(/<span class="cc-name" role="button" tabindex="0">RIDE: 45<\/span><\/span>/.test(html), '…and the name keeps its keyboard role');
     ok(/<span class="cc-sub"><span class="cc-who"><span class="instructor-link">Alex Stone<\/span><\/span><span class="cc-loc">Bank<\/span><\/span>/.test(html),
@@ -181,8 +182,8 @@ module.exports = function (t) {
     eq([card(ctx, { event_type_id: 3 }).match(/data-ct="([^"]*)"/)[1], card(ctx, { event_type_id: 4 }).match(/data-ct="([^"]*)"/)[1], card(ctx, { event_type_id: 99 }).match(/data-ct="([^"]*)"/)[1]],
       ['pilates', 'other', 'other'], 'a reformer class is pilates; an unknown or missing type wears "other"');
     ok(/REFORMER: Strength &lt;50&gt;/.test(card(ctx, { event_type_id: 3 })) && !/<50>/.test(card(ctx, { event_type_id: 3 })), 'the class name is still escaped');
-    ok(/<span class="cc-dur"><span class="cc-ampm">pm<\/span><\/span>/.test(card(ctx, { duration: undefined })) && !/undefined/.test(card(ctx, { duration: undefined })) &&
-      /<span class="cc-dur"><span class="cc-ampm">pm<\/span><\/span>/.test(card(ctx, { duration: 0 })), 'a class with no duration prints am/pm alone (it read "undefined min")');
+    ok(/<span class="cc-time-h">18:30<\/span>\s*<\/div>/.test(card(ctx, { duration: undefined })) && !/undefined|cc-dur/.test(card(ctx, { duration: undefined })) &&
+      /<span class="cc-time-h">18:30<\/span>\s*<\/div>/.test(card(ctx, { duration: 0 })) && !/cc-dur/.test(card(ctx, { duration: 0 })), 'a class with no duration prints the time alone — no empty second line (it read "undefined min")');
     ok(!/cc-who/.test(card(ctx, { instructor_id: 404 })) && /<span class="cc-sub"><span class="cc-loc">Bank<\/span><\/span>/.test(card(ctx, { instructor_id: 404 })), 'no instructor: the studio alone, no empty unit before it');
     ok(/<span class="cc-sub"><span class="cc-who">[^]*?<\/span><\/span>/.test(card(ctx, { studio_id: 404 })) && !/cc-loc/.test(card(ctx, { studio_id: 404 })), 'no studio: the instructor alone');
     ctx = mk({}, { tierBadgeHTML: (id) => (id === 1 ? '<span class="tier-badge tier-S">S</span>' : '') });
@@ -370,7 +371,7 @@ module.exports = function (t) {
   }
 
   // ── Contrast of the pairs this section introduces ────────────────────────
-  t.section('Contrast: the ink / ground pairs of the chrome, in all seven themes');
+  t.section('Contrast: the ink / ground pairs of the chrome, in every theme');
   {
     const HEX = /^#[0-9a-f]{6}$/i;
     const expand = (hex) => (/^#[0-9a-f]{3}$/i.test(hex) ? '#' + hex.slice(1).split('').map((c) => c + c).join('') : hex);
@@ -395,7 +396,7 @@ module.exports = function (t) {
     };
     const ids = [];
     themeJs.replace(/\{\s*id:\s*'([a-z]+)'[^}]*?base:\s*'(light|dark)'/g, (m, id) => { ids.push(id); return m; });
-    eq(ids.length, 7, 'seven themes read from the registry (' + ids.join(', ') + ')');
+    eq(ids.length, 5, 'five themes read from the registry (' + ids.join(', ') + ')');
     // [ink token, ground token, what it is, minimum]
     const PAIRS = [
       ['--text', '--bg-deep', 'count chip / lit neutral pill / summary chip: ink on the sunken well', 4.5],
@@ -420,8 +421,8 @@ module.exports = function (t) {
       const a = contrast(tk['--accent-ink'], tk['--accent']);
       checked++;
       // The repo's own standard for this pair (tests/suites/1f-contrast-tokens.js): AA everywhere, except
-      // Terminal and Synthwave, which keep their white-on-neon look at large-text AA.
-      if (!(a >= ((id === 'terminal' || id === 'synthwave') ? 3 : 4.5))) ok(false, id + ': --accent-ink on --accent is ' + a.toFixed(2) + ':1');
+      // Terminal, which keeps its white-on-neon look at large-text AA.
+      if (!(a >= (id === 'terminal' ? 3 : 4.5))) ok(false, id + ': --accent-ink on --accent is ' + a.toFixed(2) + ':1');
     });
     ok(checked === ids.length * (PAIRS.length + 1), checked + ' chrome pairs checked; the tightest is ' + worst.what + ' at ' + worst.v.toFixed(2) + ':1');
 
@@ -437,7 +438,7 @@ module.exports = function (t) {
       deepPairs++;
       if (!(r >= 4.5)) ok(false, n + ' · ' + id + ': deep ' + sw.deep + ' on --bg-input (the Book pill at "off") is ' + r.toFixed(2) + ':1');
     }));
-    ok(deepPairs >= 50, deepPairs + ' swatch × theme pairs: the Book pill\'s deep ink holds on the one-shade-down fill');
+    ok(deepPairs === Object.keys(PALETTE).length * 3, deepPairs + ' swatch × theme pairs (every swatch × Cloud, Graphite, Blueprint): the Book pill\'s deep ink holds on the one-shade-down fill');
     // Handheld as it ships (mono): its deep ink is the heading lime.
     const gb = themeTokens('gameboy');
     ok(contrast(gb['--text-heading'], gb['--bg-input']) >= 4.5, 'Handheld: the pill\'s ink on its --bg-input fill is ' + contrast(gb['--text-heading'], gb['--bg-input']).toFixed(2) + ':1');

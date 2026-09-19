@@ -54,10 +54,11 @@ module.exports = function (t) {
   t.ok(Math.abs(contrast('#000000', '#ffffff') - 21) < 0.01, 'black on white is 21:1');
   t.ok(Math.abs(contrast('#777777', '#ffffff') - 4.48) < 0.01, '#777 on white is 4.48:1 (just under AA)');
 
-  // ── Text ladder: the three premium themes (Cloud is the default; Graphite
-  //    is what every dark-mode phone gets) ─────────────────────────────────
+  // ── Text ladder: the two premium themes (Cloud is the default; Graphite
+  //    is what every dark-mode phone gets). Linen was the third until it was
+  //    retired in wave 10 — tests/suites/10b-themes.js holds it gone. ────────
   const LADDER = ['--text-muted', '--text-dim', '--text-faint', '--text-ghost'];
-  ['cloud', 'linen', 'graphite'].forEach((id) => {
+  ['cloud', 'graphite'].forEach((id) => {
     t.section('Text tokens — ' + id);
     const tk = themeTokens(id);
     ['--bg', '--bg-panel'].forEach((surface) => {
@@ -88,12 +89,13 @@ module.exports = function (t) {
     t.ok(rb >= 4.5, id + ': --badge-text on --badge-bg is ' + rb.toFixed(2) + ':1 (≥4.5)');
   });
 
-  // ── Text ladder: the four flavour themes ─────────────────────────────────
+  // ── Text ladder: the three flavour themes (Synthwave, the fourth, was
+  //    retired in wave 10) ───────────────────────────────────────────────────
   // They never got the ladder: --text-ghost was 2.1–3.1:1 on their cards, and
   // it carries the bike-picker hint and the Discover status line. Same floor;
   // the tiers must still run loudest → quietest. Handheld's four-shade palette
   // has nothing darker than its muted lime that passes, so its tiers may tie.
-  ['terminal', 'synthwave', 'gameboy', 'blueprint'].forEach((id) => {
+  ['terminal', 'gameboy', 'blueprint'].forEach((id) => {
     t.section('Text tokens — ' + id);
     const tk = themeTokens(id);
     ['--bg', '--bg-panel'].forEach((surface) => {
@@ -118,13 +120,13 @@ module.exports = function (t) {
   const themeJs = t.readSource('js/theme.js');
   const themeIds = [];
   themeJs.replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { themeIds.push(id); return m; });
-  t.ok(themeIds.length >= 7 && themeIds.indexOf('cloud') !== -1, 'theme ids parsed from APP_THEMES (' + themeIds.join(', ') + ')');
+  t.ok(themeIds.length >= 5 && themeIds.indexOf('cloud') !== -1, 'theme ids parsed from APP_THEMES (' + themeIds.join(', ') + ')');
   themeIds.forEach((id) => {
     const tk = themeTokens(id);
     const r = contrast(tk['--accent-ink'], tk['--accent']);
     // The premium themes + the two pale-accent flavour themes are held to AA;
-    // Terminal/Synthwave keep their white-on-neon look (large-text AA).
-    const need = (id === 'terminal' || id === 'synthwave') ? 3 : 4.5;
+    // Terminal keeps its white-on-neon look (large-text AA).
+    const need = id === 'terminal' ? 3 : 4.5;
     t.ok(r >= need, id + ': --accent-ink ' + tk['--accent-ink'] + ' on --accent ' + tk['--accent'] + ' is ' + r.toFixed(2) + ':1 (≥' + need + ')');
     // …and white must NOT be assumed: on the pale accents it is unreadable.
   });
@@ -293,7 +295,7 @@ module.exports = function (t) {
   ['.mb-countdown', '.cds-duration-badge', '.bc-slot'].forEach((chip) => {
     t.ok((decl(chip, 'color') || '').indexOf('var(--accent,') === 0 && (decl(chip, 'background') || '').indexOf('var(--accent-soft') === 0,
       chip + ' is an --accent on --accent-soft chip at source');
-    ['cloud', 'linen', 'graphite'].forEach((id) => {
+    ['cloud', 'graphite'].forEach((id) => {
       const tk = themeTokens(id);
       const ink = inkToken(id, chip, '--accent');
       const r = contrast(tk[ink], tk['--accent-soft']);

@@ -46,7 +46,7 @@ module.exports = function (t) {
     eq(w._countdownChipText(START, at(-1000)), null, 'started: no text (that card is the flip re-render\'s job)');
     eq(w._countdownChipText('2026-09-17 18:00:00', at(61 * 60000)), 'In 1h 1m', 'the space form of start_at reads the same');
     eq(w._countdownChipText('not a date', at(0)), null, 'an unreadable data-start is left alone');
-    eq(w._countdownChipText('2026-09-18T07:00:00', new Date('2026-09-17T20:00:00').getTime()), 'Tomorrow 7:00am', 'tomorrow keeps the class\'s own wall-clock time');
+    eq(w._countdownChipText('2026-09-18T07:00:00', new Date('2026-09-17T20:00:00').getTime()), 'Tomorrow 07:00', 'tomorrow keeps the class\'s own wall-clock time');
 
     const chips = [
       { textContent: 'In 1h 10m', getAttribute: () => START },
@@ -329,10 +329,11 @@ module.exports = function (t) {
     const ctx = t.vm.createContext({
       document: { getElementById: () => box }, getFullHistory: () => hist, escapeHTML: esc, instrLink: (n) => esc(n),
       DAY_NAMES_FULL: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      _clock24: t.loadPure('js/app.js', 'clock')._clock24, // app.js's ONE time formatter (24-hour)
     });
     t.vm.runInContext(reco, ctx);
     ctx.renderRecommendations();
-    ok(/Fridays at 7:30am/.test(box.innerHTML) && /2x booked/.test(box.innerHTML), 'two Friday 7:30s (space- and T-form alike) are one routine, named as before');
+    ok(/Fridays at 07:30/.test(box.innerHTML) && /2x booked/.test(box.innerHTML), 'two Friday 7:30s (space- and T-form alike) are one routine, named in 24-hour time');
     ok(!/Invalid|NaN/.test(box.innerHTML), 'an unreadable date is skipped — it used to become an "Invalid dates at NaN:NaNam" card');
   }
 
@@ -379,6 +380,7 @@ module.exports = function (t) {
         document: { getElementById: () => null, createElement: mkEl, body: { appendChild: (o) => { o.isConnected = true; } } },
         window: { escapeHTML: esc }, setTimeout: (fn) => { timers.push(fn); return 0; },
         slotLabel: () => 'Bike', formatSlots: (l, s) => l + ' ' + s.join(' & '),
+        _clock24: t.loadPure('js/app.js', 'clock')._clock24, // each row's time: app.js's ONE formatter (24-hour)
       });
       const pre = featSrc.split('\n').filter((l) => /^  (let _histMonthFmt|const HISTORY_FIRST_ROWS)/.test(l)).join('\n');
       t.vm.runInContext("var escapeHtml = function (s) { return window.escapeHTML(s); }; const HISTORY_KEY = 'psycle_class_history';\n" +

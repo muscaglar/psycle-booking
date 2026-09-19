@@ -935,8 +935,8 @@
 
 
   // ── Weekly Booking Reminder ─────────────────────────────────────
-  // Local notification at 11:59 AM UK time every Monday to signal
-  // the new booking week opening at noon.
+  // Local notification at 11:59 UK time every Monday to signal
+  // the new booking week opening at 12:00.
 
   var LocalNotifications = Capacitor.Plugins.LocalNotifications;
   // Eight rolling one-shot notifications (the next 8 Mondays). Absolute `at:`
@@ -1844,7 +1844,7 @@
     if (!StatusBar) return; // @capacitor/status-bar not installed/synced yet
     var themeId = document.documentElement.getAttribute('data-theme');
     // Resolve the theme's light/dark BASE from the registry — theme ids are
-    // flavour names (cloud/linen/graphite/terminal/...), never 'light'.
+    // flavour names (cloud/graphite/terminal/...), never 'light'.
     // No data-theme yet (following the system) → use the system scheme.
     var base = 'dark';
     if (!themeId) {

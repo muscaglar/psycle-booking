@@ -28,7 +28,7 @@ and your data are stored on your device, and the page's content security policy 
   cost tracker, instructor rankings and favourites.
 - **Offline-aware** — changes made offline are queued and never spend a credit by surprise: a queued booking found
   after a relaunch asks before it is sent.
-- **Seven themes**, keyboard and screen-reader support throughout, and an installable PWA.
+- **Five themes**, keyboard and screen-reader support throughout, and an installable PWA.
 - **iOS app** — calendar sync, Home Screen and Lock Screen widgets, a Live Activity before class, class and
   Monday-release reminders, Siri "next class".
 

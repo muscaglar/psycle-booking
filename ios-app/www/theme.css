@@ -227,10 +227,15 @@
      fill). Every theme already tunes a red for its Full chip, so the pair
      aliases it: --danger is ≥6:1 as ink on --bg-panel (≥5.4:1 on --bg-input)
      and --danger-ink is the same ratio as a label on a --danger fill. One
-     fixed red was 1.8–2.9:1 on the five dark themes. Handheld resolves to its
+     fixed red was 1.8–2.9:1 on the dark themes. Handheld resolves to its
      heading lime, so it stays in palette. */
   --danger:      var(--badge-full-text);
   --danger-ink:  var(--bg-panel);
+  /* The favourite star (a starred instructor). A graphic, so every theme
+     holds it to ≥3:1 on its ground, surface, wells and sunken — one fixed gold
+     was 1.2–1.6:1 on Cloud. Each theme block sets its own; this is the legacy
+     dark set's. Handheld's is its heading lime, so it stays in palette. */
+  --fav:         #f5c518;
 
   /* ── Crisp Colour chrome roles ───────────────────────────────
      The boards name five chrome roles. Ground, surface, hairline and the
@@ -248,10 +253,10 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Psync premium themes — Cloud (default), Linen, Graphite.
+   Psync premium themes — Cloud (default) and Graphite.
    Cloud is applied via <html data-theme="cloud"> + theme.js default.
-   Cloud & Linen are light bases (they pick up the light component fixes
-   below, whose selectors include them); Graphite is a calm dark base.
+   Cloud is the light base (it picks up the light component fixes below,
+   whose selectors include it); Graphite is a calm dark base.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Cloud · Crisp Colour's cool graphite chrome (default) ───────
@@ -284,6 +289,9 @@
   --accent-hover: #2a3245;
   --accent-ink: #ffffff;
   --accent-soft: #d9dee6;
+  /* The favourite star: the class palette's "sun" — gold that still reads on a
+     light ground (3.6:1 on the sunken, 4.7:1 on the surface). */
+  --fav: #a26403;
   /* Badge inks also colour the class sheet's availability line, which sits
      on --bg-deep — each is ≥4.5:1 there as well as on its own chip. The red
      is the boards' late-cancel red (#C3262F), one step darker so it holds
@@ -309,49 +317,6 @@
   --shadow-float: 0 10px 24px -10px rgba(27,33,48,0.5);
   --glow-sel-ring: rgba(27,33,48,0.14);
   --glow-sel-drop: rgba(27,33,48,0.45);
-}
-
-/* ── Linen · warm sand + terracotta ───────────────────────────── */
-[data-theme="linen"] {
-  --bg: #e8e1d5;
-  --bg-panel: #fbf8f2;
-  --bg-input: #f1eadd;
-  --bg-deep: #ded5c5;
-  --border: #e1d8c9;
-  --border-light: #d3c8b5;
-  --border-subtle: #ddd3c2;
-  --text: #2a2521;
-  --text-heading: #1d1916;
-  /* Same contrast ladder as Cloud (≥4.5:1 on --bg and --bg-panel). The sand
-     --bg is darker than Cloud's, so the whole scale sits a step lower. */
-  --text-muted: #5e574d;
-  --text-dim: #625a4f;
-  --text-faint: #665e53;
-  --text-ghost: #6b6358;
-  --text-off: #91877a;
-  --accent: #b5573c;
-  --accent-hover: #9c4831;
-  --accent-ink: #fff9f4;
-  --accent-soft: #f1e1d7;
-  --badge-bg: #efe8db; --badge-border: #ddd3c2; --badge-text: #625a4f;
-  --badge-full-bg: #f7e1dc; --badge-full-text: #96442d; --badge-full-border: #e6bcb0;
-  --badge-waitlist-bg: #f6edd6; --badge-waitlist-text: #73580b; --badge-waitlist-border: #e6d3a0;
-  --badge-highlight-bg: #e7ede7; --badge-highlight-text: #46623f; --badge-highlight-border: #cdd9c5;
-  --booked-bg: #fbf8f2; --booked-border: #b5573c;
-  --spinner-track: #d3c8b5;
-  --modal-overlay: rgba(42,37,33,0.42);
-  --toast-bg: #fbf8f2; --toast-border: #ddd3c2;
-  --skeleton-base: #ded5c5; --skeleton-shine: #efe8db;
-  --section-border: #e1d8c9;
-  --upcoming-bg: #fbf8f2; --upcoming-border: #e1d8c9;
-  --shadow-sm: 0 1px 4px rgba(60,50,40,0.06);
-  --shadow-md: 0 4px 14px rgba(60,50,40,0.09);
-  --shadow-lg: 0 4px 14px rgba(60,50,40,0.07), 0 14px 44px rgba(60,50,40,0.12);
-  --shadow-overlay: rgba(60,50,40,0.16);
-  --shadow-soft: 0 1px 2px rgba(60,50,40,0.12);
-  --shadow-float: 0 10px 24px -10px rgba(60,50,40,0.45);
-  --glow-sel-ring: rgba(181,87,60,0.18);
-  --glow-sel-drop: rgba(181,87,60,0.40);
 }
 
 /* ── Graphite · Cloud's dark counterpart ────────────────────────
@@ -380,6 +345,7 @@
   --accent-hover: #c5cdd9;
   --accent-ink: #1b2130;
   --accent-soft: #2b3347;
+  --fav: #f5c518;
   --badge-bg: #262d3e; --badge-border: #3b4459; --badge-text: #b7bfcc;
   --badge-full-bg: #3a1b20; --badge-full-text: #ff9aa2; --badge-full-border: #5e2b33;
   --badge-waitlist-bg: #33290f; --badge-waitlist-text: #e8c25a; --badge-waitlist-border: #594719;
@@ -524,7 +490,6 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 
 .class-time { color: var(--text-heading); }
-.class-time-ampm { color: var(--text-faint); }
 .class-type { color: var(--text); }
 .class-instructor { color: var(--text-muted); }
 .class-location { color: var(--text-faint); }
@@ -701,17 +666,17 @@ select:focus, input:focus { border-color: var(--accent); }
   background: var(--bg-panel);
   border-color: var(--border);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .sub-bar { color: var(--text); }
+:is([data-theme="light"], [data-theme="cloud"]) .sub-bar { color: var(--text); }
 /* .sub-progress / .sub-progress-fill are tokenised at source (styles.css):
    the old pink fill override here outlived the jade/terracotta accents. */
 
 /* Heatmap — a neutral ink ramp built from the theme's own tokens (it was a
    fixed green). Colour keeps ONE meaning in Crisp Colour: class type. */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-0 { background: var(--bg); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-1 { background: var(--border-light); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-2 { background: var(--text-off); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-3 { background: var(--text-ghost); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-4 { background: var(--text); }
+:is([data-theme="light"], [data-theme="cloud"]) .hm-level-0 { background: var(--bg); }
+:is([data-theme="light"], [data-theme="cloud"]) .hm-level-1 { background: var(--border-light); }
+:is([data-theme="light"], [data-theme="cloud"]) .hm-level-2 { background: var(--text-off); }
+:is([data-theme="light"], [data-theme="cloud"]) .hm-level-3 { background: var(--text-ghost); }
+:is([data-theme="light"], [data-theme="cloud"]) .hm-level-4 { background: var(--text); }
 [data-theme="graphite"] .hm-level-0 { background: var(--bg-input); }
 [data-theme="graphite"] .hm-level-1 { background: var(--border-light); }
 [data-theme="graphite"] .hm-level-2 { background: var(--text-ghost); }
@@ -753,19 +718,10 @@ select:focus, input:focus { border-color: var(--accent); }
 /* (The light-base "booked card = white panel + accent bar" rule lived here. It
    is gone, not overridden: every My Bookings card is the shared class card now
    — tinted by class type, css/crisp.css 9b.7 — and at (0,3,0) this rule outranked
-   that card's root, so it washed the tint out on Cloud and Linen.) */
-
-/* Accent-on-accent-soft chips are tokenised at source (styles.css). Linen is
-   the one theme where that pair misses AA for small text (terracotta #b5573c
-   on #f1e1d7 = 3.75:1); its darker terracotta is 4.87:1 and still reads as
-   the accent, so the brand --accent itself stays as designed. */
-[data-theme="linen"] .mb-countdown,
-[data-theme="linen"] .cds-duration-badge,
-[data-theme="linen"] .rebook-hint-eyebrow,
-[data-theme="linen"] .bc-slot { color: var(--accent-hover); }
+   that card's root, so it washed the tint out on Cloud.) */
 
 /* Skeleton in light mode */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-skeleton {
+:is([data-theme="light"], [data-theme="cloud"]) .mb-skeleton {
   background: var(--skeleton-base);
 }
 
@@ -861,7 +817,7 @@ select:focus, input:focus { border-color: var(--accent); }
   margin-bottom: var(--space-1);
 }
 
-.sk-time-ampm {
+.sk-time-dur {
   width: 26px;
   height: 11px;
 }
@@ -1006,10 +962,10 @@ select:focus, input:focus { border-color: var(--accent); }
 .week-event-name { color: var(--text-muted); }
 .week-event-loc { color: var(--text-ghost); }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .week-event {
+:is([data-theme="light"], [data-theme="cloud"]) .week-event {
   border-left-color: var(--booked-border);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .week-event:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .week-event:hover {
   border-color: var(--booked-border);
 }
 
@@ -1024,7 +980,7 @@ select:focus, input:focus { border-color: var(--accent); }
 
 .reco-class { color: var(--text); }
 .reco-detail { color: var(--text-dim); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .reco-card:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .reco-card:hover {
   border-color: var(--accent);
 }
 
@@ -1039,7 +995,7 @@ select:focus, input:focus { border-color: var(--accent); }
   color: var(--text-heading);
 }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .history-modal {
+:is([data-theme="light"], [data-theme="cloud"]) .history-modal {
   background: var(--modal-overlay);
 }
 
@@ -1058,13 +1014,13 @@ select:focus, input:focus { border-color: var(--accent); }
 .history-sub { color: var(--text-dim); }
 .history-empty { color: var(--text-ghost); }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .history-cancelled-tag {
+:is([data-theme="light"], [data-theme="cloud"]) .history-cancelled-tag {
   background: var(--badge-full-bg);
   border-color: var(--badge-full-border);
   color: var(--badge-full-text);
 }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .history-item.cancelled .history-class-name {
+:is([data-theme="light"], [data-theme="cloud"]) .history-item.cancelled .history-class-name {
   color: var(--text-ghost);
 }
 
@@ -1075,7 +1031,7 @@ select:focus, input:focus { border-color: var(--accent); }
   border-bottom-color: var(--text-ghost);
 }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .instructor-modal {
+:is([data-theme="light"], [data-theme="cloud"]) .instructor-modal {
   background: var(--modal-overlay);
 }
 
@@ -1086,7 +1042,7 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--border);
   color: var(--text);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .instructor-class-item:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .instructor-class-item:hover {
   border-color: var(--border-light);
 }
 
@@ -1106,25 +1062,25 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--text-ghost);
 }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .notify-btn.watching {
+:is([data-theme="light"], [data-theme="cloud"]) .notify-btn.watching {
   background: #fef9e7;
   border-color: #e0c860;
   color: #c8930a;
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .notify-btn.watching:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .notify-btn.watching:hover {
   background: #fdf3cd;
 }
 
 /* ── settings.css: Settings Panel extras ─────────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .settings-close {
+:is([data-theme="light"], [data-theme="cloud"]) .settings-close {
   color: var(--text-ghost);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .settings-close:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .settings-close:hover {
   color: var(--text-heading);
 }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .settings-section-title {
+:is([data-theme="light"], [data-theme="cloud"]) .settings-section-title {
   color: var(--text-dim);
 }
 
@@ -1133,23 +1089,23 @@ select:focus, input:focus { border-color: var(--accent); }
 /* (The light-base ".tier-btn" rule lived here — a #ccc outline and the
    --text-ghost ink. The rank buttons are css/crisp.css's tiles now, keyed on
    the bare class (0,1,0) so every host wears them: at (0,2,0) this rule would
-   have re-inked them on Cloud and Linen. Removed, not overridden. The hover
+   have re-inked them on Cloud. Removed, not overridden. The hover
    rule stays: tests/suites/9f-one-card.js holds a chosen rank's ink against it.) */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .tier-btn:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .tier-btn:hover {
   border-color: #aaa;
   color: var(--text-muted);
 }
 
 /* ── settings.css: Bike Preferences extras ───────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-pref-legend {
+:is([data-theme="light"], [data-theme="cloud"]) .bike-pref-legend {
   color: var(--text-dim);
 }
 
 /* ── settings.css: Diagnostics ───────────────────────────────────── */
 
 /* "OK" rows: the dark-base green is 2.4:1 on a white panel */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .diag-ok { color: #1a7a1a; }
+:is([data-theme="light"], [data-theme="cloud"]) .diag-ok { color: #1a7a1a; }
 
 /* ── styles.css: Pull-to-Refresh ─────────────────────────────────── */
 
@@ -1173,7 +1129,7 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* Ink is Cloud's --badge-full-text, which sits on this same pink: 5.1:1 for
    the small bold "CANCEL BOOKING" label (the old #c73650 was 4.4:1). */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .book-btn.booked {
+:is([data-theme="light"], [data-theme="cloud"]) .book-btn.booked {
   background: #fde8ec;
   color: #b82d46;
   border-color: #f5b3bf;
@@ -1185,23 +1141,23 @@ select:focus, input:focus { border-color: var(--accent); }
   color: #f5a623;
   border-color: var(--border-light);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .fav-btn {
+:is([data-theme="light"], [data-theme="cloud"]) .fav-btn {
   /* #f5a623 is 1.9:1 on this cream chip; dark amber keeps the gold read */
   color: #8a6a12;
   border-color: #e0c860;
   background: #fef9e7;
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .fav-btn:hover {
+:is([data-theme="light"], [data-theme="cloud"]) .fav-btn:hover {
   background: #fdf3cd;
 }
 
 /* "Booked!" tick: the bright green is 2.0:1 on its own tint over a light toast */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bc-check { color: #1a7a1a; }
+:is([data-theme="light"], [data-theme="cloud"]) .bc-check { color: #1a7a1a; }
 
 /* (A light-base ".mb-past .class-card" ground lived here. Gone for the same
    reason as the booked-card rule above: at (0,3,0) it outranked the shared class
    card's root and painted a PAST booking the page ground instead of its class
-   tint on Cloud and Linen. A class that has been is the same tinted card, dimmed
+   tint on Cloud. A class that has been is the same tinted card, dimmed
    — css/crisp.css crisp:9d-bookings §1.) */
 
 /* ── styles.css: Bike slot light mode ────────────────────────────── */
@@ -1210,30 +1166,30 @@ select:focus, input:focus { border-color: var(--accent); }
    included) and the fav / avoid number inks are tokenised at source
    (styles.css, settings.css), so the map matches the legend swatches in every
    theme — the light patches that lived here kept your own seat old-brand pink
-   on Cloud / Linen. Only the dimmed fav / avoid number on a TAKEN seat still
+   on Cloud. Only the dimmed fav / avoid number on a TAKEN seat still
    needs a light value. */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken.pref-prefer text { fill: #8ac08a !important; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bike-slot.taken.pref-avoid text { fill: #e0a0a0 !important; }
+:is([data-theme="light"], [data-theme="cloud"]) .bike-slot.taken.pref-prefer text { fill: #8ac08a !important; }
+:is([data-theme="light"], [data-theme="cloud"]) .bike-slot.taken.pref-avoid text { fill: #e0a0a0 !important; }
 
 /* ── styles.css: Subscription bar extras ─────────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .sub-bar-name { color: var(--accent); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .sub-bar-count { color: var(--text-muted); }
+:is([data-theme="light"], [data-theme="cloud"]) .sub-bar-name { color: var(--accent); }
+:is([data-theme="light"], [data-theme="cloud"]) .sub-bar-count { color: var(--text-muted); }
 
 /* ── styles.css: Instructor dropdown shadow fix ──────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .instr-dropdown {
+:is([data-theme="light"], [data-theme="cloud"]) .instr-dropdown {
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .instr-option:hover,
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .instr-option.focused {
+:is([data-theme="light"], [data-theme="cloud"]) .instr-option:hover,
+:is([data-theme="light"], [data-theme="cloud"]) .instr-option.focused {
   background: #f5f5f5;
 }
 
 /* ── styles.css: Upcoming panel extras ───────────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .upcoming-header h2 { color: var(--text-muted); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .up-cancel:hover { background: #f5f5f5; }
+:is([data-theme="light"], [data-theme="cloud"]) .upcoming-header h2 { color: var(--text-muted); }
+:is([data-theme="light"], [data-theme="cloud"]) .up-cancel:hover { background: #f5f5f5; }
 
 /* ── tabs.css: Membership status ─────────────────────────────────── */
 
@@ -1241,22 +1197,22 @@ select:focus, input:focus { border-color: var(--accent); }
    fill takes its label from --accent-ink at source. The "Active" status is a
    fixed success green (NOT --accent, which is pink/terracotta in some
    themes); the dark-base #5dba5d is 2.4:1 on a white panel. */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .membership-status { color: #1a7a1a; }
+:is([data-theme="light"], [data-theme="cloud"]) .membership-status { color: #1a7a1a; }
 
 /* ── settings.css: Floating pill green text ──────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .ncp-countdown { color: var(--accent); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .ncp-seat { color: var(--accent); }
+:is([data-theme="light"], [data-theme="cloud"]) .ncp-countdown { color: var(--accent); }
+:is([data-theme="light"], [data-theme="cloud"]) .ncp-seat { color: var(--accent); }
 
 /* ── styles.css: MB skeleton light mode ──────────────────────────── */
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-skeleton {
+:is([data-theme="light"], [data-theme="cloud"]) .mb-skeleton {
   background: var(--bg-panel);
   border-color: var(--border);
   border-left-color: var(--border);
 }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-skeleton-time,
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-skeleton-line {
+:is([data-theme="light"], [data-theme="cloud"]) .mb-skeleton-time,
+:is([data-theme="light"], [data-theme="cloud"]) .mb-skeleton-line {
   background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
   background-size: 400px 100%;
 }
@@ -1290,7 +1246,7 @@ select:focus, input:focus { border-color: var(--accent); }
 /* (Two light-base tier-bar rules lived here — a hex track and a hex "unranked"
    segment. The bar has NO track now and its segments wear the one neutral rank
    recipe (css/crisp.css 9e.5); at (0,2,0) the track outranked crisp's plain
-   ".explore-tier-bar { background: none }" on Cloud and Linen, and the segment
+   ".explore-tier-bar { background: none }" on Cloud, and the segment
    rule was already dead.) */
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1309,6 +1265,7 @@ select:focus, input:focus { border-color: var(--accent); }
   --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c;
   --text-dim: #6da86d; --text-faint: #5d9b5d; --text-ghost: #518a51; --text-off: #2c4c2c;
   --accent: #16a34a; --accent-hover: #15803d;
+  --fav: #facc15;
   --badge-bg: #0e1a0e; --badge-border: #1f4a25; --badge-text: #8cc78c;
   --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d;
   --badge-waitlist-bg: #2a2208; --badge-waitlist-text: #facc15; --badge-waitlist-border: #574a12;
@@ -1351,49 +1308,6 @@ select:focus, input:focus { border-color: var(--accent); }
 [data-theme="terminal"] .hm-level-3 { background: rgba(43, 217, 107, 0.7); }
 [data-theme="terminal"] .hm-level-4 { background: rgba(43, 217, 107, 1); }
 
-/* ── Synthwave: neon horizon ──────────────────────────────────── */
-[data-theme="synthwave"] {
-  --bg: #140a24; --bg-panel: #1c1133; --bg-input: #251746; --bg-deep: #0e0719;
-  --border: #322055; --border-light: #44307a; --border-subtle: #3a2866;
-  --text: #efe6ff; --text-heading: #ffffff; --text-muted: #c2a9e8;
-  --text-dim: #a489cf; --text-faint: #9783bb; --text-ghost: #8b78b1; --text-off: #483a64;
-  --accent: #ff2d95; --accent-hover: #e0187d;
-  --badge-bg: #251746; --badge-border: #44307a; --badge-text: #c2a9e8;
-  --badge-full-bg: #3c1030; --badge-full-text: #ff7eb9; --badge-full-border: #6e2257;
-  --badge-waitlist-bg: #3a2b0e; --badge-waitlist-text: #fbbf24; --badge-waitlist-border: #6b521c;
-  --badge-highlight-bg: #0c2a3a; --badge-highlight-text: #22d3ee; --badge-highlight-border: #1c5a73;
-  --booked-bg: #2a0f3d; --booked-border: #ff2d95;
-  --spinner-track: #44307a;
-  --modal-overlay: rgba(8, 3, 18, 0.75);
-  --toast-bg: #1c1133; --toast-border: #44307a;
-  --skeleton-base: #251746; --skeleton-shine: #322055;
-  --section-border: #2a1c4a;
-  --upcoming-bg: #1c1133; --upcoming-border: #322055;
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 16px rgba(255, 45, 149, 0.18);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 40px rgba(255, 45, 149, 0.18);
-  --shadow-overlay: rgba(0,0,0,0.6);
-  --glow-sel-ring: rgba(255,45,149,0.24);
-  --glow-sel-drop: rgba(255,45,149,0.5);
-}
-
-/* Cyan→pink gradient headlines + neon CTAs */
-[data-theme="synthwave"] header h1,
-[data-theme="synthwave"] .tab-empty-title,
-[data-theme="synthwave"] .discover-empty-title {
-  background: linear-gradient(180deg, #22d3ee 0%, #ff2d95 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-[data-theme="synthwave"] .auth-pill a.signin-pill,
-[data-theme="synthwave"] .tab-empty-btn { box-shadow: 0 0 24px rgba(255, 45, 149, 0.45); }
-[data-theme="synthwave"] .hm-level-0 { background: var(--bg-input); }
-[data-theme="synthwave"] .hm-level-1 { background: rgba(255, 45, 149, 0.25); }
-[data-theme="synthwave"] .hm-level-2 { background: rgba(255, 45, 149, 0.45); }
-[data-theme="synthwave"] .hm-level-3 { background: rgba(255, 45, 149, 0.7); }
-[data-theme="synthwave"] .hm-level-4 { background: rgba(255, 45, 149, 1); }
-
 /* ── Handheld: DMG four-shade green, hard pixel corners ───────── */
 [data-theme="gameboy"] {
   --bg: #0f380f; --bg-panel: #133f13; --bg-input: #1b4d1b; --bg-deep: #0a2a0a;
@@ -1401,6 +1315,7 @@ select:focus, input:focus { border-color: var(--accent); }
   --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f;
   --text-dim: #8bac0f; --text-faint: #8bac0f; --text-ghost: #8bac0f; --text-off: #3f5c28;
   --accent: #9bbc0f; --accent-hover: #8bac0f; --accent-ink: #0f380f;
+  --fav: #c6e034;
   --badge-bg: #1b4d1b; --badge-border: #306230; --badge-text: #8bac0f;
   --badge-full-bg: #2a572a; --badge-full-text: #c6e034; --badge-full-border: #3f7a3f;
   --badge-waitlist-bg: #2a572a; --badge-waitlist-text: #9bbc0f; --badge-waitlist-border: #3f7a3f;
@@ -1464,6 +1379,7 @@ select:focus, input:focus { border-color: var(--accent); }
   --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0;
   --text-dim: #84a8c8; --text-faint: #7e9cb6; --text-ghost: #6e90ad; --text-off: #364f66;
   --accent: #38bdf8; --accent-hover: #1ba2dd; --accent-ink: #06283f;
+  --fav: #fbbf24;
   --badge-bg: #132d4e; --badge-border: #295380; --badge-text: #a4c4e0;
   --badge-full-bg: #3a1525; --badge-full-text: #ff8097; --badge-full-border: #66293f;
   --badge-waitlist-bg: #36300e; --badge-waitlist-text: #fbbf24; --badge-waitlist-border: #645a1e;
@@ -1534,7 +1450,7 @@ html {
   --ct-other-tint: #ECF0F6; --ct-other-wash: #DBE2EE; --ct-other-base: #57647B; --ct-other-deep: #313B4D; --ct-other-ring: rgba(87, 100, 123, 0.18); --ct-other-drop: rgba(87, 100, 123, 0.5);
   --ct-on-base: #FFFFFF;
 }
-html:is([data-theme="graphite"], [data-theme="synthwave"], [data-theme="blueprint"]) {
+html:is([data-theme="graphite"], [data-theme="blueprint"]) {
   --ct-ride-tint: #1F2C4A; --ct-ride-wash: #233560; --ct-ride-base: #3A6EE7; --ct-ride-deep: #D6E2FF; --ct-ride-ring: rgba(58, 110, 231, 0.26); --ct-ride-drop: rgba(58, 110, 231, 0.5);
   --ct-strength-tint: #35252F; --ct-strength-wash: #4B292D; --ct-strength-base: #D34126; --ct-strength-deep: #FFD8D0; --ct-strength-ring: rgba(211, 65, 38, 0.26); --ct-strength-drop: rgba(211, 65, 38, 0.5);
   --ct-yoga-tint: #1B2F39; --ct-yoga-wash: #1C3A40; --ct-yoga-base: #1D836D; --ct-yoga-deep: #C4EBDF; --ct-yoga-ring: rgba(29, 131, 109, 0.26); --ct-yoga-drop: rgba(29, 131, 109, 0.5);

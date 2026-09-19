@@ -25,15 +25,19 @@ catch (e) { document.documentElement.style.display = 'none'; }
 // Cloud flash at every launch (and a Cloud-coloured status area). Same rule as
 // theme.js _resolveTheme(): a saved id from the registry wins; anything else
 // (nothing saved, or a legacy "dark" / "light") follows the system. The map
-// mirrors APP_THEMES (id → bg) in theme.js — tests compare the two — and
-// theme.js still runs afterwards and has the last word. The theme-color meta
+// mirrors APP_THEMES (id → bg) in theme.js, and RETIRED its RETIRED_THEMES (a
+// saved id of a theme that was withdrawn reads as the one that replaced it;
+// theme.js rewrites the stored value) — tests compare both — and theme.js
+// still runs afterwards and has the last word. The theme-color meta
 // sits above this script so it exists when the script looks for it.
 // login.html carries the same script.
 (function () {
   try {
-    var BG = { cloud: '#e6e9ee', linen: '#e8e1d5', graphite: '#12161f', terminal: '#060906', synthwave: '#140a24', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var BG = { cloud: '#e6e9ee', graphite: '#12161f', terminal: '#060906', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var RETIRED = { linen: 'cloud', synthwave: 'graphite' };
     var id = null;
     try { id = localStorage.getItem('psycle_theme'); } catch (e) {}
+    if (id && Object.prototype.hasOwnProperty.call(RETIRED, id)) id = RETIRED[id];
     if (!id || !Object.prototype.hasOwnProperty.call(BG, id)) {
       id = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'graphite' : 'cloud';
     }

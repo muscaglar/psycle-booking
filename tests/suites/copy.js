@@ -274,7 +274,7 @@ module.exports = async function (t) {
 
   t.section('Share images: year wrap');
   {
-    const year = { total: 1, uniqueInstrs: 1, longestStreak: 1, topInstr: LONG_NAME, topStudio: 'Bank', favDay: 'Monday', favTime: '7am' };
+    const year = { total: 1, uniqueInstrs: 1, longestStreak: 1, topInstr: LONG_NAME, topStudio: 'Bank', favDay: 'Monday', favTime: '07:00' };
     const shared = [];
     const r = boot({ year, tokens: GAMEBOY, navigator: { userAgent: 'iPhone', canShare: () => true, share: async (d) => { shared.push(d); } } });
     await r.ctx.shareYearReview();

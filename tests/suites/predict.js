@@ -99,6 +99,7 @@ module.exports = function (t) {
       const ctx = t.vm.createContext({
         document: { getElementById: () => null, createElement: () => { made.built++; return {}; } },
         currentUser: { id: 1 }, _bookingsLoadState: state, escapeHTML: String,
+        _clock24: t.loadPure('js/app.js', 'clock')._clock24, // "You usually go Tuesdays at 07:00"
         predictNextClass: () => { made.predicted++; return { label: 'RIDE 45 · Alice', dayOfWeek: 2, hour: 7, minute: 0 }; },
       });
       t.vm.runInContext(grab('function renderRebookHint() {'), ctx, { filename: 'js/app.js[renderRebookHint]' });

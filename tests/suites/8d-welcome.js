@@ -574,7 +574,7 @@ module.exports = function (t) {
   css.replace(/([^{}]+)\{([^{}]*)\}/g, (m, sel, body) => { if (/\.onboard-/.test(sel)) rules.push({ sel: sel.trim(), body }); return m; });
   ok(rules.length > 30, 'the welcome\'s rules found in css/styles.css (' + rules.length + ')');
   const literal = rules.filter((r) => /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(r.body)).map((r) => r.sel);
-  eq(literal, [], 'no colour literal in any .onboard-* rule: every colour is a theme token, so all seven themes are covered');
+  eq(literal, [], 'no colour literal in any .onboard-* rule: every colour is a theme token, so every theme is covered');
   const fixed = rules.filter((r) => /font-size:\s*\d|border-radius:\s*\d|font-family:(?!\s*var\()/.test(r.body)).map((r) => r.sel);
   eq(fixed, [], 'type sizes, radii and faces come from the scales (Handheld zeroes radii; Terminal / Handheld swap the body face)');
   const overlayRule = rules.find((r) => r.sel === '.onboard-overlay') || { body: '' };

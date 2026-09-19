@@ -42,8 +42,9 @@ module.exports = async function (t) {
   t.ok(/window\.shareClass = function\s*\(/.test(appJs) && /;shareClass\(\$\{/.test(appJs), '…shareClass (wired back in, and called from a booking card) is NOT');
   const lightBlocks = themeCss.replace(/\/\*[\s\S]*?\*\//g, '').match(/(^|\})\s*\[data-theme="light"\]\s*\{/g) || [];
   t.eq(lightBlocks.length, 0, 'theme.css: no standalone [data-theme="light"] token block (no such theme id)');
-  t.ok(/:is\(\[data-theme="light"\], \[data-theme="cloud"\], \[data-theme="linen"\]\) \.book-btn\.booked/.test(themeCss),
-    '…the shared :is(light, cloud, linen) component rules are untouched');
+  // (":is(light, cloud, linen)" until Linen was retired in wave 10 — tests/suites/10b-themes.js.)
+  t.ok(/:is\(\[data-theme="light"\], \[data-theme="cloud"\]\) \.book-btn\.booked/.test(themeCss),
+    '…the shared :is(light, cloud) component rules are untouched');
 
   t.section('Clean-up: the action log records what the dead wrappers claimed to');
   t.ok(!/_origSwitchTabForLog|_origExportSettings|_origImportSettings/.test(relJs),
@@ -244,7 +245,7 @@ module.exports = async function (t) {
 
     const themes = [];
     themeJs.replace(/\{\s*id:\s*'([a-z]+)'[^}]*?bg:\s*'(#[0-9a-f]{6})'/g, (m, id, bg) => { themes.push([id, bg]); return m; });
-    t.ok(themes.length >= 7, 'APP_THEMES parsed (' + themes.map((x) => x[0]).join(', ') + ')');
+    t.ok(themes.length >= 5, 'APP_THEMES parsed (' + themes.map((x) => x[0]).join(', ') + ')');
     const map = [];
     ((/var BG = \{([^}]*)\}/.exec(finderBoot) || [])[1] || '').replace(/([a-z]+):\s*'(#[0-9a-f]{6})'/g, (m, id, bg) => { map.push([id, bg]); return m; });
     t.eq(map, themes, 'its id → background map is APP_THEMES, entry for entry');
@@ -280,11 +281,14 @@ module.exports = async function (t) {
     t.eq(run(null, false), ['cloud', CLOUD_BG], 'nothing saved + light system → Cloud');
     t.eq([run('dark', false), run('light', true)], [['cloud', CLOUD_BG], ['graphite', GRAPHITE_BG]], 'a legacy "dark" / "light" value follows the system, exactly like theme.js');
     t.eq([run('constructor', true)[0], run('__proto__', false)[0], run('', true)[0]], ['graphite', 'cloud', 'graphite'], 'only an OWN key of the map counts as a saved theme');
-    t.eq(run('synthwave', true, { noStorage: true }), ['graphite', GRAPHITE_BG], 'localStorage denied → the system scheme, no throw');
+    t.eq(run('terminal', true, { noStorage: true }), ['graphite', GRAPHITE_BG], 'localStorage denied → the system scheme, no throw');
     t.eq(run(null, true, { noMatchMedia: true }), ['cloud', CLOUD_BG], 'no matchMedia → Cloud');
-    t.eq(run('linen', false, { noMeta: true })[0], 'linen', 'no theme-color meta → the attribute is still set');
+    t.eq(run('blueprint', false, { noMeta: true })[0], 'blueprint', 'no theme-color meta → the attribute is still set');
+    // A retired theme's id reads as the theme that replaced it — whatever the
+    // system scheme says (it was the member's own light / dark choice).
+    t.eq([run('linen', true), run('synthwave', false)], [['cloud', CLOUD_BG], ['graphite', GRAPHITE_BG]], 'a saved "linen" paints Cloud and "synthwave" Graphite, against the system scheme');
     // …and theme.js agrees on the rule it mirrors.
-    t.ok(/if \(_themeById\(saved\)\) return saved;/.test(themeJs) && /\(prefers-color-scheme: dark\)'\)\.matches\) return 'graphite';/.test(themeJs) && /const DEFAULT_THEME = 'cloud';/.test(themeJs),
+    t.ok(/const saved = _savedThemeId\(\);\n  if \(_themeById\(saved\)\) return saved;/.test(themeJs) && /\(prefers-color-scheme: dark\)'\)\.matches\) return 'graphite';/.test(themeJs) && /const DEFAULT_THEME = 'cloud';/.test(themeJs),
       'theme.js _resolveTheme still reads: saved registry id → else dark system → graphite → else cloud');
   }
 

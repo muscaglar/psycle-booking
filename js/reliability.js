@@ -554,8 +554,8 @@
     if (!m) return 'a class';
     var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     var day = days[new Date(+m[1], +m[2] - 1, +m[3]).getDay()];
-    var h = +m[4];
-    return 'a class on ' + day + ' ' + (+m[3]) + ' at ' + (h % 12 || 12) + ':' + m[5] + (h >= 12 ? 'pm' : 'am');
+    var at = _clock24(m[4], m[5]); // app.js (pure:clock): "18:30"
+    return 'a class on ' + day + ' ' + (+m[3]) + (at ? ' at ' + at : '');
   }
   // ── pure:offline-queue:end ──
 

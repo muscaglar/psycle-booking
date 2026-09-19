@@ -269,9 +269,7 @@
         let lead = `<div class="history-month-header">${group.label}</div>`;
         for (const { entry, d } of group.items) {
           const dayStr = d ? _histDayFmt.format(d) : '—';
-          const h = d ? d.getHours() : 0, m = d ? d.getMinutes().toString().padStart(2, '0') : '';
-          const ampm = h >= 12 ? 'pm' : 'am';
-          const timeStr = d ? (h % 12 || 12) + ':' + m + ampm : '';
+          const timeStr = d ? _clock24(d.getHours(), d.getMinutes()) : ''; // app.js (pure:clock): "18:30"
           const isCancelled = !!entry.cancelledAt;
           const _slH = (typeof slotLabel === 'function') ? slotLabel(entry.typeName) : 'Bike';
           // Escaped: history can come from an imported file, where a slot need not be a number.
@@ -532,8 +530,6 @@
       for (const evt of upcoming.slice(0, 20)) {
         const dt = new Date(evt.start_at);
         const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-        const h = dt.getHours(), m = dt.getMinutes().toString().padStart(2, '0');
-        const ampm = h >= 12 ? 'pm' : 'am';
         const chip = classStatusChip(evt);
         // Crisp Colour: the row is the compact class component — its type's tile
         // (data-ct → css/crisp.css; both helpers only ever emit fixed strings),
@@ -549,7 +545,7 @@
             ${tile}
             <div class="instructor-class-when">
               <div class="instructor-class-day">${dayStr}</div>
-              <div class="instructor-class-time">${(h % 12 || 12) + ':' + m}<span class="instructor-class-ampm">${ampm}</span></div>
+              <div class="instructor-class-time">${_clock24(dt.getHours(), dt.getMinutes())}</div>
             </div>
             <div class="instructor-class-info">
               <div class="instructor-class-type">${escapeHtml(evt._typeName || 'Class')}</div>

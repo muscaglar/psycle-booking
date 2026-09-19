@@ -29,9 +29,11 @@ catch (e) { document.documentElement.style.display = 'none'; }
 // theme.js). This page used to be fixed Noir-and-red whatever the app wore.
 (function () {
   try {
-    var BG = { cloud: '#e6e9ee', linen: '#e8e1d5', graphite: '#12161f', terminal: '#060906', synthwave: '#140a24', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var BG = { cloud: '#e6e9ee', graphite: '#12161f', terminal: '#060906', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var RETIRED = { linen: 'cloud', synthwave: 'graphite' };
     var id = null;
     try { id = localStorage.getItem('psycle_theme'); } catch (e) {}
+    if (id && Object.prototype.hasOwnProperty.call(RETIRED, id)) id = RETIRED[id];
     if (!id || !Object.prototype.hasOwnProperty.call(BG, id)) {
       id = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'graphite' : 'cloud';
     }
@@ -72,13 +74,6 @@ catch (e) { document.documentElement.style.display = 'none'; }
     --badge-full-bg: #fbe1e2; --badge-full-text: #a81f28; --badge-full-border: #f2b8bc;
     --shadow-lg: 0 16px 40px -12px rgba(27,33,48,0.28);
   }
-  [data-theme="linen"] {
-    --bg: #e8e1d5; --bg-panel: #fbf8f2; --bg-input: #f1eadd; --border: #e1d8c9; --border-light: #d3c8b5;
-    --text: #2a2521; --text-heading: #1d1916; --text-muted: #5e574d; --text-dim: #625a4f; --text-ghost: #6b6358; --text-off: #91877a;
-    --accent: #b5573c; --accent-hover: #9c4831; --accent-ink: #fff9f4; --accent-soft: #f1e1d7;
-    --badge-full-bg: #f7e1dc; --badge-full-text: #96442d; --badge-full-border: #e6bcb0;
-    --shadow-lg: 0 4px 14px rgba(60,50,40,0.07), 0 14px 44px rgba(60,50,40,0.12);
-  }
   [data-theme="graphite"] {
     --bg: #12161f; --bg-panel: #1b2130; --bg-input: #262d3e; --border: #2b3345; --border-light: #3b4459;
     --text: #eef1f5; --text-heading: #ffffff; --text-muted: #b7bfcc; --text-dim: #a7b0bf; --text-ghost: #8d97a9; --text-off: #4c566a;
@@ -93,13 +88,6 @@ catch (e) { document.documentElement.style.display = 'none'; }
     --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d;
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 32px rgba(22,163,74,0.12);
     --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
-  }
-  [data-theme="synthwave"] {
-    --bg: #140a24; --bg-panel: #1c1133; --bg-input: #251746; --border: #322055; --border-light: #44307a;
-    --text: #efe6ff; --text-heading: #ffffff; --text-muted: #c2a9e8; --text-dim: #a489cf; --text-ghost: #8b78b1; --text-off: #483a64;
-    --accent: #ff2d95; --accent-hover: #e0187d; --accent-ink: #ffffff; --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
-    --badge-full-bg: #3c1030; --badge-full-text: #ff7eb9; --badge-full-border: #6e2257;
-    --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 40px rgba(255, 45, 149, 0.18);
   }
   [data-theme="gameboy"] {
     --bg: #0f380f; --bg-panel: #133f13; --bg-input: #1b4d1b; --border: #306230; --border-light: #3f7a3f;

@@ -78,11 +78,21 @@
     discHeader.className = 'disc-header';
     var discActions = document.createElement('div');
     discActions.className = 'disc-actions';
+    // "Clear filters" starts hidden: app.js updateFiltersSummary shows it only
+    // while a filter is on (it used to sit there with nothing to clear).
     discActions.innerHTML =
       '<span id="lastUpdated" class="last-updated"></span>' +
-      '<button type="button" class="disc-clear-btn" onclick="clearFilters()">Clear filters</button>';
+      '<button type="button" id="discClearBtn" class="disc-clear-btn" onclick="clearFilters()" hidden>Clear filters</button>';
     discHeader.appendChild(discActions);
     discoverPanel.appendChild(discHeader);
+    // …and is put right NOW rather than by whoever paints the summary next: on a
+    // warm launch (the three reference lists come from the 24h cache) app.js's
+    // one launch-time updateFiltersSummary() runs before this function has built
+    // the button. A member whose starred instructors were pre-selected, with no
+    // saved filters to restore, then had a filter on and no way to clear it at
+    // >= 1024px (the Filters bar's own Clear is hidden there). It sets `hidden`
+    // before its "same chips" early return, so this costs nothing otherwise.
+    if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
 
     // (Top unified search bar removed — the filters cover instructor/studio/type.)
 
@@ -1050,10 +1060,7 @@
         dayEventCount++;
 
         var dt = new Date(evt.start_at.replace(' ', 'T'));
-        var h = dt.getHours();
-        var m = dt.getMinutes().toString().padStart(2, '0');
-        var ampm = h >= 12 ? 'pm' : 'am';
-        var timeStr = (h % 12 || 12) + ':' + m + ampm;
+        var timeStr = _clock24(dt.getHours(), dt.getMinutes()); // app.js (pure:clock): "18:30"
         var slotsCount = booking && booking.slots ? booking.slots.length : 0;
         var socialBadge = slotsCount > 1 ? '<span class="week-event-social" title="' + slotsCount + ' spots booked">+1</span>' : '';
         // A waitlist place is shown, but clearly not as a seat.
@@ -1076,10 +1083,7 @@
         dayEventCount++;
 
         var dt = new Date(h.date.replace(' ', 'T'));
-        var hh = dt.getHours();
-        var mm = dt.getMinutes().toString().padStart(2, '0');
-        var ap = hh >= 12 ? 'pm' : 'am';
-        var ts = (hh % 12 || 12) + ':' + mm + ap;
+        var ts = _clock24(dt.getHours(), dt.getMinutes());
 
         html += '<div class="week-event" style="opacity:0.7" title="' +
           escapeHTML(h.typeName || '') + ' · ' + escapeHTML(h.instrName || '') + '">' +
@@ -1111,11 +1115,6 @@
 
   var UW_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  function _uwTime(totalMin) {
-    var h = Math.floor(totalMin / 60), m = totalMin % 60;
-    return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h >= 12 ? 'pm' : 'am');
-  }
-
   // 'YYYY-MM-DD' → "Mon 21 Sep". The date is London's (app.js works it out
   // from the digits), so it is formatted as UTC — never shifted by the device.
   function _uwDateLabel(dateStr) {
@@ -1137,11 +1136,11 @@
     return String(label == null ? '' : label).split(' · ')[0];
   }
 
-  // Minutes after midnight → the time's two parts, so the am/pm can be set small.
-  function _uwTimeParts(totalMin) {
+  // Minutes after midnight → "18:30", through app.js's one formatter (_clock24,
+  // pure:clock). Stored junk reads as 00:00 — never NaN.
+  function _uwTime(totalMin) {
     var min = Math.max(0, Math.round(Number(totalMin) || 0)) % 1440;
-    var h = Math.floor(min / 60);
-    return { clock: (h % 12 || 12) + ':' + String(min % 60).padStart(2, '0'), ampm: h >= 12 ? 'pm' : 'am' };
+    return _clock24(Math.floor(min / 60), min % 60);
   }
 
   // The tile + data-ct of a class type. `keyOf` / `pictogram` are app.js's
@@ -1159,8 +1158,7 @@
   // ── pure:usual-week-crisp:end ──
 
   function _uwTimeHtml(totalMin) {
-    var p = _uwTimeParts(totalMin);
-    return '<span class="t-time is-compact">' + p.clock + '<span class="class-time-ampm">' + p.ampm + '</span></span>';
+    return '<span class="t-time is-compact">' + _uwTime(totalMin) + '</span>';
   }
 
   function _uwMark(typeName) {
@@ -1440,7 +1438,7 @@
       '<span class="usual-week-row-text">' +
         '<span class="usual-week-row-main">' + escapeHTML(name) + '</span>' +
         (sub ? '<span class="usual-week-row-sub">' + escapeHTML(sub) + '</span>' : '') +
-        '<span class="usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '') + '" data-uw-note="' + row.index + '">' + escapeHTML(note.text || '') + '</span>' +
+        '<span class="usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '') + '" data-uw-note="' + row.index + '">' + _uwNoteInner(note) + '</span>' +
       '</span>';
     return '<li class="usual-week-row" data-ct="' + mark.key + '">' +
       (checkbox != null
@@ -1448,6 +1446,21 @@
         : '<div class="usual-week-pick">' + text + '</div>') +
     '</li>';
   }
+
+  // ── pure:usual-week-note:start ── (DOM-free; tests/suites/10c-polish.js evaluates this block)
+  // What a row's note holds. A warning (a clash, a full class, a run that
+  // stopped) is ONE quiet line, as on the class sheet and in the dialogs: the
+  // caution mark — decorative, the words say it; css/crisp.css inks it in the
+  // theme's caution colour — and the sentence in the body ink. Nothing to say =
+  // nothing at all, so the note is still `:empty` and takes no room. The run
+  // rewrites a note in place (setNote), so the first paint and the rewrite both
+  // come through here. typeof: tabs.js can run without app.js's _uiIcon.
+  function _uwNoteInner(note) {
+    if (!note || !note.text) return '';
+    var mark = note.warn && typeof _uiIcon === 'function' ? _uiIcon('caution', 14) : '';
+    return mark + '<span>' + escapeHTML(note.text || '') + '</span>';
+  }
+  // ── pure:usual-week-note:end ──
 
   // Where focus goes when the sheet closes: what held it on open, if that is a
   // real element still in the page — else the card's own button.
@@ -1600,10 +1613,12 @@
             sw('next7', 'Next 7 days') + sw('nextweek', 'Week of ' + _uwDateLabel(starts.nextweek)) +
           '</div>' +
           '<ul class="usual-week-plan">' + rows + '</ul>' +
-          '<div class="confirm-warn">Each class is booked straight away, on your usual spot or the first free one, and uses a class credit or counts towards your plan. ' +
+          // The dialogs' warn line: the caution mark, then the sentence in the body ink.
+          '<div class="confirm-warn">' + (typeof _uiIcon === 'function' ? _uiIcon('caution', 16) : '') +
+            '<span>Each class is booked straight away, on your usual spot or the first free one, and uses a class credit or counts towards your plan. ' +
             'Psycle\'s normal 12-hour cancellation policy applies to every one.' +
             (anyWaitlist ? ' A ticked waitlist class is booked if a spot has freed up by then; otherwise you join the waitlist and Psycle books you in by itself when one does — chargeable, same policy.' : '') +
-          '</div>' +
+          '</span></div>' +
           '<div class="confirm-actions">' +
             '<button type="button" class="confirm-btn confirm-btn-cancel" data-uw-close>Not now</button>' +
             '<button type="button" class="confirm-btn confirm-btn-primary" data-uw-go></button>' +
@@ -1645,7 +1660,7 @@
           var el = body.querySelector('[data-uw-note="' + rows[i].index + '"]');
           if (!el) return;
           var note = _uwResultNote(result);
-          el.textContent = note.text;
+          el.innerHTML = _uwNoteInner(note); // escaped there; a warning keeps its caution mark
           el.className = 'usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '');
         };
         var finish = function (counts) {
@@ -1758,9 +1773,7 @@
       if (!daySlots[key]) {
         daySlots[key] = {
           day: dayName,
-          time: dt.getHours() + ':' + dt.getMinutes().toString().padStart(2, '0'),
-          timeAmPm: (dt.getHours() % 12 || 12) + ':' + dt.getMinutes().toString().padStart(2, '0') +
-            (dt.getHours() >= 12 ? 'pm' : 'am'),
+          time: _clock24(dt.getHours(), dt.getMinutes()), // app.js (pure:clock): "18:30"
           type: h.typeName || 'Class',
           instr: h.instrName || '',
           loc: h.locName || '',
@@ -1786,7 +1799,7 @@
       // (typeof: tests run this function on its own, without app.js.)
       var ct = (typeof classTypeKey === 'function') ? classTypeKey(p.type) : 'other';
       html += '<div class="reco-card ct-card" data-ct="' + ct + '">' +
-        '<div class="reco-badge">' + dayCapital + 's at ' + p.timeAmPm + '</div>' +
+        '<div class="reco-badge">' + dayCapital + 's at ' + p.time + '</div>' +
         '<div class="reco-class">' + (typeof _statsTile === 'function' ? _statsTile(ct) : '') + escapeHTML(p.type) + '</div>' +
         '<div class="reco-detail">' + instrLink(p.instr) + (p.loc ? ' · ' + escapeHTML(p.loc) : '') + '</div>' +
         '<div class="reco-detail">' + p.count + 'x booked</div>' +
@@ -1854,13 +1867,12 @@
       '<div class="habit-cards">';
 
     habits.forEach(function (s) {
-      // Most common minute for this slot, for a natural "~7:00am" label.
+      // Most common minute for this slot, for a natural "~07:00" label.
       var topMinute = 0, topMinuteCount = -1;
       Object.keys(s.minuteVotes).forEach(function (mk) {
         if (s.minuteVotes[mk] > topMinuteCount) { topMinuteCount = s.minuteVotes[mk]; topMinute = Number(mk); }
       });
-      var ampm = s.hour >= 12 ? 'pm' : 'am';
-      var timeLabel = (s.hour % 12 || 12) + ':' + String(topMinute).padStart(2, '0') + ampm;
+      var timeLabel = _clock24(s.hour, topMinute);
       var dayName = DAY_NAMES_FULL[s.dow];
       var dateStr = _nextWeekdayDateStr(s.dow);
       // The habit's class type as one of app.js's fixed category keys ('RIDE',
@@ -3157,7 +3169,7 @@
     var history = _yearReviewRows(getFullHistory(), year, Date.now(), startMs);
     if (history.length === 0) return null;
 
-    var instrCount = {}, studioCount = {}, dowCount = {}, hourCount = {};
+    var instrCount = {}, studioCount = {}, dowCount = {}, hourCount = {}, minuteVotes = {};
     var weeks = {};
     history.forEach(function (h) {
       if (h.instrName) instrCount[h.instrName] = (instrCount[h.instrName] || 0) + 1;
@@ -3165,7 +3177,10 @@
       var dt = new Date(String(h.date).replace(' ', 'T'));
       if (isNaN(dt.getTime())) return;
       dowCount[dt.getDay()] = (dowCount[dt.getDay()] || 0) + 1;
-      hourCount[dt.getHours()] = (hourCount[dt.getHours()] || 0) + 1;
+      var hh = dt.getHours(), mm = dt.getMinutes();
+      hourCount[hh] = (hourCount[hh] || 0) + 1;
+      if (!minuteVotes[hh]) minuteVotes[hh] = {};
+      minuteVotes[hh][mm] = (minuteVotes[hh][mm] || 0) + 1;
       weeks[_weekIndex(dt)] = true;
     });
 
@@ -3183,10 +3198,17 @@
     var topDow = Object.entries(dowCount).sort(function (a, b) { return b[1] - a[1]; })[0];
     var topHour = Object.entries(hourCount).sort(function (a, b) { return b[1] - a[1]; })[0];
 
+    // The hour trained most, at the minute most of those classes start — the
+    // same vote renderHabitSlots takes ("Mondays ~18:30"). A bare hour printed
+    // as HH:MM ("18:00") named a time an 18:30 regular has never trained at.
     var favTime = '';
     if (topHour) {
-      var hr = Number(topHour[0]);
-      favTime = (hr % 12 || 12) + (hr >= 12 ? 'pm' : 'am');
+      var votes = minuteVotes[topHour[0]] || {};
+      var topMinute = 0, topMinuteCount = -1;
+      Object.keys(votes).forEach(function (mk) {
+        if (votes[mk] > topMinuteCount) { topMinuteCount = votes[mk]; topMinute = Number(mk); }
+      });
+      favTime = _clock24(Number(topHour[0]), topMinute); // "18:30"
     }
 
     return {

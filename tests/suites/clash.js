@@ -30,7 +30,7 @@ module.exports = async function (t) {
   {
     const c = p._findClash(evt('2026-09-21 07:15:00', { _locName: 'Bank' }), held, cache());
     eq([kind(c), c && c.eventId, c && c.heldIsFirst], ['overlap', '10', true], '7:15 at Bank while holding 7:00 at Oxford Circus → overlap with event 10');
-    eq(p._clashLabel(c), 'Clashes with your 7:00am Ride at Oxford Circus', 'the sentence names the held class, its time and its location');
+    eq(p._clashLabel(c), 'Clashes with your 07:00 Ride at Oxford Circus', 'the sentence names the held class, its time and its location');
     eq(kind(p._findClash(evt('2026-09-21 06:30:00'), held, cache())), 'overlap', 'starting BEFORE the held class and running into it is an overlap too');
     eq(kind(p._findClash(evt('2026-09-21 07:10:00', { duration: 20 }), held, cache())), 'overlap', 'a class wholly inside the held one overlaps');
     eq(p._findClash(evt('2026-09-22 07:15:00'), held, cache()), null, 'the same time on another day is no clash');
@@ -80,11 +80,11 @@ module.exports = async function (t) {
     const at = (start, loc, o) => p._findClash(evt(start, Object.assign({ _locName: loc }, o || {})), held, cache());
     const after = at('2026-09-21 08:00:00', 'Bank');
     eq([kind(after), after && after.gapMin, after && after.heldIsFirst], ['travel', 15, true], 'held ends 7:45 at Oxford Circus, new 8:00 at Bank → 15 min to change location');
-    eq(p._clashLabel(after), 'Starts only 15 min after your 7:00am Ride at Oxford Circus ends — a different location', 'said as a squeeze, not as a clash');
+    eq(p._clashLabel(after), 'Starts only 15 min after your 07:00 Ride at Oxford Circus ends — a different location', 'said as a squeeze, not as a clash');
     const before = at('2026-09-21 06:00:00', 'Bank');
     eq([kind(before), before && before.gapMin, before && before.heldIsFirst], ['travel', 15, false], 'new ends 6:45 at Bank, held starts 7:00 elsewhere → the same, the other way round');
-    eq(p._clashLabel(before), 'Ends only 15 min before your 7:00am Ride at Oxford Circus starts — a different location', '…and worded for that order');
-    eq(p._clashLabel(at('2026-09-21 07:45:00', 'Bank')), 'Starts as your 7:00am Ride at Oxford Circus ends — a different location', 'touching at two locations: no "0 min"');
+    eq(p._clashLabel(before), 'Ends only 15 min before your 07:00 Ride at Oxford Circus starts — a different location', '…and worded for that order');
+    eq(p._clashLabel(at('2026-09-21 07:45:00', 'Bank')), 'Starts as your 07:00 Ride at Oxford Circus ends — a different location', 'touching at two locations: no "0 min"');
     eq(at('2026-09-21 08:15:00', 'Bank'), null, 'a full 30 minutes between locations is fine');
     eq(at('2026-09-21 08:00:00', 'Oxford Circus'), null, 'the same location needs no travel time');
     eq(at('2026-09-21 08:00:00', ''), null, 'an unknown location never invents a travel warning');
@@ -102,11 +102,11 @@ module.exports = async function (t) {
     // New: 8:10–8:55 at Bank. Travel squeeze with event 10 (ended 7:45 elsewhere, 25 min), overlaps 11 and 12.
     const c = p._findClash(evt('2026-09-21 08:10:00', { _locName: 'Bank' }), three, c3);
     eq([kind(c), c && c.eventId], ['overlap', '11'], 'an overlap outranks a travel squeeze, and the earliest overlapping class is named');
-    eq(p._clashLabel(c), 'Clashes with your 8:00am Barre at Bank', 'label for it');
-    eq(p._clashLabel({ kind: 'overlap', start_at: '2026-09-21 18:30:00', typeName: 'Class', locName: '' }), 'Clashes with your 6:30pm class',
+    eq(p._clashLabel(c), 'Clashes with your 08:00 Barre at Bank', 'label for it');
+    eq(p._clashLabel({ kind: 'overlap', start_at: '2026-09-21 18:30:00', typeName: 'Class', locName: '' }), 'Clashes with your 18:30 class',
       "the 'Class' placeholder name and a missing location read naturally");
-    eq(p._clashLabel({ kind: 'overlap', start_at: '2026-09-21 12:05:00', typeName: 'Ride', locName: 'Bank' }), 'Clashes with your 12:05pm Ride at Bank', 'noon is 12pm');
-    eq(p._clashLabel({ kind: 'overlap', start_at: '2026-09-21 00:05:00', typeName: 'Ride', locName: 'Bank' }), 'Clashes with your 12:05am Ride at Bank', 'midnight is 12am');
+    eq(p._clashLabel({ kind: 'overlap', start_at: '2026-09-21 12:05:00', typeName: 'Ride', locName: 'Bank' }), 'Clashes with your 12:05 Ride at Bank', 'five past noon is 12:05 — 24-hour, no am / pm');
+    eq(p._clashLabel({ kind: 'overlap', start_at: '2026-09-21 00:05:00', typeName: 'Ride', locName: 'Bank' }), 'Clashes with your 00:05 Ride at Bank', 'five past midnight is 00:05 (it read "12:05am")');
     eq(p._clashLabel(null), '', 'no clash → no sentence');
   }
 
@@ -135,7 +135,7 @@ module.exports = async function (t) {
       submitBooking: async (id, slots, b) => { log.posts.push(slots); b.textContent = 'Bike 7 ✓'; globals._myBookings[77] = seat(); },
       joinWaitlist: async (id) => { log.joins.push(id); return true; },
       leaveWaitlist: async () => {},
-      slotLabelForEvent: () => 'Bike', _waitlistClassLine: () => 'Ride · Alex · Mon 21, 7:15am', _parseSlots: (x) => x,
+      slotLabelForEvent: () => 'Bike', _waitlistClassLine: () => 'Ride · Alex · Mon 21, 07:15', _parseSlots: (x) => x,
       _clearUnverifiedBooking: async () => true,
       _usualSlotForEvent: () => null,
       applyBookedState: () => {},
@@ -156,7 +156,7 @@ module.exports = async function (t) {
     return { textContent: 'Book', className: 'book-btn', disabled: false, dataset: {}, style: {}, classList: { contains: () => false } };
   }
   const POLICY = "Psycle's normal 12-hour cancellation policy applies.";
-  const CLASH = 'Clashes with your 7:00am Ride at Oxford Circus';
+  const CLASH = 'Clashes with your 07:00 Ride at Oxford Circus';
 
   t.section('Clash: said inside the confirms bookClass already shows (no extra gate)');
   {

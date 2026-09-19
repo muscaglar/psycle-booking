@@ -287,7 +287,8 @@ module.exports = function (t) {
       .map((s) => (s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)));
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   }
-  const booked = ruleBody(theme, ':is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .book-btn.booked') || '';
+  // (The light-base list was "light, cloud, linen" until Linen was retired in wave 10.)
+  const booked = ruleBody(theme, ':is([data-theme="light"], [data-theme="cloud"]) .book-btn.booked') || '';
   const ink = (booked.match(/[^-]color:\s*(#[0-9a-f]{6})/i) || [])[1];
   const bg = (booked.match(/background:\s*(#[0-9a-f]{6})/i) || [])[1];
   const ratio = ink && bg ? (Math.max(lum(ink), lum(bg)) + 0.05) / (Math.min(lum(ink), lum(bg)) + 0.05) : 0;

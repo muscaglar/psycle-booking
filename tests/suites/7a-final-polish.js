@@ -264,7 +264,7 @@ module.exports = async function (t) {
 
   t.section('Change spot: a saved-details seat');
   {
-    const swapSrc = grab(appSrc, 'function _cancelDeadline(', '}') + '\n' + grab(appSrc, 'window.changeSpot = async function(eventId) {', '};');
+    const swapSrc = grab(appSrc, 'function _clock24(', '}') + '\n' + grab(appSrc, 'function _cancelDeadline(', '}') + '\n' + grab(appSrc, 'window.changeSpot = async function(eventId) {', '};'); // _clock24: the deadline's label
     const swapWorld = (o) => {
       const w = studioWorld(o);
       w.ctx.apiFetch = async (path) => { w.log.gets.push(path); return { ok: true, status: 200, json: async () => ({ slots: [9, 11], data: {} }) }; };
@@ -345,7 +345,7 @@ module.exports = async function (t) {
 
     // Change spot never goes through bookClass; its picker replaces _bookingContext
     // and re-wires Confirm to a swap, and its wait is now up to 10s longer.
-    const swapSrc = grab(appSrc, 'function _cancelDeadline(', '}') + '\n' + grab(appSrc, 'window.changeSpot = async function(eventId) {', '};');
+    const swapSrc = grab(appSrc, 'function _clock24(', '}') + '\n' + grab(appSrc, 'function _cancelDeadline(', '}') + '\n' + grab(appSrc, 'window.changeSpot = async function(eventId) {', '};'); // _clock24: the deadline's label
     const room = { has_layout: true, name: 'Studio 1', layout: { slots: [{ id: 5 }, { id: 9 }, { id: 11 }] } };
     const swapWorld = () => {
       const x = studioWorld({ hang: true, globals: { document: doc } });

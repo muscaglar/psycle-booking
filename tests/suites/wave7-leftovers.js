@@ -228,14 +228,14 @@ module.exports = async function (t) {
   {
     const NOW = new Date(2026, 8, 18, 12, 0).getTime(); // wall clock, like the class times
     const line = (startAt, extra) => {
-      const ctx = t.vm.createContext({ Date: fixedDate(NOW), Math, String, isNaN, _eventCache: { 77: Object.assign({ start_at: startAt, _typeName: 'Ride', _instrName: 'Alex' }, extra || {}) } });
+      const ctx = t.vm.createContext({ Date: fixedDate(NOW), Math, String, isNaN, _clock24: t.loadPure('js/app.js', 'clock')._clock24, _eventCache: { 77: Object.assign({ start_at: startAt, _typeName: 'Ride', _instrName: 'Alex' }, extra || {}) } });
       t.vm.runInContext(grab(appSrc, 'function _waitlistClassLine(', '}'), ctx, { filename: 'js/app.js[_waitlistClassLine]' });
       return ctx._waitlistClassLine(77);
     };
-    eq([line('2026-09-18 11:33:00'), line('2026-09-24 11:33:00')], ['Ride · Alex · Fri 18, 11:33am', 'Ride · Alex · Thu 24, 11:33am'], 'today, and up to 6 days off: as before — the day names it');
-    eq([line('2026-09-25 11:33:00'), line('2026-10-16 18:00:00')], ['Ride · Alex · Fri 25 Sep, 11:33am', 'Ride · Alex · Fri 16 Oct, 6:00pm'], 'further ahead: the month is said (it read "Fri 16" for a class four weeks away)');
-    eq(line('2026-09-04 07:15:00'), 'Ride · Alex · Fri 4 Sep, 7:15am', 'an ENDED place read about later: the month too');
-    eq([line('soon'), line('2026-09-25T11:33:00', { _instrName: '' })], ['Ride · Alex', 'Ride · Fri 25 Sep, 11:33am'], 'an unreadable time is left out, as before; a missing name too');
+    eq([line('2026-09-18 11:33:00'), line('2026-09-24 11:33:00')], ['Ride · Alex · Fri 18, 11:33', 'Ride · Alex · Thu 24, 11:33'], 'today, and up to 6 days off: as before — the day names it');
+    eq([line('2026-09-25 11:33:00'), line('2026-10-16 18:00:00')], ['Ride · Alex · Fri 25 Sep, 11:33', 'Ride · Alex · Fri 16 Oct, 18:00'], 'further ahead: the month is said (it read "Fri 16" for a class four weeks away)');
+    eq(line('2026-09-04 07:15:00'), 'Ride · Alex · Fri 4 Sep, 07:15', 'an ENDED place read about later: the month too');
+    eq([line('soon'), line('2026-09-25T11:33:00', { _instrName: '' })], ['Ride · Alex', 'Ride · Fri 25 Sep, 11:33'], 'an unreadable time is left out, as before; a missing name too');
   }
 
   // ── i. The Monday-reminder tap ───────────────────────────────────────────

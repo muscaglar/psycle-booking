@@ -193,11 +193,11 @@ module.exports = function (t) {
       'root: .class-card.ct-card … .my-booking-card LAST, data-id first, data-ct from the class type, the tap still opens the class sheet');
     eq(['70', '77', '78', '79', '80'].map((id) => (/data-ct="([a-z]+)"/.exec(w.cards[id]) || [])[1]), ['hiit', 'ride', 'strength', 'yoga', 'pilates'],
       'colour means class type: HIIT, Ride, Strength, Yoga, Reformer (= pilates)');
-    ok(/<div class="cc-time mb-when"><span class="mb-day">Mon 21<\/span><span class="cc-time-h">6:00<\/span><span class="cc-dur"><span class="cc-ampm">pm<\/span> · 45 min<\/span><\/div>/.test(c77),
-      'when: its day, then the SHARED time block (_ccTimeHTML) — the digits over "pm · 45 min", exactly what Discover prints for this class');
+    ok(/<div class="cc-time mb-when"><span class="mb-day">Mon 21<\/span><span class="cc-time-h">18:00<\/span><span class="cc-dur">45 min<\/span><\/div>/.test(c77),
+      'when: its day, then the SHARED time block (_ccTimeHTML) — the 24-hour time over "45 min", exactly what Discover prints for this class');
     ok(/<div class="cc-head mb-title"><span class="ct-tile" aria-hidden="true"><svg class="ct-pic" width="18" height="18"[^>]*aria-hidden="true"[^>]*>.*?<\/svg><\/span><span class="cc-name mb-name" role="button" tabindex="0">RIDE: 45<\/span><\/div>/.test(c77),
       'title: the shared title row (.cc-head > .ct-tile + .cc-name) — a button a keyboard can reach, like Discover\'s; mb-title / mb-name are only hooks');
-    ok(!/class-time-ampm|mb-time|mb-dur|t-title/.test(w.html), 'nothing is left of the second time block (am/pm beside the digits, the duration on a line of its own)');
+    ok(!/class-time-ampm|mb-time|mb-dur|t-title/.test(w.html), 'nothing is left of the second time block (its own digits, the duration on a line of its own)');
     // ONE component: the meta line is the shared class card's (.cc-sub · .cc-who ·
     // .cc-loc, crisp 9b.7 — the structure Discover's eventCard prints). The "·" is
     // not text at all: css draws it in the gap and clips it when the place wraps,
@@ -238,7 +238,7 @@ module.exports = function (t) {
       'late-cancel window: Cancel alone on the card (no Change spot), four actions behind More');
     ok(/<span class="badge late-cancel-note">Late-cancel window<\/span>/.test(w.cards[77]) && !/mb-cancel-deadline/.test(w.cards[77]), '…with the ONE red badge instead of a "Free cancel until" line');
     eq([labels(actions(w.cards[78])), labels(menu(w.cards[78]))], [['Cancel all 2', 'Change spot'], ['Find similar', 'Map', 'Share']], 'two seats, days away: Cancel all 2 · Change spot; no Add spot in the menu');
-    ok(/<div class="mb-cancel-deadline">Free cancel until <strong>Tue 9:30pm<\/strong><\/div>/.test(w.cards[78]), '"Free cancel until" with the deadline set apart (the 12h rule is _cancelDeadline\'s, untouched)');
+    ok(/<div class="mb-cancel-deadline">Free cancel until <strong>Tue 21:30<\/strong><\/div>/.test(w.cards[78]), '"Free cancel until" with the deadline set apart (the 12h rule is _cancelDeadline\'s, untouched)');
     eq([labels(actions(w.cards[79])), labels(menu(w.cards[79]))], [['Cancel all 2'], ['Add spot', 'Find similar', 'Map', 'Share']], 'a no-layout class: no seat to change; another space can be added');
     eq([labels(actions(w.cards[70])), labels(menu(w.cards[70]))], [['Leave waitlist', 'Check for a spot'], ['Find similar', 'Map']], 'a place: Leave · Check on the card; Find similar · Map behind More');
     eq([labels(actions(w.cards[80])), /mb-more/.test(w.cards[80])], [['Leave waitlist', 'Check for a spot', 'Find similar'], false], 'a place with no address: the lone "Find similar" goes on the card — no one-item menu');
@@ -301,9 +301,9 @@ module.exports = function (t) {
     const html = off._savedBookingsHTML(items, 'Saved copy · 14:05', false);
     ok(/class="class-card ct-card is-booked my-booking-card is-saved-copy" data-ct="ride"/.test(html) && /class="class-card ct-card is-dashed is-waitlisted my-booking-card is-saved-copy" data-ct="barre"/.test(html),
       'in the app: tinted by class type, a place dashed');
-    ok(/<div class="cc-time mb-when"><span class="mb-day">Thu 24<\/span><span class="cc-time-h">7:05<\/span><span class="cc-dur"><span class="cc-ampm">pm<\/span> · 45 min<\/span><\/div>/.test(html) &&
-      /<div class="cc-time mb-when"><span class="mb-day">Fri 25<\/span><span class="cc-time-h">12:15<\/span><span class="cc-dur"><span class="cc-ampm">am<\/span><\/span><\/div>/.test(html),
-      'day + the string\'s own wall-clock digits in the shared time block; no duration known → am/pm alone');
+    ok(/<div class="cc-time mb-when"><span class="mb-day">Thu 24<\/span><span class="cc-time-h">19:05<\/span><span class="cc-dur">45 min<\/span><\/div>/.test(html) &&
+      /<div class="cc-time mb-when"><span class="mb-day">Fri 25<\/span><span class="cc-time-h">00:15<\/span><\/div>/.test(html),
+      'day + the string\'s own wall-clock digits, 24-hour, in the shared time block; no duration known → the time alone');
     ok(bare.indexOf('cc-time') === -1, '…and evaluated on its own the block is simply absent (typeof-guarded, like the tile)');
     ok(/<div class="cc-head mb-title"><span class="ct-tile" aria-hidden="true"><svg/.test(html) && /<span class="cc-name mb-name">RIDE: 45<\/span>/.test(html), 'tile + title, in the shared title row');
     ok(/<div class="class-instructor cc-sub mb-meta"><span class="cc-who">Alex &lt;i&gt;<\/span><span class="cc-loc class-location">Bank · Studio 1<\/span><\/div>/.test(html) &&
@@ -321,16 +321,17 @@ module.exports = function (t) {
   // ════════════════════════════════════════════════════════════════════
   t.section('9d: usual week — a compact class component per entry, coloured by the TYPE alone');
   {
-    const u = t.loadPure('js/tabs.js', 'usual-week-crisp');
+    // _uwTime prints through app.js's ONE formatter (_clock24, pure:clock) — a global in the page, handed in here.
+    const u = t.loadPure('js/tabs.js', 'usual-week-crisp', { _clock24: t.loadPure('js/app.js', 'clock')._clock24 });
     const ct = t.loadPure('js/app.js', 'core', { window: {} });
     t.vm.runInContext(region(appSrc, 'class-type'), ct, { filename: 'js/app.js[9d class-type]' });
     eq([u._uwTypeOf('RIDE: 45 · Maya Okafor'), u._uwTypeOf('YOGA: Flow'), u._uwTypeOf(''), u._uwTypeOf(null)], ['RIDE: 45', 'YOGA: Flow', '', ''], 'the label is "Type · Instructor": only the type is asked for a colour');
     eq([ct.classTypeKey('Sound Bath · Sam Barrett'), ct.classTypeKey(u._uwTypeOf('Sound Bath · Sam Barrett'))], ['barre', 'other'],
       'why: an instructor called Barrett made a Sound Bath a Barre class');
     eq(ct.classTypeKey(u._uwTypeOf('REFORMER: Signature 55 · Tom Alexandrou-Whitfield')), 'pilates', 'a reformer class is violet, whoever teaches it');
-    eq([u._uwTimeParts(18 * 60 + 30), u._uwTimeParts(12 * 60 + 15), u._uwTimeParts(0), u._uwTimeParts(9 * 60 + 5)],
-      [{ clock: '6:30', ampm: 'pm' }, { clock: '12:15', ampm: 'pm' }, { clock: '12:00', ampm: 'am' }, { clock: '9:05', ampm: 'am' }], 'the time in two parts, so am/pm can be set small');
-    eq([u._uwTimeParts('junk'), u._uwTimeParts(-5), u._uwTimeParts(25 * 60)], [{ clock: '12:00', ampm: 'am' }, { clock: '12:00', ampm: 'am' }, { clock: '1:00', ampm: 'am' }], 'stored junk never prints NaN');
+    eq([u._uwTime(18 * 60 + 30), u._uwTime(12 * 60 + 15), u._uwTime(0), u._uwTime(9 * 60 + 5)], ['18:30', '12:15', '00:00', '09:05'], 'minutes after midnight → the 24-hour time, zero-padded');
+    eq([u._uwTime('junk'), u._uwTime(-5), u._uwTime(25 * 60)], ['00:00', '00:00', '01:00'], 'stored junk never prints NaN');
+    ok(/return '<span class="t-time is-compact">' \+ _uwTime\(totalMin\) \+ '<\/span>';/.test(tabsSrc) && !/class-time-ampm|_uwTimeParts/.test(tabsSrc), 'the compact time is that string alone — no am / pm part is left to set small');
     const mark = u._uwClassMark('RIDE: 45', ct.classTypeKey, ct.classPictogram);
     ok(mark.key === 'ride' && /^<span class="ct-tile is-sm" aria-hidden="true"><svg class="ct-pic" width="15" height="15"/.test(mark.tile), 'the small tile with the 15px pictogram');
     eq(u._uwClassMark('RIDE: 45', null, null), { key: 'other', tile: '' }, 'tabs.js on its own (no app.js helpers): neutral, no tile, no throw');
@@ -490,6 +491,7 @@ module.exports = function (t) {
     const calls = [];
     const ctx = t.vm.createContext({
       window: {}, Date, escapeHTML: esc, toast() {}, requestAnimationFrame: () => 0, setTimeout: () => 0, rebookNextWeek: (id) => calls.push(['rebookNextWeek', id]),
+      _clock24: t.loadPure('js/app.js', 'clock')._clock24, // "Tuesdays at 07:00"
       _eventCache: { 77: { start_at: '2026-09-22 07:00:00', _instrName: 'Alex', _typeName: 'RIDE: 45' } },
       document: { querySelector: (sel) => (sel === '.find-similar-popup' ? null : trigger), createElement: () => popup, addEventListener() {}, removeEventListener() {} },
     });
@@ -522,7 +524,7 @@ module.exports = function (t) {
     const card = { querySelector: (sel) => (sel === '.mb-actions' ? actions : null) };
     const trigger = { style: {}, parentElement: menu, closest: (sel) => (sel === '.my-booking-card' ? card : null) };
     const ctx = t.vm.createContext({
-      window: {}, Date, escapeHTML: esc, toast() {}, requestAnimationFrame: () => 0, setTimeout: () => 0,
+      window: {}, Date, escapeHTML: esc, toast() {}, requestAnimationFrame: () => 0, setTimeout: () => 0, _clock24: t.loadPure('js/app.js', 'clock')._clock24,
       _eventCache: { 77: { start_at: '2026-09-22 07:00:00', _instrName: 'Alex', _typeName: 'RIDE: 45' } },
       document: { querySelector: (sel) => (sel === '.find-similar-popup' ? null : trigger), createElement: () => { const e = mkEl(); made.push(e); return e; }, addEventListener() {}, removeEventListener() {} },
     });
@@ -549,8 +551,12 @@ module.exports = function (t) {
     const selectors = [];
     flat.replace(/([^{}]+)\{[^{}]*\}/g, (m, sel) => { sel.split(',').forEach((s) => { s = s.trim(); if (s) selectors.push(s); }); return m; });
     ok(selectors.length > 120, 'rules were found (' + selectors.length + ' selectors)');
-    const scoped = /^(html\[data-ct-intensity="off"\] )?(#tab-bookings|#usualWeekCard|#usualWeekSheet|\.next-class-pill)\b|^body\.has-next-pill #tab-bookings\b/;
+    // (A theme or intensity prefix narrows a rule; it cannot widen what the rule reaches.)
+    const scoped = /^(html\[data-ct-intensity="off"\] |html\[data-theme="gameboy"\] )?(#tab-bookings|#usualWeekCard|#usualWeekSheet|\.next-class-pill)\b|^body\.has-next-pill #tab-bookings\b/;
     eq(selectors.filter((s) => !scoped.test(s)), [], 'every selector starts at #tab-bookings / #usualWeekCard / #usualWeekSheet / .next-class-pill — nothing here can restyle a Discover card or a sheet');
+    // Handheld: no soft shadow, and its cards ARE the surface — at rest over a card the pill had the card's
+    // fill and no edge, and read as that card's last row. A ring (its box does not grow), over the float shadow.
+    ok(/html\[data-theme="gameboy"\] \.next-class-pill \{ box-shadow: 0 0 0 var\(--hairline\) var\(--border-light\), var\(--shadow-float\); \}/.test(css), 'Handheld: the pill wears a hairline ring, so it no longer merges with the card under it');
     ok(!/\.class-card(?![\w-])/.test(css) && !/\.book-btn(?![\w-])/.test(css), '…and none names the shared .class-card / .book-btn at all (9b\'s to style)');
 
     const rule = (sel) => { const i = css.indexOf(sel + ' {'); return i === -1 ? '' : css.slice(i, css.indexOf('}', i)); };

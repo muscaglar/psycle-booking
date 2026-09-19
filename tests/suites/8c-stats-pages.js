@@ -8,7 +8,7 @@
 //     against a fake DOM: tab-list semantics, one page displayed, a page built
 //     when it is first opened and not again, the hero states, the quiet line;
 //   · explore.js's gate (its three sections are not built while their page is closed);
-//   · the CSS block: tokens only, pinned, fingertip-tall, readable in all 7 themes.
+//   · the CSS block: tokens only, pinned, fingertip-tall, readable in every theme.
 module.exports = function (t) {
   const { ok, eq } = t;
   const tabsSrc = t.readSource('js/tabs.js');
@@ -434,7 +434,7 @@ module.exports = function (t) {
     };
     const ids = [];
     t.readSource('js/theme.js').replace(/\{\s*id:\s*'([a-z]+)'/g, (m, id) => { ids.push(id); return m; });
-    ok(ids.length >= 7, 'theme ids parsed from APP_THEMES (' + ids.join(', ') + ')');
+    ok(ids.length >= 5, 'theme ids parsed from APP_THEMES (' + ids.join(', ') + ')');
     ids.forEach((id) => {
       const tk = Object.assign({}, tokensOf(':root'), tokensOf('[data-theme="' + id + '"]'));
       const rest = contrast(tk['--text-muted'], tk['--bg-deep']), on = contrast(tk['--text-heading'], tk['--bg-panel']);

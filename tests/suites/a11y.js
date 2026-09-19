@@ -105,9 +105,9 @@ module.exports = async function (t) {
 
   w = speakWorld(true);
   w.ctx.toast("Spot claimed — you're booked in!", 'success');
-  w.ctx.announce('Booked!. Ride · Ada. Mon 3 Feb, 7:00am');
+  w.ctx.announce('Booked!. Ride · Ada. Mon 3 Feb, 07:00');
   w.run(50);
-  eq(w.els.srStatus.textContent, "Spot claimed — you're booked in! Booked!. Ride · Ada. Mon 3 Feb, 7:00am",
+  eq(w.els.srStatus.textContent, "Spot claimed — you're booked in! Booked!. Ride · Ada. Mon 3 Feb, 07:00",
     'a toast and the Booked! line in the same tick: neither is lost');
   eq(w.timers.filter(x => x.ms === 50 && x.fn).length, 2, 'one write timer per call…');
   w.run(p._toastDuration(w.els.srStatus.textContent));
