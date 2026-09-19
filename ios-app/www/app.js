@@ -1258,6 +1258,17 @@ function _pickActiveSubscription(subs) {
 function _shouldOfferHistorySync(s) {
   return !!(s && s.hasToken && !s.synced && !s.dismissed && !(s.historyCount > 10));
 }
+
+// The member in a /profile body — `{data: {...}}` or the bare object — or null when the
+// body is not a profile at all. An ARRAY is an object to typeof: `[]` (or `{data: []}`)
+// once read as a signed-in member with no name, no plan and no id, where the rule is
+// "a 200 whose body cannot be read as a profile is unverified" (see Session states).
+function _profileFrom(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const user = Object.prototype.hasOwnProperty.call(data, 'data') && data.data != null ? data.data : data;
+  if (!user || typeof user !== 'object' || Array.isArray(user)) return null;
+  return user;
+}
 // ── pure:session:end ──
 
 // Auth check
@@ -1468,8 +1479,8 @@ function _claimDataOwner(id) {
 // refreshProfile so both pick the subscription the same way. Returns false
 // (state untouched) for a body that isn't a profile.
 function _applyProfile(data) {
-  const user = data && (data.data || data);
-  if (!user || typeof user !== 'object') return false;
+  const user = _profileFrom(data);
+  if (!user) return false;
   _authUnverified = false;
   // A DIFFERENT customer than the last one on this page. Session expiry keeps
   // _myBookings on purpose (same member: the cards and widget stay true until

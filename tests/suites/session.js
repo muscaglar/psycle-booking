@@ -475,4 +475,16 @@ module.exports = async function (t) {
   const exploreSrc = t.readSource('js/explore.js');
   const zero = exploreSrc.slice(exploreSrc.indexOf('if (allBookings.length === 0) {'), exploreSrc.indexOf('// Update button with progress'));
   t.ok(/if \(_confirmedEmpty\) \{\s*localStorage\.setItem\(SYNC_KEY/.test(zero), 'history sync: only a confirmed-empty answer is recorded as synced');
+
+  t.section('Session: what counts as a profile body');
+  {
+    const from = pure._profileFrom;
+    t.eq(from({ data: { id: 7, first_name: 'A' } }), { id: 7, first_name: 'A' }, 'the wrapped form');
+    t.eq(from({ id: 7, first_name: 'A' }), { id: 7, first_name: 'A' }, 'the bare form');
+    t.eq([from([]), from([{ id: 7 }]), from({ data: [] }), from({ data: [{ id: 7 }] })], [null, null, null, null], 'an array is not a member, wrapped or bare (typeof says "object")');
+    t.eq([from(null), from(undefined), from('<html>'), from(7), from(true), from({ data: 'x' }), from({ data: 0 })].map((v) => v === null || (v && typeof v === 'object' && !Array.isArray(v))), [true, true, true, true, true, true, true], 'null, an HTML page, a number, a string payload: never an array, never a primitive');
+    t.eq([from(null), from('<html>'), from({ data: 'x' })], [null, null, null], '…and those three are simply not profiles');
+    t.eq(from({ data: null, id: 9 }), { data: null, id: 9 }, 'a null `data` beside real fields is the bare form');
+    t.ok(/function _applyProfile\(data\) \{\n  const user = _profileFrom\(data\);\n  if \(!user\) return false;/.test(t.readSource('js/app.js')), '_applyProfile asks it first — so checkAuth reads such a body as "unverified", never as signed in');
+  }
 };
