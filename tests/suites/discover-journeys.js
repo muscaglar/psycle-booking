@@ -21,7 +21,8 @@ module.exports = async function (t) {
 
   // ── Release instants ─────────────────────────────────────────────────────
   t.section('Release: the latest / next Monday 12:00 Europe/London (js/app.js pure:window)');
-  t.ok(['_lastReleaseMs', '_nextReleaseMs', '_weekOpensMs'].every((n) => typeof W[n] === 'function'), 'the pure:window region defines the release helpers');
+  t.ok(['_lastReleaseMs', '_nextReleaseMs', '_dayOpensMs', '_dayListedMs', '_bookingHorizon'].every((n) => typeof W[n] === 'function') && typeof W._weekOpensMs === 'undefined',
+    'the pure:window region defines the release helpers — per DAY now: _weekOpensMs ("a week opens on the Monday before it") is gone with the rule it stood for');
   // BST: Monday noon in London is 11:00 UTC.
   t.eq(iso(W._lastReleaseMs(utc(2026, 9, 17, 15))), '2026-09-14T11:00:00.000Z', 'a Thursday in September → Monday 14th, 12:00 BST (11:00 UTC)');
   t.eq(iso(W._nextReleaseMs(utc(2026, 9, 17, 15))), '2026-09-21T11:00:00.000Z', '…and the next one is Monday 21st');
@@ -39,12 +40,22 @@ module.exports = async function (t) {
   t.eq(iso(W._lastReleaseMs(utc(2026, 3, 30, 10, 59, 59))), '2026-03-23T12:00:00.000Z', 'first Monday on BST, 11:59:59: last week\'s GMT release');
   t.eq(iso(W._lastReleaseMs(utc(2026, 3, 30, 11))), '2026-03-30T11:00:00.000Z', '…12:00:00 BST: released');
   t.eq([W._lastReleaseMs(NaN), W._nextReleaseMs('x')], [null, null], 'an unreadable clock → null, no throw');
-  t.eq(iso(W._weekOpensMs('2026-09-28')), '2026-09-21T11:00:00.000Z', 'the week of Monday 28th opens at noon (London) on Monday 21st');
-  t.eq(iso(W._weekOpensMs('2026-11-02')), '2026-10-26T12:00:00.000Z', '…across a month end and the clock change');
-  t.eq([W._weekOpensMs(''), W._weekOpensMs('28/09/2026')], [null, null], 'not a date → null');
+  // When a DAY opens — the OBSERVED model (pure:horizon; 2026-09-19): a Monday
+  // release opens the Friday 18 days on to the Thursday 24 days on, and the
+  // timetable lists one such batch further. The old rule said Monday 28th's
+  // week opened on Monday 21st; it had been open since the 7th.
+  t.eq([iso(W._dayOpensMs('2026-10-02')), iso(W._dayOpensMs('2026-10-08'))], ['2026-09-14T11:00:00.000Z', '2026-09-14T11:00:00.000Z'],
+    'Fri 2 → Thu 8 Oct all opened at noon (London) on Monday 14 Sept — what was seen on the live timetable');
+  t.eq([iso(W._dayOpensMs('2026-10-09')), iso(W._dayOpensMs('2026-10-15'))], ['2026-09-21T11:00:00.000Z', '2026-09-21T11:00:00.000Z'], '…and Fri 9 → Thu 15 Oct open on Monday 21 Sept');
+  t.eq([iso(W._dayOpensMs('2026-09-28')), iso(W._dayOpensMs('2026-10-04'))], ['2026-09-07T11:00:00.000Z', '2026-09-14T11:00:00.000Z'],
+    'a Monday–Sunday week does not open as one: Monday 28th came with the release of the 7th, its Sunday with the 14th');
+  t.eq(iso(W._dayOpensMs('2026-11-19')), '2026-10-26T12:00:00.000Z', '…across the clock change: that release is 12:00 GMT');
+  t.eq([iso(W._dayListedMs('2026-10-15')), iso(W._dayListedMs('2026-10-16'))], ['2026-09-14T11:00:00.000Z', '2026-09-21T11:00:00.000Z'],
+    'a day is LISTED a release before it opens: Thu 15 Oct was on the timetable from 14 Sept, Fri 16 Oct is not until the 21st');
+  t.eq([W._dayOpensMs(''), W._dayOpensMs('28/09/2026'), W._dayListedMs(null)], [null, null, null], 'not a date → null');
   const bare = t.loadPure('js/app.js', 'window', { _dateModeWindow: F._dateModeWindow }); // no London resolver in scope
-  t.eq([bare._lastReleaseMs(utc(2026, 9, 17, 15)), bare._nextReleaseMs(utc(2026, 9, 17, 15)), bare._weekOpensMs('2026-09-28')], [null, null, null],
-    'without the London resolver (or Europe/London data) every helper answers null');
+  t.eq([bare._lastReleaseMs(utc(2026, 9, 17, 15)), bare._nextReleaseMs(utc(2026, 9, 17, 15)), bare._dayOpensMs('2026-09-28'), bare._dayListedMs('2026-09-28'), bare._bookingHorizon(utc(2026, 9, 17, 15))],
+    [null, null, null, null, null], 'without the London resolver (or Europe/London data) every helper answers null');
 
   t.section('Release: a timetable fetched before it is never fresh');
   {
@@ -105,32 +116,39 @@ module.exports = async function (t) {
       t.vm.runInContext('var _revalInFlight = null, _loadableSearchStarted = true, _dateQuickMode = ' + JSON.stringify(o.mode) + ';\n' + ecSrc, c, { filename: 'js/app.js[empty context]' });
       return c._discoverEmptyContext();
     };
+    // "Next week" has long been open by the Monday before it (pure:horizon —
+    // observed): the old "Next week opens Monday 12:00" was simply untrue.
     const MON = { today: '2026-09-21', start: '2026-09-28', end: '2026-10-04', mode: 'nextweek' };
     let e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 10, 59) }, MON)); // 11:59 London
-    t.eq([e.title, e.actions], ['Next week opens Monday 12:00', ['week']], 'Monday 11:59: not "There are no classes" — it says when the week opens, with a way back to the 7 days');
-    t.ok(/12:00 UK time/.test(e.sub), '…in UK time (the member may be abroad)');
-    e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 10, 59), locations: ['3'] }, MON));
-    t.eq(e.title, 'Next week opens Monday 12:00', 'filters or not: "nothing matches these filters" would be the wrong reason');
-    e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 11, 0, 1) }, MON));
-    t.eq([e.title, e.actions], ['No classes on these dates', ['week']], 'after noon an empty week is just empty');
-    e = emptyCtx({ now: utc(2026, 9, 22, 9), today: '2026-09-22', start: '2026-09-28', end: '2026-10-04', mode: 'nextweek' });
-    t.eq(e.title, 'No classes on these dates', 'Tuesday to Sunday that week has long been open');
-    e = emptyCtx({ now: utc(2026, 9, 21, 9), today: '2026-09-21', start: '2026-10-07', mode: 'nextweek' });
-    t.eq(e.title, 'No classes on these dates', 'a stale "nextweek" mode over a date another flow picked makes no such claim');
+    t.eq([e.title, e.actions], ['No classes on these dates', ['week']], 'Monday 11:59, "Next week" empty: it is just empty — that week opened two releases ago');
+    // What CAN be empty for lack of a release: a date past what the timetable
+    // lists (about 25 days out) — only a date picked in the calendar gets there.
+    const FAR = { today: '2026-09-21', start: '2026-10-16', mode: null };
+    e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 10, 59) }, FAR)); // Fri 16 Oct is listed from Monday 21st, 12:00
+    t.eq([e.title, e.actions], ['Not on the timetable yet', ['week']], 'Monday 11:59, a date the 12:00 release will list: not "There are no classes" — with a way back to the 7 days');
+    t.ok(/Mondays at 12:00 UK time/.test(e.sub) && /Booking for these usually opens Monday 28 September\./.test(e.sub) && !/these opens/.test(e.sub),
+      '…it says when new dates appear, in UK time (the member may be abroad), and when these can USUALLY be booked — the date is the observed model\'s, never a promise: ' + e.sub);
+    e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 10, 59), locations: ['3'] }, FAR));
+    t.eq(e.title, 'Not on the timetable yet', 'filters or not: "nothing matches these filters" would be the wrong reason');
+    e = emptyCtx(Object.assign({ now: utc(2026, 9, 21, 11, 0, 1) }, FAR));
+    t.eq([e.title, e.actions], ['No classes on these dates', ['week']], 'after noon that date is listed: an empty day is just empty');
+    e = emptyCtx({ now: utc(2026, 9, 21, 9), today: '2026-09-21', start: '2026-10-15', mode: null });
+    t.eq(e.title, 'No classes on these dates', 'Thu 15 Oct has been listed since the release before: no such claim');
     // A member in Sydney: device Monday 09:00 is Sunday 23:00 UTC — noon in London is 21:00 their time.
-    e = emptyCtx({ now: utc(2026, 9, 20, 23), today: '2026-09-21', start: '2026-09-28', end: '2026-10-04', mode: 'nextweek' });
-    t.eq(e.title, 'Next week opens Monday 12:00', 'the release is London\'s noon wherever the device is');
+    e = emptyCtx({ now: utc(2026, 9, 20, 23), today: '2026-09-21', start: '2026-10-16', mode: null });
+    t.eq(e.title, 'Not on the timetable yet', 'the release is London\'s noon wherever the device is');
   }
 
   // ── The release timer + the reminder-tap hook ────────────────────────────
-  t.section('Release: one timer looks at noon; the Monday-reminder tap opens "Next week"');
+  t.section('Release: one timer looks at noon; the Monday-reminder tap shows the dates that just opened');
   {
     const rStart = appSrc.indexOf('// ── Monday noon: the new booking week opens');
     const rEnd = appSrc.indexOf('async function search(opts) {');
     t.ok(rStart !== -1 && rEnd > rStart, 'the release block can be sliced (anchors moved? update tests/suites/discover-journeys.js)');
     const world = (o) => {
       o = o || {};
-      const w = { timers: [], cleared: [], calls: [], handlers: {}, hidden: false, busy: false, tab: 'tab-discover', now: null, token: o.signedOut ? '' : 'tok' };
+      const w = { timers: [], cleared: [], calls: [], handlers: {}, hidden: false, busy: false, tab: 'tab-discover', now: null, token: o.signedOut ? '' : 'tok',
+        inputs: { startDate: { value: '2026-09-21' }, daysAhead: { value: '6' } } };
       class Clock extends Date { static now() { return w.now == null ? Date.now() : w.now; } } // movable once w.now is set
       const ctx = t.loadPure('js/app.js', 'window', {
         Date: Clock,
@@ -139,6 +157,7 @@ module.exports = async function (t) {
         document: {
           get hidden() { return w.hidden; },
           querySelector: (sel) => (sel === '.tab-panel.active' && w.tab ? { id: w.tab } : null),
+          getElementById: (id) => w.inputs[id] || null,
           addEventListener: (type, fn) => { w.handlers[type] = fn; },
         },
         getBearerToken: () => w.token,
@@ -146,17 +165,27 @@ module.exports = async function (t) {
         _revalidateIfStale: () => w.calls.push('revalidateIfStale'),
         _discoverBusy: () => w.busy,
         switchTab: (tab) => w.calls.push('tab:' + tab),
-        // The hook applies the preset WITHOUT saving it: _applyDateQuick, never the
-        // saveFilters-wrapped setDateQuick (a call to that one shows up as "saved:").
-        _applyDateQuick: (mode) => w.calls.push('date:' + mode),
+        // The hook writes the date WITHOUT saving it: the inputs themselves, as the
+        // calendar's pick does — never through a name interactions.js wraps with
+        // saveFilters (a call to one of those shows up as "saved:"), and no preset.
+        _applyDateQuick: (mode) => w.calls.push('preset:' + mode),
         setDateQuick: (mode) => w.calls.push('saved:' + mode),
+        onDateInputChange: () => w.calls.push('saved:custom'),
+        _syncDatePills: () => w.calls.push('pills'),
+        triggerAutoSearch: () => w.calls.push('search'),
         _revealActiveDatePill: () => {},
       });
       ctx.window = ctx;
-      t.vm.runInContext('var _revalFailedAt = 0, _loadableSearchStarted = ' + (o.launched === false ? 'false' : 'true') + ';\n' + appSrc.slice(rStart, rEnd), ctx, { filename: 'js/app.js[release]' });
+      t.vm.runInContext('var _revalFailedAt = 0, _dateQuickMode = "week", _loadableSearchStarted = ' + (o.launched === false ? 'false' : 'true') + ';\n' + appSrc.slice(rStart, rEnd), ctx, { filename: 'js/app.js[release]' });
       w.ctx = ctx;
+      // What the date row holds: [startDate, daysAhead, preset, held-for-the-notification].
+      w.row = () => [w.inputs.startDate.value, String(w.inputs.daysAhead.value), t.vm.runInContext('_dateQuickMode', ctx), ctx._dateRowHeld];
       return w;
     };
+    // Monday 21 September 2026, 12:00:01 London: that release opened Fri 9 → Thu 15
+    // October (observed model, js/app.js pure:week-opened; tests/suites/14c-weekly-reminder.js).
+    const TAPPED = Date.UTC(2026, 8, 21, 11, 0, 1);
+    const SHOWN = ['2026-10-09', '1', null, true], UNTOUCHED = ['2026-09-21', '6', 'week', undefined];
     let w = world();
     t.eq(w.timers.length, 1, 'loading app.js arms ONE timer');
     t.ok(w.timers[0].ms > 3000 - 1 && w.timers[0].ms <= 7 * 86400000 + 3600000 + 3000, 'for the next release (within a week and a bit — never past setTimeout\'s 24.8-day ceiling)');
@@ -191,35 +220,41 @@ module.exports = async function (t) {
     t.eq(w.calls, [], 'signed out: inert');
     t.eq(world({ noZone: true }).timers.length, 0, 'no London resolver: no timer at all');
 
-    // The hook native-bridge's Monday-reminder tap calls.
+    // The hook native-bridge's Monday-reminder tap calls. No usual week is saved
+    // in this world (no loadWeeklyTemplate at all), so every case below is the
+    // Discover route; the usual-week review route is tests/suites/14c-weekly-reminder.js.
     w = world();
+    w.now = TAPPED;
     t.eq(typeof w.ctx._onBookingWeekOpened, 'function', 'window._onBookingWeekOpened is exported');
     w.ctx._onBookingWeekOpened();
-    t.eq(w.calls, ['tab:discover', 'date:nextweek'], "app already up: Discover, then the 'Next week' preset — it searches like a pill tap, but is NOT saved: a tapped notification used to become what every later launch opened on");
-    t.eq(w.ctx._dateRowHeld, true, '…nor by their next chip tap: the date row is marked as the notification\'s, which saveFilters and the overnight roll respect (tests/suites/wave7-leftovers.js, window.js)');
+    t.eq(w.calls, ['tab:discover', 'pills', 'search'], 'app already up: Discover, the date row repainted, a search like a calendar pick — through NO name that saves (a tapped notification used to become what every later launch opened on) and no preset ("Next week" opened a fortnight earlier: the wrong dates)');
+    t.eq(w.row(), SHOWN, '…on the FIRST day of the dates that release opened, as one picked day — and the date row is marked as the notification\'s, which saveFilters and the overnight roll respect (tests/suites/wave7-leftovers.js, window.js)');
     t.ok(!/refreshWindow\(\)/.test(appSrc.slice(appSrc.indexOf('window._onBookingWeekOpened = function'), rEnd)), 'no explicit refresh to race that search — the freshness rule refetches a pre-release window');
     w = world({ launched: false });
+    w.now = TAPPED;
     w.ctx._onBookingWeekOpened();
-    t.eq([w.calls, w.timers.length, w.ctx._dateRowHeld], [[], 2, undefined], 'cold start, launch not done: NOTHING is written yet (init\'s tail and restoreFilters would each put the old preset back) — a retry is armed');
+    t.eq([w.calls, w.timers.length, w.row()], [[], 2, UNTOUCHED], 'cold start, launch not done: NOTHING is written yet (init\'s tail and restoreFilters would each put the old date back) — a retry is armed');
     t.vm.runInContext('_loadableSearchStarted = true;', w.ctx);
     w.timers[1].fn();
-    t.eq(w.calls, ['date:nextweek'], 'once a search that could load has started (launch restored the saved date row before it), the preset is applied — with no second switchTab: the bridge put the member on Discover at the tap');
+    t.eq([w.calls, w.row()], [['pills', 'search'], SHOWN], 'once a search that could load has started (launch restored the saved date row before it), the day is shown — with no second switchTab: the bridge put the member on Discover at the tap');
     w = world();
+    w.now = TAPPED;
     w.busy = true;
     w.ctx._onBookingWeekOpened();
-    t.eq(w.calls, [], 'a booking in progress: the list is not rebuilt under the open picker');
+    t.eq([w.calls, w.row()], [[], UNTOUCHED], 'a booking in progress: the list is not rebuilt under the open picker');
     w.busy = false;
     w.timers[w.timers.length - 1].fn();
-    t.eq(w.calls, ['date:nextweek'], '…it happens when the flow ends');
+    t.eq([w.calls, w.row()], [['pills', 'search'], SHOWN], '…it happens when the flow ends');
     // The member moved on while it waited ("View my bookings" on the dialog that
     // held it up): a retry must not yank them back and rewrite the date row.
     w = world();
+    w.now = TAPPED;
     w.busy = true;
     w.ctx._onBookingWeekOpened();
     w.busy = false;
     w.tab = 'tab-bookings';
     w.timers[w.timers.length - 1].fn();
-    t.eq([w.calls, w.timers.length], [[], 2], 'the member is on My Bookings by the retry: nothing happens, and no further retry is armed');
+    t.eq([w.calls, w.timers.length, w.row()], [[], 2, UNTOUCHED], 'the member is on My Bookings by the retry: nothing happens, and no further retry is armed');
     // Timers freeze in a suspended app: the poll counted tries, not the clock.
     w = world();
     w.now = Date.UTC(2026, 8, 21, 11, 0, 0);
@@ -231,13 +266,19 @@ module.exports = async function (t) {
     w.busy = false;
     w.now += 3 * 3600000; // phone locked, reopened hours later
     w.timers[w.timers.length - 1].fn();
-    t.eq([w.calls, w.timers.length], [[], 3], 'a poll that wakes hours after the tap gives up by the clock (it used to switch tab and preset at +180 min)');
+    t.eq([w.calls, w.timers.length, w.row()], [[], 3, UNTOUCHED], 'a poll that wakes hours after the tap gives up by the clock (it used to switch tab and rewrite the date row at +180 min)');
     w.ctx._onBookingWeekOpened();
-    t.eq(w.calls, ['tab:discover', 'date:nextweek'], '…while a NEW tap starts afresh');
+    t.eq([w.calls, w.row()], [['tab:discover', 'pills', 'search'], SHOWN], '…while a NEW tap starts afresh');
     w = world({ launched: false });
     w.ctx._onBookingWeekOpened();
     for (let i = 0; i < 200 && w.timers.length > 1 + i; i++) w.timers[1 + i].fn();
     t.eq([w.calls, w.timers.length], [[], 121], 'signed out / reference data that never loads: it gives up after a bounded number of retries');
+    // No Europe/London data in the engine: the dates cannot be worked out. The
+    // date row is left alone (and not held) — the list as it stands, made current.
+    w = world({ noZone: true });
+    w.now = TAPPED;
+    w.ctx._onBookingWeekOpened();
+    t.eq([w.calls, w.row()], [['tab:discover', 'revalidateIfStale'], UNTOUCHED], 'no London resolver: Discover, refreshed if stale, with the member\'s own dates still on the row');
   }
 
   // ── _focusSearch: what each caller ends up with ──────────────────────────

@@ -12,7 +12,7 @@
  * Exposes on window:
  *   switchTab, renderInsights, showStatsPage, weekNav, shareInsights, planDay,
  *   openYearReview, shareYearReview, saveWeekAsTemplate, bookTemplateWeek,
- *   clearUsualWeek, removeUsualWeekEntry, renderUsualWeekCard
+ *   clearUsualWeek, removeUsualWeekEntry, renderUsualWeekCard, toggleUsualWeek
  */
 (function () {
   'use strict';
@@ -119,14 +119,6 @@
     bookingsPanel.id = 'tab-bookings';
     bookingsPanel.className = 'tab-panel';
 
-    // Empty state (filled by renderMyBookings — sign-in CTA when logged
-    // out, find-a-class CTA when logged in with nothing booked)
-    var bookingsEmpty = document.createElement('div');
-    bookingsEmpty.id = 'bookingsEmpty';
-    bookingsEmpty.className = 'tab-empty';
-    bookingsEmpty.style.display = 'none';
-    bookingsPanel.appendChild(bookingsEmpty);
-
     // "Your usual week" (weekly template). Its own container, filled by
     // renderUsualWeekCard — which also keeps it right after #rebookHint, a
     // node app.js removes and re-creates in front of #upcomingPanel.
@@ -139,6 +131,17 @@
     if (upcomingPanel) {
       bookingsPanel.appendChild(upcomingPanel);
     }
+
+    // Empty state (filled by renderMyBookings — sign-in CTA when logged
+    // out, find-a-class CTA when logged in with nothing booked). It comes
+    // AFTER the usual-week card (and the list it stands in for, hidden then):
+    // with nothing booked the tall "Nothing booked — yet" hero used to push
+    // "Review and book" — the way to fill the week again — below the fold.
+    var bookingsEmpty = document.createElement('div');
+    bookingsEmpty.id = 'bookingsEmpty';
+    bookingsEmpty.className = 'tab-empty';
+    bookingsEmpty.style.display = 'none';
+    bookingsPanel.appendChild(bookingsEmpty);
 
     var historyBtnHtml = '<button class="history-in-bookings-btn" id="historyInBookingsBtn" onclick="openHistoryModal()">View full history</button>';
     var historyBtnContainer = document.createElement('div');
@@ -1247,6 +1250,8 @@
         ? 'Saved ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' from your history — remove any you no longer take'
         : 'Saved ' + _uwPlural(entries.length, 'class', 'classes') + ' as your usual week', 'success');
       renderUsualWeekCard();
+      // [13c] iOS app only (native-bridge.js defines it): offer the Monday 12:00 reminder, once.
+      if (typeof window._offerWeeklyReminder === 'function') window._offerWeeklyReminder('usual-week-saved');
     } catch (e) {
       console.error('[template] save failed:', e);
       toast('Couldn\'t save template', 'error');
@@ -1303,12 +1308,139 @@
     _usualWeekWatch.observe(card.parentNode, { childList: true });
   }
 
+  // ── pure:usual-week-card:start ── (DOM-free; tests/suites/14b-usual-week-card.js evaluates this block)
+  // The card is a DISCLOSURE. Its head — "Your usual week" over "4 classes ·
+  // Hide", with the ONE primary beside it — is the same in both states, so
+  // nothing moves under a thumb; collapsed, the head is all there is, and
+  // "Review and book" is still one tap away. Below it, #usualWeekBody: the
+  // entries and the two quiet actions (Update from my bookings · Clear).
+
+  var UW_COLLAPSED_KEY = 'psycle_usual_week_collapsed';
+
+  // Stored '1' = collapsed; anything else there (absent, junk, an import's
+  // "true") = expanded. What the member did in THIS page session (`mem`: true /
+  // false; null = nothing yet) wins, so the card still folds where storage is
+  // blocked or full.
+  function _uwCollapsedFrom(stored, mem) {
+    if (mem === true || mem === false) return mem;
+    return stored === '1';
+  }
+
+  // How many seats an entry books: an integer 1–4 (Psycle's own limit per
+  // booking); anything else stored there reads as 1. The card only SAYS it —
+  // seats are chosen and confirmed in the review sheet, never here.
+  function _uwCardSeats(value) {
+    return (typeof value === 'number' && value % 1 === 0 && value >= 1 && value <= 4) ? value : 1;
+  }
+
+  // The word that shows the head is a control (no chevron: the Filters bar's rule).
+  function _uwToggleWord(collapsed) { return collapsed ? 'Show' : 'Hide'; }
+
+  // The whole card for a saved week. The state is said in exactly TWO places —
+  // aria-expanded and the Show / Hide word — which is all toggleUsualWeek has to
+  // flip in place (plus .is-collapsed on the container, which is not in here).
+  // Every name in it is stored (or API) text: escaped.
+  function _uwCardHtml(template, collapsed) {
+    var rows = template.map(function (en, i) {
+      if (!en || typeof en !== 'object') en = {}; // stored junk: a row the member can still remove, never a throw
+      var min = (Number(en.hour) || 0) * 60 + (Number(en.minute) || 0);
+      var day = UW_DAYS[Number(en.dayOfWeek)] || '';
+      var when = day + ' ' + _uwTime(min); // as words, for the remove button's name
+      var label = String(en.label || 'Class');
+      var seats = _uwCardSeats(en.seats);
+      // A compact class component: tile, day, a smaller time — tinted by type.
+      var mark = _uwMark(_uwTypeOf(label));
+      return '<li class="usual-week-entry ct-card" data-ct="' + mark.key + '">' +
+        mark.tile +
+        '<span class="usual-week-when"><span class="usual-week-day">' + escapeHTML(day) + '</span>' + _uwTimeHtml(min) + '</span>' +
+        '<span class="usual-week-what">' + escapeHTML(label) +
+          // More than one seat LEADS the second line: the ellipsis takes the end of a line, and the count must never be what it eats.
+          (seats > 1 ? '<span class="usual-week-seats"><span class="usual-week-sep"> · </span>' + _uwPlural(seats, 'seat', 'seats') + '</span>' : '') +
+          // The separator has a span of its own: the card puts the studio on a second line (styles.css), where it is dropped.
+          (en.locName ? '<span class="usual-week-where"><span class="usual-week-sep"> · </span>' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
+        '<button type="button" class="usual-week-remove" onclick="removeUsualWeekEntry(' + i + ')" aria-label="' +
+          escapeHTML('Remove ' + when + ' ' + label + ' from your usual week') + '">×</button>' +
+      '</li>';
+    }).join('');
+    // The head: a real heading that IS the disclosure button (the accordion
+    // pattern). Its name is its text — "Your usual week, 4 classes, Hide" — and
+    // its state is aria-expanded; the dot between the two is decoration.
+    return '<div class="usual-week-head">' +
+        '<h2 class="usual-week-eyebrow t-heading">' +
+          '<button type="button" class="usual-week-toggle" aria-expanded="' + (collapsed ? 'false' : 'true') + '" aria-controls="usualWeekBody" onclick="toggleUsualWeek()">' +
+            '<span class="usual-week-title">Your usual week</span>' +
+            '<span class="usual-week-meta"><span class="usual-week-count">' + _uwPlural(template.length, 'class', 'classes') + '</span>' +
+              // (the spaces stay OUTSIDE the hidden dot, or the name runs the two together: "4 classesHide")
+              ' <span class="usual-week-dot" aria-hidden="true">·</span> <span class="usual-week-toggle-word">' + _uwToggleWord(collapsed) + '</span></span>' +
+          '</button>' +
+        '</h2>' +
+        // The ONE primary, in the head in BOTH states. It opens the review sheet —
+        // nothing is booked by pressing it — and its label says so.
+        '<button type="button" class="week-template-btn week-template-book pill-btn pill-primary" onclick="bookTemplateWeek()" aria-label="Review and book your usual week">Review and book</button>' +
+      '</div>' +
+      '<div class="usual-week-body" id="usualWeekBody">' +
+        '<ul class="usual-week-list">' + rows + '</ul>' +
+        // Two quiet actions share a phone's row (a third wrapped onto a line of its
+        // own — one more reason the primary lives in the head). "Clear" is named
+        // for what it clears: down here the bare word follows a list, not a title.
+        '<div class="usual-week-actions">' +
+          '<button type="button" class="week-template-btn pill-btn pill-quiet" onclick="saveWeekAsTemplate()">Update from my bookings</button>' +
+          '<button type="button" class="week-template-btn pill-btn pill-quiet usual-week-clear" onclick="clearUsualWeek()" aria-label="Clear your usual week">Clear</button>' +
+        '</div>' +
+      '</div>';
+  }
+  // ── pure:usual-week-card:end ──
+
+  // Collapsed or not: localStorage psycle_usual_week_collapsed ('1' | absent),
+  // read at every paint — never cached: in the iOS app the first paint can come
+  // before the Preferences restore — and read defensively (a blocked store is
+  // simply "expanded").
+  var _uwCollapsedMem = null;
+  function _uwIsCollapsed() {
+    var stored = null;
+    try { stored = localStorage.getItem(UW_COLLAPSED_KEY); } catch (e) {}
+    return _uwCollapsedFrom(stored, _uwCollapsedMem);
+  }
+  function _uwRememberCollapsed(collapsed) {
+    _uwCollapsedMem = collapsed;
+    try {
+      if (!collapsed) localStorage.removeItem(UW_COLLAPSED_KEY);
+      else if (typeof window._psycleSafeSetItem === 'function') window._psycleSafeSetItem(UW_COLLAPSED_KEY, '1');
+      else localStorage.setItem(UW_COLLAPSED_KEY, '1');
+    } catch (e) {}
+  }
+
+  // The head's button. IN PLACE — no repaint: the button that was pressed stays
+  // the same node, so it keeps the focus (and a screen reader's cursor), and its
+  // own state — aria-expanded — is what announces the change. No toast, no
+  // scroll, no search.
+  window.toggleUsualWeek = function () {
+    var card = document.getElementById('usualWeekCard');
+    var btn = card && card.querySelector('.usual-week-toggle');
+    if (!btn) return; // the invitation (nothing saved yet) does not fold
+    var template = _usualWeekTemplate();
+    // What is ON SCREEN decides, not what is stored: a press always flips what
+    // the member is looking at (another tab may have changed the key since).
+    var collapsed = btn.getAttribute('aria-expanded') !== 'false';
+    // Was the card showing exactly what the builder prints? Then after the flip
+    // it still is, and the next background repaint has nothing to write.
+    var inStep = card._uwHtml === _uwCardHtml(template, !collapsed);
+    _uwRememberCollapsed(collapsed);
+    card.classList.toggle('is-collapsed', collapsed);
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    var word = btn.querySelector('.usual-week-toggle-word');
+    if (word) word.textContent = _uwToggleWord(collapsed);
+    card._uwHtml = inStep ? _uwCardHtml(template, collapsed) : null;
+    _uwLog('usual-week:' + (collapsed ? 'collapse' : 'expand'));
+  };
+
   // Which of the card's buttons holds focus (-1: none), and putting it back on
   // the button in that place once the card has been repainted. Every repaint
   // replaces the buttons, and the one that had focus takes it to <body> — after
-  // a usual-week run that is a certainty: the sheet hands focus back to "Book my
-  // usual week", and the /bookings re-read behind the run repaints this card
-  // (bookings:loaded) a moment later.
+  // a usual-week run that is a certainty: the sheet hands focus back to "Review
+  // and book", and the /bookings re-read behind the run repaints this card
+  // (bookings:loaded) a moment later — a repaint that is now skipped while the
+  // card has nothing new to say, so this is for the ones that do.
   function _uwFocusedButton(card, doc) {
     return Array.prototype.indexOf.call(card.querySelectorAll('button'), doc.activeElement);
   }
@@ -1329,52 +1461,32 @@
     card.classList.toggle('has-template', template.length > 0);
     var focusedIdx = _uwFocusedButton(card, document);
 
+    // Only a saved week folds: the invitation below is one line already.
+    var collapsed = template.length > 0 && _uwIsCollapsed();
+    card.classList.toggle('is-collapsed', collapsed);
+    var html = '';
+
     if (template.length) {
-      var rows = template.map(function (en, i) {
-        var min = (Number(en.hour) || 0) * 60 + (Number(en.minute) || 0);
-        var day = UW_DAYS[Number(en.dayOfWeek)] || '';
-        var when = day + ' ' + _uwTime(min); // as words, for the remove button's name
-        var label = String(en.label || 'Class');
-        // A compact class component: tile, day, a smaller time — tinted by type.
-        var mark = _uwMark(_uwTypeOf(label));
-        return '<li class="usual-week-entry ct-card" data-ct="' + mark.key + '">' +
-          mark.tile +
-          '<span class="usual-week-when"><span class="usual-week-day">' + escapeHTML(day) + '</span>' + _uwTimeHtml(min) + '</span>' +
-          '<span class="usual-week-what">' + escapeHTML(label) +
-            // The separator has a span of its own: the card puts the studio on a second line (styles.css), where it is dropped.
-            (en.locName ? '<span class="usual-week-where"><span class="usual-week-sep"> · </span>' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
-          '<button type="button" class="usual-week-remove" onclick="removeUsualWeekEntry(' + i + ')" aria-label="' +
-            escapeHTML('Remove ' + when + ' ' + label + ' from your usual week') + '">×</button>' +
-        '</li>';
-      }).join('');
-      card.innerHTML =
-        // Crisp primitives: the one graphite primary, the rest quiet text. "Clear"
-        // sits in the head beside the count — on a phone the two actions under
-        // the list fill their row, and a third wrapped onto a line of its own.
-        // (Its name says what it clears: up here it no longer follows the list.)
-        '<div class="usual-week-head">' +
-          '<h2 class="usual-week-eyebrow t-heading">Your usual week</h2>' +
-          '<span class="usual-week-count">' + _uwPlural(template.length, 'class', 'classes') + '</span>' +
-          '<button type="button" class="week-template-btn pill-btn pill-quiet usual-week-clear" onclick="clearUsualWeek()" aria-label="Clear your usual week">Clear</button>' +
-        '</div>' +
-        '<ul class="usual-week-list">' + rows + '</ul>' +
-        '<div class="usual-week-actions">' +
-          '<button type="button" class="week-template-btn week-template-book pill-btn pill-primary" onclick="bookTemplateWeek()">Book my usual week</button>' +
-          '<button type="button" class="week-template-btn pill-btn pill-quiet" onclick="saveWeekAsTemplate()">Update from my bookings</button>' +
-        '</div>';
-      card.style.display = '';
+      // Head (the disclosure + the one primary) over the body it folds away: pure:usual-week-card.
+      html = _uwCardHtml(template, collapsed);
     } else if (signedIn && (_collectDisplayedWeekTemplate().length || _usualWeekFromHistory().length)) {
       // Nothing saved yet: a one-line invitation, not a second card under the hint.
-      card.innerHTML =
+      html =
         '<div class="usual-week-invite">' +
           '<span class="usual-week-invite-text">Same classes every week? Save them once, then book them together.</span>' +
           '<button type="button" class="week-template-btn pill-btn pill-outline" onclick="saveWeekAsTemplate()">Save my usual week</button>' +
         '</div>';
-      card.style.display = '';
-    } else {
-      card.innerHTML = '';
-      card.style.display = 'none';
     }
+    // This runs on every bookings:loaded / booking / auth event, nearly always
+    // with nothing new to say. What is already on the card is not written again:
+    // the buttons stay the same nodes — focus, a screen reader's cursor and a
+    // finger already down on one all survive. (_uwHtml is the string last
+    // written, kept on the node: innerHTML reads back normalised.)
+    if (card._uwHtml !== html) {
+      card.innerHTML = html;
+      card._uwHtml = html;
+    }
+    card.style.display = html ? '' : 'none';
     _placeUsualWeekCard(card);
     _uwRefocusButton(card, focusedIdx); // after placement: moving a node drops its focus too
   }
@@ -1389,43 +1501,182 @@
     });
   }
 
+  // ── pure:usual-week-sheet:start ── (DOM-free; tests/suites/14a-usual-week-sheet.js evaluates this block)
   // What the sheet says about a planned row (state → copy). `pickable` rows get
-  // a live checkbox; only a plain 'book' with the usual instructor starts ticked
-  // — a waitlist join and a cover instructor are the member's call, every time.
+  // a live checkbox; only a plain 'book' with the usual instructor, inside what
+  // Psycle has opened, starts ticked — a waitlist join, a cover instructor, a
+  // class that may not be open yet and one more seat in a class already held
+  // (`topUp`) are the member's call, every time.
+  var UW_NOT_OPEN = 'May not be open yet — Psycle opens new dates on Mondays at 12:00';
+  var UW_NOT_LISTED = 'Not on the timetable yet — Psycle adds new dates on Mondays at 12:00';
+  // What joining a waitlist from here means (it leads with a space: it follows
+  // the sheet's money sentence). On screen only while a waitlist row is ticked.
+  var UW_WAITLIST_NOTE = ' A ticked waitlist class joins the waitlist only while it is still full — Psycle then books you in by itself when a spot frees up, chargeable, same policy. If a spot has opened up by then, nothing is joined and it is left for you to choose.';
   function _uwPlanNote(row) {
+    var join = function (parts) { return parts.filter(Boolean).join('. '); };
     if (row.state === 'book') {
-      if (row.instructorChanged) return { pickable: true, on: false, warn: true, text: 'Different instructor this week — tick to book it anyway' };
+      if (row.instructorChanged) return { pickable: true, on: false, warn: true, text: join(['Different instructor this week — tick to book it anyway', row.beyondOpen ? UW_NOT_OPEN : '']) };
+      // ADVISORY (app.js pure:horizon — an observed model, not Psycle's word):
+      // the row stays tickable, and Psycle's own answer is what counts.
+      if (row.beyondOpen) return { pickable: true, on: false, warn: true, text: join([UW_NOT_OPEN, row.clashLine]) };
       return { pickable: true, on: true, warn: !!row.clashLine, text: row.clashLine || '' };
     }
-    if (row.state === 'waitlist') return { pickable: true, on: false, warn: true, text: 'Full — tick to join the waitlist' + (row.clashLine ? '. ' + row.clashLine : '') };
-    if (row.state === 'booked') return { text: 'Already booked' };
+    if (row.state === 'waitlist') return { pickable: true, on: false, warn: true, text: join(['Full — tick to join the waitlist', row.clashLine]) };
+    if (row.state === 'booked') {
+      var held = Number(row.heldSeats) || 0, asked = Number(row.seats) || 1;
+      var unit = row.count ? 'space' : 'seat';
+      // Fewer seats than the usual week asks for, and room left: the missing
+      // one(s) can be added — those and no more.
+      if (row.canAdd && held > 0 && held < asked) return { pickable: true, on: false, topUp: true, text: held + ' of ' + asked + ' ' + unit + 's held — tick to add ' + (asked - held) + ' more' };
+      return { text: held > 1 ? 'Already booked · ' + held + ' ' + unit + 's' : 'Already booked' };
+    }
     if (row.state === 'waitlisted') return { text: 'Already on the waitlist' };
     if (row.state === 'clash') return { warn: true, text: (row.clashLine || 'Clashes with a class you hold') + ' — left out' };
-    if (row.state === 'nolayout') return { text: 'This studio has no spot map, which can\'t be booked from here yet — book it from Discover' };
+    if (row.state === 'nolayout') return { text: 'Couldn\'t tell how this studio is booked — book it from Discover' };
     if (row.state === 'full') return { text: 'Full, and no waitlist' };
     if (row.state === 'error') return { warn: true, text: 'Couldn\'t load that day\'s timetable' };
+    // An empty day past what the timetable lists (app.js pure:horizon, advisory)
+    // is an unpublished day, not a changed timetable — the same reason Discover
+    // gives, and the sheet's own line when NO row was found. Every Monday
+    // before 12:00 that is the Fri–Sun of the third week.
+    if (row.beyondListed) return { text: UW_NOT_LISTED };
     return { text: 'No matching class that day' };
   }
 
-  // …and about what happened to a ticked row once the run reached it.
-  function _uwResultNote(result) {
+  // "1 of 2 seats held": the seat(s) still missing — all a top-up may ask for.
+  function _uwTopUpNeed(row) {
+    return Math.max(1, (Number(row.seats) || 1) - (Number(row.heldSeats) || 0));
+  }
+
+  // "Choose again" lists the same dates afresh. WHAT the member ticked is kept,
+  // not just where: the class, the state it was in, whether it was a top-up or
+  // a cover class, and the seats asked for (`need`: the sheet's rowNeed).
+  function _uwTickOf(row, need) {
+    return { eventId: row.eventId, state: row.state, topUp: !!_uwPlanNote(row).topUp, cover: !!row.instructorChanged, seats: Number(need) || 1 };
+  }
+  // …and a kept tick stands only on a row that is still THAT: by template index
+  // alone, a seat that went while the class filled came back as a PRE-TICKED
+  // waitlist join (a place Psycle turns into a charge), a class just booked at
+  // one seat as a pre-ticked "add 1 more", a cover class as ticked — every one
+  // a spend the member never chose. `kept`: _uwTickOf() from the run, or
+  // nothing (the row was not in it: it stays unticked). Anything else that has
+  // changed falls back on the rule every fresh row starts by (_uwPlanNote.on).
+  // → { on, same, seats }: `seats` = the member's OWN count to put back (null:
+  // the row's — a top-up only ever asks for what is missing, and only the same
+  // ask stays ticked).
+  function _uwKeepTick(kept, row) {
+    if (!kept) return { on: false, same: false, seats: null };
+    var note = _uwPlanNote(row);
+    var same = !!note.pickable && row.eventId != null && String(kept.eventId) === String(row.eventId) && kept.state === row.state &&
+      kept.topUp === !!note.topUp && kept.cover === !!row.instructorChanged &&
+      (!note.topUp || Number(kept.seats) === _uwTopUpNeed(row));
+    if (!same) return { on: !!note.on, same: false, seats: null };
+    var cap = Math.floor(Number(row.maxSeats));
+    var seats = Math.max(1, Math.min(Math.floor(Number(kept.seats)) || 1, cap >= 1 ? cap : 4));
+    return { on: true, same: true, seats: note.topUp ? null : seats };
+  }
+
+  // …and about what happened to a ticked row once the run reached it. `info`:
+  // { gone: "Bike 9" (the shown spots that went), goneMany, said: Psycle's own
+  // words for a refusal, told: what the app toasted for a 'failed' — printed
+  // here because that toast has faded by the time the summary is read }.
+  // `again`: the sheet offers "Choose again" for it.
+  function _uwResultNote(result, info) {
+    info = info || {};
     if (result === 'running') return { text: 'Booking…' };
     if (result === 'booked') return { ok: true, text: 'Booked ✓' };
     if (result === 'waitlisted') return { ok: true, text: 'On the waitlist ✓' };
-    if (result === 'already') return { text: 'Already held — left as it is' };
+    if (result === 'already') return { text: 'Your booking there changed — left as it is' };
     if (result === 'clash') return { warn: true, text: 'Clashes with a class you hold — not booked' };
     if (result === 'full') return { warn: true, text: 'Filled up before we got there — not booked' };
-    if (result === 'nolayout') return { text: 'No spot map at this studio — book it from Discover' };
-    if (result === 'taken') return { warn: true, text: 'That spot was just taken — not booked. Try it from Discover' };
+    if (result === 'opened') return { warn: true, again: true, text: 'A spot has opened up — nothing was joined. Choose again to book it' };
+    if (result === 'nolayout') return { warn: true, text: 'Couldn\'t load the studio map — not booked. Book it from Discover' };
+    if (result === 'stale') return { warn: true, again: true, text: 'This class changed since it was listed — not booked' };
+    if (result === 'taken') return { warn: true, again: true, text: (info.gone ? info.gone + (info.goneMany ? ' were' : ' was') : 'That spot was') + ' just taken — not booked. Choose again' };
+    if (result === 'refused') return { warn: true, text: info.said ? 'Psycle said: ' + info.said : 'Psycle didn\'t take this booking' };
+    if (result === 'partial') return { warn: true, text: 'Only part of this was booked — check My Bookings before trying again' };
     if (result === 'queued') return { warn: true, text: 'You went offline — queued to book when you\'re back online' };
     if (result === 'unconfirmed') return { warn: true, text: 'Couldn\'t confirm with Psycle — check My Bookings before trying again' };
     if (result === 'joinfailed') return { warn: true, text: 'Still full, and the waitlist couldn\'t be joined — see Psycle\'s message' };
-    if (result === 'failed') return { warn: true, text: 'Psycle didn\'t take this booking — see its message' };
+    if (result === 'failed') return { warn: true, text: info.told || 'Couldn\'t book this class — check My Bookings before trying again' };
     return { text: 'Not attempted' };
   }
 
+  // The seat counts a row offers: 1 · 2, and 3 · 4 only when the saved entry
+  // asked for them — never above the class's own max_bookable_slots (`max`).
+  function _uwSeatOptions(saved, max) {
+    var top = Math.max(2, Math.min(4, Math.floor(Number(saved)) || 1));
+    var cap = Math.floor(Number(max));
+    if (cap >= 1 && cap < top) top = cap;
+    var out = [];
+    for (var n = 1; n <= top; n++) out.push(n);
+    return out;
+  }
+
+  // The confirm button counts what it will SPEND: "Book 3 classes · 4 seats".
+  // t: { classes, seats, places (waitlists to join) }. '' = nothing to do.
+  function _uwConfirmLabel(t) {
+    t = t || {};
+    var n = function (count, one, many) { return count + ' ' + (count === 1 ? one : many); };
+    var classes = Math.max(0, Number(t.classes) || 0), seats = Math.max(0, Number(t.seats) || 0), places = Math.max(0, Number(t.places) || 0);
+    var book = classes ? 'Book ' + n(classes, 'class', 'classes') + ' · ' + n(seats, 'seat', 'seats') : '';
+    if (!places) return book;
+    if (!book) return 'Join ' + n(places, 'waitlist', 'waitlists');
+    return book + ' · join ' + n(places, 'waitlist', 'waitlists');
+  }
+
+  // A date range of the sheet's control, as it is labelled. `fmt(dateStr, opts)`
+  // formats a London calendar date (the sheet's own _uwDateLabel family).
+  function _uwRangeLabel(range, fmt) {
+    if (!range) return '';
+    if (range.id === 'next7') return 'Next 7 days';
+    // "Fri 9 – Thu 15 Oct"; across a month end both halves carry their month.
+    var sameMonth = String(range.start).slice(0, 7) === String(range.end).slice(0, 7);
+    if (range.id === 'newest') return 'Newly opened · ' + fmt(range.start, sameMonth ? 'weekday' : 'full') + ' – ' + fmt(range.end, 'full');
+    return fmt(range.start, 'day');
+  }
+  // "Newly opened · Fri 25 Sept – Thu 1 Oct" as two halves that each stay whole.
+  // In the mono themes on a phone that label is wider than its track: it then
+  // breaks BETWEEN the halves — the "·" kept with the words before it, so no
+  // line starts on a bare dot — never in the middle of a date. One half = a
+  // label with nothing to split.
+  function _uwLabelHalves(label) {
+    var s = String(label || ''), cut = s.indexOf(' · ');
+    return cut === -1 ? [s] : [s.slice(0, cut) + '\u00a0·', s.slice(cut + 3)];
+  }
+
+  // The list's scrollTop once the sheet has re-flowed around the row the member
+  // is on. Everything but the list is pinned, so a tick that shows the waitlist
+  // sentence or the plan line is paid for by the LIST — and the row just ticked
+  // slid under its fold. The answer keeps the part just `used` (the tick's own
+  // label, or the row's spots block) on screen whole, with as much of its row
+  // as the list can show — a row that fits, whole; one taller than the list (a
+  // short phone squeezes the list to its floor) filling it — by the least
+  // movement. Unchanged when that already holds. `row` / `used` = { top, height }
+  // in the list's own content coordinates.
+  function _uwScrollTopToReveal(scrollTop, viewH, row, used) {
+    var cur = Number(scrollTop) || 0;
+    var real = function (box) { return !!box && box.height > 0 && !isNaN(box.top); };
+    if (!(viewH > 0) || !real(row)) return cur;
+    // Every scrollTop that shows `box` whole — or, taller than the list, fills the list with it.
+    var span = function (box) {
+      var a = box.top, b = box.top + box.height - viewH;
+      return [Math.min(a, b), Math.max(a, b)];
+    };
+    var want = span(row);
+    if (real(used)) {
+      var u = span(used);
+      var lo = Math.max(want[0], u[0]), hi = Math.min(want[1], u[1]);
+      want = lo <= hi ? [lo, hi] : u; // both cannot be had: the part just used wins
+    }
+    return Math.max(0, Math.min(Math.max(cur, want[0]), want[1]));
+  }
+  // ── pure:usual-week-sheet:end ──
+
   // One row of the sheet. Every name in it is API (or stored) text: escaped.
-  function _uwRowHtml(row, note, checkbox) {
+  // `spots`: the row's seat count, suggested spot(s) and "Change spot" — its own
+  // block UNDER the label, so its buttons are not part of the checkbox's name.
+  function _uwRowHtml(row, note, checkbox, spots) {
     var en = row.entry || {};
     var wall = (row.startAt && typeof _templateWall === 'function') ? _templateWall(row.startAt) : null;
     var min = wall ? wall.min : (Number(en.hour) || 0) * 60 + (Number(en.minute) || 0);
@@ -1444,6 +1695,7 @@
       (checkbox != null
         ? '<label class="usual-week-pick"><input type="checkbox" data-uw-row="' + row.index + '"' + (checkbox ? ' checked' : '') + '>' + text + '</label>'
         : '<div class="usual-week-pick">' + text + '</div>') +
+      (spots || '') +
     '</li>';
   }
 
@@ -1477,7 +1729,15 @@
   // _ownKeysOverlayUp() know that id: background dialogs (a waitlist "You're
   // in", "Spot opened", the offline-booking ask, the sync prompt) wait for this
   // to close rather than open over a run, and its keys stay its own.
-  function _runUsualWeekSheet() {
+  // What it shows is what it books: the dates (a control over the next 7 days
+  // and the next three weeks — plus the batch a Monday release just opened), a
+  // seat count per class, the spot(s) it SUGGESTS for each ticked class with
+  // the reason in a few words, "Change spot" on the real seat map, and a
+  // button that counts the spend. The run sends exactly those spots.
+  // `opts.range === 'newest'`: open on the newly opened batch (the Monday
+  // reminder's tap) — it still books nothing until its button is pressed.
+  function _runUsualWeekSheet(opts) {
+    opts = opts || {};
     return new Promise(function (resolve) {
       var previouslyFocused = document.activeElement;
       var overlay = document.createElement('div');
@@ -1492,11 +1752,21 @@
       requestAnimationFrame(function () { overlay.classList.add('show'); });
       var dialog = overlay.querySelector('.usual-week-dialog');
       var body = overlay.querySelector('.usual-week-sheet-body');
-      var st = { closed: false, running: false, stop: false, plan: null, seq: 0, checked: {} };
+      // checked / seats / spots / picks are per row index (template order):
+      //   seats[i]  the seat count chosen for the class (starts at the saved one)
+      //   spots[i]  { status: 'loading' | 'ready' | 'full' | 'error', info, sugg }
+      //             — what templateSpotsFor read, and what _spotSuggestion made of it
+      //   picks[i]  the member's own choice from "Change spot" (kept while free)
+      // choosing: the seat map is up and this sheet has stepped out of the page.
+      // reported: a run's results are on screen (until "Choose again" lists afresh).
+      // on: the row the member last used, and which part of it (revealRow).
+      var st = { closed: false, running: false, stop: false, plan: null, seq: 0, checked: {}, seats: {}, spots: {}, picks: {},
+        keep: null, choosing: false, reported: false, saidCaution: '', saidWaitlist: false, on: null, wantNewest: opts.range === 'newest' };
 
       function close() {
-        if (st.closed || st.running) return; // a run in flight is never orphaned
+        if (st.closed || st.running || st.choosing) return; // a run in flight is never orphaned
         st.closed = true;
+        if (window._usualWeekSheetNewest === showNewest) delete window._usualWeekSheetNewest;
         overlay._psycleClosing = true; // still rendered while it fades: not a dialog to announce into (app.js _dialogLiveRegion)
         overlay.classList.remove('show');
         setTimeout(function () { overlay.remove(); }, 180);
@@ -1511,8 +1781,10 @@
       }
 
       function onKey(e) {
-        // A confirmModal stacked on top owns the keyboard while it is up.
-        if (e.defaultPrevented || document.getElementById('psycleConfirmOverlay')) return;
+        // A confirmModal stacked on top owns the keyboard while it is up — and
+        // so does the seat map of "Change spot" (this sheet is out of the page
+        // then, and app.js's own handler serves the picker).
+        if (st.choosing || e.defaultPrevented || document.getElementById('psycleConfirmOverlay')) return;
         if (e.key === 'Escape') { e.preventDefault(); close(); return; }
         if (e.key !== 'Tab') return;
         var items = Array.prototype.slice.call(overlay.querySelectorAll('button, input')).filter(function (el) {
@@ -1539,17 +1811,40 @@
         keepFocus();
       }
 
-      // The two weeks a member can mean: see _templateDefaultStart (app.js).
-      function weekStarts() {
-        var today = _templateLondonNow(Date.now()).date;
-        return { next7: today, nextweek: _templateAddDays(today, ((8 - _templateDow(today)) % 7) || 7) };
+      // 'YYYY-MM-DD' → a London calendar date in the sheet's own words:
+      // 'day' "21 Sept" · 'weekday' "Fri 9" · 'full' "Thu 15 Oct".
+      function rangeDate(dateStr, how) {
+        var p = String(dateStr || '').split('-').map(Number);
+        if (p.length !== 3 || !p[0]) return '';
+        var o = how === 'day' ? { day: 'numeric', month: 'short' } : how === 'weekday' ? { weekday: 'short', day: 'numeric' } : { weekday: 'short', day: 'numeric', month: 'short' };
+        o.timeZone = 'UTC';
+        return new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString('en-GB', o).replace(',', '');
       }
 
-      function load(start) {
+      // Spot reads are one GET per ticked class: a few at a time, and none left
+      // over from a range the member has already moved on from.
+      var spotJobs = [], spotJobsOut = 0;
+      function pumpSpotJobs() {
+        while (spotJobsOut < 3 && spotJobs.length) {
+          spotJobsOut++;
+          var job = spotJobs.shift();
+          var next = function () { spotJobsOut--; pumpSpotJobs(); };
+          Promise.resolve().then(job).then(next, next);
+        }
+      }
+
+      // `start`: the first of the 7 days (none: the plan chooses — app.js
+      // _templateDefaultStart). `keepTicks`: { rowIndex: _uwTickOf() } from
+      // "Choose again" — the member's own ticks, seat counts and picks survive
+      // that re-plan, each only on a row that is still what was ticked.
+      function load(start, keepTicks) {
         var seq = ++st.seq;
         st.plan = null;
+        st.reported = false;
+        st.keep = keepTicks || null;
+        spotJobs.length = 0;
         message('Checking the timetable…', true);
-        window.planWeeklyTemplate(start).then(function (plan) {
+        window.planWeeklyTemplate(start, { newest: st.wantNewest }).then(function (plan) {
           if (st.closed || seq !== st.seq) return;
           st.plan = plan || { ok: false, reason: '' };
           paintPlan();
@@ -1558,6 +1853,37 @@
           if (st.closed || seq !== st.seq) return;
           message('Couldn\'t load the timetable — try again.');
         });
+      }
+
+      // The Monday reminder's tap while this sheet is ALREADY up (app.js
+      // _onBookingWeekOpened): opened before the 12:00 release to be ready for
+      // it, or sitting on another range, it has no "Newly opened" dates — the
+      // ones the tap promised. An idle sheet takes the tap: it lists afresh,
+      // that batch first. It books nothing, and answers false — the tap is
+      // then dropped, never queued — during a run, while the seat map is up,
+      // and over a run's results (what happened to each class is not wiped).
+      function showNewest() {
+        if (st.closed || st.running || st.choosing || st.reported) return false;
+        if (st.plan && st.plan.ok && st.plan.rangeId === 'newest') return true;
+        st.wantNewest = true;
+        load();
+        return true;
+      }
+      window._usualWeekSheetNewest = showNewest;
+
+      function rowByIndex(i) {
+        return ((st.plan && st.plan.rows) || []).filter(function (r) { return r.index === i; })[0] || null;
+      }
+
+      // What a ticked row is: a waitlist to join, a COUNT of spaces (a studio
+      // with no spot map), or seats on a map — the only kind with spots to show.
+      function rowKind(r) { return r.state === 'waitlist' ? 'join' : (r.count ? 'count' : 'seats'); }
+
+      // How many seats the row will ASK for: the missing one(s) of a class
+      // already held, else the count the member chose.
+      function rowNeed(r) {
+        if (_uwPlanNote(r).topUp) return _uwTopUpNeed(r);
+        return Math.max(1, Number(st.seats[r.index]) || 1);
       }
 
       function picked() {
@@ -1569,13 +1895,230 @@
         return out;
       }
 
-      function confirmLabel() {
-        var seats = 0, places = 0;
-        picked().forEach(function (r) { if (r.state === 'waitlist') places++; else seats++; });
-        if (!seats && !places) return '';
-        if (!places) return 'Book ' + _uwPlural(seats, 'class', 'classes');
-        if (!seats) return 'Join ' + _uwPlural(places, 'waitlist', 'waitlists');
-        return 'Book ' + seats + ' · join ' + _uwPlural(places, 'waitlist', 'waitlists');
+      // A ticked row the run may take: its spots are ON SCREEN. A row still
+      // reading them, or whose read failed, is not — it is left out of the count
+      // on the button and of the run, and says why on its own line.
+      function rowReady(r) {
+        if (rowKind(r) !== 'seats') return true;
+        var sp = st.spots[r.index];
+        return !!(sp && sp.status === 'ready' && sp.sugg && sp.sugg.slots.length);
+      }
+      function rowLoading(r) {
+        if (rowKind(r) !== 'seats') return false;
+        var sp = st.spots[r.index];
+        return !sp || sp.status === 'loading';
+      }
+
+      function totals(rows) {
+        var t = { classes: 0, seats: 0, places: 0 };
+        rows.forEach(function (r) {
+          var kind = rowKind(r);
+          if (kind === 'join') { t.places++; return; }
+          t.classes++;
+          t.seats += kind === 'count' ? rowNeed(r) : st.spots[r.index].sugg.slots.length;
+        });
+        return t;
+      }
+
+      // The number printed on a seat (a layout's label can differ from its id).
+      function spotLabeller(info) {
+        var by = {};
+        (((info && info.layout) || {}).slots || []).forEach(function (s) { by[Number(s.id)] = s.label == null ? s.id : s.label; });
+        return function (id) { return by[Number(id)] == null ? id : by[Number(id)]; };
+      }
+      function spotWord(r) { return typeof slotLabel === 'function' ? slotLabel(r.typeName) : 'Spot'; }
+      function spotNames(r, ids, info) {
+        var labels = ids.map(spotLabeller(info));
+        // Three or four read as a list, in seat order ("Benches 5, 6, 10 & 11") —
+        // nearest-first gave "5 & 6 & 11 & 10". A pair keeps its order: the first
+        // is the one the reason is about ("your usual, plus the closest free").
+        if (labels.length > 2 && labels.every(function (l) { return isFinite(Number(l)); })) labels.sort(function (a, b) { return Number(a) - Number(b); });
+        return typeof formatSlots === 'function' ? formatSlots(spotWord(r), labels) : spotWord(r) + ' ' + labels.join(' & ');
+      }
+
+      // The opinion, made again from what was read (no new GET): when the seat
+      // count changes, and when the member comes back from the seat map.
+      function resuggest(r) {
+        var sp = st.spots[r.index];
+        if (!sp || !sp.info || typeof _spotSuggestion !== 'function') return;
+        var info = sp.info;
+        sp.sugg = _spotSuggestion({
+          slots: info.layout.slots, free: info.free, count: rowNeed(r), usual: info.usual,
+          prefer: info.prefer, avoid: info.avoid, held: info.held, keep: st.picks[r.index] || null,
+        });
+        sp.status = (info.full || !sp.sugg.slots.length) ? 'full' : 'ready';
+        // Fewer free than asked for: the count follows what can be shown.
+        if (sp.status === 'ready' && sp.sugg.short > 0 && !_uwPlanNote(r).topUp) st.seats[r.index] = sp.sugg.slots.length;
+      }
+
+      // The row the member is on stays on screen. A tick can show the waitlist
+      // sentence or the plan line — pinned, so the LIST gives up the room — and
+      // opens the row's own spots: on a 667px phone the box just ticked, focus
+      // and all, was left with 3px of its row above the list's fold. Moved by
+      // the list's OWN scrollTop (_uwScrollTopToReveal says where to), never
+      // scrollIntoView(): that scrolls the dialog too and, on iOS, the page.
+      // `part`: what was used — 'pick' (the tick's label) or 'spots' (the block
+      // under it). Remembered (st.on): the row re-flows once more when its spots
+      // read lands. A fresh plan forgets it, and nothing else ever moves the list.
+      function revealRow(index, part) {
+        st.on = { index: index, part: part };
+        try {
+          var list = body.querySelector('.usual-week-plan');
+          var box = body.querySelector('[data-uw-row="' + index + '"]');
+          var row = box && box.closest('.usual-week-row');
+          if (!list || !row || !(list.scrollHeight > list.clientHeight)) return;
+          var used = (part === 'spots' && row.querySelector('[data-uw-spots]:not([hidden])')) || row.querySelector('.usual-week-pick');
+          // Layout px — scrollTop's own unit — walked up the offsetParent chain,
+          // never getBoundingClientRect(): the dialog scales in as it opens (and
+          // springs past 1), and a rect is measured THROUGH that transform — a
+          // tick in the sheet's first moments would come up some 10px short.
+          var edge = list.offsetTop + list.clientTop;
+          var at = function (el) {
+            var top = 0, n = el;
+            while (n && n !== list && n !== list.offsetParent) { top += n.offsetTop + (n === el ? 0 : n.clientTop); n = n.offsetParent; }
+            return { top: n === list ? top : top - edge, height: el.offsetHeight };
+          };
+          var to = _uwScrollTopToReveal(list.scrollTop, list.clientHeight, at(row), used ? at(used) : null);
+          if (to !== list.scrollTop) list.scrollTop = to;
+        } catch (e) { /* a nicety: never in the way of the tick */ }
+      }
+
+      function readSpots(r) {
+        if (rowKind(r) !== 'seats' || typeof window.templateSpotsFor !== 'function') return;
+        var cur = st.spots[r.index];
+        if (cur && (cur.status === 'loading' || cur.status === 'ready' || cur.status === 'full')) return;
+        var seq = st.seq;
+        st.spots[r.index] = { status: 'loading' };
+        spotJobs.push(function () {
+          if (st.closed || seq !== st.seq) return null;
+          return window.templateSpotsFor(r.eventId, r.studioId).then(function (info) {
+            if (st.closed || seq !== st.seq) return;
+            if (info && info.ok && info.kind === 'seats') { st.spots[r.index] = { status: 'ready', info: info }; resuggest(r); }
+            else st.spots[r.index] = { status: 'error' };
+            paintSpots(r);
+            syncGo();
+            // Only the row the member is on: the reads of a fresh plan move nothing.
+            if (st.on && st.on.index === r.index) revealRow(r.index, st.on.part);
+          });
+        });
+        pumpSpotJobs();
+      }
+
+      // The row's own block under its label: the opinion first, then the seat
+      // count and "Change spot". Rewritten in place — the list keeps its scroll
+      // offset, and the control that had focus gets it back.
+      function paintSpots(r) {
+        var el = body.querySelector('[data-uw-spots="' + r.index + '"]');
+        if (!el) return;
+        if (!st.checked[r.index]) { el.innerHTML = ''; el.hidden = true; return; }
+        var focusKey = el.contains(document.activeElement) ? document.activeElement.getAttribute('data-uw-key') : null;
+        var kind = rowKind(r), topUp = !!_uwPlanNote(r).topUp;
+        var sp = st.spots[r.index];
+        var line = '', change = '';
+        // Every row has the same two controls: their spoken names say WHICH class
+        // (API text — escaped, like everything else that reaches this markup).
+        var forClass = escapeHTML(' for ' + (r.typeName || 'this class') + ', ' + _uwDateLabel(r.date));
+        if (kind === 'count') {
+          var n = rowNeed(r);
+          line = '<strong>' + n + (n === 1 ? ' space' : ' spaces') + '</strong><span class="usual-week-spot-why"> · no spot to choose at this studio</span>';
+        } else if (!sp || sp.status === 'loading') {
+          line = '<span class="usual-week-spot-why">Checking the spots…</span>';
+        } else if (sp.status === 'ready') {
+          var why = typeof _spotWhyText === 'function' ? _spotWhyText(sp.sugg, spotLabeller(sp.info)) : '';
+          if (sp.sugg.short > 0) why = (why ? why + ' — ' : '') + 'only ' + sp.sugg.slots.length + ' free';
+          line = '<strong>' + escapeHTML(spotNames(r, sp.sugg.slots, sp.info)) + '</strong>' +
+            (why ? '<span class="usual-week-spot-why"> · ' + escapeHTML(why) + '</span>' : '');
+          change = '<button type="button" class="pill-btn pill-quiet usual-week-change" data-uw-key="change" data-uw-change="' + r.index + '" aria-label="Change spot' + forClass + '">Change spot</button>';
+        } else if (sp.status === 'full') {
+          line = '<span class="usual-week-spot-why">Just filled up — left out</span>';
+        } else {
+          line = '<span class="usual-week-spot-why">Couldn\'t check the spots — left out</span>';
+          change = '<button type="button" class="pill-btn pill-quiet usual-week-change" data-uw-key="retry" data-uw-retry="' + r.index + '" aria-label="Try again: check the spots' + forClass + '">Try again</button>';
+        }
+        var seats = '';
+        if (!topUp) {
+          var max = (sp && sp.info && sp.info.max) || r.maxSeats;
+          var unit = kind === 'count' ? 'Spaces' : 'Seats';
+          seats = '<div class="seg usual-week-seats" role="group" aria-label="' + unit + forClass + '">' +
+            _uwSeatOptions(r.seats, max).map(function (n) {
+              var on = n === rowNeed(r);
+              return '<button type="button" class="seg-btn" aria-pressed="' + on + '" data-uw-key="seats-' + n + '" data-uw-seats="' + n + '"' +
+                ' aria-label="' + n + (n === 1 ? (kind === 'count' ? ' space' : ' seat') : (kind === 'count' ? ' spaces' : ' seats')) + '">' + n + '</button>';
+            }).join('') + '</div>';
+        }
+        el.hidden = false;
+        el.innerHTML = '<div class="usual-week-spot-text">' + line + '</div>' + seats + change;
+        Array.prototype.forEach.call(el.querySelectorAll('[data-uw-seats]'), function (b) {
+          b.onclick = function () {
+            if (st.running || st.choosing) return;
+            st.seats[r.index] = Number(b.getAttribute('data-uw-seats'));
+            // Another count is another set of spots: the member's pick of N no longer stands.
+            st.picks[r.index] = null;
+            resuggest(r);
+            paintSpots(r);
+            syncGo();
+            revealRow(r.index, 'spots');
+          };
+        });
+        var changeBtn = el.querySelector('[data-uw-change]');
+        if (changeBtn) changeBtn.onclick = function () { changeSpot(r, changeBtn); };
+        var retryBtn = el.querySelector('[data-uw-retry]');
+        if (retryBtn) retryBtn.onclick = function () { st.spots[r.index] = null; readSpots(r); paintSpots(r); syncGo(); revealRow(r.index, 'spots'); };
+        if (focusKey) {
+          var back = el.querySelector('[data-uw-key="' + focusKey + '"]') || el.querySelector('button');
+          if (back) { try { back.focus({ preventScroll: true }); } catch (e) {} } else keepFocus();
+        }
+      }
+
+      // "Change spot": the REAL seat map, in its choose-only mode (app.js
+      // showBikePicker — it books nothing and answers with the chosen ids, or
+      // null for "no change"). Availability is read afresh first. The map sits
+      // UNDER this sheet's layer, and app.js's one key handler stands aside
+      // while #usualWeekSheet is in the page — so the sheet steps OUT of the
+      // page while the map is up and comes back, as it was, with the answer.
+      // _dialogOpen() stays true throughout (the picker counts), so no
+      // background dialog can slip in between the two.
+      function changeSpot(r, btn) {
+        if (st.choosing || st.running || typeof window.showBikePicker !== 'function' || typeof window.templateSpotsFor !== 'function') return;
+        st.choosing = true;
+        var seq = st.seq;
+        btn.disabled = true;
+        btn.textContent = 'Loading…';
+        var giveUp = function () { st.choosing = false; paintSpots(r); syncGo(); };
+        window.templateSpotsFor(r.eventId, r.studioId).then(function (info) {
+          if (st.closed || seq !== st.seq) { st.choosing = false; return; }
+          if (!(info && info.ok && info.kind === 'seats')) { st.spots[r.index] = { status: 'error' }; giveUp(); return; }
+          st.spots[r.index] = { status: 'ready', info: info };
+          resuggest(r);
+          var sp = st.spots[r.index];
+          if (sp.status !== 'ready') { giveUp(); return; }
+          var list = body.querySelector('.usual-week-plan');
+          var scrollTop = list ? list.scrollTop : 0;
+          var answered = false;
+          var done = function (ids) {
+            if (answered) return;
+            answered = true;
+            st.choosing = false;
+            if (st.closed) return;
+            if (!overlay.isConnected) document.body.appendChild(overlay);
+            if (ids && ids.length) { st.picks[r.index] = ids.slice(); resuggest(r); }
+            paintSpots(r);
+            syncGo();
+            var again = body.querySelector('.usual-week-plan');
+            if (again) again.scrollTop = scrollTop;
+            revealRow(r.index, 'spots'); // the words of another pick can wrap: "Change spot", where focus lands, stays in view
+            var focusBack = body.querySelector('[data-uw-change="' + r.index + '"]');
+            if (focusBack) { try { focusBack.focus({ preventScroll: true }); } catch (e) {} } else keepFocus();
+          };
+          try {
+            window.showBikePicker(r.eventId, null, info.layout, new Set(info.free), new Set(info.held), info.studioName,
+              { clashLine: info.clashLine, choose: { count: sp.sugg.slots.length, preselect: sp.sugg.slots.slice(), done: done } });
+            overlay.remove();
+          } catch (e) {
+            console.error('[template] seat map failed:', e);
+            done(null);
+          }
+        }, giveUp);
       }
 
       function paintPlan() {
@@ -1588,106 +2131,216 @@
             : 'Couldn\'t load the timetable — try again.');
           return;
         }
+        var keep = st.keep;
+        st.keep = null;
+        st.on = null;
+        st.saidCaution = '';
+        st.saidWaitlist = false;
         st.checked = {};
+        st.seats = {};
+        st.spots = {};
+        if (!keep) st.picks = {};
         var anyWaitlist = false, anyFound = false;
         var rows = plan.rows.map(function (r) {
           var note = _uwPlanNote(r);
           if (r.state === 'waitlist') anyWaitlist = true;
           if (r.state !== 'nomatch' && r.state !== 'error') anyFound = true;
-          if (note.pickable && r.eventId != null) { st.checked[r.index] = !!note.on; return _uwRowHtml(r, note, !!note.on); }
-          return _uwRowHtml(r, note, null);
+          st.seats[r.index] = r.seats;
+          if (!(note.pickable && r.eventId != null)) { st.picks[r.index] = null; return _uwRowHtml(r, note, null); }
+          // "Choose again" re-plans: a row the member had unticked stays
+          // unticked, and a tick survives only where the row is still what was
+          // ticked (_uwKeepTick) — at the member's own seat count, not the
+          // saved one. A pick of theirs stands for that class at that count only.
+          var on = !!note.on;
+          if (keep) {
+            var kept = _uwKeepTick(keep[r.index], r);
+            on = kept.on;
+            if (kept.seats != null) st.seats[r.index] = kept.seats;
+            var pick = st.picks[r.index];
+            if (!(kept.same && pick && pick.length === rowNeed(r))) st.picks[r.index] = null;
+          }
+          st.checked[r.index] = on;
+          return _uwRowHtml(r, note, on, rowKind(r) === 'join' ? '' : '<div class="usual-week-spots" data-uw-spots="' + r.index + '" hidden></div>');
         }).join('');
-        var starts = weekStarts();
-        var sw = function (mode, label) {
-          var active = plan.mode === mode;
+        var ranges = plan.ranges || [];
+        var sw = function (range) {
+          var active = range.start === plan.weekStart;
           // .seg-btn: the Crisp segmented track lights the segment off aria-pressed.
-          return '<button type="button" class="seg-btn usual-week-switch-btn' + (active ? ' active' : '') + '" aria-pressed="' + active + '" data-uw-start="' + starts[mode] + '">' + escapeHTML(label) + '</button>';
+          var label = _uwLabelHalves(_uwRangeLabel(range, rangeDate)).map(function (half) { return '<span>' + escapeHTML(half) + '</span>'; }).join(' ');
+          return '<button type="button" class="seg-btn usual-week-switch-btn' + (range.id === 'newest' ? ' is-newest' : '') + (active ? ' active' : '') + '" aria-pressed="' + active + '" data-uw-start="' + range.start + '">' + label + '</button>';
         };
+        // Past what the timetable lists (app.js pure:horizon, advisory) an empty
+        // range is an unpublished one, not a changed timetable.
+        var unlisted = !anyFound && plan.horizon && plan.weekEnd > plan.horizon.listedThrough;
         body.innerHTML =
-          '<div class="confirm-body">' + escapeHTML(_uwDateLabel(plan.weekStart) + ' – ' + _uwDateLabel(plan.weekEnd)) +
-            '. Nothing is booked until you press the button below.' +
-            // An empty week is usually an unreleased one, not a changed timetable.
-            (anyFound ? '' : ' None of your classes were found — Psycle opens each new week on Monday at 12:00, so these days may not be bookable yet.') +
-          '</div>' +
-          '<div class="seg usual-week-switch" role="group" aria-label="Which week">' +
-            sw('next7', 'Next 7 days') + sw('nextweek', 'Week of ' + _uwDateLabel(starts.nextweek)) +
-          '</div>' +
+          '<div class="confirm-body">' +
+            '<strong class="usual-week-range">' + escapeHTML(_uwDateLabel(plan.weekStart) + ' – ' + _uwDateLabel(plan.weekEnd)) + '</strong>' +
+            '<span>Nothing is booked until you press the button below.' +
+            (anyFound ? '' : unlisted ? ' None of your classes were found — Psycle adds new dates on Mondays at 12:00, so these may not be on the timetable yet.'
+              : ' None of your classes were found on these dates.') +
+          '</span></div>' +
+          '<div class="seg usual-week-switch" role="group" aria-label="Which week">' + ranges.map(sw).join('') + '</div>' +
           '<ul class="usual-week-plan">' + rows + '</ul>' +
+          // No role="status": the line is written while still [hidden] and then
+          // revealed — a change a screen reader does not announce. syncGo says it
+          // through announce() instead (and a role here would say it twice).
+          '<div class="usual-week-total" data-uw-total hidden></div>' +
           // The dialogs' warn line: the caution mark, then the sentence in the body ink.
           '<div class="confirm-warn">' + (typeof _uiIcon === 'function' ? _uiIcon('caution', 16) : '') +
-            '<span>Each class is booked straight away, on your usual spot or the first free one, and uses a class credit or counts towards your plan. ' +
+            '<span>Each class is booked straight away, on the spots shown, and every seat uses a class credit or counts towards your plan. ' +
             'Psycle\'s normal 12-hour cancellation policy applies to every one.' +
-            (anyWaitlist ? ' A ticked waitlist class is booked if a spot has freed up by then; otherwise you join the waitlist and Psycle books you in by itself when one does — chargeable, same policy.' : '') +
+            // What a waitlist join means — shown only WHILE a waitlist row is ticked
+            // (syncGo): everything but the list is pinned, and on a short phone these
+            // four lines (seven in the mono themes) took the list's last room for a
+            // sentence about a box nobody had ticked.
+            (anyWaitlist ? '<span data-uw-waitlist-note hidden>' + escapeHTML(UW_WAITLIST_NOTE) + '</span>' : '') +
           '</span></div>' +
           '<div class="confirm-actions">' +
             '<button type="button" class="confirm-btn confirm-btn-cancel" data-uw-close>Not now</button>' +
             '<button type="button" class="confirm-btn confirm-btn-primary" data-uw-go></button>' +
           '</div>';
-        var go = body.querySelector('[data-uw-go]');
-        var syncGo = function () {
-          var label = confirmLabel();
-          go.textContent = label || 'Nothing selected';
-          go.disabled = !label;
-        };
         syncGo();
         body.querySelector('[data-uw-close]').onclick = close;
-        go.onclick = run;
+        body.querySelector('[data-uw-go]').onclick = run;
         Array.prototype.forEach.call(body.querySelectorAll('[data-uw-row]'), function (box) {
-          box.onchange = function () { st.checked[Number(box.dataset.uwRow)] = box.checked; syncGo(); };
+          box.onchange = function () {
+            var r = rowByIndex(Number(box.dataset.uwRow));
+            st.checked[Number(box.dataset.uwRow)] = box.checked;
+            if (r) { if (box.checked) readSpots(r); paintSpots(r); }
+            syncGo();
+            revealRow(Number(box.dataset.uwRow), 'pick');
+          };
         });
         Array.prototype.forEach.call(body.querySelectorAll('[data-uw-start]'), function (b) {
-          b.onclick = function () { if (b.getAttribute('aria-pressed') !== 'true') load(b.dataset.uwStart); };
+          b.onclick = function () { if (b.getAttribute('aria-pressed') !== 'true' && !st.choosing) load(b.dataset.uwStart); };
         });
+        // The opinion on the spots, for every class that starts ticked.
+        picked().forEach(function (r) { readSpots(r); paintSpots(r); });
+        syncGo();
         keepFocus();
       }
 
-      function run() {
-        if (st.running) return;
+      // The button counts what it will spend — only the rows whose spots are on
+      // screen — and one advisory line weighs that against the plan.
+      function syncGo() {
+        var go = body.querySelector('[data-uw-go]');
+        if (!go) return;
         var rows = picked();
-        if (!rows.length) return;
-        var picks = rows.map(function (r) { return { eventId: r.eventId, studioId: r.studioId, joinIfFull: r.state === 'waitlist' }; });
+        var loading = rows.some(rowLoading);
+        var ready = rows.filter(rowReady);
+        var label = _uwConfirmLabel(totals(ready));
+        // On a phone the label runs to two lines: the "·" stays with the words
+        // before it (a no-break space), so no line ever STARTS on a bare dot.
+        go.textContent = loading ? 'Checking the spots…' : (label ? label.replace(/ ·/g, '\u00a0·') : 'Nothing selected');
+        go.disabled = loading || !label;
+        var total = body.querySelector('[data-uw-total]');
+        if (!total) return;
+        var caution = '';
+        if (!loading && typeof window.templatePlanCaution === 'function') {
+          caution = window.templatePlanCaution(ready.filter(function (r) { return rowKind(r) !== 'join'; }).map(function (r) {
+            return { startAt: r.startAt, seats: rowKind(r) === 'count' ? rowNeed(r) : st.spots[r.index].sugg.slots.length };
+          })) || '';
+        }
+        var html = _uwNoteInner({ warn: true, text: caution });
+        if (total.innerHTML !== html) total.innerHTML = html;
+        total.hidden = !caution;
+        // The waitlist sentence follows the ticks; both money lines are SPOKEN the
+        // moment they appear or change (announce() writes into this dialog's own
+        // live region — app.js _dialogLiveRegion): un-hiding a node says nothing.
+        var joining = rows.some(function (r) { return rowKind(r) === 'join'; });
+        var waitNote = body.querySelector('[data-uw-waitlist-note]');
+        if (waitNote) waitNote.hidden = !joining;
+        var say = [];
+        if (caution && caution !== st.saidCaution) say.push(caution);
+        if (joining && waitNote && !st.saidWaitlist) say.push(UW_WAITLIST_NOTE.trim());
+        st.saidCaution = caution;
+        st.saidWaitlist = joining && !!waitNote;
+        if (say.length && typeof announce === 'function') { try { announce(say.join(' ')); } catch (e) {} }
+      }
+
+      function run() {
+        if (st.running || st.choosing) return;
+        var rows = picked().filter(rowReady);
+        if (!rows.length || picked().some(rowLoading)) return;
+        // EXACTLY what is on screen: these spots (or this count), and no others.
+        var shown = {};
+        var picks = rows.map(function (r) {
+          var kind = rowKind(r);
+          var p = { eventId: r.eventId, studioId: r.studioId, joinIfFull: kind === 'join', mayBeClosed: !!r.beyondOpen,
+            held: _uwPlanNote(r).topUp ? (Number(r.heldSeats) || 0) : 0 };
+          if (kind === 'count') { p.spaces = rowNeed(r); shown[r.index] = p.spaces + (p.spaces === 1 ? ' space' : ' spaces'); }
+          else if (kind === 'seats') { p.slots = st.spots[r.index].sugg.slots.slice(); shown[r.index] = spotNames(r, p.slots, st.spots[r.index].info); }
+          return p;
+        });
+        var ticked = {};
+        rows.forEach(function (r) { ticked[r.index] = _uwTickOf(r, rowNeed(r)); });
         st.running = true;
         st.stop = false;
         _uwLog('usual-week:book');
+        var spotsOf = function (r) {
+          return shown[r.index] ? '<div class="usual-week-spots"><div class="usual-week-spot-text"><strong>' + escapeHTML(shown[r.index]) + '</strong></div></div>' : '';
+        };
         body.innerHTML =
           '<div class="confirm-body" role="status" data-uw-progress>Booking 1 of ' + rows.length + '…</div>' +
-          '<ul class="usual-week-plan">' + rows.map(function (r) { return _uwRowHtml(r, _uwResultNote('notrun'), null); }).join('') + '</ul>' +
+          '<ul class="usual-week-plan">' + rows.map(function (r) { return _uwRowHtml(r, _uwResultNote('notrun'), null, spotsOf(r)); }).join('') + '</ul>' +
           '<div class="confirm-actions"><button type="button" class="confirm-btn confirm-btn-cancel" data-uw-stop>Stop after this class</button></div>';
         var stopBtn = body.querySelector('[data-uw-stop]');
         stopBtn.onclick = function () { st.stop = true; stopBtn.disabled = true; stopBtn.textContent = 'Stopping…'; keepFocus(); };
         keepFocus();
+        // What the run hands back beside a result: the shown spots that went,
+        // Psycle's own words for a refusal (setNote reads it by row).
+        var detail = {};
         var setNote = function (i, result) {
           var el = body.querySelector('[data-uw-note="' + rows[i].index + '"]');
           if (!el) return;
-          var note = _uwResultNote(result);
+          var note = _uwResultNote(result, detail[i]);
           el.innerHTML = _uwNoteInner(note); // escaped there; a warning keeps its caution mark
           el.className = 'usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '');
         };
+        var noteDetail = function (i, res) {
+          res = res || {};
+          var gone = Array.isArray(res.gone) ? res.gone : [];
+          var sp = st.spots[rows[i].index];
+          detail[i] = { gone: gone.length ? spotNames(rows[i], gone, sp && sp.info) : '', goneMany: gone.length > 1, said: res.said || '', told: res.told || '' };
+        };
         var finish = function (counts) {
           st.running = false;
+          st.reported = true;
           counts = counts || {};
-          (counts.results || []).forEach(function (r, i) { setNote(i, r.result); });
+          var again = false;
+          (counts.results || []).forEach(function (r, i) {
+            noteDetail(i, r);
+            setNote(i, r.result);
+            if (_uwResultNote(r.result, detail[i]).again) again = true;
+          });
           var parts = [];
           if (counts.booked) parts.push(counts.booked + ' booked');
           if (counts.waitlisted) parts.push(counts.waitlisted + ' on the waitlist');
           var rest = rows.length - (counts.booked || 0) - (counts.waitlisted || 0);
           if (rest > 0) parts.push(rest + ' not booked');
           var why = counts.stopped === 'auth' ? ' Your session expired, so the run stopped — sign in and open this again (classes already booked are skipped).'
-            : counts.stopped === 'failed' ? ' Stopped there, so nothing else was attempted: check Psycle\'s message (credits, plan), then open this again — classes already booked are skipped.'
+            : counts.stopped === 'failed' ? ' Stopped there, so nothing else was attempted: see the note on that class, then open this again — classes already booked are skipped.'
             : counts.stopped === 'offline' ? ' You went offline, so the run stopped.'
             : counts.stopped === 'bookings' ? ' Couldn\'t load your bookings, so nothing was attempted — try again.'
             : counts.stopped === 'user' ? ' Stopped — the rest were not attempted.' : '';
           var progress = body.querySelector('[data-uw-progress]');
           if (progress) progress.textContent = (parts.join(' · ') || 'Nothing was booked') + '.' + why;
           var actions = body.querySelector('.confirm-actions');
-          actions.innerHTML = '<button type="button" class="confirm-btn confirm-btn-primary" data-uw-close>Done</button>';
+          // "Choose again" books nothing: it lists these dates afresh — new
+          // spots shown, the same classes ticked while they are still the same
+          // thing (_uwKeepTick) — for the member to confirm.
+          actions.innerHTML = (again ? '<button type="button" class="confirm-btn confirm-btn-cancel" data-uw-again>Choose again</button>' : '') +
+            '<button type="button" class="confirm-btn confirm-btn-primary" data-uw-close>Done</button>';
           var done = actions.querySelector('[data-uw-close]');
           done.onclick = close;
+          var againBtn = actions.querySelector('[data-uw-again]');
+          if (againBtn) againBtn.onclick = function () { load(st.plan.weekStart, ticked); };
           try { done.focus(); } catch (e) {}
           renderUsualWeekCard();
         };
         window.bookWeeklyTemplate(picks, {
-          onProgress: function (i, result) {
+          onProgress: function (i, result, res) {
+            noteDetail(i, res);
             setNote(i, result);
             var progress = body.querySelector('[data-uw-progress]');
             if (progress && result === 'running') progress.textContent = 'Booking ' + (i + 1) + ' of ' + rows.length + '…';
@@ -1704,8 +2357,14 @@
     });
   }
 
+  // Opens the REVIEW sheet — it books nothing by itself. `opts` (optional):
+  // { range: 'newest' } opens it on the batch the latest Monday release opened
+  // (the Monday reminder's tap); anything else, or nothing, lets the sheet pick
+  // its own dates. Called with no argument by the card's button.
   var _templateWeekRunning = false;
-  window.bookTemplateWeek = async function () {
+  window.bookTemplateWeek = async function (opts) {
+    // An onclick hands over its event, not options: only a plain { range } counts.
+    var range = (opts && typeof opts === 'object' && opts.range === 'newest') ? 'newest' : '';
     if (typeof window.bookWeeklyTemplate !== 'function' || typeof window.planWeeklyTemplate !== 'function') {
       toast('Template booking isn\'t available yet', 'info');
       return;
@@ -1732,7 +2391,12 @@
           return;
         }
       }
-      await _runUsualWeekSheet();
+      await _runUsualWeekSheet({ range: range });
+      // The sheet has closed. The Monday reminder is offered here too (iOS only —
+      // native-bridge.js; its own rules: once, never answered, never over a
+      // dialog): a usual week saved by an earlier build never meets "Save"
+      // again, and a review opened straight after a save outlasts that offer.
+      if (typeof window._offerWeeklyReminder === 'function') window._offerWeeklyReminder('usual-week-reviewed');
     } catch (e) {
       console.error('[template] book failed:', e);
       toast('Couldn\'t open your usual week', 'error');
@@ -2881,7 +3545,7 @@
     var html =
       '<button class="app-row" role="switch" aria-checked="' + !!on + '" onclick="window._toggleReminder()">' +
         '<span class="app-row-text"><span class="app-row-label">Monday booking reminder</span>' +
-        '<span class="app-row-detail">11:59 UK — a minute before the new booking week opens</span></span>' +
+        '<span class="app-row-detail">Mondays at 12:00 — when Psycle opens new dates</span></span>' +
         '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
       '</button>';
     if (window._nativeClassReminders) {
@@ -2930,7 +3594,7 @@
       toast('Weekly reminder off', 'info');
     } else {
       var ok = await window._nativeReminder.enable();
-      toast(ok ? 'Reminder set — Mondays at 11:59' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
+      toast(ok ? 'Reminder set — Mondays at 12:00' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
     }
     renderReminderRow();
   };

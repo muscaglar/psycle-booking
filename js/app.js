@@ -16,6 +16,8 @@
  *   checkAuth, openLoginPopup, showSessionExpired, clearToken,
  *   submitBooking, bookClass, confirmUnbook, cancelBikeSlot,
  *   showBikePicker, closeBikePicker, selectBike, confirmBikeBooking,
+ *   confirmSpotChoice, planWeeklyTemplate, templateSpotsFor,
+ *   templatePlanCaution, bookWeeklyTemplate, _bookingHorizon,
  *   fetchMyBookings, renderMyBookings, refreshUpcomingPanel,
  *   renderInstrDropdown, renderInstrChips, toggleInstructor,
  *   removeInstructor, toggleFavourite, applyFavouritesAsFilter,
@@ -314,12 +316,14 @@ function _plural(n, one, many) {
 
 /**
  * Format a booked slot list with the correct noun for the class type.
- * e.g. formatSlots('Bench', [12, 15]) -> "Benches 12 & 15", ('Bike', [7]) -> "Bike 7"
+ * e.g. formatSlots('Bench', [12, 15]) -> "Benches 12 & 15", ('Bike', [7]) -> "Bike 7",
+ * ('Bed', [1, 2, 3]) -> "Beds 1, 2 & 3" (three or four — the usual week books up
+ * to four — read as a list: "5 & 6 & 11 & 10" did not).
  */
 function formatSlots(label, slots) {
   if (!slots || !slots.length) return '';
   const noun = slots.length === 1 ? label : pluralizeSlotLabel(label);
-  return noun + ' ' + slots.join(' & ');
+  return noun + ' ' + (slots.length > 2 ? slots.slice(0, -1).join(', ') + ' & ' + slots[slots.length - 1] : slots.join(' & '));
 }
 // ── pure:core:end ──
 
@@ -2744,13 +2748,77 @@ function _releaseFrom(now, dir) {
 function _lastReleaseMs(now) { return _releaseFrom(now, -1); }
 function _nextReleaseMs(now) { return _releaseFrom(now, 1); }
 
-// When the Monday-to-Sunday week starting `mondayStr` opens: noon in London on
-// the Monday before. null when it cannot be worked out.
-function _weekOpensMs(mondayStr) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(mondayStr || ''));
-  if (!m) return null;
-  try { return _gymWallToUtcMs(+m[1], +m[2], +m[3] - 7, 12, 0, 0); } catch (e) { return null; }
+// ── pure:horizon:start ── (nested in pure:window; tests/suites/14a-usual-week-sheet.js evaluates it too)
+// HOW FAR AHEAD PSYCLE BOOKS — OBSERVED, NOT AN API CONTRACT. The API never
+// says when booking opens (an event carries `bookable_until` only). Read off
+// Psycle's public timetable on Saturday 2026-09-19 (Oxford Circus, occupancy
+// per day): real bookings ran through Thu 8 Oct, classes were LISTED through
+// Thu 15 Oct. So each Monday-12:00 release opens ONE 7-day batch — the Friday
+// 18 days on to the Thursday 24 days on (14 Sept opened Fri 2 → Thu 8 Oct) —
+// and the timetable lists one batch further than is open (credit types with an
+// `extended_booking_period` may book that one early). The rule this replaced —
+// "a Monday–Sunday week opens at noon on the Monday before it" — was wrong:
+// next week and the week after are long open.
+// ADVISORY ONLY: defaults, notes, which dates a reminder is about. Nothing may
+// BLOCK on it — a class that is listed can always be tried, and Psycle's own
+// answer stands.
+const RELEASE_OPENS_FROM_DAYS = 18;  // release Monday → the first day it opens (a Friday)
+const RELEASE_OPENS_TO_DAYS = 24;    // … → the last day it opens (a Thursday)
+const RELEASE_LISTED_EXTRA_DAYS = 7; // listed but not yet open: one batch more
+
+// Calendar arithmetic on 'YYYY-MM-DD' through UTC, where every day has 24 hours.
+function _horizonAddDays(dayStr, n) {
+  const p = String(dayStr).split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
 }
+
+// A release is Monday 12:00 in London — 11:00 or 12:00 UTC — so the instant's
+// UTC date IS that Monday, whatever zone the device is in.
+function _horizonDayOf(ms) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+// The Monday-noon release that reaches `dayStr`: the latest Monday on or before
+// (day − `reachDays`). null for anything that is not a day, or without London data.
+function _releaseReaching(dayStr, reachDays) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dayStr || ''));
+  if (!m) return null;
+  try {
+    const edge = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] - reachDays));
+    const sinceMonday = (edge.getUTCDay() + 6) % 7;
+    return _gymWallToUtcMs(edge.getUTCFullYear(), edge.getUTCMonth() + 1, edge.getUTCDate() - sinceMonday, 12, 0, 0);
+  } catch (e) { return null; }
+}
+
+// When booking for a day opens, and when the day first appears on the timetable
+// (a batch earlier). Observed model — see above.
+function _dayOpensMs(dayStr) { return _releaseReaching(dayStr, RELEASE_OPENS_FROM_DAYS); }
+function _dayListedMs(dayStr) { return _releaseReaching(dayStr, RELEASE_OPENS_FROM_DAYS + RELEASE_LISTED_EXTRA_DAYS); }
+
+// What is open, what is listed, and what the next release brings. null when the
+// clock or Europe/London cannot be read — callers then say nothing about it.
+//   openThrough / listedThrough  'YYYY-MM-DD' (London)
+//   lastRelease / nextRelease    ms
+//   lastBatch / nextBatch        { from, to } — the Friday → Thursday each opens
+function _bookingHorizon(nowMs) {
+  const now = Number(nowMs);
+  const last = _lastReleaseMs(now), next = _nextReleaseMs(now);
+  if (!(last > 0) || !(next > 0)) return null;
+  const lastDay = _horizonDayOf(last), nextDay = _horizonDayOf(next);
+  const openThrough = _horizonAddDays(lastDay, RELEASE_OPENS_TO_DAYS);
+  return {
+    openThrough,
+    listedThrough: _horizonAddDays(openThrough, RELEASE_LISTED_EXTRA_DAYS),
+    lastRelease: last,
+    nextRelease: next,
+    lastBatch: { from: _horizonAddDays(lastDay, RELEASE_OPENS_FROM_DAYS), to: openThrough },
+    nextBatch: { from: _horizonAddDays(nextDay, RELEASE_OPENS_FROM_DAYS), to: _horizonAddDays(nextDay, RELEASE_OPENS_TO_DAYS) },
+  };
+}
+// ── pure:horizon:end ──
+// (_weekOpensMs — "a Monday–Sunday week opens at noon on the Monday before it"
+// — is gone with the rule it stood for: a week does not open as one. Its
+// readers ask per DAY now: _dayOpensMs / _dayListedMs above.)
 
 // A stamp from the future (the clock was moved back) is NOT fresh — it would
 // otherwise pass for fresh until the clock caught up with it. Nor is a
@@ -3320,9 +3388,9 @@ async function refreshWindow() {
 // silently: the list stays up and is swapped in place when the fetch lands.
 // A DOM timer stops counting while the app is suspended or the phone sleeps and
 // resumes with what was LEFT: armed Sunday evening it would fire hours after
-// noon, and the "We'll refresh this list then" empty state (which the 11:59
-// reminder tap lands on) relies on exactly this — so it is re-armed from the
-// clock on every return to the foreground (below).
+// noon — and the Monday reminder now fires AT the release, so a member who taps
+// it is looking at this list at exactly that moment. So it is re-armed from
+// the clock on every return to the foreground (below).
 let _releaseTimer = null;
 function _armReleaseTimer() {
   clearTimeout(_releaseTimer);
@@ -3351,42 +3419,139 @@ function _refreshForRelease(again) {
 _armReleaseTimer();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) _armReleaseTimer(); });
 
-// The Monday "new booking week opens" reminder was tapped (the iOS bridge
-// calls this). Show exactly that week: the 'Next week' preset, as a pill tap
-// would — it searches, and a window fetched before the release is refreshed by
-// the freshness rule, so there is no explicit refresh here to race that
-// search. Through _applyDateQuick, NOT setDateQuick: that one saves the
-// filters (interactions.js), and a tapped notification made "Next week" what
-// every later launch opened on. Not before launch is done, though: init's
-// tail and restoreFilters would each put the OLD date preset back. A search
-// that could load only starts after both. Nor under a booking in progress (the
-// search rebuilds the list the open picker's button lives in). Bounded: signed
+// ── pure:week-opened:start ── (DOM-free; tests/suites/14c-weekly-reminder.js evaluates this block)
+// WHICH dates a Monday release opens, for the reminder tap below. Observed on
+// 2026-09-19 (Psycle's public timetable, read-only — not an API contract): each
+// Monday 12:00 London release opens a 7-day batch, the Friday 18 days after
+// that Monday to the Thursday 24 days after it (14 Sept opened Fri 2 → Thu 8
+// Oct). window._bookingHorizon(now) owns that model where it exists — its
+// `openThrough` is the batch's last day — and these two numbers are only the
+// stand-in for a build without it. The release instant is 11:00 or 12:00 UTC,
+// so its UTC date IS the London Monday: plain day arithmetic, no zone.
+// It only says where a tap LANDS: nothing is refused or hidden because of it.
+const OPENED_BATCH_FIRST_DAY = 18;
+const OPENED_BATCH_LAST_DAY = 24;
+function _isoDayPlus(ds, n) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ds || ''));
+  if (!m) return null;
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)).toISOString().slice(0, 10);
+}
+// → { from, to } ('YYYY-MM-DD', London days) or null when neither can say.
+function _openedBatch(horizon, lastReleaseMs) {
+  const through = horizon && _isoDayPlus(horizon.openThrough, 0);
+  if (through) return { from: _isoDayPlus(through, -6), to: through };
+  if (!(typeof lastReleaseMs === 'number' && isFinite(lastReleaseMs) && lastReleaseMs > 0)) return null;
+  const monday = new Date(lastReleaseMs).toISOString().slice(0, 10);
+  return { from: _isoDayPlus(monday, OPENED_BATCH_FIRST_DAY), to: _isoDayPlus(monday, OPENED_BATCH_LAST_DAY) };
+}
+// Where the tap goes. 'review' = My Bookings + the usual-week REVIEW sheet on
+// those dates (it lists every class and books only what is ticked and confirmed
+// in it — the tap itself books nothing); 'discover' = Discover on the batch's
+// first day. A saved week with no sheet to open it in is 'discover' too.
+function _weekOpenedRouteFor(f) {
+  return (f && f.hasUsualWeek && f.canReview) ? 'review' : 'discover';
+}
+// ── pure:week-opened:end ──
+
+// The Monday "New Psycle dates are open" reminder was tapped (the iOS bridge
+// calls this, having put the member on My Bookings when a usual week is saved
+// and on Discover when not — the same stored week read here, at the tap).
+// With a usual week: its review sheet on the dates that just opened,
+// bookTemplateWeek({ range: 'newest' }). NOTHING is booked by the tap — the
+// sheet lists the classes and the member ticks and confirms. Without one:
+// Discover on the first of those dates, as a day picked in the calendar —
+// it searches, and a window fetched before the release is refreshed by the
+// freshness rule, so there is no explicit refresh here to race that search.
+// (It showed the 'Next week' preset until September 2026: the wrong week — that
+// one opened a fortnight earlier.) NOT through onDateInputChange / setDateQuick:
+// those save the filters (interactions.js), and a tapped notification became
+// what every later launch opened on. Not before launch is done, though: init's
+// tail and restoreFilters would each put the OLD date back. A search that
+// could load only starts after both. Nor under a booking in progress (the
+// search rebuilds the list the open picker's button lives in), and the review
+// never over another dialog, sheet or the welcome, nor before the session is
+// verified (its plan would call a signed-in member signed out). Bounded: signed
 // out, or reference data that never loads, it gives up quietly — and BY THE
 // CLOCK, like the bridge's own tap router: timers freeze in a suspended app, so
 // a try counter alone let the poll wake hours later and rewrite the date row.
-// A retry also only acts while the member is still where the tap put them (the
-// bridge switched to Discover at the tap): having moved on — "View my
-// bookings" on the dialog that held this up — they are not yanked back.
+// A retry also only acts while the member is still where the tap put them:
+// having moved on — "View my bookings" on the dialog that held this up — they
+// are not yanked back.
 const WEEK_OPENED_GIVE_UP_MS = 15000;
-let _weekOpenedTimer = null, _weekOpenedTries = 0, _weekOpenedAt = 0;
+let _weekOpenedTimer = null, _weekOpenedTries = 0, _weekOpenedAt = 0, _weekOpenedRoute = 'discover';
+
+function _weekOpenedUsualWeek() {
+  try { return typeof loadWeeklyTemplate === 'function' && loadWeeklyTemplate().length > 0; } catch (e) { return false; }
+}
+
+// Anything the review sheet would land on top of, or a Book button mid-flight
+// on either tab (the run inside the sheet must never start beside another booking).
+function _weekOpenedReviewBlocked() {
+  try {
+    if (_dialogOpen() || _ownKeysOverlayUp() || _overlayStack.length > 0 || document.getElementById('bookingConfirmation')) return true;
+    return Array.from(document.querySelectorAll('.book-btn')).some(b => b.dataset.busy === '1' || b.textContent === '…');
+  } catch (e) { return true; } // cannot tell → wait (bounded by the clock above)
+}
+
+// The date row's own custom-date path — what pickCalDate writes — minus
+// onDateInputChange: that name is saved by interactions.js and releases the hold.
+function _showOpenedDay(day) {
+  const startEl = document.getElementById('startDate'), daysEl = document.getElementById('daysAhead');
+  if (!startEl || !daysEl) return false;
+  window._dateRowHeld = true; // …nor may the member's next chip tap save it (see _releaseDateRow)
+  _dateQuickMode = null;
+  startEl.value = day;
+  daysEl.value = 1;
+  _syncDatePills(); // the calendar button now reads that day
+  triggerAutoSearch();
+  return true;
+}
+
 window._onBookingWeekOpened = function (isRetry) {
   clearTimeout(_weekOpenedTimer);
   if (isRetry !== true) {
     _weekOpenedTries = 0;
     _weekOpenedAt = Date.now();
+    _weekOpenedRoute = _weekOpenedRouteFor({ hasUsualWeek: _weekOpenedUsualWeek(), canReview: typeof window.bookTemplateWeek === 'function' });
   } else {
     if (Date.now() - _weekOpenedAt > WEEK_OPENED_GIVE_UP_MS) return;
     const active = document.querySelector('.tab-panel.active');
-    if (active && active.id !== 'tab-discover') return;
+    if (active && active.id !== (_weekOpenedRoute === 'review' ? 'tab-bookings' : 'tab-discover')) return;
   }
-  if (!_loadableSearchStarted || _discoverBusy()) {
+  const review = _weekOpenedRoute === 'review';
+  // The review is already on screen (the member opened it, or an earlier tap
+  // did): no second sheet. It must not wait for it either — a retry left
+  // polling re-opened the sheet the moment the member closed it. But a sheet
+  // opened BEFORE the 12:00 release (to be ready for it), or sitting on another
+  // range, has no "Newly opened" dates — the ones this tap promised — so an
+  // idle sheet is asked to show them (js/tabs.js _usualWeekSheetNewest: it
+  // re-plans, books nothing, and refuses during a run or over the seat map).
+  // Only the TAP itself asks: a poll that wakes seconds later must not re-list
+  // a sheet the member has opened — and started ticking — in the meantime.
+  if (review && document.getElementById('usualWeekSheet')) {
+    if (isRetry !== true) { try { if (typeof window._usualWeekSheetNewest === 'function') window._usualWeekSheetNewest(); } catch (e) {} }
+    return;
+  }
+  const wait = !_loadableSearchStarted ||
+    (review ? (!currentUser || !getBearerToken() || _weekOpenedReviewBlocked()) : _discoverBusy());
+  if (wait) {
     if (_weekOpenedTries++ < 120) _weekOpenedTimer = setTimeout(() => window._onBookingWeekOpened(true), 500);
     return;
   }
+  if (review) {
+    if (isRetry !== true && typeof switchTab === 'function') switchTab('bookings');
+    // The sheet owns everything from here: its own session / connection /
+    // bookings-loaded checks, the double-open guard, and every booking rule.
+    try { Promise.resolve(window.bookTemplateWeek({ range: 'newest' })).catch(() => {}); } catch (e) {}
+    return;
+  }
   if (isRetry !== true && typeof switchTab === 'function') switchTab('discover');
-  window._dateRowHeld = true; // …nor may the member's next chip tap save it (see _releaseDateRow)
-  _applyDateQuick('nextweek');
-  _revealActiveDatePill(); // "Next week" is past a phone's right edge
+  let horizon = null;
+  try { if (typeof window._bookingHorizon === 'function') horizon = window._bookingHorizon(Date.now()); } catch (e) {}
+  const batch = _openedBatch(horizon, _lastReleaseMs(Date.now()));
+  // No London zone data to work the dates out from: the list as it stands, made current.
+  if (!batch || !_showOpenedDay(batch.from)) { _revalidateIfStale(); return; }
+  _revealActiveDatePill(); // the calendar button, when the row has been scrolled away from it
 };
 
 async function search(opts) {
@@ -3713,16 +3878,20 @@ function _discoverEmptyContext() {
     // for a fetch that never ran (offline) or failed in a way nobody can name.
     return { title: "Couldn't check these dates", sub: window._windowLoadError || "The latest timetable didn't load — check your connection and try again.", actions: ['retry'] };
   }
-  // "Next week" on a Monday morning: empty because Psycle has not opened that
-  // week yet — not for lack of classes, and whatever the filters say. (Only
-  // while the inputs still ARE that preset; other flows move the date and
-  // leave the mode behind.) The release timer refreshes this view at noon.
-  const nextWeek = _dateQuickMode === 'nextweek' ? _dateModeWindow('nextweek', localDateStr()) : null;
-  if (nextWeek && nextWeek.startDate === sel.startDate) {
-    const opens = _weekOpensMs(sel.startDate);
-    if (opens && Date.now() < opens) {
-      return { title: 'Next week opens Monday 12:00', sub: "Psycle releases the new booking week on Mondays at 12:00 UK time. We'll refresh this list then.", actions: ['week'] };
-    }
+  // Dates Psycle has not put on the timetable yet: empty because of that — not
+  // for lack of classes, and whatever the filters say. By the OBSERVED release
+  // model (pure:horizon — advisory): new dates appear on Mondays at 12:00 UK
+  // time, a batch before they can be booked. No preset reaches that far (the
+  // "Next week" preset has long been open by the Monday before it — the empty
+  // state that said otherwise was wrong); a date picked in the calendar can.
+  // (typeof: a suite runs this function on its own.)
+  const listed = typeof _dayListedMs === 'function' ? _dayListedMs(sel.startDate) : null;
+  if (listed && Date.now() < listed) {
+    const opens = _dayOpensMs(sel.startDate);
+    const when = opens ? new Date(opens).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : '';
+    // "usually": the date is the observed model's arithmetic, not Psycle's word
+    // (some credit types book a batch early) — it explains, it never promises.
+    return { title: 'Not on the timetable yet', sub: 'Psycle adds new dates on Mondays at 12:00 UK time.' + (when ? ' Booking for these usually opens ' + when + '.' : ''), actions: ['week'] };
   }
   const today = localDateStr();
   const filtered = selectedInstructors.size > 0 || selectedLocations.size > 0 ||
@@ -4341,13 +4510,35 @@ function _sheetPlanNote(f) {
 
 // The picker's confirm button says what it will book: "Book bike 12",
 // "Book benches 3 & 4" — and plain "Book" (disabled) while nothing is picked.
-// A swap words its own button (changeSpot / executeSpotSwap).
-function _pickerConfirmLabel(slotWord, selected) {
+// A swap words its own button (changeSpot / executeSpotSwap). `verb`: the
+// choose-only picker (the usual-week sheet's "Change spot") books nothing, and
+// says so — "Use bike 12".
+function _pickerConfirmLabel(slotWord, selected, verb) {
   var list = Array.isArray(selected) ? selected : [];
-  if (!list.length) return 'Book';
+  var does = verb === 'Use' ? 'Use' : 'Book';
+  if (!list.length) return does;
   var word = String(slotWord || 'Spot').toLowerCase();
   if (list.length > 1) word = /^bench$/.test(word) ? 'benches' : word + 's';
-  return 'Book ' + word + ' ' + list.join(' & ');
+  return does + ' ' + word + ' ' + _seatList(list);
+}
+
+// "3 & 4", "3, 4 & 5" — as formatSlots lists the same seats everywhere else.
+function _seatList(list) {
+  return list.length > 2 ? list.slice(0, -1).join(', ') + ' & ' + list[list.length - 1] : list.join(' & ');
+}
+
+// The choose-only picker's hint: how many spots the sheet's row asks for, and
+// how many are picked. The confirm button is live only at exactly `count`.
+function _chooseSpotHint(slotWord, count, selected) {
+  var list = Array.isArray(selected) ? selected : [];
+  var n = Math.max(1, Math.floor(Number(count)) || 1);
+  var word = String(slotWord || 'Spot');
+  var plural = function (w) { return /^bench$/i.test(w) ? w + 'es' : w + 's'; }; // as pluralizeSlotLabel
+  var one = word.toLowerCase();
+  if (!list.length) return n === 1 ? 'Tap the ' + one + ' you want' : 'Pick ' + n + ' ' + plural(one);
+  var picked = (list.length === 1 ? word : plural(word)) + ' ' + _seatList(list) + ' selected';
+  if (list.length < n) return picked + ' — pick ' + (n - list.length) + ' more';
+  return picked + ' — tap another to switch';
 }
 // ── pure:sheets:end ──
 
@@ -4355,6 +4546,21 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   _bookingContext = { eventId, btn };
   _selectedSlots = [];
   _usualPreselected = null;
+  // CHOOSE-ONLY MODE — opts.choose = { count, preselect: [ids], done(ids | null) }:
+  // the usual-week sheet's "Change spot". The REAL seat map, but it BOOKS
+  // NOTHING: its confirm reads "Use bike 12" and hands the chosen ids back to
+  // the sheet (confirmSpotChoice); closing it any other way answers done(null)
+  // — no change. On window, like _changeSpotContext, because selectBike,
+  // closeBikePicker and confirmBikeBooking all have to know. A chooser still
+  // waiting when another picker opens is answered "no change" first.
+  const _prevChoose = window._chooseSpotContext;
+  const _choose = (opts && opts.choose && typeof opts.choose.done === 'function') ? {
+    count: Math.max(1, Math.min(4, Math.floor(Number(opts.choose.count)) || 1)),
+    preselect: (Array.isArray(opts.choose.preselect) ? opts.choose.preselect : []).map(Number).filter(n => Number.isFinite(n)),
+    done: opts.choose.done,
+  } : null;
+  window._chooseSpotContext = _choose;
+  if (_prevChoose && typeof _prevChoose.done === 'function') { try { _prevChoose.done(null); } catch (e) {} }
 
   const hasMySlots = mySlotIds.size > 0;
   const _sl = slotLabelForEvent(eventId).toLowerCase();
@@ -4542,16 +4748,37 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
       `${_slU} ${usualSlot} is your usual — tap another to switch, or confirm.`;
     document.getElementById('confirmBookBtn').disabled = false;
   }
+  // Choose-only mode, over the normal picker drawn above: the sheet's
+  // suggestion is what starts selected (not the auto-picked usual), a seat
+  // already held is shown but is no cancel button here, and the confirm BOOKS
+  // NOTHING (confirmSpotChoice — confirmBikeBooking refuses in this mode too).
+  if (_choose) {
+    const preset = _choose.preselect.filter(id => availableSlotIds.has(id) && !mySlotIds.has(id)).slice(0, _choose.count);
+    svg.querySelectorAll('.bike-slot').forEach(g => {
+      const id = Number(g.getAttribute('data-slot'));
+      if (g.classList.contains('mine')) { g.removeAttribute('onclick'); return; }
+      if (g.classList.contains('selected') && preset.indexOf(id) === -1) g.classList.replace('selected', 'available');
+      else if (g.classList.contains('available') && preset.indexOf(id) !== -1) g.classList.replace('available', 'selected');
+    });
+    _selectedSlots = preset.slice();
+    _usualPreselected = null; // the first tap on another seat adds or evicts by the count — it never "replaces the usual"
+    document.getElementById('modalTitle').textContent = `Choose your ${_choose.count > 1 ? pluralizeSlotLabel(_sl) : _sl}`;
+    document.getElementById('modalHint').textContent = _chooseSpotHint(_SL, _choose.count, _selectedSlots);
+    _confirmBtn.disabled = _selectedSlots.length !== _choose.count;
+    _confirmBtn.onclick = confirmSpotChoice;
+    if (_dismissBtn) _dismissBtn.textContent = 'Back'; // to the sheet, with no change
+  }
   _syncBikeSlotsA11y();
   if (typeof _syncPickerConfirmLabel === 'function') _syncPickerConfirmLabel(); // "Book bike 12" for the pre-selected usual
 }
 
-// The confirm button names what it books (_pickerConfirmLabel). Not in a swap:
+// The confirm button names what it books (_pickerConfirmLabel) — or, in the
+// choose-only picker, what it will hand back ("Use bike 12"). Not in a swap:
 // changeSpot / executeSpotSwap word that button themselves.
 function _syncPickerConfirmLabel() {
   if (window._changeSpotContext) return;
   const btn = document.getElementById('confirmBookBtn');
-  if (btn) btn.textContent = _pickerConfirmLabel(_bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot', _selectedSlots);
+  if (btn) btn.textContent = _pickerConfirmLabel(_bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot', _selectedSlots, window._chooseSpotContext ? 'Use' : 'Book');
 }
 
 // ── pure:booking:start ── (DOM-free; tests/suites/booking.js evaluates these blocks)
@@ -4598,6 +4825,9 @@ function _syncBikeSlotsA11y() {
     const text = g.querySelector('text');
     const a = _bikeSlotA11y(Array.from(g.classList), word,
       String((text && text.textContent) || g.getAttribute('data-slot') || '').trim());
+    // Choose-only mode: a seat already held is shown, not offered — it has no
+    // action behind it there (showBikePicker took its cancel handler away).
+    if (window._chooseSpotContext && g.classList.contains('mine')) { a.disabled = true; a.tabindex = -1; }
     g.setAttribute('role', 'button');
     g.setAttribute('tabindex', String(a.tabindex));
     g.setAttribute('aria-label', a.label);
@@ -4626,8 +4856,9 @@ function selectBike(slotId) {
       _selectedSlots.shift();
       document.querySelector(`.bike-slot[data-slot="${_usualPreselected}"]`)?.classList.replace('selected', 'available');
     }
-    // A swap replaces exactly one seat, so swap mode is single-select.
-    const maxSel = swapMode ? 1 : MAX_SEATS;
+    // A swap replaces exactly one seat, so swap mode is single-select. The
+    // choose-only picker takes exactly the seats its sheet row asks for.
+    const maxSel = swapMode ? 1 : (window._chooseSpotContext ? window._chooseSpotContext.count : MAX_SEATS);
     while (_selectedSlots.length >= maxSel) {
       const evicted = _selectedSlots.shift();
       document.querySelector(`.bike-slot[data-slot="${evicted}"]`)?.classList.replace('selected', 'available');
@@ -4642,6 +4873,16 @@ function selectBike(slotId) {
     // Keep the change-spot chips + swap hint instead of the generic booking hint.
     renderChangeSpotHint();
     document.getElementById('confirmBookBtn').disabled = _selectedSlots.length === 0;
+    return;
+  }
+  // Choose-only mode: its own hint, and "Use …" is live only with exactly the
+  // seats the sheet's row asks for.
+  const choose = window._chooseSpotContext;
+  if (choose) {
+    const word = _bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot';
+    document.getElementById('modalHint').textContent = _chooseSpotHint(word, choose.count, _selectedSlots);
+    document.getElementById('confirmBookBtn').disabled = _selectedSlots.length !== choose.count;
+    if (typeof _syncPickerConfirmLabel === 'function') _syncPickerConfirmLabel();
     return;
   }
   const count = _selectedSlots.length;
@@ -4668,9 +4909,31 @@ function closeBikePicker() {
     confirmBtn.textContent = 'Book';
     confirmBtn.onclick = confirmBikeBooking;
   }
+  // A choose-only picker (the usual-week sheet's "Change spot") closed by ×,
+  // Back, Escape or the backdrop: that IS its answer — no change. The sheet is
+  // waiting on it, so it is always answered, and exactly once.
+  const choose = window._chooseSpotContext;
+  window._chooseSpotContext = null;
+  if (choose && typeof choose.done === 'function') { try { choose.done(null); } catch (e) {} }
+}
+
+// "Use bike 12": the choose-only picker hands the chosen spots back to the
+// usual-week sheet. NOTHING is booked here — the sheet shows the choice, and
+// only its own confirm button spends anything.
+function confirmSpotChoice() {
+  const choose = window._chooseSpotContext;
+  if (!choose) return;
+  const picked = _selectedSlots.map(Number);
+  if (picked.length !== choose.count) return;
+  window._chooseSpotContext = null; // closeBikePicker must not also answer "no change"
+  closeBikePicker();
+  try { choose.done(picked); } catch (e) {}
 }
 
 async function confirmBikeBooking() {
+  // The choose-only picker never books, whatever ended up calling this (the
+  // page's own onclick attribute names this function).
+  if (window._chooseSpotContext) { confirmSpotChoice(); return; }
   if (!_bookingContext || _selectedSlots.length === 0) return;
   const { eventId, btn } = _bookingContext;
   const slotsToBook = [..._selectedSlots]; // capture before close
@@ -7260,18 +7523,13 @@ function _pagerSpoken(day, todayStr, n, state) {
   return _pagerDayLabel(day, todayStr).long + ', ' + what;
 }
 
-// The Monday of a day's Monday-to-Sunday week ('' for anything that is not a day).
-function _pagerMondayOf(day) {
-  if (!_pagerIsDay(day)) return '';
-  const p = String(day).split('-').map(Number);
-  return _pagerAddDays(day, -((new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() + 6) % 7));
-}
-
 // A day with nothing to show is not always a day with no classes. What such a
 // day is INSTEAD — null when "no classes" is the truth as far as anyone knows:
-//   'unopened' Psycle has not released its week yet: o.opensMs(monday) is when
-//              that week opens (_weekOpensMs), o.now the clock. Every "14 days"
-//              view reaches past the Monday-noon release;
+//   'unopened' Psycle has not put the day on the timetable yet: o.opensMs(day)
+//              is when it first appears (_dayListedMs — the OBSERVED release
+//              model, pure:horizon), o.now the clock. No preset reaches that far
+//              (about 25 days out); a date picked in the calendar can. A day
+//              that IS listed and empty really has no classes;
 //   'unknown'  it lies past o.heldEnd, the last day a provisional window (an
 //              older cache shown while the real range loads) really holds. It
 //              was never loaded, so "no classes" would be a guess — the rule
@@ -7281,18 +7539,21 @@ function _pagerEmptyState(day, n, o) {
   if (n > 0 || !_pagerIsDay(day)) return null;
   o = o || {};
   let opens = null;
-  try { opens = typeof o.opensMs === 'function' ? o.opensMs(_pagerMondayOf(day)) : null; } catch (e) {}
+  try { opens = typeof o.opensMs === 'function' ? o.opensMs(day) : null; } catch (e) {}
   if (opens && o.now < opens) return 'unopened';
   return (_pagerIsDay(o.heldEnd) && day > o.heldEnd) ? 'unknown' : null;
 }
 
-// "Booking opens Monday 21 September, 12:00" — the Monday BEFORE the day's own
-// week, by its date: the day on screen sits in a week that starts on a Monday
-// too, and a bare "Monday" would read as that one.
-function _pagerOpensText(day, todayStr) {
-  const opensDay = _pagerAddDays(_pagerMondayOf(day), -7);
-  if (!opensDay) return '';
-  return opensDay === todayStr ? 'Booking opens today at 12:00' : 'Booking opens ' + _pagerDayLabel(opensDay, '').long + ', 12:00';
+// "Booking usually opens Monday 12 October, 12:00" — the release that opens the
+// day (`opensMs`: _dayOpensMs, pure:horizon), named by its date: a bare "Monday"
+// would read as the next one. "usually": that date is the OBSERVED model's, not
+// an answer from Psycle (the API never says when booking opens, and some credit
+// types book a batch early) — so it explains, it never promises. Monday noon in
+// London is 11:00 or 12:00 UTC, so the instant's UTC date IS that Monday.
+function _pagerOpensText(opensMs, todayStr) {
+  if (!(opensMs > 0)) return '';
+  const opensDay = new Date(opensMs).toISOString().slice(0, 10);
+  return opensDay === todayStr ? 'Booking usually opens today at 12:00' : 'Booking usually opens ' + _pagerDayLabel(opensDay, '').long + ', 12:00';
 }
 
 function _pagerFirstWithClasses(days, counts) {
@@ -7695,7 +7956,7 @@ function _pagerModelFor(byDay, filters, done, dataAt, maps, heldEnd) {
   const todayStr = localDateStr();
   // Days with nothing to show that may not say "no classes" (_pagerEmptyState).
   const states = {}, now = Date.now();
-  days.forEach(d => { const s = _pagerEmptyState(d, counts[d], { heldEnd, now, opensMs: _weekOpensMs }); if (s) states[d] = s; });
+  days.forEach(d => { const s = _pagerEmptyState(d, counts[d], { heldEnd, now, opensMs: _dayListedMs }); if (s) states[d] = s; });
   const m = { paged: days.length > 1 && shown.length > 0, days, counts, states, byDay, maps, shown, done: !!done, dataAt, todayStr };
   if (days.length <= 1) {
     // A single day. Back on a range later, it starts on its first day: the range changed.
@@ -7786,8 +8047,8 @@ function _paintDayGroup(host, day, m) {
       empty.className = 'day-empty';
       body.appendChild(empty);
     }
-    // WHY it is empty decides what it may say (_pagerEmptyState). A week Psycle
-    // has not opened yet says when it opens. A day a provisional window never
+    // WHY it is empty decides what it may say (_pagerEmptyState). A day Psycle
+    // has not listed yet says when booking for it opens. A day a provisional window never
     // held is still being checked — or could not be, and then the way on is the
     // whole-range state's own retry: a forced search shows the studios that
     // answer, where a refresh is all-or-nothing. (.empty-loading: once nothing
@@ -7799,7 +8060,7 @@ function _paintDayGroup(host, day, m) {
         : '<div class="day-empty-line">Couldn\'t check this day</div><button type="button" class="empty-action primary" data-pager-retry>Try again</button>';
       return;
     }
-    const line = (state === 'unopened' && _pagerOpensText(day, m.todayStr)) || 'No classes on this day.';
+    const line = (state === 'unopened' && _pagerOpensText(_dayOpensMs(day), m.todayStr)) || 'No classes on this day.';
     empty.innerHTML = `<div class="day-empty-line">${escapeHTML(line)}</div>` + (jump
       ? `<button type="button" class="empty-action primary" data-pager-day="${jump.day}">${jump.dir > 0 ? 'Next' : 'Previous'} day with classes: ${escapeHTML(_pagerDayLabel(jump.day, m.todayStr).short)}</button>`
       : '');
@@ -11338,12 +11599,14 @@ document.addEventListener('error', function (e) {
 // Feature: Weekly Template Booking Engine ("Your usual week")
 // localStorage 'psycle_weekly_template' = array of
 //   { dayOfWeek:0-6 (0=Sun), hour, minute, locationId, eventTypeId,
-//     instructorId, label, locName? }
+//     instructorId, label, locName?, seats? (1–4; absent = 1) }
 // The "Your usual week" card in tabs.js calls saveWeeklyTemplate /
 // loadWeeklyTemplate / planWeeklyTemplate / bookWeeklyTemplate; this is the
 // implementation behind those hooks. NEVER a one-tap spend: planWeeklyTemplate
-// only reads, and bookWeeklyTemplate books nothing but the classes the member
-// ticked in the sheet that listed them.
+// and templateSpotsFor only read, and bookWeeklyTemplate books nothing but the
+// classes the member ticked in the sheet that listed them — on exactly the
+// spots that sheet showed. `seats` is where the sheet STARTS; it is coerced
+// where it is read (_templateSeats) and bounded again before anything is sent.
 // ════════════════════════════════════════════════════════════════
 const WEEKLY_TEMPLATE_KEY = 'psycle_weekly_template';
 
@@ -11410,15 +11673,99 @@ function _templateLondonNow(nowMs) {
   return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, min: d.getHours() * 60 + d.getMinutes() };
 }
 
-// Which 7 days "my usual week" means right now. Psycle opens the NEXT week's
-// timetable on Monday at 12:00 London: from then on the week still to book is
-// next Monday–Sunday (this one was booked last Monday). Before it, on Monday
-// morning, next week can't be booked yet — so it is the 7 days from today.
-function _templateDefaultStart(nowMs) {
+// Seats per class. 4 is Psycle's own `max_bookable_slots` on every class read
+// (observed 2026-09-19); an event that says less is believed (`max`).
+const TEMPLATE_MAX_SEATS = 4;
+
+// A saved entry's seat count: an integer 1–4, anything else 1 — storage is not
+// ours to trust (an import, the iOS mirror), and this number ends up in a POST.
+// A NUMBER only: the app never writes anything else there, so "3" is junk like
+// any other — and it is the rule the card reads the same field by (js/tabs.js
+// _uwCardSeats). The two must never disagree: the card SAYS what the sheet will
+// offer to SPEND (tests/suites/14b-usual-week-card.js holds them together).
+function _templateSeats(v, max) {
+  let n = typeof v === 'number' ? v : 1;
+  if (!(Number.isInteger(n) && n >= 1 && n <= TEMPLATE_MAX_SEATS)) n = 1;
+  const cap = Number(max);
+  return (Number.isInteger(cap) && cap >= 1 && cap < n) ? cap : n;
+}
+
+// How many seats a held entry is: its seats, or — a studio with no spot map
+// keeps one slot-less record per space — its records. 0 for a waitlist place.
+function _templateSeatsHeld(held) {
+  if (!held || held.waitlisted) return 0;
+  const seats = Array.isArray(held.slots) ? held.slots.length : 0;
+  const records = Array.isArray(held.bookingIds) ? held.bookingIds.length : 0;
+  return Math.max(1, seats || records);
+}
+
+// The slot ids a pick may send: whole positive numbers, each once, at most
+// TEMPLATE_MAX_SEATS. Bounded HERE, again, whatever the sheet built.
+function _templatePickSlots(v) {
+  const out = [];
+  (Array.isArray(v) ? v : []).forEach(s => {
+    const n = (typeof s === 'number' || (typeof s === 'string' && s.trim() !== '')) ? Number(s) : NaN;
+    if (Number.isInteger(n) && n > 0 && out.indexOf(n) === -1 && out.length < TEMPLATE_MAX_SEATS) out.push(n);
+  });
+  return out;
+}
+
+// The date ranges the sheet offers, each 7 days, in the order shown: the next 7
+// days, then the next THREE Monday–Sunday weeks (Psycle books about three weeks
+// ahead — pure:horizon). `horizon` is _bookingHorizon()'s answer (null: none).
+// The batch the latest Monday release opened ('newest', a Friday → Thursday)
+// leads the list when it is asked for (the Monday reminder's tap) or while that
+// release is under 24 hours old.
+function _templateRanges(nowMs, horizon, wantNewest) {
+  const today = _templateLondonNow(nowMs).date;
+  const monday = _templateAddDays(today, ((8 - _templateDow(today)) % 7) || 7);
+  const out = [{ id: 'next7', start: today, end: _templateAddDays(today, 6) }];
+  for (let k = 0; k < 3; k++) {
+    const start = _templateAddDays(monday, 7 * k);
+    out.push({ id: 'week' + (k + 1), start, end: _templateAddDays(start, 6) });
+  }
+  const batch = horizon && horizon.lastBatch;
+  const age = horizon ? Number(nowMs) - Number(horizon.lastRelease) : NaN;
+  if (batch && batch.from && batch.to && (wantNewest === true || (age >= 0 && age < 24 * 60 * 60 * 1000))) {
+    out.unshift({ id: 'newest', start: batch.from, end: batch.to });
+  }
+  return out;
+}
+
+// Is this entry's class already held on `date`? A REAL seat in a class of its
+// type (or, for an entry that names no type, its instructor) starting within
+// the tolerance of its time — read off the cache, no network.
+function _templateEntryHeld(entry, date, bookings, cache, tol) {
+  if (!entry || (entry.eventTypeId == null && entry.instructorId == null)) return false;
+  const limit = tol == null ? TEMPLATE_TOLERANCE_MIN : tol;
+  const target = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
+  const same = (a, b) => a != null && b != null && String(a) === String(b);
+  return Object.keys(bookings || {}).some(id => {
+    const held = bookings[id];
+    const evt = (cache || {})[id];
+    if (!held || held.waitlisted || !evt) return false;
+    const w = _templateWall(evt.start_at);
+    if (!w || w.date !== date || Math.abs(w.min - target) > limit) return false;
+    return entry.eventTypeId != null ? same(evt.event_type_id, entry.eventTypeId) : same(evt.instructor_id, entry.instructorId);
+  });
+}
+
+// Which range the sheet opens on: the newly opened batch when it leads the
+// list; otherwise the FIRST range in which at least one usual class is not yet
+// held (a week already booked is not the one to show); otherwise the next 7
+// days. ctx: { ranges (_templateRanges), template, bookings, cache } — with
+// none it is the next 7 days. (The old rule — "next week cannot be booked
+// before Monday noon" — was wrong: see pure:horizon.)
+function _templateDefaultStart(nowMs, ctx) {
+  ctx = ctx || {};
   const now = _templateLondonNow(nowMs);
-  const dow = _templateDow(now.date);
-  if (dow === 1 && now.min < 12 * 60) return { mode: 'next7', start: now.date };
-  return { mode: 'nextweek', start: _templateAddDays(now.date, ((8 - dow) % 7) || 7) };
+  const ranges = Array.isArray(ctx.ranges) && ctx.ranges.length ? ctx.ranges : _templateRanges(nowMs, null, false);
+  const answer = r => ({ mode: r.id === 'next7' ? 'next7' : 'nextweek', start: r.start, id: r.id });
+  if (ranges[0].id === 'newest') return answer(ranges[0]);
+  const template = Array.isArray(ctx.template) ? ctx.template : [];
+  const open = ranges.find(r => template.some(entry =>
+    !_templateEntryHeld(entry, _templateDateFor(entry, r.start, now), ctx.bookings, ctx.cache)));
+  return answer(open || ranges.find(r => r.id === 'next7') || ranges[0]);
 }
 
 // The date a template entry falls on within the 7 days from `start`. One that
@@ -11441,16 +11788,22 @@ function _templateDateFor(entry, start, now) {
 // of assuming a cover is wanted. An entry naming neither a type nor an
 // instructor — or no location AND a different instructor — identifies nothing.
 // States: 'nomatch' | 'booked' | 'waitlisted' | 'clash' (hard overlap with a
-// seat already held) | 'nolayout' (studio not positively known to have a spot
-// map: the {spaces:1} body is unproven live) | 'full' | 'waitlist' | 'book'.
-// "Has a spot map" is the studio's has_layout flag alone: a LIST response's
-// studio record doesn't always carry the map itself (and _fetchTemplateDay
-// replaces a richer cached record with it), and the plan reads nothing but
-// lists. The map is the booking step's business — _bookTemplateSeat takes it
-// from the class detail it reads anyway.
+// seat already held) | 'nolayout' (a studio nothing says has, or has not, a
+// spot map: neither a seat nor a count may be guessed for it) | 'full' |
+// 'waitlist' | 'book'.
+// A studio is one of two kinds, by its has_layout flag ALONE: true → seats are
+// chosen (a LIST response's studio record doesn't always carry the map itself,
+// and _fetchTemplateDay replaces a richer cached record with it — the map is
+// read later, from the class detail); false → `count`: booked by a COUNT of
+// spaces, no spot to choose (CLAUDE.md "No-layout studios").
+// Also on the row: `seats` (what the entry asks for, 1–4, never above the
+// event's own max_bookable_slots), `heldSeats` (seats / spaces held there now)
+// and `canAdd` — a class already held with FEWER seats than asked, with room
+// left: the sheet may offer the missing seat(s), and only those.
 function _templatePlanRow(entry, events, ctx) {
   ctx = ctx || {};
-  const row = { entry, date: ctx.date, state: 'nomatch', event: null, instructorChanged: false, clash: null };
+  const row = { entry, date: ctx.date, state: 'nomatch', event: null, instructorChanged: false, clash: null,
+    seats: _templateSeats(entry && entry.seats), heldSeats: 0, count: false, canAdd: false };
   if (!entry || (entry.eventTypeId == null && entry.instructorId == null)) return row;
   const tol = ctx.tol == null ? TEMPLATE_TOLERANCE_MIN : ctx.tol;
   const target = (Number(entry.hour) || 0) * 60 + (Number(entry.minute) || 0);
@@ -11472,12 +11825,20 @@ function _templatePlanRow(entry, events, ctx) {
   if (!pick) return row;
   row.event = pick.e;
   row.instructorChanged = !pick.mine;
+  row.seats = _templateSeats(entry.seats, pick.e.max_bookable_slots);
+  const studio = (ctx.studios || {})[pick.e.studio_id];
+  const known = !!studio && (studio.has_layout === true || studio.has_layout === false);
+  row.count = known && studio.has_layout === false;
   const held = bookings[String(pick.e.id)];
-  if (held) { row.state = held.waitlisted ? 'waitlisted' : 'booked'; return row; }
+  if (held) {
+    row.state = held.waitlisted ? 'waitlisted' : 'booked';
+    row.heldSeats = _templateSeatsHeld(held);
+    row.canAdd = row.state === 'booked' && known && row.heldSeats < row.seats && !pick.e.is_fully_booked;
+    return row;
+  }
   try { row.clash = (typeof ctx.findClash === 'function' && ctx.findClash(pick.e)) || null; } catch (e) { row.clash = null; }
   if (row.clash && row.clash.kind === 'overlap') { row.state = 'clash'; return row; }
-  const studio = (ctx.studios || {})[pick.e.studio_id];
-  if (!(studio && studio.has_layout === true)) { row.state = 'nolayout'; return row; }
+  if (!known) { row.state = 'nolayout'; return row; }
   if (pick.e.is_fully_booked) { row.state = pick.e.is_waitlistable ? 'waitlist' : 'full'; return row; }
   row.state = 'book';
   return row;
@@ -11486,7 +11847,9 @@ function _templatePlanRow(entry, events, ctx) {
 // "Save my usual week": the REAL seats (never waitlist places) held over the 7
 // London days from today, as template entries, Monday first. `resolveLocationId`
 // turns a cached class into a real location id (or null) — studio ids are a
-// different id space and must never be stored as one.
+// different id space and must never be stored as one. Each entry remembers how
+// many seats were held (`seats`, 1–4; spaces count the same where a studio has
+// no spot map) — it is what the sheet STARTS from, never what it books unseen.
 function _templateFromSeats(bookings, cache, now, resolveLocationId) {
   const last = _templateAddDays(now.date, 6);
   const seen = {};
@@ -11507,16 +11870,154 @@ function _templateFromSeats(bookings, cache, now, resolveLocationId) {
       instructorId: evt.instructor_id != null ? evt.instructor_id : null,
       label: (evt._typeName || 'Class') + (evt._instrName ? ' · ' + evt._instrName : ''),
       locName: evt._locName || '',
+      seats: Math.min(TEMPLATE_MAX_SEATS, _templateSeatsHeld(held)),
     };
     const key = [entry.dayOfWeek, w.min, entry.eventTypeId, entry.instructorId, entry.locationId].join('|');
-    if (seen[key]) return;
-    seen[key] = true;
+    // The same slot twice is one entry — wearing the larger seat count.
+    if (seen[key]) { seen[key].seats = Math.max(seen[key].seats, entry.seats); return; }
+    seen[key] = entry;
     entries.push(entry);
   });
   return entries.sort((a, b) => ((a.dayOfWeek + 6) % 7) - ((b.dayOfWeek + 6) % 7) ||
     (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute));
 }
+
+// ONE advisory line when the ticked seats are more than Psycle's own numbers
+// say are left — '' otherwise. NEVER a block: the member may know better, and
+// Psycle's answer is the one that counts. Same restraint as the class sheet's
+// _sheetPlanNote: a capped plan counts per BILLING PERIOD, so only seats in
+// classes inside the period /profile is counting are weighed; an unlimited plan
+// has nothing to run out of; with no plan, a credit balance when there is one.
+// f: { items: [{ classMs, seats }], subscription, periodStartMs, periodEndMs,
+//      creditsRemaining, periodWord ('month' | 'week' | 'period') }
+function _templatePlanCaution(f) {
+  f = f || {};
+  const items = Array.isArray(f.items) ? f.items : [];
+  const seatsOf = it => Math.max(0, Math.floor(Number(it && it.seats)) || 0);
+  const words = n => n + ' ' + (n === 1 ? 'seat' : 'seats');
+  const sub = f.subscription;
+  if (sub && typeof sub === 'object') {
+    const max = Number(sub.max_bookings);
+    if (!(max > 0)) return '';
+    const left = Math.max(0, Math.round(max - Math.max(0, Number(sub.bookings_made) || 0)));
+    const inPeriod = it => !!it && it.classMs >= 0 && f.periodEndMs > 0 && it.classMs < f.periodEndMs &&
+      !(f.periodStartMs > 0 && it.classMs < f.periodStartMs);
+    const n = items.filter(inPeriod).reduce((sum, it) => sum + seatsOf(it), 0);
+    if (n <= left) return '';
+    return words(n) + ' this ' + (f.periodWord || 'period') + ' — your plan shows ' + (left === 0 ? 'none' : left) + ' left';
+  }
+  const credits = Math.floor(Number(f.creditsRemaining));
+  if (!(credits > 0)) return '';
+  const total = items.reduce((sum, it) => sum + seatsOf(it), 0);
+  return total > credits ? words(total) + ' — you have ' + credits + ' ' + (credits === 1 ? 'credit' : 'credits') + ' left' : '';
+}
 // ── pure:template:end ──
+
+// ── pure:template-spots:start ── (DOM-free; tests/suites/14a-usual-week-sheet.js evaluates this block)
+// AN OPINION ON THE SPOTS — SHOWN, NEVER SILENT. The usual-week sheet prints
+// what this answers BEFORE anything is booked, and the run books exactly those
+// ids or nothing (bookWeeklyTemplate). In order:
+//   the member's own pick (Change spot), while it is still free;
+//   adding to a class already held → the free spot closest to the seat held;
+//   the usual spot for this studio + instructor (psycle_bike_history), if free;
+//   a PREFERRED spot (psycle_bike_prefs) that is free — the one nearest the usual;
+//   the free spot closest to the usual one, by the layout's own coordinates;
+//   the first free one (lowest id).
+// Never a spot on the AVOID list while another is free. Further seats are the
+// free spots closest to the first (ties → lower id).
+// o: { slots (layout.slots: [{id,x,y}]), free: [ids], count, usual, prefer,
+//      avoid, held: [ids already held there], keep: [the member's pick] }
+// → { slots: [ids] — free, at most `count`; why: 'pick' | 'near-held' | 'usual'
+//     | 'preferred' | 'near-usual' | 'first' | ''; usual, usualTaken (for
+//     'near-usual'); heldNear; firstSkipped ('first' passed over a lower free
+//     spot the member avoids); lost: [picked ids no longer free]; filled (seats
+//     added by nearness); avoided (an avoided spot had to be used); short (how
+//     many seats could not be found) }
+function _spotSuggestion(o) {
+  o = o || {};
+  const num = v => ((typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) ? Number(v) : NaN);
+  const ids = list => {
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach(v => { const n = num(v); if (Number.isFinite(n) && out.indexOf(n) === -1) out.push(n); });
+    return out;
+  };
+  const at = {};
+  (Array.isArray(o.slots) ? o.slots : []).forEach(s => { const n = num(s && s.id); if (Number.isFinite(n)) at[n] = s; });
+  const free = ids(o.free).sort((a, b) => a - b);
+  const count = Math.max(1, Math.min(4, Math.floor(Number(o.count)) || 1));
+  const avoid = ids(o.avoid), prefer = ids(o.prefer), held = ids(o.held), keep = ids(o.keep);
+  const usual = Number.isFinite(num(o.usual)) ? num(o.usual) : null;
+  const isFree = id => free.indexOf(id) !== -1;
+  // The map's own geometry; a seat the map cannot place is "far", then by number.
+  const dist = (a, b) => {
+    const p = at[a], q = at[b];
+    const placed = p && q && [p.x, p.y, q.x, q.y].every(v => typeof v === 'number' && isFinite(v));
+    return placed ? (p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y) : 1e12 + Math.abs(a - b);
+  };
+  const nearest = (anchor, pool) => pool.slice().sort((a, b) => dist(anchor, a) - dist(anchor, b) || a - b)[0];
+
+  const chosen = keep.filter(isFree).slice(0, count);
+  const lost = keep.filter(id => !isFree(id));
+  let why = chosen.length ? 'pick' : '';
+  // What may still be taken: never an avoided spot while another is free.
+  const pool = () => {
+    const rest = free.filter(id => chosen.indexOf(id) === -1);
+    const liked = rest.filter(id => avoid.indexOf(id) === -1);
+    return liked.length ? liked : rest;
+  };
+  if (!chosen.length) {
+    const first = pool();
+    if (first.length) {
+      const preferred = first.filter(id => prefer.indexOf(id) !== -1);
+      let pick;
+      if (held.length) { pick = nearest(held[0], first); why = 'near-held'; }
+      else if (usual != null && first.indexOf(usual) !== -1) { pick = usual; why = 'usual'; }
+      else if (preferred.length) { pick = (usual != null && at[usual]) ? nearest(usual, preferred) : preferred[0]; why = 'preferred'; }
+      else if (usual != null && at[usual]) { pick = nearest(usual, first); why = 'near-usual'; }
+      else { pick = first[0]; why = 'first'; }
+      chosen.push(pick);
+    }
+  }
+  // 'first' that passed over a lower-numbered free spot the member avoids is
+  // not literally the first free one — the reason says which first it is.
+  const firstSkipped = why === 'first' && chosen.length > 0 && free[0] !== chosen[0];
+  const before = chosen.length;
+  while (chosen.length && chosen.length < count) {
+    const more = pool();
+    if (!more.length) break;
+    chosen.push(nearest(chosen[0], more));
+  }
+  return {
+    slots: chosen, why,
+    usual: why === 'near-usual' ? usual : null,
+    usualTaken: why === 'near-usual' ? !isFree(usual) : false,
+    heldNear: why === 'near-held' ? held[0] : null,
+    firstSkipped,
+    lost,
+    filled: chosen.length - before,
+    avoided: chosen.some(id => avoid.indexOf(id) !== -1),
+    short: count - chosen.length,
+  };
+}
+
+// …and WHY, in a few words. `labelOf(id)` → the number printed on the seat.
+function _spotWhyText(s, labelOf) {
+  s = s || {};
+  const name = id => String(typeof labelOf === 'function' ? labelOf(id) : id);
+  let text = s.why === 'pick' ? 'your pick'
+    : s.why === 'usual' ? 'your usual'
+    : s.why === 'preferred' ? 'one you prefer'
+    : s.why === 'near-usual' ? 'closest to your usual — ' + name(s.usual) + (s.usualTaken ? ' is taken' : ' is one you avoid')
+    : s.why === 'near-held' ? 'closest to ' + name(s.heldNear) + ', which you hold'
+    : s.why === 'first' ? (s.firstSkipped ? "first free you don't avoid" : 'first free') : '';
+  if (text && s.filled > 0) text += ', plus the closest free';
+  if (text && s.avoided) text += ' (nothing else is free)';
+  const lost = Array.isArray(s.lost) ? s.lost : [];
+  const names = lost.map(name); // "4", "4 & 5", "4, 5 & 6" — as formatSlots lists seats
+  if (lost.length) text = (names.length > 2 ? names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1] : names.join(' & ')) + (lost.length > 1 ? ' were' : ' was') + ' just taken' + (text ? ' — ' + text : '');
+  return text;
+}
+// ── pure:template-spots:end ──
 
 // Resolve a template's stored id (which may be a real location id OR a
 // studio_id, since _eventCache only stores studio_id) into a location id
@@ -11643,21 +12144,59 @@ async function _bookEventHeadless(eventId, studioId) {
   }
 }
 
-// One seat for a class the member ticked in the "usual week" sheet:
-// _bookEventHeadless's seat path WITHOUT its waitlist join. A class that filled
-// up after the sheet was shown must come back 'full' — not as a place Psycle
-// can turn into a charge nobody agreed to (the caller joins only where that
-// box was ticked). Holding the button is also the only way to read
+// Psycle's own words for a booking it refused — what submitBooking has just
+// toasted (toast() writes #toast synchronously, and nothing else can run
+// between that and the line that reads this). '' when there is none to read.
+function _templateRefusalText() {
+  try {
+    const el = document.getElementById('toast');
+    const text = (el && /\berror\b/.test(String(el.className || ''))) ? String(el.textContent || '').trim() : '';
+    return text.length > 200 ? text.slice(0, 200) + '…' : text;
+  } catch (e) { return ''; }
+}
+
+// ONE class the member ticked in the "usual week" sheet — booked EXACTLY as the
+// sheet showed it, in ONE POST, or not at all. `want` is what was shown:
+//   { slots: [ids] }   a seat studio: these spots and no others. If any of them
+//                      is no longer free by now, NOTHING is sent ('taken', the
+//                      ids on want.gone) — never a substitute: the member
+//                      approved specific spots, and the sheet offers "Choose
+//                      again" afterwards;
+//   { spaces: n }      a studio POSITIVELY known to have no spot map
+//                      (has_layout === false): a COUNT body, as bookClass sends
+//                      — never a guessed count, never retried;
+//   { joinOnly: true } a ticked waitlist row: it only asks "still full?" —
+//                      'full' lets the caller join; a spot that has opened up
+//                      is 'opened' and left for the member to choose (no spot
+//                      was shown for it, so none is booked).
+// A class that filled up after the sheet was shown comes back 'full' — not as a
+// place Psycle can turn into a charge nobody agreed to (the caller joins only
+// where that box was ticked). Holding the button is the only way to read
 // submitBooking's label contract, which is where "that seat was just taken"
-// (this class's problem) differs from "Psycle refused / couldn't confirm" (the
-// next POST meets the same wall). _bookEventHeadless answers a bare 'failed'
-// for both. Layout studios only: the {spaces:1} body is unproven live.
-// Resolves 'booked' | 'full' | 'clash' | 'nolayout' | 'taken' | 'queued' |
+// (this class's problem) differs from "couldn't confirm" (the next POST could
+// land twice). "Failed — retry" is two things: a POST that may still land is
+// held in _unverifiedBookings ('failed' — the run stops); otherwise Psycle
+// answered cleanly and said no ('refused', its words on want.said).
+// A ✓ is NOT "this POST landed": the label contract only says /bookings shows a
+// seat in the class — and for a class ALREADY held (the sheet's "1 of 2 seats
+// held" top-up) the seat held before earns it, whatever became of this POST.
+// So 'booked' also needs the booking to have GROWN by what was shown (these
+// spots, newly held; or more spaces than before), and a ✓ over a POST that is
+// still unverified (a lost / 5xx answer: the extra seat MAY still land) is
+// 'unconfirmed' — the run stops. A ✓ with nothing new and nothing pending is
+// the 409: 'taken' for shown spots, 'refused' for a count.
+// Resolves 'booked' | 'partial' (a seat landed, not all that was shown) |
+// 'full' | 'opened' | 'clash' | 'nolayout' | 'stale' (nothing was shown for it,
+// or Psycle now allows fewer seats) | 'taken' | 'refused' | 'queued' |
 // 'unconfirmed' | 'failed'.
-async function _bookTemplateSeat(eventId, studioId) {
+async function _bookTemplateSeat(eventId, studioId, want) {
   const btn = document.createElement('button');
   btn.className = 'book-btn';
   btn.textContent = 'Book';
+  want = want || {};
+  // Bounded again here, whatever the sheet built.
+  const slots = _templatePickSlots(want.slots);
+  const spaces = want.spaces == null ? 0 : _templateSeats(want.spaces);
 
   try {
     const res = await apiFetch(`/events/${eventId}`);
@@ -11673,35 +12212,99 @@ async function _bookTemplateSeat(eventId, studioId) {
     if (clash && clash.kind === 'overlap') return 'clash';
 
     const studio = _studioMap[studioId];
-    if (!(studio && studio.has_layout === true)) return 'nolayout';
-    // Before the map: a FULL class needs none to be reported (or joined).
-    if (evtData.is_fully_booked ?? cached.is_fully_booked) return 'full';
-    // As bookClass / _bookEventHeadless: the plan's own _fetchTemplateDay has
-    // just replaced the studio record with a LIST response's — has_layout, not
-    // always the seat map. The detail just read carries it. (typeof: the suite
-    // slices this function on its own.)
-    let layout = studio.layout;
-    if (!(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
-      layout = _layoutFromEventDetail(detail, studioId);
-      if (layout) studio.layout = layout;
+    // Neither kind of studio, positively: neither a seat nor a count is guessed.
+    if (!(studio && (studio.has_layout === true || studio.has_layout === false))) return 'nolayout';
+    const isFull = !!(evtData.is_fully_booked ?? cached.is_fully_booked);
+    if (want.joinOnly) {
+      // Before the map: a FULL class needs none to be reported (or joined).
+      if (isFull || (studio.has_layout === true && availableSlotIds.size === 0)) return 'full';
+      return 'opened';
     }
-    // Still no map: this class only. Never 'failed' — that stops the whole run
-    // and blames Psycle for a booking that was never sent.
-    if (!(layout?.slots?.length > 0)) return 'nolayout';
-    if (availableSlotIds.size === 0) return 'full';
+    if (isFull) return 'full';
+    // Psycle's own limit on seats per booking, when the class says it: what was
+    // shown no longer fits → nothing is sent (never silently fewer).
+    const cap = Number(evtData.max_bookable_slots ?? cached.max_bookable_slots);
+    const over = n => Number.isInteger(cap) && cap >= 1 && n > cap;
+    // What is held going in (read NOW: the optimistic wrapper rewrites the
+    // entry before the POST is answered) — see the ✓ rule above.
+    const heldBefore = _myBookings[String(eventId)];
+    const seatsBefore = _templateSeatsHeld(heldBefore);
+    const slotsBefore = ((heldBefore && !heldBefore.waitlisted && Array.isArray(heldBefore.slots)) ? heldBefore.slots : []).map(Number);
 
-    // Auto-pick, as _bookEventHeadless: the usual slot if free, else the first.
-    const usual = _usualSlotForEvent(eventId);
-    const pick = (usual != null && availableSlotIds.has(Number(usual))) ? Number(usual) : [...availableSlotIds][0];
-    await submitBooking(eventId, [pick], btn);
+    if (studio.has_layout === false) {
+      // COUNT body — for a studio positively known to have no spot map ONLY.
+      if (!spaces || slots.length || over(spaces)) return 'stale';
+      await submitBooking(eventId, null, btn, { spaces });
+    } else {
+      // As bookClass: the plan's own _fetchTemplateDay has just replaced the
+      // studio record with a LIST response's — has_layout, not always the seat
+      // map. The detail just read carries it. (typeof: the suite slices this
+      // function on its own.)
+      let layout = studio.layout;
+      if (!(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
+        layout = _layoutFromEventDetail(detail, studioId);
+        if (layout) studio.layout = layout;
+      }
+      // Still no map: this class only. Never 'failed' — that stops the whole run
+      // and blames Psycle for a booking that was never sent.
+      if (!(layout?.slots?.length > 0)) return 'nolayout';
+      if (availableSlotIds.size === 0) return 'full';
+      // NO auto-pick: with no spot shown there is nothing the member agreed to.
+      if (!slots.length || spaces || over(slots.length)) return 'stale';
+      const gone = slots.filter(s => !availableSlotIds.has(s));
+      if (gone.length) { want.gone = gone; return 'taken'; }
+      await submitBooking(eventId, slots, btn);
+    }
     // The ✓ label contract plus a seat in state — never the CSS class alone.
     const held = _myBookings[String(eventId)];
-    if (btn.textContent.indexOf('✓') !== -1 && held && !held.waitlisted) return 'booked';
+    const label = String(btn.textContent || '');
+    if (label.indexOf('✓') !== -1) {
+      if (!(held && !held.waitlisted)) return 'failed';
+      // The seat held BEFORE can wear the ✓ while this POST is still unverified
+      // (_settleUnverifiedBooking's 'partial'): an answer that cannot be trusted
+      // stops the run. (typeof: the suites slice this function on its own.)
+      if (typeof _unverifiedBookings !== 'undefined' && _unverifiedBookings[String(eventId)]) return 'unconfirmed';
+      if (slots.length) {
+        // Every spot that was shown, NEWLY held — or it is not what the member agreed to.
+        const have = (held.slots || []).map(Number);
+        const landed = slots.filter(s => have.includes(s) && !slotsBefore.includes(s));
+        if (landed.length === slots.length) return 'booked';
+        // Some of them — or a seat nobody showed (an earlier POST for this class
+        // that turned out to have landed): the booking changed, and not as agreed.
+        if (landed.length || have.some(s => !slotsBefore.includes(s))) return 'partial';
+        // Nothing new at all (a 409: the spot went between the GET and the POST,
+        // and the ✓ is the seat held before): that class only, and "Choose again".
+        want.gone = slots.filter(s => !have.includes(s));
+        return 'taken';
+      }
+      // A COUNT body leaves no spot to look for: the spaces held must have grown.
+      if (_templateSeatsHeld(held) > seatsBefore) return 'booked';
+      // Not grown, nothing pending: Psycle added nothing (a 409) — or a clean 2xx
+      // whose body named no record, which reads the same from here. /bookings
+      // says which; if it cannot, neither can we ("when in doubt, stop").
+      if (typeof _rereadBookingsForVerify !== 'function' || !(await _rereadBookingsForVerify())) return 'unconfirmed';
+      if (_templateSeatsHeld(_myBookings[String(eventId)]) > seatsBefore) return 'booked';
+      want.said = typeof _templateRefusalText === 'function' ? _templateRefusalText() : '';
+      return 'refused';
+    }
     // No ✓: submitBooking's own failure labels. 'Book' = a refusal that re-read
     // as "someone else holds it" (or a 401 — the caller checks the session).
-    if (btn.textContent === 'Book') return 'taken';
-    if (btn.textContent === 'Queued') return 'queued';
-    return btn.textContent.indexOf('Unconfirmed') === 0 ? 'unconfirmed' : 'failed';
+    if (label === 'Book') { want.gone = slots.slice(); return 'taken'; }
+    if (label === 'Queued') return 'queued';
+    if (label.indexOf('Unconfirmed') === 0) return 'unconfirmed';
+    // "Failed — retry": still pending (a lost / 5xx answer that MAY have booked)
+    // → the run stops. Not pending → Psycle said no, cleanly. Can't tell → stop.
+    const pending = typeof _unverifiedBookings === 'undefined' ? true : !!_unverifiedBookings[String(eventId)];
+    if (label.indexOf('Failed') !== 0 || pending) {
+      // What submitBooking has just toasted — Psycle's reason when its 5xx gave
+      // one, else "…isn't showing in My Bookings — try again". The sheet prints
+      // it on the row: by the time the run's summary is read the toast has
+      // faded, and "see its message" pointed at nothing.
+      if (label.indexOf('Failed') === 0 && typeof _templateRefusalText === 'function') want.told = _templateRefusalText();
+      return 'failed';
+    }
+    want.said = typeof _templateRefusalText === 'function' ? _templateRefusalText() : '';
+    return 'refused';
   } catch (e) {
     console.warn('[psycle] template seat failed:', eventId, e);
     return 'failed';
@@ -11709,18 +12312,31 @@ async function _bookTemplateSeat(eventId, studioId) {
 }
 
 // Executes what the member confirmed in the "usual week" sheet — and only that.
-// `picks`: [{ eventId, studioId, joinIfFull }] built from planWeeklyTemplate's
-// rows. There is deliberately NO "book the whole template" default: with no
-// picks nothing happens, so no call can spend a credit on a class that was not
-// listed (with its state) and ticked. Every pick is a seat attempt first
-// (_bookTemplateSeat); a waitlist is joined only for a pick whose box was
-// ticked (joinIfFull) and only while the class is still full. `hooks`:
-// { onProgress(i, result), shouldStop() }.
+// `picks`, built from planWeeklyTemplate's rows and what the sheet SHOWED:
+//   { eventId, studioId,
+//     slots: [ids]   the spots shown for a seat studio — ONE POST with exactly
+//                    these (see _bookTemplateSeat: if one has gone, nothing),
+//     spaces: n      …or the count shown for a studio with no spot map,
+//     held: n        seats the sheet showed as already held there (0: none). A
+//                    pick for a held class is its "1 of 2 seats held" top-up —
+//                    sent only while the booking still reads as it was shown,
+//     joinIfFull     a ticked waitlist row (no slots: there was none to show),
+//     mayBeClosed }  the class lies past what Psycle has opened (advisory —
+//                    pure:horizon): a clean refusal there is the expected
+//                    answer, shown in Psycle's words, and the run carries on.
+// There is deliberately NO "book the whole template" default: with no picks
+// nothing happens, so no call can spend a credit on a class that was not
+// listed (with its state and its spots) and ticked. A waitlist is joined only
+// for a pick whose box was ticked (joinIfFull) and only while the class is
+// still full. `hooks`: { onProgress(i, result), shouldStop() }.
 // Resolves to { booked, waitlisted, failed, skipped, stopped, results }:
-// results[i].result is 'booked' | 'waitlisted' | 'already' | 'clash' | 'full' |
-// 'nolayout' | 'taken' | 'joinfailed' | 'queued' | 'unconfirmed' (a seat OR a
-// waitlist join Psycle may have taken) | 'failed' | 'notrun'; stopped is '' or
-// why the run ended early ('auth' | 'bookings' | 'offline' | 'failed' | 'user').
+// results[i] is { eventId, result, gone?, said?, told? } (told: what was
+// toasted for a 'failed' whose POST may still land); result is 'booked' |
+// 'waitlisted' | 'already' | 'clash' | 'full' | 'opened' | 'nolayout' | 'stale'
+// | 'taken' | 'refused' | 'partial' | 'joinfailed' | 'queued' | 'unconfirmed'
+// (a seat OR a waitlist join Psycle may have taken) | 'failed' | 'notrun';
+// stopped is '' or why the run ended early ('auth' | 'bookings' | 'offline' |
+// 'failed' | 'user').
 let _templateBookingInFlight = false;
 async function bookWeeklyTemplate(picks, hooks) {
   const counts = { booked: 0, waitlisted: 0, failed: 0, skipped: 0 };
@@ -11760,11 +12376,19 @@ async function _bookWeeklyTemplateInner(counts, picks, hooks) {
     try { if (typeof hooks.onProgress === 'function') hooks.onProgress(i, 'running'); } catch (e) {}
 
     let result = 'failed';
+    // What the sheet showed for this class — and what _bookTemplateSeat hands
+    // back on it (`gone`: the shown spots that went; `said`: Psycle's refusal).
+    const want = p.joinIfFull ? { joinOnly: true } : { slots: p.slots, spaces: p.spaces };
     try {
-      // The sheet may be minutes old: never re-book what is held by now.
-      if (_myBookings[String(p.eventId)]) result = 'already';
+      // The sheet may be minutes old: never re-book what is held by now. A pick
+      // for a class that WAS held is its top-up ("1 of 2 seats held"), and goes
+      // out only while the booking still reads as the sheet showed it.
+      const heldNow = _myBookings[String(p.eventId)];
+      const shownHeld = Math.max(0, Math.floor(Number(p.held)) || 0);
+      if (heldNow && (heldNow.waitlisted || !shownHeld || _templateSeatsHeld(heldNow) !== shownHeld)) result = 'already';
+      else if (!heldNow && shownHeld) result = 'stale'; // it was cancelled meanwhile: not the booking that was shown
       else {
-        result = await _bookTemplateSeat(p.eventId, p.studioId);
+        result = await _bookTemplateSeat(p.eventId, p.studioId, want);
         // Still full AND its waitlist box was ticked: the one place a join is
         // allowed. quiet — the sheet reports it, not a slide-up.
         if (result === 'full' && p.joinIfFull) {
@@ -11783,19 +12407,25 @@ async function _bookWeeklyTemplateInner(counts, picks, hooks) {
     try { dismissBookingConfirmation(); } catch (e) {}
 
     counts.results[i].result = result;
+    if (want.gone && want.gone.length) counts.results[i].gone = want.gone.slice();
+    if (want.said) counts.results[i].said = want.said;
+    if (want.told) counts.results[i].told = want.told;
     if (result === 'booked') counts.booked++;
     else if (result === 'waitlisted') counts.waitlisted++;
-    else if (result === 'already' || result === 'clash' || result === 'full' || result === 'nolayout') counts.skipped++;
+    else if (result === 'already' || result === 'clash' || result === 'full' || result === 'opened' || result === 'nolayout' || result === 'stale') counts.skipped++;
     else counts.failed++;
-    try { if (typeof hooks.onProgress === 'function') hooks.onProgress(i, result); } catch (e) {}
+    try { if (typeof hooks.onProgress === 'function') hooks.onProgress(i, result, counts.results[i]); } catch (e) {}
 
     // Session gone (a 401 anywhere expires it): nothing after this can book.
     if (!currentUser || !getBearerToken()) { counts.stopped = 'auth'; break; }
     if (result === 'queued') { counts.stopped = 'offline'; break; }
     // Psycle refused a seat (no credits, plan doesn't cover it) or its answer
     // can't be trusted: stop rather than send the next POST into the same
-    // wall. 'taken' and 'joinfailed' are that class's problem only.
-    if (result === 'failed' || result === 'unconfirmed') { counts.stopped = 'failed'; break; }
+    // wall. 'taken' and 'joinfailed' are that class's problem only — and so is a
+    // clean refusal of a class past what Psycle has opened (mayBeClosed): that
+    // "not yet" was the expected answer, and says nothing about the next class.
+    if (result === 'failed' || result === 'unconfirmed' || result === 'partial' ||
+        (result === 'refused' && !p.mayBeClosed)) { counts.stopped = 'failed'; break; }
   }
 
   if (typeof fetchMyBookings === 'function') { try { await fetchMyBookings(); } catch {} }
@@ -11851,24 +12481,45 @@ function _fetchTemplateDay(dayStr, locId, dayCache) {
 // real upcoming class and what a tap would do about it, so the confirm sheet
 // can list exactly that before anything is spent. GETs only (/events per day +
 // location, /bookings when no snapshot is loaded) — nothing is booked, joined
-// or cancelled here. `weekStart` ('YYYY-MM-DD') is the first of the 7 days;
-// default: see _templateDefaultStart.
-// Resolves { ok, reason, mode, weekStart, weekEnd, rows }. reason (when !ok):
-// 'empty' | 'signedout' | 'offline' | 'bookings'. rows[i]: { index, entry,
-// date, state, eventId, studioId, startAt, typeName, instrName, locName,
-// instructorChanged, clashLine } — state as _templatePlanRow, plus 'error'
-// when that day's timetable could not be read.
-async function planWeeklyTemplate(weekStart) {
+// or cancelled here. `weekStart` ('YYYY-MM-DD') is the first of the 7 days —
+// any day: a Monday–Sunday week, the 7 days from today, or the Friday →
+// Thursday batch a release opened. Without one the plan picks the range itself
+// (_templateDefaultStart — once the bookings it judges by are loaded).
+// `opts.newest`: offer the newly opened batch first (the Monday reminder's tap).
+// Resolves { ok, reason, mode, weekStart, weekEnd, rows, ranges, rangeId,
+// horizon }. reason (when !ok): 'empty' | 'signedout' | 'offline' | 'bookings'.
+// ranges: what the sheet's date control offers (_templateRanges); rangeId: the
+// one this plan is for ('' for a start that is none of them); horizon:
+// _bookingHorizon() or null. rows[i]: { index, entry, date, state, eventId,
+// studioId, startAt, typeName, instrName, locName, instructorChanged,
+// clashLine, seats, heldSeats, count, canAdd, maxSeats, beyondOpen,
+// beyondListed } — state, seats, heldSeats, count and canAdd as
+// _templatePlanRow (state also 'error' when that day's timetable could not be
+// read); maxSeats: the class's own max_bookable_slots when it says one;
+// beyondOpen: the class lies past what Psycle has opened by the observed model
+// — ADVISORY, the row stays tickable; beyondListed: the DAY lies past what the
+// timetable lists by the same model (every Monday before 12:00, the Fri–Sun of
+// the third week) — advisory too: it only lets a 'nomatch' there say "not on
+// the timetable yet" instead of "no matching class".
+async function planWeeklyTemplate(weekStart, opts) {
+  opts = opts || {};
   const nowMs = Date.now();
   const now = _templateLondonNow(nowMs);
-  const def = _templateDefaultStart(nowMs);
+  let horizon = null;
+  try { horizon = typeof _bookingHorizon === 'function' ? _bookingHorizon(nowMs) : null; } catch (e) {}
+  const ranges = _templateRanges(nowMs, horizon, opts.newest === true);
   const custom = /^\d{4}-\d{2}-\d{2}$/.test(String(weekStart || ''));
-  const start = custom ? String(weekStart) : def.start;
   const plan = {
-    ok: false, reason: '', rows: [],
-    mode: !custom ? def.mode : (start === now.date ? 'next7' : 'nextweek'),
-    weekStart: start, weekEnd: _templateAddDays(start, 6),
+    ok: false, reason: '', rows: [], mode: '', ranges, rangeId: '', horizon,
+    weekStart: custom ? String(weekStart) : ranges[0].start, weekEnd: '',
   };
+  const settle = (start, mode) => {
+    plan.weekStart = start;
+    plan.weekEnd = _templateAddDays(start, 6);
+    plan.mode = mode;
+    plan.rangeId = (ranges.find(r => r.start === start) || { id: '' }).id;
+  };
+  settle(plan.weekStart, plan.weekStart === now.date ? 'next7' : 'nextweek');
   const template = loadWeeklyTemplate();
   if (!template.length) { plan.reason = 'empty'; return plan; }
   if (!currentUser || !getBearerToken()) { plan.reason = 'signedout'; return plan; }
@@ -11876,6 +12527,13 @@ async function planWeeklyTemplate(weekStart) {
   // 'booked' / 'clash' are read off _myBookings: over an unloaded map every
   // class the member already holds would be offered again.
   if (_bookingsLoadState !== 'loaded' && !(await _rereadBookingsForVerify())) { plan.reason = 'bookings'; return plan; }
+  // The range is chosen only now: "the first one with a usual class not yet
+  // held" is read off the bookings just made sure of.
+  if (!custom) {
+    const def = _templateDefaultStart(nowMs, { ranges, template, bookings: _myBookings, cache: _eventCache });
+    settle(def.start, def.mode);
+  }
+  const start = plan.weekStart;
 
   const dayCache = {};
   plan.rows = await Promise.all(template.map(async (entry, index) => {
@@ -11896,6 +12554,7 @@ async function planWeeklyTemplate(weekStart) {
     }
     const evt = row.event;
     const cached = (evt && _eventCache[String(evt.id)]) || {};
+    const cap = evt ? Number(evt.max_bookable_slots) : NaN;
     return {
       index, entry, date: row.date, state: row.state,
       eventId: evt ? evt.id : null,
@@ -11906,6 +12565,14 @@ async function planWeeklyTemplate(weekStart) {
       locName: cached._locName || entry.locName || '',
       instructorChanged: !!row.instructorChanged,
       clashLine: row.clash ? _clashLabel(row.clash) : '',
+      // Coerced again where it is read: the 'error' rows above never met _templatePlanRow.
+      seats: _templateSeats(row.seats == null ? (entry && entry.seats) : row.seats, cap),
+      heldSeats: Math.max(0, Number(row.heldSeats) || 0),
+      count: row.count === true,
+      canAdd: row.canAdd === true,
+      maxSeats: (Number.isInteger(cap) && cap >= 1) ? Math.min(cap, TEMPLATE_MAX_SEATS) : null,
+      beyondOpen: !!(horizon && horizon.openThrough && row.date > horizon.openThrough),
+      beyondListed: !!(horizon && horizon.listedThrough && row.date > horizon.listedThrough),
     };
   }));
   plan.ok = true;
@@ -11979,11 +12646,84 @@ function detectRecurringSlots() {
   return candidates.sort((a, b) => (b._count || 0) - (a._count || 0));
 }
 
+// READ-ONLY: what the sheet needs to show its opinion on the spots of ONE
+// planned class BEFORE anything is booked — a fresh GET /events/{id} (the read
+// _bookTemplateSeat repeats when the row's turn comes) plus the member's own
+// stored habits. Nothing is booked, joined or held here; the suggestion itself
+// is pure (_spotSuggestion), so the sheet can re-run it when the seat count
+// changes without reading again.
+// Resolves { ok: false, reason: 'read' | 'studio' | 'nomap' } or
+//   { ok: true, kind: 'count', full, max }                a studio with no spot map
+//   { ok: true, kind: 'seats', full, max, layout, free, held, usual, prefer,
+//     avoid, studioName, clashLine }                      a seat studio
+// free / held / prefer / avoid are slot ids; `max` is the class's own
+// max_bookable_slots (null when it says none).
+async function templateSpotsFor(eventId, studioId) {
+  try {
+    const res = await apiFetch(`/events/${eventId}`);
+    if (!res.ok) return { ok: false, reason: 'read' };
+    const detail = await res.json();
+    const evtData = (detail && detail.data) || {};
+    const cached = _eventCache[String(eventId)] || {};
+    const studio = _studioMap[studioId];
+    // Neither kind, positively: neither a seat nor a count is guessed for it.
+    if (!(studio && (studio.has_layout === true || studio.has_layout === false))) return { ok: false, reason: 'studio' };
+    const cap = Number(evtData.max_bookable_slots ?? cached.max_bookable_slots);
+    const max = (Number.isInteger(cap) && cap >= 1) ? Math.min(cap, TEMPLATE_MAX_SEATS) : null;
+    const full = !!(evtData.is_fully_booked ?? cached.is_fully_booked);
+    if (studio.has_layout === false) return { ok: true, kind: 'count', full, max };
+    // As bookClass: a LIST response's studio record has no seat map; the detail has.
+    let layout = studio.layout;
+    if (!(layout?.slots?.length > 0)) {
+      layout = _layoutFromEventDetail(detail, studioId);
+      if (layout) studio.layout = layout;
+    }
+    if (!(layout?.slots?.length > 0)) return { ok: false, reason: 'nomap' };
+    const free = (Array.isArray(detail.slots) ? detail.slots : []).map(Number).filter(n => Number.isFinite(n));
+    const mine = _myBookings[String(eventId)];
+    let prefs = {};
+    try { prefs = _cleanStoredBikePrefs(JSON.parse(localStorage.getItem('psycle_bike_prefs') || '{}'))[String(studioId)] || {}; } catch (e) {}
+    let clashLine = '';
+    try { clashLine = _clashLabel(_clashFor(eventId, evtData, { includePlaces: true })); } catch (e) {}
+    return {
+      ok: true, kind: 'seats', full: full || free.length === 0, max, layout, free,
+      held: (mine && !mine.waitlisted) ? (mine.slots || []).map(Number) : [],
+      usual: _usualSlotForEvent(eventId),
+      prefer: prefs.prefer || [], avoid: prefs.avoid || [],
+      studioName: studio.name || '', clashLine,
+    };
+  } catch (e) {
+    console.warn('[psycle] template spots failed:', eventId, e);
+    return { ok: false, reason: 'read' };
+  }
+}
+
+// The sheet's ONE advisory line about the plan (pure: _templatePlanCaution),
+// fed with what /profile says — as the class sheet feeds _sheetPlanNote.
+// `items`: [{ startAt, seats }] of the ticked classes. '' = nothing to say.
+function templatePlanCaution(items) {
+  try {
+    const ms = d => (d && !isNaN(d.getTime()) ? d.getTime() : NaN);
+    const sub = _activeSubscription || null;
+    const startMs = sub ? ms(parsePsycleDate(sub.period_start)) : NaN;
+    const endMs = sub ? ms(parsePsycleDate(sub.period_end)) : NaN;
+    return _templatePlanCaution({
+      items: (Array.isArray(items) ? items : []).map(it => ({ classMs: _gymClassStartMs(it && it.startAt), seats: it && it.seats })),
+      subscription: sub, periodStartMs: startMs, periodEndMs: endMs,
+      creditsRemaining: currentUser && currentUser.stats ? currentUser.stats.credits_remaining : NaN,
+      periodWord: _mbPeriodWord(startMs, endMs),
+    });
+  } catch (e) { return ''; } // advisory: never in the way of the sheet
+}
+
 window.loadWeeklyTemplate = loadWeeklyTemplate;
 window.saveWeeklyTemplate = saveWeeklyTemplate;
 window.clearWeeklyTemplate = clearWeeklyTemplate;
 window.planWeeklyTemplate = planWeeklyTemplate;
 window.bookWeeklyTemplate = bookWeeklyTemplate;
+window.templateSpotsFor = templateSpotsFor;
+window.templatePlanCaution = templatePlanCaution;
+window._bookingHorizon = _bookingHorizon; // wave 13's shared contract (the Monday reminder reads it too)
 window.detectRecurringSlots = detectRecurringSlots;
 
 // ════════════════════════════════════════════════════════════════

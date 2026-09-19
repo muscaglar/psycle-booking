@@ -218,6 +218,162 @@ showed an app that no longer exists.
 
 Assertions: 7,255 → 7,429.
 
+### Follow-up: your usual week
+
+The owner, of the card's one button: *"'Book my usual week' is great. But I'm scared to press it — what will it do?
+Will it confirm for which time frame I'm about to book? Will it allow me to select 2 or 1 slots accordingly?"* And
+then: let the section collapse so it takes less room; have an opinion on the spots, but guide the member through
+it; remind them on Mondays at 12:00 to book the weeks ahead; and — "I think we can book up to 3 weeks ahead. If
+yes, I want that reflected in the pop up."
+
+**First, how far ahead Psycle really books — observed, not documented.** The API never says when booking opens (a
+class carries `bookable_until` only), so it was read off Psycle's public timetable — read-only — on Saturday 19
+September 2026 (Oxford Circus, seats taken per day). Classes were *listed* through Thursday 15 October, 26 days
+out, but really *booked* only through Thursday 8 October, 19 days out: the Thursdays 24 Sept / 1 Oct / 8 Oct /
+15 Oct carried 295 / 83 / 61 / 1 seats, the Mondays 21 Sept / 28 Sept / 5 Oct / 12 Oct 509 / 153 / 61 / 3, and
+Friday 9 → Thursday 15 October a trickle of one to three a day. So each Monday-12:00 release opens ONE seven-day
+batch — the Friday 18 days on to the Thursday 24 days on (14 September opened Fri 2 → Thu 8 October) — and the
+timetable lists one batch further than is open. The trickle is members whose credit type carries an
+`extended_booking_period` ("+1 week" on Extended Booking / Classpass / All Access, "+3 weeks" on Promotion) and
+may book that batch early. So: yes, about three weeks ahead.
+- **The app's old rule was wrong, and is gone.** "A Monday–Sunday week opens at noon on the Monday before it"
+  (`_weekOpensMs`) is deleted with what was built on it: Discover's "Next week opens Monday 12:00" empty state —
+  next week has been open for a fortnight by then — and the day pager's per-week "Booking opens …". Both now ask,
+  per DAY, whether Psycle has *listed* it yet ("Not on the timetable yet"); only a date picked in the calendar
+  reaches that far. The date they name is worded "Booking usually opens Monday 5 October, 12:00": it is this
+  model's arithmetic, not Psycle's word, and members who book a batch early would find it a week out.
+- **The model may suggest and explain — never block** (`window._bookingHorizon`, js/app.js `pure:horizon`: three
+  named constants, commented as observed on that date). A class that is listed can always be tried, and Psycle's
+  own answer is shown as it is. If Psycle changes its release pattern, the cost is a wrong default or a wrong
+  advisory note — never a refused booking.
+
+**The card folds, and its button says what it does.** "Your usual week" is a disclosure: folded it is one row —
+"Your usual week" over "4 classes · Show" — with the primary still on it, so collapsing saves the space without
+hiding the one thing people come for. It remembers the choice on the device (and through an iOS storage purge),
+opens expanded until the member folds it, flips in place — the pressed button keeps the focus and its own state is
+the announcement, no toast — and is no longer rewritten when nothing changed (it used to be repainted on every
+bookings and sign-in event). The button reads **"Review and book"**: it opens a review and books nothing, and now
+says so. An entry that books more than one seat says "2 seats".
+
+**The sheet answers the owner's three questions before anything is spent.**
+- *For which time frame?* A dates control: **Next 7 days** and the next **three** Monday–Sunday weeks ("21 Sept ·
+  28 Sept · 5 Oct"), plus "Newly opened · Fri 9 – Thu 15 Oct" first and selected when the Monday reminder opened
+  the sheet or the release is under a day old. The chosen range is the first, bold line, over the unchanged
+  "Nothing is booked until you press the button below." It opens on the first range with a usual class not yet
+  held. A class past what Psycle has opened starts UNTICKED with "May not be open yet — Psycle opens new dates on
+  Mondays at 12:00" — and stays tickable.
+- *One seat or two?* Each bookable row has a seat count, starting at what the saved week held (1 · 2, and 3 · 4
+  only when the entry asked for them), never above the class's own `max_bookable_slots`. A waitlist row has none:
+  Psycle allows one place per person. A saved entry remembers its `seats`; storage is not trusted, so the number
+  is coerced where it is read and bounded again before anything is sent.
+- *Which spots?* **An opinion, shown — never silent.** Every ticked row shows the spot(s) it suggests and why,
+  from one read-only look at that class: "Bike 12 · your usual", else one you prefer, else "closest to your usual —
+  9 is taken", else "first free"; never a spot on the avoid list while another is free; further seats as close to
+  the first as the layout allows. **Change spot** opens the REAL seat map in a choose-only mode that books nothing
+  ("Use bike 12", Back, Escape = no change) and the row then reads "your pick".
+- The button counts the spend — "Book 3 classes · 4 seats" — and only rows whose spots are on screen are counted
+  or run ("Checking the spots…" meanwhile). One quiet caution line when the ticked seats exceed what the plan
+  shows left; never a block.
+
+**The run books exactly what was shown.** Each row is ONE `POST /bookings` with the very spots on screen — the old
+run booked one auto-picked seat ("your usual spot or the first free one"), and that auto-pick is gone. A shown
+spot taken in the meantime books NOTHING for that row ("Bike 9 was just taken — not booked. Choose again") and the
+run carries on; "Choose again" re-plans the same dates with the ticks kept. A class already held with fewer seats
+than asked reads "1 of 2 seats held — tick to add 1 more", starts unticked, and adds only the missing seat.
+Studios with no spot map — skipped until now — are booked as a count ("2 spaces · no spot to choose at this
+studio"), for a studio positively known to have none and never retried. A clean refusal is shown in Psycle's words
+("Psycle said: …"): inside what is open it still stops the run (credits, plan — the next class would meet the same
+wall); past it, it is the expected answer and the run carries on. A lost, 5xx or 409 answer stops the run exactly
+as before, and a booking POST is still never re-sent.
+- **One behaviour change to know.** A ticked WAITLIST row whose class has a spot again by the time the run reaches
+  it is no longer booked on an auto-picked seat — no spot was ever shown for it. It reads "A spot has opened up —
+  nothing was joined. Choose again to book it".
+
+**The Monday reminder fires at 12:00 and points at the usual week** (iOS). It fired at 11:59 and said the week
+"opens at 12:00"; it now fires AT the release — "New Psycle dates are open" — with "Book your usual week for the
+dates that just opened." when a usual week is saved, else "Find your classes for the dates that just opened."; the
+sentence follows a save or a clear at once. Same eight rolling one-shots at absolute London instants under the
+same ids, so an older build's 11:59 reminders are replaced, never doubled. **The tap** used to select "Next week"
+— by the model above the wrong week, open a fortnight already. With a usual week it now opens My Bookings and the
+review sheet on the newly opened batch (the tap books nothing); without one, Discover on that batch's first day,
+not saved as the launch default. It keeps its patience — not before launch is done, never over a dialog or a
+booking in progress, 15 seconds by the clock — and the review also waits for a verified session. **Offered once, in
+context:** after a usual week is first saved the app asks "Remind you on Mondays at 12:00, when new dates open?"
+(iOS's own prompt only follows an in-app yes; never at launch; a stored on or off is already an answer). On the
+web nothing appears where it cannot work.
+
+**Found while the three parts were put together, fixed before it shipped.**
+- A reminder tap that arrived while the review sheet was already up was held back by that very sheet, kept
+  polling, and re-opened it the moment the member pressed "Not now". With the review on screen the tap now stands
+  down. A sheet that spends credits never comes back by itself.
+- The card and the sheet read a saved entry's `seats` by different rules: a stored `"3"` (text, which only a
+  tampered or imported store can hold — the app writes a number) was one seat on the card and three in the sheet.
+  Both now read it as one — the side that can only make the sheet start lower — and a test runs the two shipped
+  functions over one table.
+- The first-booking reminder ask could open over a usual-week run (a run announces each seat as it lands). Both
+  iOS asks now wait for the sheet.
+- The release model is written down twice (the horizon's constants; the reminder tap's stand-in numbers). A test
+  now fails if the tap's batch and the sheet's "Newly opened" batch ever stop being the same seven days. The suite
+  that was meant to prove "the horizon wins, and one that throws costs nothing" had stopped proving either once
+  the two met — its fake was silently replaced by the real function.
+
+**Found by the reviews of the finished wave, fixed before it shipped.**
+- **"Choose again" re-ticked rows by their position alone.** A seat that went while its class filled came back as a
+  PRE-TICKED "join the waitlist" (one press from a place Psycle turns into a charge); a class just booked at one
+  seat of a saved two came back as a pre-ticked "add 1 more"; and every kept row went back to the SAVED seat count.
+  The sheet now remembers what was ticked — the class, its state, top-up or cover, the seats asked for — and a tick
+  survives only on a row that is still that; anything else starts as any fresh row does. The member's own count
+  and spot come back with it.
+- **A ✓ was read as "this booking landed".** It only ever means "Psycle shows a seat in this class" — and for a
+  class already held, the seat held before earns it. A top-up whose answer was lost, or a 5xx, was reported
+  "Booked ✓" and the run carried on; a 409 too, with nothing added; a seat top-up whose spot went read "Only part of
+  this was booked". The seat step now also needs the booking to have GROWN by what was shown; an unverified answer
+  stops the run ("Couldn't confirm with Psycle"), a spot that went is "just taken — Choose again", and a count that
+  did not grow is settled by one more look at the bookings.
+- The third week's Friday–Sunday, opened on a Monday morning, read "No matching class that day" — the days are
+  simply not on the timetable until 12:00, and now say so.
+- A reminder tap with the review sheet ALREADY open (opened at 11:58 to be ready) did nothing, so "Newly opened"
+  was never offered. An idle sheet now takes the tap and lists afresh with that batch first — never during a run,
+  over the seat map, or over a run's results.
+- **On a short phone the pinned text left the class list almost no room** — in Terminal / Handheld none, with the
+  buttons pushed past the dialog while "Book 2 classes" stayed live. The list keeps a floor of up to three rows,
+  the dialog scrolls when that does not fit, the buttons ride its bottom edge, and the long waitlist sentence is
+  shown only while a waitlist row is ticked. "Newly opened · Fri 25 Sept – Thu 1 Oct" wraps inside its track
+  instead of sticking out of it; the focus ring of "Change spot" is no longer cut by the list's edge; a rule at
+  each end of the list shows a cut row as "more below".
+- **…and that fix had a catch of its own:** because only the list gives, ticking a waitlist class — which brings
+  the waitlist sentence up — shrank the list under the very row just ticked (375 × 667, Cloud: 3px of it left in
+  view, keyboard focus still on its box). The row the member is on now stays on screen: after a tick, a seat
+  count, "Try again", the way back from the seat map, and when that row's spots read lands, the list scrolls
+  itself by the least that shows it (never the dialog or the page; measured in layout px, because the dialog is
+  still scaling in during its first moments).
+- The plan-caution line was written into a hidden live region and then revealed — silent to VoiceOver. It (and the
+  waitlist sentence) is announced when it appears.
+- **The Monday-reminder offer could only follow a save**, so a member whose usual week came from the previous
+  build was never asked — and one who opened the review straight after saving lost the ask to its 40-second
+  patience. It is offered when the review sheet closes too (once, by the same rules).
+- Smaller: a failed row prints what was said at the time instead of "see its message" (the toast had faded);
+  three or four seats read "Benches 5, 6, 10 & 11"; a suggestion that passed over a lower free spot the member
+  avoids says "first free you don't avoid"; with nothing booked the usual-week card sits ABOVE the "Nothing
+  booked — yet" hero, not under it.
+
+**Decisions the owner may want to overrule.** The primary sits in the card's head in both states (so nothing moves
+when it folds) and "Clear" moved down beside "Update from my bookings". "1 of 2 seats held" starts unticked. The
+Discover route of the reminder tap shows ONE day, the batch's first — the date row cannot name a custom range
+yet. The Settings row reads "Monday booking reminder — Mondays at 12:00 — when Psycle opens new dates" ("Monday"
+twice; and no "UK", though the reminder always fires at London noon). The second seat is the free one closest to
+the first, which can be the seat in front rather than beside. The button counts a no-map studio's spaces as
+"seats". "Not now" to the offer leaves the reminder unset rather than writing "off".
+
+**Not covered.** Nothing here has run on a phone (checklist below). Count bookings for studios with no spot map
+are as unproven against the live system as they are from Discover. Terminal's chosen segment — every `.seg` in
+the app, the sheet's two included — is white on its green at 3.3:1. On the smallest phone in a mono theme the
+sheet's list shows about one row at a time (its floor), and the rest of the sheet scrolls under the buttons. The usual week
+(`psycle_weekly_template`) is still not part of a settings export. The App Store listing still says "when new
+booking week opens".
+
+Assertions: 7,436 → 7,953.
+
 ## How it was done
 
 A multi-pass review: discovery, independent verification of each finding, implementation in small patches,
@@ -285,11 +441,12 @@ changed app to look for regressions and for what was still missing, and its find
   one request per booking; the details refresh in the background and are never treated as server-confirmed by the
   calendar or the widget. "Change spot" and the class sheet's seat button wait for such a card's details instead of
   erroring.
-- **Your usual week** is back, with a preview. "Save my usual week" from the classes you hold, then "Book my usual
-  week": the sheet lists every class and what will happen (book, waitlist, already booked, clash, no match), and
+- **Your usual week** is back, with a preview. "Save my usual week" from the classes you hold, then "Review and
+  book": the sheet lists every class and what will happen (book, waitlist, already booked, clash, no match), and
   nothing is sent before the explicit "Book N classes". Waitlist joins are opt-in, classes are booked one at a
-  time, the run stops on an auth or credits error, and a per-class result is shown. Studios without a seat map are
-  skipped for now.
+  time, the run stops on an auth or credits error, and a per-class result is shown. (As first shipped the button
+  read "Book my usual week", each class was booked on one auto-picked seat and studios without a seat map were
+  skipped — see *Follow-up: your usual week* for the weeks ahead, seat counts, shown spots and the folding card.)
 - The list skips re-rendering identical content, and one 60-second ticker updates countdowns in place.
 - Usual-week entries wrap so the location stays visible; the last card can scroll clear of the floating next-class
   pill.
@@ -334,7 +491,9 @@ changed app to look for regressions and for what was still missing, and its find
   with the other filters (and with recent searches), and never hides a class you are booked or waitlisted on.
 - **"Next week"** date preset (next Monday to Sunday), and the **Monday release**: a timetable fetched before
   Monday 12:00 London time is never treated as fresh afterwards; while Discover is open it refreshes at the
-  release; tapping the Monday reminder opens next week — without making it the saved launch default.
+  release; tapping the Monday reminder opens the dates that release opened — the usual-week review, or Discover on
+  their first day — without making it the saved launch default. (It opened "Next week" at first: the wrong week —
+  see *Follow-up: your usual week*.)
 - "Find similar", "Book again", "View schedule / classes" and the habit shortcuts clear the filters they do not
   mean, so the promised classes are not hidden; "Same time" means that day. "Book again?" ignores classes you
   already hold.
@@ -575,7 +734,35 @@ read the App Group).
 - [ ] The first-booking notification ask appears once, after a first booking, and the iOS prompt follows an in-app
       yes.
 - [ ] A T-90 reminder tap opens My Bookings and the class.
-- [ ] A Monday reminder tap opens Discover on "Next week" (and does not make it the launch default next time).
+- [ ] The Monday reminder's banner arrives at 12:00:00 London time — also on a phone set to another time zone, and
+      on the Mondays either side of a clock change — and reads "New Psycle dates are open" with the usual-week
+      sentence when a usual week is saved, the "Find your classes…" one when not (save, then clear, a usual week
+      and check the pending notification's body follows).
+- [ ] First Monday after updating from a build that armed 11:59 reminders: ONE banner, at 12:00 — not two.
+- [ ] A Monday reminder tap WITH a usual week opens My Bookings and the review sheet on "Newly opened · Fri … –
+      Thu …" — from a running app, from the background and **after a force-quit** (cold launch) — once and only
+      once, with nothing booked; pressing "Not now" does not bring the sheet back.
+- [ ] A Monday reminder tap WITHOUT a usual week opens Discover on the first newly opened day (the calendar button
+      reads e.g. "Fri 9 Oct"), and the next launch still opens on the member's own saved dates.
+- [ ] After the first "Save my usual week" the app asks "Remind you on Mondays at 12:00, when new dates open?" by
+      itself — never at launch, never over the review sheet; iOS's own prompt follows "Remind me"; "Not now" is
+      not asked again; Settings → Reminders shows the switch on afterwards.
+
+**Your usual week**
+- [ ] The card folds to one row and stays folded after a relaunch (and after an iOS storage purge); "Review and
+      book" is on the folded row; VoiceOver reads the head as a button with its expanded / collapsed state, and
+      folding keeps the VoiceOver cursor on it.
+- [ ] The review sheet at the phone's real size: the dates control wraps cleanly with "Newly opened" on a line of
+      its own, the list scrolls under the pinned money line and buttons, and nothing sits under the home
+      indicator — check an SE-class phone and Terminal / Handheld, where the list is shortest.
+- [ ] "Change spot" opens the real seat map in the sheet's place; "Use bike N", Back, × and a tap outside each
+      return to the sheet exactly as it was (scroll position, ticks, the other rows' spots), with VoiceOver focus
+      back on that row's "Change spot".
+- [ ] A real run against the live system, watched: exactly the spots shown are the spots booked; a two-seat row
+      books two; "Stop after this class" stops. **First live booking of a studio with no spot map from the sheet
+      ("N spaces") — watch the error log for `POST /bookings`.**
+- [ ] A class past what Psycle has opened, ticked anyway: Psycle's own refusal appears on the row in its words and
+      the run carries on. Note what Psycle actually says — it tells us whether the observed release model holds.
 
 **Share sheet**
 - [ ] Settings export goes through the share sheet (file, with the text fallback) and the toast tells the truth

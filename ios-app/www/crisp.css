@@ -2826,17 +2826,58 @@ html[data-ct-intensity="off"] .instructor-class-item { background: var(--sunken)
   background: var(--surface);
   box-shadow: var(--shadow-soft);
 }
-/* Heading · count · Clear. The count takes the slack, so Clear ends the row. */
-#usualWeekCard .usual-week-head { align-items: center; gap: var(--space-3); margin-bottom: var(--space-1); }
-#usualWeekCard .usual-week-eyebrow { margin: 0; letter-spacing: 0; text-transform: none; color: var(--text-heading); }
-#usualWeekCard .usual-week-count {
-  flex: 1;
-  min-width: 0;
+/* The head is a DISCLOSURE (js/tabs.js pure:usual-week-card), and the same in
+   both states: the heading — a real <button aria-expanded> — takes the slack
+   with "Your usual week" over "4 classes · Hide", and the ONE primary ends the
+   row. Folded, that row is the whole card: the primary has not moved. No
+   chevron (the Filters bar's rule): the Show / Hide word says it is a control. */
+#usualWeekCard .usual-week-head { align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+#usualWeekCard.is-collapsed .usual-week-head { margin-bottom: 0; }
+#usualWeekCard .usual-week-eyebrow { flex: 1; min-width: 0; margin: 0; letter-spacing: 0; text-transform: none; color: var(--text-heading); }
+#usualWeekCard .usual-week-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  /* Room for the focus ring to clear the words — taken back from the card's
+     own inset, so the heading still lines up with the rows under it. */
+  width: calc(100% + var(--space-3));
+  min-height: var(--tap-min);
+  margin: 0 0 0 calc(var(--space-3) * -1);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: inherit;
+  /* (a <button> does not inherit the heading's face) */
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#usualWeekCard .usual-week-toggle:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+#usualWeekCard .usual-week-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#usualWeekCard .usual-week-meta {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-body);
   font-size: var(--type-caption);
   font-weight: var(--weight-medium);
+  line-height: 1.4;
   color: var(--text-muted);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+#usualWeekCard .usual-week-count { font-size: inherit; color: inherit; }
+#usualWeekCard .usual-week-toggle-word { font-weight: var(--weight-bold); color: var(--text); }
+/* "Review and book": the graphite primary, a size down — it shares a phone's
+   row with the heading. Still a --tap-min target. */
+#usualWeekCard .usual-week-head .week-template-book { font-size: var(--type-meta); }
+/* Folded = the body is not rendered: its buttons are out of the tab order and
+   out of a screen reader's reach, which is what aria-expanded="false" promises.
+   (No rule above gives .usual-week-body a display of its own to outrank this.) */
+#usualWeekCard.is-collapsed .usual-week-body { display: none; }
 /* minmax(0, …): a long "Class · Instructor" ends in its ellipsis instead of
    pushing the row — and its × — out of the card. */
 #usualWeekCard .usual-week-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
@@ -2872,10 +2913,21 @@ html[data-ct-intensity="off"] #usualWeekCard .usual-week-entry { background: var
 }
 #usualWeekCard .usual-week-what { font-weight: var(--weight-semibold); line-height: 1.35; color: var(--ct-ink); }
 #usualWeekCard .usual-week-where { font-weight: var(--weight-medium); color: var(--ct-ink-2); }
+/* "2 seats" (an entry that books more than one) LEADS the second line, in the
+   class's deep ink: the ellipsis takes the END of a line, and the count — it is
+   what the entry spends — must never be what it eats. It brings the line break
+   the studio otherwise brings (css/styles.css); the studio then follows it on
+   the same line, after the " · " its markup carries (dropped everywhere else
+   in the card, where it has nothing to join). */
+#usualWeekCard .usual-week-seats { color: var(--ct-deep); }
+#usualWeekCard .usual-week-seats::before { content: "\A"; white-space: pre; }
+#usualWeekCard .usual-week-seats + .usual-week-where::before { content: none; }
+#usualWeekCard .usual-week-seats + .usual-week-where .usual-week-sep { display: inline; }
 #usualWeekCard .usual-week-remove { border-radius: var(--radius-full); color: var(--ct-ink-2); }
 #usualWeekCard .usual-week-remove:hover { background: var(--surface); color: var(--ct-ink); }
 #usualWeekCard .usual-week-remove:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
-#usualWeekCard .usual-week-actions { align-items: center; gap: 0 var(--space-1); padding-top: var(--space-3); border-top: 0; }
+/* Update from my bookings · Clear: two quiet words, one at each end of the row. */
+#usualWeekCard .usual-week-actions { align-items: center; justify-content: space-between; gap: 0 var(--space-1); padding-top: var(--space-2); border-top: 0; }
 /* tabs.css paints .week-template-btn (and its :hover) with more weight than a
    primitive: hand the pill its own recipe back. */
 #usualWeekCard .pill-btn,
@@ -2909,9 +2961,125 @@ html[data-ct-intensity="off"] #usualWeekCard .usual-week-entry { background: var
    row — class, instructor and its caution line — shout the moment it could be
    ticked, beside the sentence-case rows that cannot. */
 #usualWeekSheet label.usual-week-pick { letter-spacing: 0; text-transform: none; }
-#usualWeekSheet .usual-week-switch { gap: 0; }
+/* The dates: the batch a Monday release has just opened (when there is one) on
+   a line of its own, then the next 7 days and the next three weeks — four
+   segments that fit a 375px phone. Where the labels run wider (the mono themes)
+   the track wraps onto a second line rather than hiding a week off its edge. */
+#usualWeekSheet .usual-week-switch { display: flex; flex-wrap: wrap; gap: 0; }
 #usualWeekSheet .usual-week-switch-btn,
-#usualWeekSheet .usual-week-switch-btn.active { flex: none; border: 0; }
+#usualWeekSheet .usual-week-switch-btn.active { flex: 1 1 auto; border: 0; white-space: nowrap; }
+#usualWeekSheet .usual-week-switch-btn.is-newest { flex-basis: 100%; }
+/* …but "Newly opened · Fri 25 Sept – Thu 1 Oct" (a batch across a month end
+   names both months) is wider than the track in the mono themes on a phone, and
+   a no-wrap flex item cannot shrink below its content: the lit segment stuck out
+   of the sunken track into the dialog's padding. This one segment may wrap —
+   between its two halves only (js/tabs.js _uwLabelHalves: "Newly opened ·" over
+   the dates), never inside a date. */
+#usualWeekSheet .usual-week-switch-btn.is-newest,
+#usualWeekSheet .usual-week-switch-btn.is-newest.active { min-width: 0; padding-block: var(--space-2); line-height: 1.2; white-space: normal; }
+#usualWeekSheet .usual-week-switch-btn > span { white-space: nowrap; }
+/* The first line of the sheet IS the dates it is about to book. */
+#usualWeekSheet .usual-week-range {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--type-title);
+  font-weight: var(--weight-bold);
+  color: var(--text-heading);
+}
+/* Under a ticked class: the opinion on its spot(s) first — the seat, then why,
+   in a few words — then the seat count and "Change spot". Indented to the
+   class's own text (past the checkbox). [hidden] is restated: a rule that sets
+   `display` outranks the attribute's own. */
+#usualWeekSheet .usual-week-spots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: 0 0 var(--space-4) calc(var(--space-8) + var(--space-4));
+}
+#usualWeekSheet .usual-week-spots[hidden] { display: none; }
+#usualWeekSheet .usual-week-spot-text {
+  flex: 1 0 100%;
+  min-width: 0;
+  font-size: var(--type-caption);
+  line-height: 1.4;
+  color: var(--text);
+}
+#usualWeekSheet .usual-week-spot-text strong { font-weight: var(--weight-bold); color: var(--text-heading); }
+#usualWeekSheet .usual-week-spot-why { color: var(--text-muted); }
+/* The seat count: the segmented primitive, small — sunk into the dialog's own
+   surface (a raised track on a raised dialog reads as a second card). */
+#usualWeekSheet .usual-week-seats { flex: none; background: var(--sunken); box-shadow: none; }
+#usualWeekSheet .usual-week-seats .seg-btn { min-width: var(--tap-min); }
+#usualWeekSheet .usual-week-change { flex: none; margin-left: auto; min-height: var(--tap-min); }
+/* The ONE line that weighs the ticked seats against the plan: the dialogs'
+   quiet caution line — body ink, the mark in the caution colour, no ground. */
+#usualWeekSheet .usual-week-total {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  font-size: var(--type-caption);
+  line-height: 1.4;
+  color: var(--text);
+}
+#usualWeekSheet .usual-week-total[hidden] { display: none; }
+/* "Book 3 classes · 4 seats" runs to two lines on a phone: break it evenly
+   rather than leave "seats" alone on the second. */
+#usualWeekSheet .confirm-actions .confirm-btn { text-wrap: balance; }
+#usualWeekSheet .usual-week-total .ui-icon { flex: none; margin-top: calc(var(--space-1) / 2); color: var(--badge-waitlist-text); }
+/* A short phone (375 x 667 — and the mono themes, whose lines run longer). Only
+   the class list can shrink, and everything else in the sheet was pinned: the
+   range line, the week switch, the plan line and the money paragraph squeezed
+   the list to a sliver (in Terminal / Handheld to nothing, the buttons pushed
+   past the dialog) while "Book 2 classes" stayed live — a spend on spots
+   nobody could see. Pin only what must stay pinned:
+   · the list keeps a floor — a tap row per class, up to three (a rule per step:
+     an engine without :has(), iOS < 15.4, keeps the one-row floor; a short list
+     is never padded out with blank space);
+   · when that floor and the pinned parts no longer fit, the DIALOG scrolls
+     (the body's overflow lands in it);
+   · the buttons ride the dialog's bottom edge on their own strip of surface —
+     the recipe of .cds-actions and #bikeModal .modal-actions — so the dialog's
+     bottom inset belongs to them. */
+#usualWeekSheet .usual-week-dialog { overflow-y: auto; padding-bottom: 0; }
+#usualWeekSheet .confirm-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: var(--space-3);
+  padding: var(--space-4) 0 var(--space-8);
+  background: var(--surface);
+}
+/* The list is a scroller, and a scroller clips at its own padding box: the
+   focus ring (--focus-ring + --focus-offset) of a control flush with its edge
+   — "Change spot" on the right, where focus lands after every spot change; the
+   checkboxes on the left — lost that side. Room for the ring inside, the same
+   amount taken back outside, so nothing moves. Its end rules are drawn INSIDE
+   that room (in line with the rows' own) and stay put while the rows pass under
+   them: a row cut by the edge of the list then reads as "more below", not as
+   the end of it (css/styles.css drew one at the bottom only, and the first row
+   slid straight under the week switch). */
+#usualWeekSheet .usual-week-plan {
+  min-height: var(--tap-lg);
+  margin-inline: calc(var(--space-2) * -1);
+  padding-inline: var(--space-2);
+  border-bottom: 0;
+}
+#usualWeekSheet .usual-week-plan:has(> .usual-week-row:nth-child(2)) { min-height: calc(var(--tap-lg) * 2); }
+#usualWeekSheet .usual-week-plan:has(> .usual-week-row:nth-child(3)) { min-height: calc(var(--tap-lg) * 3); }
+#usualWeekSheet .usual-week-plan::before,
+#usualWeekSheet .usual-week-plan::after {
+  content: "";
+  position: sticky;
+  z-index: 1;
+  display: block;
+  height: var(--hairline);
+  background: var(--line);
+}
+#usualWeekSheet .usual-week-plan::before { top: 0; margin-bottom: calc(var(--hairline) * -1); }
+#usualWeekSheet .usual-week-plan::after { bottom: 0; margin-top: calc(var(--hairline) * -1); }
+#usualWeekSheet .usual-week-row:first-child { border-top-color: transparent; }
 
 /* ── 8. The next-class pill: docked over the tab bar, the list padded under it ── */
 .next-class-pill {

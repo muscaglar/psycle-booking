@@ -19,7 +19,7 @@
   // time — right only while the phone happens to be in the UK. A booking
   // made (or a calendar reconciled) from abroad landed the class at the
   // wrong instant, tagged with the wrong zone. The calendar path (and the
-  // weekly Monday-11:59 reminder) resolve class times through the gym's zone
+  // weekly Monday-12:00 reminder) resolve class times through the gym's zone
   // explicitly, and calendar events are stamped Europe/London.
   // (Known follow-up: the widget/Live Activity snapshot, T-90 class reminders
   // and the web ICS/Google export still parse start_at device-locally.)
@@ -227,9 +227,14 @@
     'psycle_waitlist_places', 'psycle_weekly_template',
     'psycle_bike_history', 'psycle_recent_searches', 'psycle_onboarded_v1',
     'psycle_weekly_reminder', 'psycle_class_reminders',
-    // One-time answers (the first-booking reminder ask below; the web layer's
-    // history-sync prompt) — without the mirror a storage purge asks again.
-    'psycle_class_reminder_asked', 'psycle_history_prompt_dismissed',
+    // The "Your usual week" card, folded or not (js/tabs.js, '1' | absent): a
+    // storage purge must not unfold it. Unfolding REMOVES the key, and
+    // removeItem is mirrored too, so a stale copy here can never re-fold it.
+    'psycle_usual_week_collapsed',
+    // One-time answers (the first-booking reminder ask and the usual-week
+    // Monday-reminder ask below; the web layer's history-sync prompt) — without
+    // the mirror a storage purge asks again.
+    'psycle_class_reminder_asked', 'psycle_weekly_reminder_asked', 'psycle_history_prompt_dismissed',
     // Calendar integration state — must survive iOS storage purges
     // or duplicates are created on the next full sync.
     'psycle_native_cal_events', 'psycle_native_cal_id',
@@ -935,8 +940,9 @@
 
 
   // ── Weekly Booking Reminder ─────────────────────────────────────
-  // Local notification at 11:59 UK time every Monday to signal
-  // the new booking week opening at 12:00.
+  // Local notification at 12:00 UK time every Monday — the moment Psycle
+  // opens new dates (it fired a minute early until September 2026, and said
+  // "opens at 12:00"; the owner asked for the moment itself).
 
   var LocalNotifications = Capacitor.Plugins.LocalNotifications;
   // Eight rolling one-shot notifications (the next 8 Mondays). Absolute `at:`
@@ -947,39 +953,87 @@
   // eight weeks covers long stretches without opening the app.
   var REMINDER_IDS = [9999, 9998, 9997, 9996, 9995, 9994, 9993, 9992];
 
+  // ── pure:weekly-reminder:start ── (DOM-free; tests/suites/14c-weekly-reminder.js evaluates this block)
+  // WHEN it fires and WHAT it says. Nothing here touches Capacitor, the DOM or
+  // the clock: `now` and the gym-zone resolver (_gymWallToUtcMs) are handed in.
+  var WEEKLY_REMINDER_HOUR = 12, WEEKLY_REMINDER_MINUTE = 0; // Mondays 12:00 Europe/London: Psycle's release
+  var WEEKLY_TEMPLATE_KEY = 'psycle_weekly_template'; // js/app.js — "Your usual week"
+
   /**
-   * The next `count` occurrences of Monday 11:59 Europe/London as absolute
-   * Date instants, DST-correct for any device timezone.
+   * The next `count` occurrences of Monday 12:00 Europe/London as absolute
+   * Date instants, DST-correct for any device timezone. Walked over UTC
+   * calendar days: noon in London is 11:00 or 12:00 UTC, so the instant always
+   * falls on the London date's own UTC day — no weekday formatter is needed,
+   * only the resolver. One under a minute away is left to next week.
    */
-  function _nextMondays1159London(count) {
+  function _nextMondaysNoonLondon(count, now, wallToUtcMs) {
     var DAY = 86400000;
     var out = [];
     try {
-      var dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: GYM_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-      var wdFmt = new Intl.DateTimeFormat('en-GB', { timeZone: GYM_TZ, weekday: 'short' });
-
-      // Exact UTC instant of 11:59 London on a given London calendar date —
-      // the shared gym-zone wall-clock resolver (see _gymWallToUtcMs).
-      var instantFor = function (dateStr) {
-        var p = dateStr.split('-').map(Number);
-        return _gymWallToUtcMs(p[0], p[1], p[2], 11, 59, 0);
-      };
-
-      var now = Date.now();
-      for (var d = 0; d < 7 * (count + 1) + 2 && out.length < count; d++) {
-        var probe = new Date(now + d * DAY);
-        if (wdFmt.format(probe) !== 'Mon') continue;
-        var ts = instantFor(dateFmt.format(probe));
+      var n = new Date(now);
+      for (var k = 0; k <= 7 * (count + 1) && out.length < count; k++) {
+        var c = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + k));
+        if (c.getUTCDay() !== 1) continue;
+        var ts = wallToUtcMs(c.getUTCFullYear(), c.getUTCMonth() + 1, c.getUTCDate(), WEEKLY_REMINDER_HOUR, WEEKLY_REMINDER_MINUTE, 0);
         if (ts > now + 60000) out.push(new Date(ts));
       }
     } catch (e) { /* Intl/timezone unavailable — fall through */ }
-    if (out.length === 0) out.push(new Date(Date.now() + 7 * DAY)); // defensive
+    if (out.length === 0) out.push(new Date(now + 7 * DAY)); // defensive
     return out;
   }
 
+  // Is a usual week saved? `raw` is the stored string, which is untrusted (an
+  // import, the Preferences mirror): anything but a non-empty array is "no".
+  function _hasUsualWeek(raw) {
+    try {
+      var list = JSON.parse(raw || '[]');
+      return Array.isArray(list) && list.length > 0;
+    } catch (e) { return false; }
+  }
+
+  // It fires AT the release, so it says the dates ARE open (and still reads
+  // true when the banner is seen later). The body names what the tap opens:
+  // the review of the usual week, or Discover on the dates that just opened.
+  function _weeklyReminderCopy(hasUsualWeek) {
+    return {
+      title: 'New Psycle dates are open',
+      body: hasUsualWeek ? 'Book your usual week for the dates that just opened.'
+        : 'Find your classes for the dates that just opened.',
+    };
+  }
+
+  // Where the tap lands at once (the web layer's _onBookingWeekOpened does the
+  // rest when it can): the usual-week review lives on My Bookings.
+  function _weeklyTapTab(hasUsualWeek) {
+    return hasUsualWeek ? 'bookings' : 'discover';
+  }
+
+  // Put the in-app "remind you on Mondays?" question (_offerWeeklyReminder)?
+  // Only to a member who has a usual week, has never answered it, has never
+  // touched the Settings switch (a stored 'on' or 'off' IS an answer) and whom
+  // iOS would still let say yes — after a 'denied' the question leads nowhere.
+  // `permission` is undefined before it has been read: that alone rules nothing out.
+  function _weeklyOfferDecision(f) {
+    f = f || {};
+    if (!f.hasUsualWeek || f.asked) return 'skip';
+    if (f.pref === 'on' || f.pref === 'off') return 'skip';
+    if (f.permission === 'denied') return 'skip';
+    return 'ask';
+  }
+  // ── pure:weekly-reminder:end ──
+
+  function _usualWeekSaved() {
+    try { return _hasUsualWeek(localStorage.getItem(WEEKLY_TEMPLATE_KEY)); } catch (e) { return false; }
+  }
+
   var REMINDER_PREF = 'psycle_weekly_reminder'; // 'on' | 'off' | unset (off)
+  // Which body the armed reminders carry (true = "Book your usual week…"),
+  // null while nothing is known to be armed — so a save / clear that does not
+  // change the sentence re-arms nothing.
+  var _weeklyArmedWithWeek = null;
 
   async function _cancelReminders() {
+    _weeklyArmedWithWeek = null;
     try {
       await LocalNotifications.cancel({
         notifications: REMINDER_IDS.map(function (id) { return { id: id }; }),
@@ -1007,20 +1061,23 @@
       // Cancel existing to reschedule (handles timezone/DST changes)
       await _cancelReminders();
 
-      var mondays = _nextMondays1159London(REMINDER_IDS.length);
+      var mondays = _nextMondaysNoonLondon(REMINDER_IDS.length, Date.now(), _gymWallToUtcMs);
+      // Read HERE, after the awaits: of two passes that overlap (a save and a
+      // clear a moment apart) the later one writes what is true now.
+      var hasWeek = _usualWeekSaved();
+      var copy = _weeklyReminderCopy(hasWeek);
       await LocalNotifications.schedule({
         notifications: mondays.map(function (at, i) {
           return {
             id: REMINDER_IDS[i],
-            // Fires at 11:59, a minute BEFORE the release — so it says when the
-            // week opens, not that it has (and still reads true if seen later).
-            title: 'New booking week opens at 12:00',
-            body: "Next week's Psycle classes open at noon UK time — get ready to grab your favourite spots.",
+            title: copy.title,
+            body: copy.body,
             schedule: { at: at, allowWhileIdle: true },
             sound: 'default',
           };
         }),
       });
+      _weeklyArmedWithWeek = hasWeek;
 
       console.log('[native] weekly reminders scheduled for: ' +
         mondays.map(function (d) { return d.toISOString(); }).join(', '));
@@ -1031,13 +1088,22 @@
     }
   }
 
+  // One pass at a time: each cancels the eight ids and schedules them again,
+  // and two interleaved passes could leave the older one's sentence armed.
+  var _weeklyChain = Promise.resolve();
+  function _scheduleWeeklySerial(interactive) {
+    var run = _weeklyChain.then(function () { return scheduleWeeklyReminder(interactive); });
+    _weeklyChain = run.catch(function () {});
+    return run;
+  }
+
   // Exposed to the web layer (Membership tab toggle). The permission
   // prompt only ever appears from enable() — a deliberate user action —
   // never at app launch.
   window._nativeReminder = {
     isOn: function () { return localStorage.getItem(REMINDER_PREF) === 'on'; },
     enable: async function () {
-      var ok = await scheduleWeeklyReminder(true);
+      var ok = await _scheduleWeeklySerial(true);
       if (ok) localStorage.setItem(REMINDER_PREF, 'on');
       return ok;
     },
@@ -1050,8 +1116,34 @@
   // Launch-time reschedule (recalculates timezone offset for DST) — only
   // for users who already opted in, and never prompting.
   setTimeout(function () {
-    if (localStorage.getItem(REMINDER_PREF) === 'on') scheduleWeeklyReminder(false);
+    if (localStorage.getItem(REMINDER_PREF) === 'on') _scheduleWeeklySerial(false);
   }, 3000);
+
+  // The body names what the tap opens, so it follows the usual week. js/tabs.js
+  // saves and clears it through these two window functions (Save, Update from
+  // my bookings, Clear, and removing the last class); an account switch swaps
+  // the stored week. Only while the reminder is on, only when the sentence
+  // would change, and never prompting. (A week that arrives some other way —
+  // an import, the Preferences restore — is picked up by the next launch.)
+  function _rearmWeeklyReminder() {
+    try {
+      if (localStorage.getItem(REMINDER_PREF) !== 'on') return;
+      if (_usualWeekSaved() === _weeklyArmedWithWeek) return;
+      _scheduleWeeklySerial(false);
+    } catch (e) { /* best-effort: never in the way of a save */ }
+  }
+  ['saveWeeklyTemplate', 'clearWeeklyTemplate'].forEach(function (name) {
+    var orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function () {
+      var result = orig.apply(this, arguments);
+      _rearmWeeklyReminder();
+      return result;
+    };
+  });
+  if (typeof PsycleEvents !== 'undefined' && PsycleEvents && typeof PsycleEvents.on === 'function') {
+    try { PsycleEvents.on('data:owner-changed', _rearmWeeklyReminder); } catch (e) {}
+  }
 
 
   // ── Notification Action Buttons (Book / Cancel / Snooze) ────────
@@ -1082,21 +1174,24 @@
   }
 
   // Land a tapped notification on what it was about. A class reminder carries
-  // extra.eventId → My Bookings + that class's sheet; the weekly "new booking
-  // week" reminder carries none → Discover. Nothing here books or cancels:
-  // the web layer owns that (auth + slot picker) behind the sheet's buttons.
+  // extra.eventId → My Bookings + that class's sheet; the weekly "new dates
+  // are open" reminder carries none → My Bookings when a usual week is saved
+  // (the web layer then opens its REVIEW sheet on the dates that just opened),
+  // else Discover. Nothing here books or cancels: the web layer owns that
+  // (auth + slot picker) behind the sheet's buttons, and the review sheet books
+  // only what the member ticks and confirms in it.
   var TAP_ROUTE_WAIT_MS = 10000;
   var _cancelTapRoute = null; // only the latest tap may still open a sheet
 
-  // The Monday reminder exists for one moment: the new week's release. A
+  // The Monday reminder exists for one moment: the release of new dates. A
   // timetable loaded at 11:50 still counts as fresh (15 min) at noon, so the
-  // tap landed on last week's classes and nothing refreshed them. Ask Discover
-  // for a fresh one. The freshness rule itself lives in js/app.js — use its
-  // hook (_onBookingWeekOpened) when it is there, and ONLY it: it runs its own
-  // search, and a second loader would race that. Else the plain silent refresh
-  // (which no-ops without a token, offline, mid-search, or on a cold start
-  // before studios load — the launch search covers that). GETs only; never
-  // throws, sync or async.
+  // tap landed on a list without them and nothing refreshed it. Hand over to
+  // js/app.js's hook (_onBookingWeekOpened) when it is there, and ONLY it: it
+  // opens the usual-week review or shows the opened dates on Discover, runs
+  // its own search, and a second loader would race that. Else the plain silent
+  // refresh (which no-ops without a token, offline, mid-search, or on a cold
+  // start before studios load — the launch search covers that). GETs only;
+  // never throws, sync or async.
   function _askDiscoverToRefresh() {
     try {
       var asked = null;
@@ -1110,7 +1205,9 @@
     if (typeof window.switchTab !== 'function') return;
     if (_cancelTapRoute) _cancelTapRoute();
     if (eventId === null || eventId === undefined || eventId === '') {
-      window.switchTab('discover');
+      // Decided HERE, at the tap, from the same stored week the hook reads: its
+      // retries only act while the member is still on the tab this put them on.
+      window.switchTab(_weeklyTapTab(_usualWeekSaved()));
       _askDiscoverToRefresh();
       return;
     }
@@ -1219,7 +1316,8 @@
 
   // Same landing as a class-reminder tap: My Bookings, then that class's sheet
   // (only while the seat is still held). With no id it is My Bookings alone —
-  // NOT the router's own "no id" case, which is the weekly reminder → Discover.
+  // NOT the router's own "no id" case, which is the weekly reminder's (the
+  // usual-week review, or Discover on the dates that just opened).
   function handleWidgetURL(info) {
     try {
       var link = _parseWidgetLink(info && info.url);
@@ -1788,9 +1886,11 @@
   // dialog (confirmModal is single-instance, so opening ours would cancel the
   // one on screen) — and every other overlay: the ask sits above them all, so
   // it would interrupt a seat being picked, or a history sync mid-run. These
-  // are built on open and removed on close, so presence = showing.
+  // are built on open and removed on close, so presence = showing. The
+  // usual-week sheet too: a run inside it emits booking:complete per seat, and
+  // an ask opening over it would sit on top of a run that spends credits.
   var ASK_BLOCKING_IDS = [
-    'bookingConfirmation', 'psycleConfirmOverlay', 'classDetailOverlay',
+    'bookingConfirmation', 'psycleConfirmOverlay', 'usualWeekSheet', 'classDetailOverlay',
     'syncPromptOverlay', 'onboardOverlay', 'instructorModalOverlay',
     'historyModalOverlay', 'settingsOverlay', 'diagOverlay', 'yearReviewOverlay',
   ];
@@ -1868,6 +1968,87 @@
     // being about THAT class — drop it; the next real booking asks again.
     try { PsycleEvents.on('waitlist:joined', function () { _reminderAskVoid++; }); } catch (e) {}
   }
+
+  // ── Usual-week ask: the Monday reminder, offered in context ──────
+  // The weekly reminder defaults OFF and its switch sits in Settings, where
+  // nobody looks for it. Offer it ONCE, in-app, at the moment it means
+  // something: a usual week has just been saved, or its review sheet has just
+  // closed — a week saved by an earlier build never meets "Save" again
+  // (js/tabs.js calls this at both, behind a typeof guard — on the web this
+  // function does not exist, so nothing about a reminder appears where it
+  // cannot work). Same manners as the ask above:
+  // never at launch, never over another dialog or the usual-week sheet, and
+  // iOS's own prompt only ever follows an in-app yes. A yes turns the reminder
+  // on and nothing else: the notification's tap opens a REVIEW, never a booking.
+  var WEEKLY_REMINDER_ASKED = 'psycle_weekly_reminder_asked'; // '1' once answered (mirrored via SYNC_KEYS)
+  var _weeklyAskBusy = false;
+  var _weeklyAskSince = 0; // when the offer was last called for: the give-up clock runs from there
+
+  function _weeklyOfferFacts(permission) {
+    return {
+      hasUsualWeek: _usualWeekSaved(),
+      asked: !!localStorage.getItem(WEEKLY_REMINDER_ASKED),
+      pref: localStorage.getItem(REMINDER_PREF),
+      permission: permission,
+    };
+  }
+
+  window._offerWeeklyReminder = async function (reason) {
+    // Called for again while an ask still waits its turn (saved, then straight
+    // into a review that outlasts ASK_GIVE_UP_MS — js/tabs.js offers it again
+    // when that sheet closes): the moment is NOW, so the clock starts over.
+    // Still one ask, never two.
+    if (_weeklyAskBusy) { _weeklyAskSince = Date.now(); return; }
+    if (!LocalNotifications || typeof window.confirmModal !== 'function') return;
+    _weeklyAskBusy = true;
+    try {
+      if (_weeklyOfferDecision(_weeklyOfferFacts()) !== 'ask') return;
+      var perm = await LocalNotifications.checkPermissions();
+      if (_weeklyOfferDecision(_weeklyOfferFacts(perm.display)) !== 'ask') return;
+
+      // As above: wait until the UI has been clear for two polls running (the
+      // "Replace your usual week?" confirm has only just closed), and give up
+      // by the clock — long after the save the moment has passed.
+      _weeklyAskSince = Date.now();
+      var clearPolls = 0;
+      while (clearPolls < 2) {
+        await new Promise(function (resolve) { setTimeout(resolve, ASK_POLL_MS); });
+        if (Date.now() - _weeklyAskSince > ASK_GIVE_UP_MS) return;
+        clearPolls = _askBlocked() ? 0 : clearPolls + 1;
+      }
+      if (document.visibilityState === 'hidden') return;
+      if (_weeklyOfferDecision(_weeklyOfferFacts(perm.display)) !== 'ask') return;
+
+      var displaced = false;
+      var yes = await window.confirmModal({
+        title: 'Remind you on Mondays at 12:00, when new dates open?',
+        body: 'Tap the reminder to review your usual week for those dates. Nothing is booked until you confirm.',
+        confirmText: 'Remind me',
+        cancelText: 'Not now',
+        onReplaced: function () { displaced = true; },
+      });
+      // Pushed aside by another dialog is not an answer — ask after a later save.
+      if (displaced) return;
+      localStorage.setItem(WEEKLY_REMINDER_ASKED, '1');
+      if (yes) {
+        var armed = await window._nativeReminder.enable(); // the iOS prompt, when it is still owed
+        if (typeof window.toast === 'function') {
+          window.toast(armed ? 'Reminder set — Mondays at 12:00' : 'Enable notifications for Psync in iOS Settings first', armed ? 'success' : 'error');
+        }
+      }
+      if (typeof window.pushAction === 'function') {
+        // The action log goes into bug reports: a bounded slug, never free text.
+        var why = String(reason || '').replace(/[^a-z0-9-]/gi, '').slice(0, 32);
+        try { window.pushAction('weekly-reminder:offer ' + (yes ? 'yes' : 'no') + ' after=' + why); } catch (e) {}
+      }
+      // Keep the Settings switch honest if the panel happens to be open.
+      if (typeof window.renderReminderRow === 'function') window.renderReminderRow();
+    } catch (e) {
+      /* best-effort — never let the ask disturb a save */
+    } finally {
+      _weeklyAskBusy = false;
+    }
+  };
 
   // Deliberate sign-out must blank the snapshot and cancel pending class
   // reminders — otherwise the previous account's classes stay on the widget

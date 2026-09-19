@@ -239,7 +239,7 @@ module.exports = async function (t) {
   }
 
   // ── i. The Monday-reminder tap ───────────────────────────────────────────
-  t.section('The Monday-reminder tap shows "Next week" without saving it');
+  t.section('The Monday-reminder tap shows the dates that opened without saving them');
   {
     const log = [];
     const els = { startDate: { value: '' }, daysAhead: { value: '' } };
@@ -256,16 +256,23 @@ module.exports = async function (t) {
     ctx._applyDateQuick('nonsense');
     eq(t.vm.runInContext('_dateQuickMode', ctx), 'week', 'an unknown mode is the week, as before');
 
-    const hook = appSrc.slice(appSrc.indexOf('window._onBookingWeekOpened = function'), appSrc.indexOf('async function search(opts) {'));
-    ok(/_applyDateQuick\('nextweek'\);/.test(hook) && !/\bsetDateQuick\(/.test(hook), 'the reminder tap goes through _applyDateQuick — never the name interactions.js wraps with saveFilters');
+    // Since September 2026 the tap shows the FIRST DAY of the dates that release
+    // opened (one picked day — "Next week" was the wrong week), so the unsaved
+    // path is _showOpenedDay: the calendar pick's own writes, minus the saving
+    // name. Comments are dropped first: the hook's own comment names what it avoids.
+    const code = (s) => s.replace(/\/\/[^\n]*/g, '');
+    const hook = code(appSrc.slice(appSrc.indexOf('function _showOpenedDay('), appSrc.indexOf('async function search(opts) {')));
+    ok(/_showOpenedDay\(batch\.from\)/.test(hook) && !/\b(setDateQuick|onDateInputChange|pickCalDate)\(/.test(hook), 'the reminder tap writes the date row itself — never through a name interactions.js wraps with saveFilters');
     const inter = t.readSource('js/interactions.js');
-    ok(/wrapGlobal\('setDateQuick', saveFilters\);/.test(inter) && !/_applyDateQuick/.test(inter), '…which is still setDateQuick alone: a pill tap is saved, a notification is not');
+    ok(/wrapGlobal\('setDateQuick', saveFilters\);/.test(inter) && /wrapGlobal\('onDateInputChange', saveFilters\);/.test(inter) && !/_applyDateQuick|_showOpenedDay/.test(inter), '…which are still setDateQuick and onDateInputChange alone: a pill tap or a picked date is saved, a notification is not');
 
     // …and the member's NEXT tap must not save it either: every wrapped toggle
     // (a studio chip, a class type, the Time row) runs saveFilters, which
     // snapshotted the LIVE date row — one chip on the reminder's week, and every
     // later launch opened on "Next week" after all.
-    ok(/window\._dateRowHeld = true;[^\n]*\n\s*_applyDateQuick\('nextweek'\);/.test(hook), 'the hook marks the date row as not the member\'s own before it applies the preset');
+    const shown = code(grab(appSrc, 'function _showOpenedDay(', '}'));
+    ok(shown.indexOf('window._dateRowHeld = true;') !== -1 && shown.indexOf('window._dateRowHeld = true;') < shown.indexOf('startEl.value = day;') &&
+      shown.indexOf('startEl.value = day;') < shown.indexOf('triggerAutoSearch();'), 'the hook marks the date row as not the member\'s own before it writes the day and searches');
     const saveSrc = inter.slice(inter.indexOf('  function saveFilters() {'), inter.indexOf('  function restoreFilters() {'));
     const HOME = { locationIds: ['5'], startDate: '2026-09-18', daysAhead: '7', dateQuickMode: 'week' };
     const heldWorld = (stored) => {
@@ -280,17 +287,18 @@ module.exports = async function (t) {
       });
       c.window = c; // as in the page: app.js's globals ARE window's
       t.vm.runInContext([grab(appSrc, 'function setDateQuick(', '}'), grab(appSrc, 'function _applyDateQuick(', '}'), grab(appSrc, 'function _releaseDateRow(', '}'),
-        grab(appSrc, 'function onDateInputChange(', '}'), saveSrc].join('\n'), c, { filename: 'js/app.js + interactions.js[held date row]' });
-      // The reminder tap, as the hook does it; then `tap` = any wrapped toggle (the toggle, then the save).
-      c.reminder = () => { c._dateRowHeld = true; c._applyDateQuick('nextweek'); };
+        grab(appSrc, 'function onDateInputChange(', '}'), grab(appSrc, 'function _showOpenedDay(', '}'), saveSrc].join('\n'), c, { filename: 'js/app.js + interactions.js[held date row]' });
+      // The reminder tap, as the hook does it — the SHIPPED _showOpenedDay, on the day the 21 September release
+      // opened; then `tap` = any wrapped toggle (the toggle, then the save).
+      c.reminder = () => c._showOpenedDay('2026-10-09');
       return { c, inputs, saved: () => JSON.parse(store.getItem('psycle_saved_filters') || 'null'), tap: () => c.saveFilters() };
     };
     const dateOf = (s) => [s.dateQuickMode, s.startDate, String(s.daysAhead)];
     let h = heldWorld(HOME);
     h.c.reminder();
-    eq([h.inputs.startDate.value, dateOf(h.saved())], ['2026-09-28', ['week', '2026-09-18', '7']], '(the reminder itself: next week on screen, "7 days" still what is stored)');
+    eq([h.inputs.startDate.value, String(h.inputs.daysAhead.value), h.c._dateRowHeld, dateOf(h.saved())], ['2026-10-09', '1', true, ['week', '2026-09-18', '7']], '(the reminder itself: the opened day on screen and held, "7 days" still what is stored)');
     h.tap();
-    eq(dateOf(h.saved()), ['week', '2026-09-18', '7'], 'one studio chip on that week: the save keeps the date ALREADY STORED (it wrote dateQuickMode "nextweek")');
+    eq(dateOf(h.saved()), ['week', '2026-09-18', '7'], 'one studio chip on that day: the save keeps the date ALREADY STORED (it used to write the notification\'s own)');
     eq(h.c._restoredDateState(h.saved(), '2026-09-22').mode, 'week', '…so the next launch opens on the member\'s own "7 days"');
     h.tap(); h.tap();
     eq(dateOf(h.saved()), ['week', '2026-09-18', '7'], '…however many chips they tap');

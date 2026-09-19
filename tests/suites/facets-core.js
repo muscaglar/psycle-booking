@@ -140,7 +140,8 @@ module.exports = function (t) {
 
   t.section('pluralizeSlotLabel / formatSlots / _parseSlots (js/app.js pure:core)');
   eq([core.formatSlots('Bike', [7]), core.formatSlots('Bike', [7, 12]), core.formatSlots('Bench', [12, 15]), core.formatSlots('Bed', [1, 2, 3]), core.formatSlots('Machine', [4, 5])],
-    ['Bike 7', 'Bikes 7 & 12', 'Benches 12 & 15', 'Beds 1 & 2 & 3', 'Machines 4 & 5'], 'one seat is singular; several are plural — "Benches", not "Benchs"');
+    ['Bike 7', 'Bikes 7 & 12', 'Benches 12 & 15', 'Beds 1, 2 & 3', 'Machines 4 & 5'], 'one seat is singular; several are plural — "Benches", not "Benchs"; three or more read as a list ("1, 2 & 3", never "1 & 2 & 3")');
+  eq(core.formatSlots('Bench', [5, 6, 10, 11]), 'Benches 5, 6, 10 & 11', 'four seats (the usual week books up to four)');
   eq([core.pluralizeSlotLabel('bench'), core.pluralizeSlotLabel('bike'), core.pluralizeSlotLabel('Spot')], ['benches', 'bikes', 'Spots'], 'the picker\'s lower-case nouns pluralise the same way');
   eq([core.formatSlots('Bike', []), core.formatSlots('Bike', null), core.pluralizeSlotLabel('')], ['', '', ''], 'no seats / no noun → empty, never "Bikes undefined"');
 

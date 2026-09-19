@@ -337,14 +337,22 @@ module.exports = function (t) {
     eq(u._uwClassMark('RIDE: 45', null, null), { key: 'other', tile: '' }, 'tabs.js on its own (no app.js helpers): neutral, no tile, no throw');
     eq(u._uwClassMark('x', () => 'Ri"de onload=1', () => '').key, 'rideonload', 'whatever hands the key over, only a lower-case word reaches the attribute');
 
-    const card = tabsSrc.slice(tabsSrc.indexOf('  function renderUsualWeekCard() {'), tabsSrc.indexOf('  window.renderUsualWeekCard = renderUsualWeekCard;'));
+    // Wave 13b: the card's markup is built by _uwCardHtml (pure:usual-week-card — tests/suites/14b-usual-week-card.js RUNS it);
+    // renderUsualWeekCard only decides which state to print. The card is a disclosure now, and its primary reads as a review.
+    const card = tabsSrc.slice(tabsSrc.indexOf('  function _uwCardHtml(template, collapsed) {'), tabsSrc.indexOf('  // ── pure:usual-week-card:end ──'));
+    ok(card.length > 0 && /html = _uwCardHtml\(template, collapsed\);/.test(tabsSrc.slice(tabsSrc.indexOf('  function renderUsualWeekCard() {'), tabsSrc.indexOf('  window.renderUsualWeekCard = renderUsualWeekCard;'))),
+      'the card builder can be sliced, and renderUsualWeekCard prints through it');
     ok(/'<li class="usual-week-entry ct-card" data-ct="' \+ mark\.key \+ '">'/.test(card) && /var mark = _uwMark\(_uwTypeOf\(label\)\);/.test(card), 'each entry is a tinted .ct-card with its data-ct');
     ok(/'<span class="usual-week-when"><span class="usual-week-day">' \+ escapeHTML\(day\) \+ '<\/span>' \+ _uwTimeHtml\(min\) \+ '<\/span>'/.test(card), 'day over the compact time');
     ok(/escapeHTML\('Remove ' \+ when \+ ' ' \+ label \+ ' from your usual week'\)/.test(card), 'the remove button keeps its full spoken name');
-    ok(/class="week-template-btn week-template-book pill-btn pill-primary" onclick="bookTemplateWeek\(\)">Book my usual week</.test(card), 'the ONE primary: the graphite pill (and still .week-template-book — the sheet hands focus back to it)');
+    ok(/class="week-template-btn week-template-book pill-btn pill-primary" onclick="bookTemplateWeek\(\)" aria-label="Review and book your usual week">Review and book</.test(card) &&
+      (card.match(/week-template-book/g) || []).length === 1,
+      'the ONE primary: the graphite pill (and still .week-template-book — the sheet hands focus back to it), worded as a review');
     ok(/class="week-template-btn pill-btn pill-quiet usual-week-clear" onclick="clearUsualWeek\(\)" aria-label="Clear your usual week">Clear</.test(card) &&
-      card.indexOf('usual-week-clear') < card.indexOf('usual-week-list'), 'Clear sits in the head, named for what it clears (its visible word is part of that name)');
-    ok(/<h2 class="usual-week-eyebrow t-heading">Your usual week<\/h2>/.test(card), 'a real heading');
+      card.indexOf('usual-week-clear') > card.indexOf('usual-week-list') && card.indexOf('usual-week-clear') > card.indexOf('>Update from my bookings<'),
+      'Clear sits with "Update from my bookings" under the list (the head holds the primary now) — still named for what it clears (its visible word is part of that name)');
+    ok(/'<h2 class="usual-week-eyebrow t-heading">' \+\s*'<button type="button" class="usual-week-toggle" aria-expanded="/.test(card) && /<span class="usual-week-title">Your usual week<\/span>/.test(card),
+      'a real heading — which is the disclosure button (the accordion pattern)');
     const row = tabsSrc.slice(tabsSrc.indexOf('  function _uwRowHtml('), tabsSrc.indexOf('  // Where focus goes when the sheet closes'));
     ok(/var mark = _uwMark\(row\.typeName \|\| _uwTypeOf\(en\.label\)\);/.test(row) && /'<li class="usual-week-row" data-ct="' \+ mark\.key \+ '">'/.test(row) && /_uwTimeHtml\(min\)/.test(row),
       'the confirm sheet\'s rows are the same compact component (the class the plan FOUND decides the colour)');

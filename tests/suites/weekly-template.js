@@ -36,14 +36,19 @@ module.exports = async function (t) {
   eq(p._templateLondonNow(utc(2026, 1, 5, 11, 59)), { date: '2026-01-05', min: 719 }, '11:59Z in January is 11:59 GMT');
   eq(p._templateLondonNow(utc(2026, 9, 20, 23, 30)), { date: '2026-09-21', min: 30 }, '23:30Z on a BST Sunday is already Monday 00:30 in London');
 
-  t.section('Usual week: which week a tap means (Monday 12:00 London release)');
-  eq(p._templateDefaultStart(utc(2026, 9, 21, 10, 59)), { mode: 'next7', start: '2026-09-21' }, 'Monday 11:59 BST: next week is not open yet → the 7 days from today');
-  eq(p._templateDefaultStart(utc(2026, 9, 21, 11, 0)), { mode: 'nextweek', start: '2026-09-28' }, 'Monday 12:00 BST: the week to book is NEXT Monday–Sunday');
-  eq(p._templateDefaultStart(utc(2026, 1, 5, 11, 59)), { mode: 'next7', start: '2026-01-05' }, 'the same boundary in winter (GMT): 11:59 …');
-  eq(p._templateDefaultStart(utc(2026, 1, 5, 12, 0)), { mode: 'nextweek', start: '2026-01-12' }, '… and 12:00');
-  eq(p._templateDefaultStart(utc(2026, 9, 24, 8, 0)), { mode: 'nextweek', start: '2026-09-28' }, 'a Thursday → next Monday');
-  eq(p._templateDefaultStart(utc(2026, 9, 27, 20, 0)), { mode: 'nextweek', start: '2026-09-28' }, 'a Sunday evening → tomorrow');
-  eq(p._templateDefaultStart(utc(2026, 9, 20, 23, 30)), { mode: 'next7', start: '2026-09-21' }, 'Sunday 23:30Z is Monday 00:30 in London → Monday morning rules');
+  // Wave 13: the old rule here — "before Monday 12:00 next week cannot be booked, after it next week IS the week" —
+  // was wrong (Psycle books about three weeks ahead: js/app.js pure:horizon). The sheet now opens on the first
+  // range with a usual class not yet held; tests/suites/14a-usual-week-sheet.js covers that choice. Here: the
+  // clock it reads is still London's, and with nothing to judge by it is the 7 days from today.
+  t.section('Usual week: which dates a tap means (London\'s today; no "Monday noon" rule any more)');
+  eq(p._templateDefaultStart(utc(2026, 9, 21, 10, 59)), { mode: 'next7', start: '2026-09-21', id: 'next7' }, 'Monday 11:59 BST, nothing to judge by → the 7 days from today');
+  eq(p._templateDefaultStart(utc(2026, 9, 21, 11, 0)), { mode: 'next7', start: '2026-09-21', id: 'next7' }, 'Monday 12:00 BST: the same — noon moves nothing (it used to jump to next week)');
+  eq(p._templateDefaultStart(utc(2026, 1, 5, 12, 0)), { mode: 'next7', start: '2026-01-05', id: 'next7' }, '…in winter (GMT) too');
+  eq(p._templateDefaultStart(utc(2026, 9, 20, 23, 30)), { mode: 'next7', start: '2026-09-21', id: 'next7' }, 'Sunday 23:30Z is Monday 00:30 in London → London\'s Monday is "today"');
+  eq(p._templateRanges(utc(2026, 9, 24, 8, 0), null, false).map((r) => [r.id, r.start, r.end]),
+    [['next7', '2026-09-24', '2026-09-30'], ['week1', '2026-09-28', '2026-10-04'], ['week2', '2026-10-05', '2026-10-11'], ['week3', '2026-10-12', '2026-10-18']],
+    'the ranges on offer from a Thursday: the next 7 days, then the next THREE Monday–Sunday weeks');
+  eq(p._templateRanges(utc(2026, 9, 27, 20, 0), null, false)[1].start, '2026-09-28', 'a Sunday evening → week 1 starts tomorrow');
 
   t.section('Usual week: the date an entry falls on');
   {
@@ -126,8 +131,12 @@ module.exports = async function (t) {
     const travel = p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00')], ctx({ findClash: () => ({ kind: 'travel', eventId: '55' }) }));
     eq([travel.state, travel.clash.kind], ['book', 'travel'], 'a tight change between two locations stays bookable, with the warning');
     eq(p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00')], ctx({ findClash: () => { throw new Error('cache'); } })).state, 'book', 'a clash lookup that throws is advisory — it never blocks the row');
-    eq(pick(p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00', { studio_id: 9 })], ctx())), ['nolayout', 10], 'a no-layout studio is listed but never booked from here ({spaces:1} is unproven)');
-    eq(pick(p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00', { studio_id: 77 })], ctx())), ['nolayout', 10], 'an unknown studio is not guessed to have a layout');
+    // Wave 13: a studio POSITIVELY known to have no spot map (has_layout === false) is booked by a COUNT of spaces
+    // from the sheet — the row says so (`count`), and shows no spot. An UNKNOWN studio is still neither.
+    const noMap = p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00', { studio_id: 9 })], ctx());
+    eq([pick(noMap), noMap.count], [['book', 10], true], 'a studio with has_layout === false is bookable — by COUNT (row.count), never by a guessed seat');
+    eq(p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00')], ctx()).count, false, '…and a seat studio is not a count');
+    eq(pick(p._templatePlanRow(entry(), [ev(10, '2026-09-28 07:00:00', { studio_id: 77 })], ctx())), ['nolayout', 10], 'an unknown studio is not guessed to be either kind');
     // A LIST response's studio record: has_layout, not always the seat map (and
     // _fetchTemplateDay replaces a richer cached record with it). The plan only
     // ever reads lists — the flag decides; the map is the booking step's.
@@ -155,6 +164,7 @@ module.exports = async function (t) {
     eq(got[0].dayOfWeek, 1, 'an 18:30 Monday class is a MONDAY entry on a New York device too (the digits, not the device zone)');
     eq(p._templateFromSeats({ 10: seat(), 16: seat() }, { 10: cache[10], 16: Object.assign({}, cache[10], { id: 16 }) }, { date: '2026-09-21', min: 0 }, () => 2).length, 1,
       'two seats in the same slot (a guest) save one entry');
+    eq(got.map((e) => e.seats), [1, 1], 'each entry remembers how many seats were held (one here)');
     eq(p._templateFromSeats(bookings, cache, { date: '2026-09-21', min: 0 }).map((e) => e.locationId), [null, null], 'with no resolver the location stays null — never the studio id');
   }
 
@@ -175,7 +185,9 @@ module.exports = async function (t) {
       loadWeeklyTemplate: () => [entry()],
       _bookEventHeadless: async () => { throw new Error('the run never takes the book-OR-join path: a join happens only where its box was ticked'); },
     };
-    g._bookTemplateSeat = async (id) => {
+    log.wants = [];
+    g._bookTemplateSeat = async (id, studioId, want) => {
+      log.wants.push(clone(want || null));
       log.calls.push('seat:' + id + ':start');
       await new Promise((r) => setTimeout(r, 1));
       const answer = script[id];
@@ -209,13 +221,16 @@ module.exports = async function (t) {
 
   t.section('Usual week run: sequential, and the waitlist only where it was ticked');
   {
-    const w = runWorld({ 10: 'booked', 11: 'full', 12: 'full', 13: 'booked' });
-    const c = await w.run([{ eventId: 10, studioId: 4 }, { eventId: 11, studioId: 4, joinIfFull: true }, { eventId: 12, studioId: 4 }, { eventId: 13, studioId: 4, joinIfFull: true }]);
+    // Wave 13: a ticked WAITLIST row had no spot to show (the class was full), so when a spot has opened up by
+    // the time the run gets there nothing is booked for it ("opened") — it is left for the member to choose.
+    const w = runWorld({ 10: 'booked', 11: 'full', 12: 'full', 13: 'opened' });
+    const c = await w.run([{ eventId: 10, studioId: 4, slots: [5] }, { eventId: 11, studioId: 4, joinIfFull: true }, { eventId: 12, studioId: 4, slots: [5] }, { eventId: 13, studioId: 4, joinIfFull: true }]);
     eq(w.log.calls, ['seat:10:start', 'seat:10:end', 'seat:11:start', 'seat:11:end', 'join:11:[null,{"quiet":true}]', 'seat:12:start', 'seat:12:end', 'seat:13:start', 'seat:13:end'],
       'one class at a time, each settled before the next starts; ONE waitlist join — the full class whose box was ticked (quietly)');
-    eq([c.booked, c.waitlisted, c.failed, c.skipped, c.stopped, results(c)], [2, 1, 0, 1, '', ['booked', 'waitlisted', 'full', 'booked']],
-      'a full class that was NOT ticked stays "full"; a ticked one where a seat had opened up is simply booked');
-    eq(w.log.progress, ['0:running', '0:booked', '1:running', '1:waitlisted', '2:running', '2:full', '3:running', '3:booked'], 'the sheet hears each class start and finish');
+    eq([c.booked, c.waitlisted, c.failed, c.skipped, c.stopped, results(c)], [1, 1, 0, 2, '', ['booked', 'waitlisted', 'full', 'opened']],
+      'a full class that was NOT ticked stays "full"; a ticked one where a seat had opened up is NOT booked on a spot nobody saw — and joins nothing');
+    eq(w.log.wants, [{ slots: [5] }, { joinOnly: true }, { slots: [5] }, { joinOnly: true }], 'each class is handed exactly what the sheet showed: its spots — or, for a waitlist row, only the question "still full?"');
+    eq(w.log.progress, ['0:running', '0:booked', '1:running', '1:waitlisted', '2:running', '2:full', '3:running', '3:opened'], 'the sheet hears each class start and finish');
     eq([w.log.dismissed, w.log.refetch], [4, 1], 'the per-booking slide-up is dismissed each time (the sheet reports instead); bookings are re-read once at the end');
   }
 
@@ -239,10 +254,10 @@ module.exports = async function (t) {
     c = await w.run([{ eventId: 10, studioId: 4, joinIfFull: true }, { eventId: 11, studioId: 4 }]);
     eq([results(c), c.stopped, w.log.calls.filter((x) => /^seat:11/.test(x))], [['unconfirmed', 'notrun'], 'failed', []],
       'a join Psycle may have TAKEN (PUT timed out, lookup failed) is "unconfirmed", never "couldn\'t be joined" — a place can become a charge — and the run stops on it');
-    w = runWorld({ 10: 'failed', 11: 'booked' });
+    w = runWorld({ 10: 'opened', 11: 'booked' });
     c = await w.run([{ eventId: 10, studioId: 4, joinIfFull: true }, { eventId: 11, studioId: 4 }]);
-    eq([results(c), c.stopped, w.log.calls.filter((x) => /^join/.test(x))], [['failed', 'notrun'], 'failed', []],
-      'a ticked-waitlist class whose seat had opened up but Psycle refused it stops the run like any other refusal — and joins nothing');
+    eq([results(c), c.stopped, w.log.calls.filter((x) => /^join/.test(x))], [['opened', 'booked'], '', []],
+      'a ticked-waitlist class whose seat had opened up joins nothing, books nothing — and the run carries on');
     w = runWorld({ 10: '401', 11: 'booked' });
     c = await w.run([{ eventId: 10, studioId: 4 }, { eventId: 11, studioId: 4 }]);
     eq([results(c), c.stopped], [['taken', 'notrun'], 'auth'], 'the session expired part-way → stop; nothing after it can book');
@@ -258,34 +273,39 @@ module.exports = async function (t) {
     eq([results(c), c.skipped, w.log.calls], [['already'], 1, []], 'a class held by the time the run reaches it (a stale sheet) is never booked again');
   }
 
-  // ── A seat, never a waitlist place ───────────────────────────────────────
+  // ── Exactly the spots that were shown — and a seat, never a waitlist place ─
   // `detail` = what GET /events/{id} answers; `label` = what submitBooking
-  // leaves on the button (its label contract); `lands` = the seat shows up.
+  // leaves on the button (its label contract); `lands` = the seat shows up;
+  // `want` = what the sheet showed for the class ({ slots } | { spaces } |
+  // { joinOnly }); `pending` = the POST may still land (_unverifiedBookings).
   const seatWorld = (detail, o) => {
     o = o || {};
     const log = { posts: [], joins: 0, gets: [] };
     const g = {
       _myBookings: {}, _eventCache: { 10: { id: 10, studio_id: o.studio || 4 } }, _studioMap: clone(o.studios || studios), console: quiet,
-      document: { createElement: () => ({ className: '', textContent: '' }) },
+      document: { createElement: () => ({ className: '', textContent: '' }), getElementById: (id) => (id === 'toast' ? (o.toast || null) : null) },
       apiFetch: async (path, opts) => {
         log.gets.push((opts && opts.method) || 'GET');
         return { ok: o.getOk !== false, status: o.getOk === false ? 500 : 200, json: async () => clone(detail) };
       },
       _clashFor: () => (o.clash || null),
-      _usualSlotForEvent: () => (o.usual == null ? null : o.usual),
+      _usualSlotForEvent: () => { throw new Error('the run never auto-picks: it books the spots the sheet showed, or nothing'); },
       joinWaitlist: async () => { log.joins++; return true; },
       submitBooking: async (id, slots, btn, opts) => {
         log.posts.push({ id, slots, opts: opts || null });
         btn.textContent = o.label || 'Bike 2 ✓';
-        if (o.lands !== false) g._myBookings[String(id)] = { bookingId: 1, slots, waitlisted: false };
+        if (o.lands !== false) g._myBookings[String(id)] = { bookingId: 1, slots: o.landed || slots || [], waitlisted: false };
       },
     };
-    const world = t.vm.createContext(Object.assign({ Set, Number, String, Array, Object }, g));
+    if (o.pending !== undefined) g._unverifiedBookings = o.pending ? { 10: { slots: [2] } } : {};
+    // pure:template carries the bounds the function applies again (_templatePickSlots / _templateSeats).
+    const world = t.loadPure('js/app.js', 'template', g);
     // `helper`: with app.js's _layoutFromEventDetail beside it, as in the app.
-    t.vm.runInContext((o.helper ? grab('function _layoutFromEventDetail(') + '\n' : '') + grab('async function _bookTemplateSeat('), world);
+    t.vm.runInContext((o.helper ? grab('function _layoutFromEventDetail(') + '\n' : '') + grab('function _templateRefusalText(') + '\n' + grab('async function _bookTemplateSeat('), world);
     // The function reads the bare global; keep the world's and the stub's map the same object.
     g._myBookings = world._myBookings;
-    return { log, world, run: () => world._bookTemplateSeat(10, o.studio || 4) };
+    const want = o.want === undefined ? { slots: [2] } : o.want;
+    return { log, world, want, run: () => world._bookTemplateSeat(10, o.studio || 4, want) };
   };
 
   t.section('Usual week seat: a class that filled up is NOT turned into a waitlist place');
@@ -294,12 +314,10 @@ module.exports = async function (t) {
     eq([await w.run(), w.log.joins, w.log.posts], ['full', 0, []], 'full by the time the run gets there → "full": no PUT /waitlists, no POST');
     w = seatWorld({ data: { is_fully_booked: false }, slots: [] });
     eq([await w.run(), w.log.joins, w.log.posts], ['full', 0, []], 'no free slot in a layout studio counts as full as well');
-    w = seatWorld({ data: {}, slots: [2, 5] }, { usual: 5 });
-    eq([await w.run(), w.log.posts], ['booked', [{ id: 10, slots: [5], opts: null }]], 'the member\'s usual spot is booked when it is free');
-    w = seatWorld({ data: {}, slots: [2, 5] }, { usual: 9 });
-    eq([await w.run(), w.log.posts[0].slots], ['booked', [2]], '…otherwise the first free one');
-    w = seatWorld({ data: {}, slots: [2] }, { studio: 9 });
-    eq([await w.run(), w.log.posts], ['nolayout', []], 'a no-layout studio is never booked from here — no {spaces:1} body goes out');
+    w = seatWorld({ data: {}, slots: [2, 5] }, { want: { slots: [5] } });
+    eq([await w.run(), w.log.posts], ['booked', [{ id: 10, slots: [5], opts: null }]], 'the spot the sheet SHOWED is the spot that is booked');
+    w = seatWorld({ data: {}, slots: [2, 5, 7] }, { want: { slots: [5, 7] } });
+    eq([await w.run(), w.log.posts], ['booked', [{ id: 10, slots: [5, 7], opts: null }]], 'two seats shown → ONE POST with exactly those two (as the picker\'s multi-seat booking)');
     w = seatWorld({ data: {}, slots: [2] }, { clash: { kind: 'overlap' } });
     eq([await w.run(), w.log.posts], ['clash', []], 'a class overlapping one booked earlier in the same run is skipped');
     w = seatWorld({ data: {}, slots: [2] }, { clash: { kind: 'travel' } });
@@ -308,38 +326,80 @@ module.exports = async function (t) {
     eq([await w.run(), w.log.posts], ['failed', []], 'the class could not be read → failed, nothing posted');
   }
 
+  t.section('Usual week seat: never a spot nobody saw');
+  {
+    let w = seatWorld({ data: {}, slots: [2, 5] }, { want: { slots: [9] } });
+    eq([await w.run(), w.log.posts, w.want.gone], ['taken', [], [9]], 'the shown spot has gone → NOTHING is sent (no substitute: the usual / first-free pick is gone from this path) and the spot is named for "Choose again"');
+    w = seatWorld({ data: {}, slots: [2, 5] }, { want: { slots: [5, 9] } });
+    eq([await w.run(), w.log.posts, w.want.gone], ['taken', [], [9]], 'one of two shown spots has gone → nothing for the row, not the one that is left');
+    w = seatWorld({ data: {}, slots: [2, 5] }, { want: {} });
+    eq([await w.run(), w.log.posts], ['stale', []], 'a pick that carries no spots books nothing — there is no auto-pick to fall back on');
+    w = seatWorld({ data: {}, slots: [2, 5] }, { want: { slots: ['x', -1, 2.5, null] } });
+    eq([await w.run(), w.log.posts], ['stale', []], '…nor does one whose spots are not slot ids');
+    w = seatWorld({ data: {}, slots: [1, 2, 3, 4, 5, 6] }, { want: { slots: [1, 2, 3, 4, 5, 6] } });
+    eq([await w.run(), w.log.posts[0].slots], ['booked', [1, 2, 3, 4]], 'bounded again before anything is sent: at most four seats, whatever the caller built');
+    w = seatWorld({ data: { max_bookable_slots: 1 }, slots: [2, 5] }, { want: { slots: [2, 5] } });
+    eq([await w.run(), w.log.posts], ['stale', []], 'Psycle now allows fewer seats per booking than were shown → nothing is sent (never silently fewer)');
+    w = seatWorld({ data: {}, slots: [2, 5] }, { want: { slots: [2, 5] }, landed: [2], label: 'Bike 2 ✓' });
+    eq(await w.run(), 'partial', 'a ✓ that does not hold EVERY spot shown is not "booked"');
+    w = seatWorld({ data: {}, slots: [2] }, { want: { joinOnly: true } });
+    eq([await w.run(), w.log.posts, w.log.joins], ['opened', [], 0], 'a ticked waitlist row whose class has a spot again: nothing is booked (none was shown) and nothing is joined');
+    w = seatWorld({ data: { is_fully_booked: true }, slots: [] }, { want: { joinOnly: true } });
+    eq([await w.run(), w.log.posts], ['full', []], '…still full → "full" (the caller joins, where that box was ticked)');
+  }
+
+  t.section('Usual week seat: a studio with no spot map is booked by COUNT — and only when that is positively known');
+  {
+    let w = seatWorld({ data: {}, slots: [] }, { studio: 9, want: { spaces: 2 }, label: 'Booked ✓' });
+    eq([await w.run(), w.log.posts], ['booked', [{ id: 10, slots: null, opts: { spaces: 2 } }]], 'has_layout === false: the count the sheet showed goes out as submitBooking\'s {spaces} — no slot list');
+    w = seatWorld({ data: {}, slots: [2] }, { studio: 9, want: { slots: [2] } });
+    eq([await w.run(), w.log.posts], ['stale', []], 'a seat pick for a studio with no map is never turned into a count');
+    w = seatWorld({ data: {}, slots: [2] }, { studio: 9, want: { spaces: 9 }, label: 'Booked ✓' });
+    eq([await w.run(), w.log.posts[0].opts], ['booked', { spaces: 1 }], 'a count that is not 1–4 is not believed (stored data): one space');
+    w = seatWorld({ data: { max_bookable_slots: 2 }, slots: [] }, { studio: 9, want: { spaces: 3 } });
+    eq([await w.run(), w.log.posts], ['stale', []], 'more spaces than the class allows → nothing is sent');
+    w = seatWorld({ data: {}, slots: [2] }, { studio: 77, want: { spaces: 1 } });
+    eq([await w.run(), w.log.posts], ['nolayout', []], 'an UNKNOWN studio never gets a guessed count');
+    w = seatWorld({ data: { is_fully_booked: true }, slots: [] }, { studio: 9, want: { spaces: 1 } });
+    eq([await w.run(), w.log.posts], ['full', []], 'full → "full", no POST');
+  }
+
   t.section('Usual week seat: the studio record has no seat map (a list response replaced it)');
   {
     // What _fetchTemplateDay leaves in _studioMap when the list's relations
     // carry has_layout only; the GET /events/{id} this step reads has the map.
     const listShaped = { 4: { id: 4, has_layout: true } };
     const withMap = (o) => Object.assign({ data: {}, slots: [9, 12], relations: { studios: [{ id: 4, has_layout: true, layout: { slots: [{ id: 9 }, { id: 12 }] } }] } }, o || {});
-    let w = seatWorld(withMap(), { studios: listShaped, helper: true });
-    eq([await w.run(), w.log.posts], ['booked', [{ id: 10, slots: [9], opts: null }]], 'the map is taken from the class detail → a seat is booked (it used to answer "nolayout" with no POST)');
+    let w = seatWorld(withMap(), { studios: listShaped, helper: true, want: { slots: [9] } });
+    eq([await w.run(), w.log.posts], ['booked', [{ id: 10, slots: [9], opts: null }]], 'the map is taken from the class detail → the shown seat is booked (it used to answer "nolayout" with no POST)');
     eq(w.world._studioMap[4].layout.slots.length, 2, '…and kept on the studio record for the next class');
-    w = seatWorld(withMap({ slots: [9, 12] }), { studios: listShaped, helper: true, usual: 12 });
-    eq([await w.run(), w.log.posts[0].slots], ['booked', [12]], 'the usual spot still wins');
-    w = seatWorld({ data: {}, slots: [9] }, { studios: listShaped, helper: true });
+    w = seatWorld({ data: {}, slots: [9] }, { studios: listShaped, helper: true, want: { slots: [9] } });
     eq([await w.run(), w.log.posts], ['nolayout', []], 'no map anywhere → this class only ("nolayout"), never "failed": that would stop the run and blame Psycle for a POST that was never sent');
-    w = seatWorld(withMap(), { studios: listShaped });
+    w = seatWorld(withMap(), { studios: listShaped, want: { slots: [9] } });
     eq([await w.run(), w.log.posts], ['nolayout', []], '(sliced without the helper, the typeof guard holds)');
     w = seatWorld({ data: { is_fully_booked: true }, slots: [] }, { studios: listShaped, helper: true });
     eq([await w.run(), w.log.posts, w.log.joins], ['full', [], 0], 'a FULL class needs no map to be reported full');
     w = seatWorld(withMap({ slots: [] }), { studios: listShaped, helper: true });
     eq([await w.run(), w.log.posts], ['full', []], 'a map but no free slot → full');
-    w = seatWorld(withMap(), { studios: { 4: { id: 4, has_layout: false } }, helper: true });
-    eq([await w.run(), w.log.posts], ['nolayout', []], 'a studio not positively a seat studio is never booked from here, whatever the detail carries');
   }
 
-  t.section('Usual week seat: submitBooking\'s label contract tells "taken" from "refused"');
+  t.section('Usual week seat: submitBooking\'s label contract tells "taken" from "refused" from "may still land"');
   {
-    const outcome = async (label, lands) => (await seatWorld({ data: {}, slots: [2] }, { label, lands }).run());
+    const outcome = async (label, lands, o) => (await seatWorld({ data: {}, slots: [2] }, Object.assign({ label, lands }, o || {})).run());
     eq(await outcome('Bike 2 ✓', true), 'booked', '✓ and a seat in state → booked');
     eq(await outcome('Bike 2 ✓', false), 'failed', '✓ without a seat in state is not a booking (the optimistic label alone proves nothing)');
     eq(await outcome('Book', false), 'taken', '"Book" = the seat went to someone else → this class only');
-    eq(await outcome('Failed — retry', false), 'failed', '"Failed — retry" = Psycle refused (credits, plan) → the run stops on it');
     eq(await outcome('Unconfirmed — retry', false), 'unconfirmed', '"Unconfirmed — retry" → the run stops on it');
     eq(await outcome('Queued', false), 'queued', '"Queued" (offline wrapper) is reported as such, never as booked');
+    // "Failed — retry" is two things. A lost / 5xx answer leaves the class in _unverifiedBookings (the POST may
+    // still land): 'failed', the run stops. A clean 4xx leaves nothing pending: Psycle said no, in its own words.
+    eq(await outcome('Failed — retry', false, { pending: true }), 'failed', '"Failed — retry" with the POST still unverified → failed (the run stops: the next POST could land twice)');
+    eq(await outcome('Failed — retry', false), 'failed', '…and when nothing can say whether it is pending (the function on its own) → failed: when in doubt, stop');
+    const refused = seatWorld({ data: {}, slots: [2] }, { label: 'Failed — retry', lands: false, pending: false, toast: { className: 'toast show error', textContent: ' Booking is not open yet ' } });
+    eq([await refused.run(), refused.want.said], ['refused', 'Booking is not open yet'], 'nothing pending → Psycle answered cleanly and said no: "refused", with ITS words (the toast submitBooking has just raised)');
+    const quiet403 = seatWorld({ data: {}, slots: [2] }, { label: 'Failed — retry', lands: false, pending: false, toast: { className: 'toast show info', textContent: 'Something else' } });
+    eq([await quiet403.run(), quiet403.want.said], ['refused', ''], 'a toast that is not an error is not Psycle\'s refusal — no words are put in its mouth');
+    eq(await outcome('Something new', false, { pending: false }), 'failed', 'a label nobody knows is never read as a clean refusal');
   }
 
   // ── joinWaitlist says when it could not tell ─────────────────────────────

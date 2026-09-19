@@ -335,6 +335,14 @@ module.exports = async function (t) {
     t.eq(b.calls.switchTab, ['bookings'], 'a CLASS reminder still goes to My Bookings');
     t.eq(seen, [], '…and refreshes nothing on Discover');
   }
+  {
+    // A usual week is saved: the weekly tap is about ITS review, which lives on
+    // My Bookings (the hook opens the sheet; tests/suites/14c-weekly-reminder.js).
+    const seen = [];
+    const b = boot({ local: { psycle_weekly_template: JSON.stringify([{ dayOfWeek: 1, hour: 7, minute: 0 }]) }, hooks: { _onBookingWeekOpened() { seen.push('hook'); } } });
+    b.tap(undefined);
+    t.eq([b.calls.switchTab, seen], [['bookings'], ['hook']], 'with a usual week saved the weekly reminder lands on My Bookings — and still hands over to app.js\'s hook, once');
+  }
 
   // ════════════════════════════════════════════════════════════════════
   t.section('iOS polish: copy names the right app and the right moment (R2-21)');
@@ -343,14 +351,18 @@ module.exports = async function (t) {
     await b.ctx._nativeReminder.enable();
     const weekly = b.calls.scheduled[b.calls.scheduled.length - 1].notifications;
     t.eq(weekly.length, 8, 'the 8 rolling Monday reminders are scheduled');
-    t.ok(/12:00/.test(weekly[0].title) && !/opens now/i.test(weekly[0].title), 'fired at 11:59, the title says WHEN the week opens ("' + weekly[0].title + '") — not that it has');
-    t.ok(!/are available/i.test(weekly[0].body) && /noon/i.test(weekly[0].body), '…and the body no longer claims the classes are available a minute early');
-    t.ok(!/in a minute/i.test(weekly[0].title + weekly[0].body), '…nor anything that goes stale when the banner is read later');
+    // It fired at 11:59 and said "opens at 12:00" until September 2026; the owner
+    // asked for 12:00 itself, so it now says the dates ARE open — true at the
+    // moment it fires and whenever the banner is read afterwards.
+    t.eq(new Date(weekly[0].schedule.at).toISOString(), '2026-09-21T11:00:00.000Z', 'it fires AT the release: Monday 12:00 London (11:00 UTC in September), whatever zone the phone is in');
+    t.eq(weekly[0].title, 'New Psycle dates are open', 'fired at 12:00, the title says the dates ARE open — never that they are about to');
+    t.ok(!/opens at|get ready|noon/i.test(weekly[0].title + weekly[0].body), '…with nothing left of the minute-early wording');
+    t.ok(!/in a minute|right now|just now/i.test(weekly[0].title + weekly[0].body) && !/!/.test(weekly[0].title + weekly[0].body), '…nor anything that goes stale when the banner is read later, and no exclamation mark');
 
     const tabs = t.readSource('js/tabs.js');
     t.ok(!/Enable notifications for Psycle /.test(tabs), 'no toast sends the member to iOS Settings to find "Psycle" — that is the official app');
     t.eq((tabs.match(/Enable notifications for Psync in iOS Settings first/g) || []).length, 3, '…all three say Psync');
-    t.ok(/11:59 UK — a minute before the new booking week opens/.test(tabs), 'the Settings row says the reminder comes a minute BEFORE the week opens');
+    t.ok(/Mondays at 12:00 — when Psycle opens new dates/.test(tabs) && !/11:59/.test(tabs), 'the Settings row says when the reminder comes — Mondays at 12:00, when Psycle opens new dates — and 11:59 is gone from the web layer');
 
     const plist = t.readSource('ios-app/ios/App/App/Info.plist');
     t.ok(!/Psycle Finder/.test(plist), 'the calendar permission prompt no longer names an app ("Psycle Finder") that appears nowhere else');

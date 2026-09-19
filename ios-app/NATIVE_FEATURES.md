@@ -396,17 +396,84 @@ and give it the App Group capability. Only one `AppShortcutsProvider` per target
   this into a `UNNotificationCategory` with Book / Cancel / Snooze buttons.
 - Taps are routed by the `localNotificationActionPerformed` listener:
   - **Snooze** re-schedules the reminder ~1h later (native, no app launch).
-  - **Book / Cancel / tap** call `window.handleNotificationIntent(action,
-    eventId, data)` if the web app defines it; otherwise the intent is stashed
-    in `sessionStorage` under `psycle_pending_notification_action` for the web
-    app to pick up.
+  - **Book / Cancel / tap** go through `_routeNotificationTap(eventId)`. Nothing
+    is ever booked or cancelled from a notification: the web layer owns that
+    (auth, the seat picker, the confirm sheets).
+    - A **class reminder** carries `extra.eventId` → My Bookings, then that
+      class's sheet (only while the seat is still held; on a cold start it waits
+      for ONE `bookings:loaded`, at most 10s by the clock).
+    - The **weekly reminder** carries none → see 6a.
 
 To actually surface the buttons, schedule notifications with
-`actionTypeId: 'PSYCLE_CLASS'` and `extra: { eventId }`. (The existing weekly
-reminder doesn't use a category; add `actionTypeId` to any per-class reminders
-you schedule.) **Follow-up (web side):** implement
-`window.handleNotificationIntent(action, eventId)` in the web app to open the
-class / start a cancel from a notification tap.
+`actionTypeId: 'PSYCLE_CLASS'` and `extra: { eventId }`. (The weekly reminder
+doesn't use a category; the per-class reminders do.) (An earlier version of this
+guide described a `window.handleNotificationIntent` hand-off and a
+`sessionStorage` stash: no module ever defined or read either, so a tap went
+nowhere — `_routeNotificationTap` replaced them.)
+
+### 6a. The weekly reminder — Mondays 12:00, "New Psycle dates are open"
+
+Psycle opens new dates on Mondays at 12:00 Europe/London, and that is when the
+reminder fires (it fired at 11:59 and said "opens at 12:00" until September
+2026). All of it is JS in `native-bridge.js`; there is no Swift.
+
+- **Schedule** — `pure:weekly-reminder` → `_nextMondaysNoonLondon(count, now,
+  wallToUtcMs)`: the next **8** Mondays as ABSOLUTE instants resolved through
+  the bridge's Europe/London helper (`_gymWallToUtcMs`), so DST and the phone's
+  own zone cannot move them (11:00 UTC in summer, 12:00 UTC in winter). Eight
+  rolling one-shots rather than a repeating trigger: an hour-of-day repeat
+  broke whenever the device's DATE differed from London's. `REMINDER_IDS`
+  9992–9999 are unchanged, and every pass cancels those eight before it
+  schedules — so reminders an older build armed for 11:59 are REPLACED at the
+  first launch of the new one, never doubled. Re-armed 3s after every launch
+  (`checkPermissions` only — a launch never prompts).
+- **Copy** — `_weeklyReminderCopy(hasUsualWeek)`: title "New Psycle dates are
+  open"; body "Book your usual week for the dates that just opened." when a
+  usual week is saved (`psycle_weekly_template` is a non-empty array), else
+  "Find your classes for the dates that just opened." It fires AT the release,
+  so it says the dates ARE open and still reads true when the banner is seen
+  later. The body follows the usual week: the bridge wraps
+  `window.saveWeeklyTemplate` / `window.clearWeeklyTemplate` and listens for
+  `data:owner-changed`, re-arming only while the reminder is on and only when
+  the sentence would change; passes are serialized.
+- **The tap** — lands at once on My Bookings when a usual week is saved, else
+  Discover, then hands over to `window._onBookingWeekOpened()` in `js/app.js`
+  (and only to it): the usual-week **review sheet** on the dates that just
+  opened — `bookTemplateWeek({ range: 'newest' })`; **nothing is booked by the
+  tap**, the sheet books only what the member ticks and confirms — or Discover
+  on the first of those dates, never saved as the launch default. It waits for
+  launch to finish, for a verified session and for every dialog / sheet / busy
+  Book button to clear, and gives up 15s after the tap by the clock. If the
+  review is already on screen it opens no second sheet and arms no retry — the
+  tap itself (never a later poll) asks the open sheet to list the newly opened
+  dates first
+  (`window._usualWeekSheetNewest()`; refused during a run, over the seat map
+  and over a run's results) (CLAUDE.md → Monday reminder (iOS)).
+- **On / off** — `psycle_weekly_reminder` `'on'` | `'off'` (unset = off;
+  mirrored to Preferences). `window._nativeReminder.enable()` is the ONLY place
+  the iOS permission prompt can come from, and only ever after a deliberate
+  tap: the Settings switch ("Monday booking reminder — Mondays at 12:00 — when
+  Psycle opens new dates"), or a yes to the in-app offer.
+- **The in-app offer** — `window._offerWeeklyReminder(reason)`, called by
+  `js/tabs.js` right after "Save my usual week" succeeds AND when the review
+  sheet closes — a usual week saved by an earlier build never meets "Save"
+  again (behind a `typeof` guard: the function exists only here, so the web
+  shows nothing). Offered again while an ask still waits its turn, the give-up
+  clock starts over — still one ask. Asked ONCE
+  (`psycle_weekly_reminder_asked`, mirrored), only with a usual week saved, the
+  switch never touched and iOS not already refusing: "Remind you on Mondays at
+  12:00, when new dates open?" — Remind me / Not now. Same manners as the
+  first-booking ask: never at launch, only once the UI has been clear for two
+  1s polls (the usual-week sheet counts, for both asks), gives up 40s after it
+  was last called for, a displaced dialog is not an answer.
+
+**Not verified on a device.** The schedule, copy, tap routing and the offer are
+covered by `tests/suites/14c-weekly-reminder.js` and were driven in a desktop
+browser against a fake Capacitor and the fake Psycle server. Still to check on
+an iPhone: the banner arrives at 12:00:00 London (not a minute early, not late
+under Low Power Mode / Focus); a tap from a COLD start opens the review sheet
+once and only once; after updating from a build that armed 11:59 reminders
+there is ONE banner on the next Monday, at 12:00.
 
 `PsycleIntents/NotificationCategories.swift` is a **native reference only** for
 if you ever drop the Capacitor plugin and schedule notifications in Swift. Do

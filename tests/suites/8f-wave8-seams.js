@@ -185,7 +185,9 @@ module.exports = function (t) {
   {
     const ec = app.slice(app.indexOf('function _discoverEmptyContext() {'), app.indexOf('function mergeRelations('));
     ok(!/Nothing matches these filters|Nothing left on today|There are no classes on the dates shown/.test(ec), 'no sentence that repeats its title');
-    ok(/title: "Couldn't check these dates", sub: /.test(ec) && /title: 'Next week opens Monday 12:00', sub: /.test(ec), 'a cause and a time keep their second line');
+    // (Wave 13: "Next week opens Monday 12:00" was untrue — that week is long open. What can
+    // be empty for lack of a release is a date not yet LISTED; it keeps the second line, a time.)
+    ok(/title: "Couldn't check these dates", sub: /.test(ec) && /title: 'Not on the timetable yet', sub: /.test(ec) && !/Next week opens/.test(ec), 'a cause and a time keep their second line');
     ok(/return \{ title: 'No classes on these dates', actions: /.test(ec), 'with no filter set the title does not blame "these filters"');
     const block = theme.slice(theme.indexOf('const EMPTY_STATE_ACTIONS'), theme.indexOf('// ── D. Haptic Feedback'));
     ok(block.indexOf('Try adjusting your filters') === -1, 'the catch-all paragraph is gone');

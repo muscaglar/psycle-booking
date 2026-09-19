@@ -208,5 +208,5 @@ module.exports = function (t) {
   ok(/title = opts\.waitlist \? \(opts\.already \? 'Already on the waitlist' : 'On the waitlist!'\) : 'Booked!';/.test(app),
     'the Booked! sheet keeps its title: it is also the line announce() speaks (tests/suites/a11y.js), and the one place a "!" is earned');
   ok(/detail: blocked \? 'Tap to allow notifications' : '90 minutes before each class — opens the live countdown'/.test(tabs) &&
-    /11:59 UK — a minute before the new booking week opens/.test(tabs), 'reminder rows still say WHEN they fire');
+    /Mondays at 12:00 — when Psycle opens new dates/.test(tabs), 'reminder rows still say WHEN they fire');
 };

@@ -25,7 +25,7 @@ module.exports = async function (t) {
 
   // ── Days of a range ──────────────────────────────────────────────────────
   t.section('Day pager: the days of a range');
-  ok(['_pagerIsDay', '_pagerAddDays', '_pagerDays', '_pagerDayList', '_pagerDayLabel', '_pagerCountText', '_pagerSpoken', '_pagerMondayOf',
+  ok(['_pagerIsDay', '_pagerAddDays', '_pagerDays', '_pagerDayList', '_pagerDayLabel', '_pagerCountText', '_pagerSpoken',
     '_pagerEmptyState', '_pagerOpensText', '_pagerFirstWithClasses', '_pagerStep', '_pagerJump', '_pagerPickDay', '_pagerHintWanted'].every((n) => typeof P[n] === 'function'),
   'pure:day-pager defines every helper');
   eq(P._pagerDays('2026-09-18', '2026-09-25'), ['2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25'],
@@ -101,30 +101,38 @@ module.exports = async function (t) {
 
   // ── A day with nothing to show is not always a day with no classes ───────
   t.section('Day pager: an empty day that may not say "No classes"');
-  eq([P._pagerMondayOf('2026-09-28'), P._pagerMondayOf('2026-10-02'), P._pagerMondayOf('2026-10-04'), P._pagerMondayOf('2026-09-18'), P._pagerMondayOf('2027-01-01'), P._pagerMondayOf('x')],
-    ['2026-09-28', '2026-09-28', '2026-09-28', '2026-09-14', '2026-12-28', ''], 'the Monday of a Monday-to-Sunday week: a Monday is its own, a Sunday belongs to the Monday before, across a year end');
   {
-    // Friday 18 September 2026, 15:00 London. The week of Mon 21 opened on Mon 14 at noon; the week of Mon 28 opens on Mon 21 at noon.
+    // Friday 18 September 2026, 15:00 London. By the OBSERVED release model (js/app.js pure:horizon, 2026-09-19) the
+    // release of Mon 14 opened Fri 2 → Thu 8 Oct and LISTED a batch more, through Thu 15 Oct; Fri 16 Oct is not on
+    // the timetable until Mon 21, 12:00. "Unopened" is about LISTING: a listed day with nothing on really is empty.
     const W = t.loadPure('js/app.js', 'window', { _gymWallToUtcMs: t.loadPure('js/app.js', 'gym-time')._gymWallToUtcMs });
     const now = Date.UTC(2026, 8, 18, 14, 0, 0);
-    const st = (day, n, o) => P._pagerEmptyState(day, n, Object.assign({ now, opensMs: W._weekOpensMs }, o || {}));
+    const st = (day, n, o) => P._pagerEmptyState(day, n, Object.assign({ now, opensMs: W._dayListedMs }, o || {}));
     const fortnight = P._pagerDays('2026-09-18', '2026-10-02');
-    eq(fortnight.filter((d) => st(d, 0) === 'unopened'), ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'],
-      '"14 days" on a Friday: the five days of the week Psycle has not released are "unopened" — never "No classes"');
-    eq(fortnight.filter((d) => st(d, 0) === null).length, 10, '…and every day of a released week with nothing on really is empty');
-    eq(st('2026-09-28', 2), null, 'a day that HAS classes is just a day (whatever the clock says)');
+    eq(fortnight.filter((d) => st(d, 0) !== null), [],
+      '"14 days" on a Friday: every day of it has long been listed — an empty one really is empty (the old rule called the five days of "next week" unopened: that week had been open since the 7th)');
+    const far = P._pagerDays('2026-10-13', '2026-10-19'); // a range picked in the calendar
+    eq(far.filter((d) => st(d, 0) === 'unopened'), ['2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19'],
+      'past what the timetable lists (Thu 15 Oct) an empty day is "unopened" — never "No classes"');
+    eq(st('2026-10-16', 2), null, 'a day that HAS classes is just a day (whatever the clock says)');
     const mondayMorning = Date.UTC(2026, 8, 21, 9, 0, 0), mondayNoon = Date.UTC(2026, 8, 21, 11, 0, 0); // 10:00 and 12:00 BST
-    eq([st('2026-09-28', 0, { now: mondayMorning }), st('2026-09-28', 0, { now: mondayNoon }), st('2026-09-27', 0, { now: mondayMorning })], ['unopened', null, null],
-      'the last pill of "7 days" on a Monday morning is unopened until 12:00 London — and open from noon on');
+    eq([st('2026-10-16', 0, { now: mondayMorning }), st('2026-10-16', 0, { now: mondayNoon }), st('2026-10-15', 0, { now: mondayMorning })], ['unopened', null, null],
+      'Fri 16 Oct on Monday 21 Sept: unopened until 12:00 London — and listed from noon on');
     eq([st('2026-09-25', 0, { heldEnd: '2026-09-24' }), st('2026-09-24', 0, { heldEnd: '2026-09-24' }), st('2026-09-25', 0, { heldEnd: null }), st('2026-09-25', 0, { heldEnd: 'junk' })],
       ['unknown', null, null, null], "past the last day a provisional window held: unknown (never loaded) — the days it did hold keep their \"no classes\"");
-    eq(st('2026-10-02', 0, { heldEnd: '2026-10-01' }), 'unopened', 'unopened outranks unknown: it is true whatever was loaded, and no retry changes it');
+    eq(st('2026-10-16', 0, { heldEnd: '2026-10-15' }), 'unopened', 'unopened outranks unknown: it is true whatever was loaded, and no retry changes it');
     eq([P._pagerEmptyState('2026-09-25', 0, null), P._pagerEmptyState('2026-09-25', 0, { now, opensMs: () => { throw new RangeError('no tz data'); } }), P._pagerEmptyState('nonsense', 0, { heldEnd: '2026-01-01' })],
       [null, null, null], 'no clock, no London data, or not a day: nothing is claimed');
   }
-  eq([P._pagerOpensText('2026-09-28', '2026-09-18'), P._pagerOpensText('2026-10-02', '2026-09-18'), P._pagerOpensText('2026-09-28', '2026-09-21'), P._pagerOpensText('x', TODAY)],
-    ['Booking opens Monday 21 September, 12:00', 'Booking opens Monday 21 September, 12:00', 'Booking opens today at 12:00', ''],
-    'when it opens: the Monday BEFORE its week, by date (the day on screen is in a week that starts on a Monday too) — "today" on the day itself');
+  {
+    // _pagerOpensText words the RELEASE that opens the day (its instant comes from _dayOpensMs, pure:horizon).
+    const W = t.loadPure('js/app.js', 'window', { _gymWallToUtcMs: t.loadPure('js/app.js', 'gym-time')._gymWallToUtcMs });
+    eq([P._pagerOpensText(W._dayOpensMs('2026-10-16'), '2026-09-18'), P._pagerOpensText(W._dayOpensMs('2026-10-22'), '2026-09-18'), P._pagerOpensText(W._dayOpensMs('2026-10-16'), '2026-09-28'),
+      P._pagerOpensText(W._dayOpensMs('2026-11-19'), '2026-09-18'), P._pagerOpensText(null, TODAY), P._pagerOpensText(NaN, TODAY)],
+    ['Booking usually opens Monday 28 September, 12:00', 'Booking usually opens Monday 28 September, 12:00', 'Booking usually opens today at 12:00', 'Booking usually opens Monday 26 October, 12:00', '', ''],
+    'when it USUALLY opens (the observed model explains — it never promises: the API does not say, and some credit types book a batch early): the release Monday, by date (a bare "Monday" would read as the next one) — one batch is a Friday to the Thursday after; "today" on the day itself; a GMT release names its own Monday too');
+    ok(!/'Booking opens /.test(t.readSource('js/app.js')), 'no string in js/app.js states the opening as fact any more');
+  }
 
   // ── Next / previous / the way off an empty day ───────────────────────────
   t.section('Day pager: stepping, edges and the way off an empty day');
@@ -159,10 +167,12 @@ module.exports = async function (t) {
   t.section('Day pager: render() → _pagerModelFor keeps / resets the day (shipped lines)');
   {
     const win = { _pagerDay: null, _pagerRangeKey: null, _pagerChosen: false };
-    // Noon on Friday 18 September 2026, London: the week of Mon 21 is open, the week of Mon 28 is not.
+    // Noon on Friday 18 September 2026, London. `listed` stands in for _dayListedMs (pure:horizon): here, days from
+    // Mon 28 Sept on are not on the timetable yet (they appear on Mon 21, 12:00) — the model's own numbers are
+    // tested above; this is about what _pagerModelFor does with the answer, per DAY.
     const NOON = Date.UTC(2026, 8, 18, 11, 0, 0);
-    const opens = (monday) => Date.UTC(+monday.slice(0, 4), +monday.slice(5, 7) - 1, +monday.slice(8) - 7, 11, 0, 0);
-    const ctx = t.loadPure('js/app.js', 'day-pager', { window: win, localDateStr: () => TODAY, _gymDayKey: () => '2026-09-19', _weekOpensMs: opens, Date: class extends Date { static now() { return NOON; } } });
+    const listed = (day) => (day >= '2026-09-28' ? Date.UTC(2026, 8, 21, 11, 0, 0) : Date.UTC(2026, 8, 14, 11, 0, 0));
+    const ctx = t.loadPure('js/app.js', 'day-pager', { window: win, localDateStr: () => TODAY, _gymDayKey: () => '2026-09-19', _dayListedMs: listed, Date: class extends Date { static now() { return NOON; } } });
     t.vm.runInContext('var _pagerStripLeft = 77;\n' + fnSrc(app, 'function _pagerModelFor(byDay, filters, done, dataAt, maps, heldEnd) {'), ctx, { filename: 'js/app.js[_pagerModelFor]' });
     const ev = (day, n) => Array.from({ length: n }, (x, i) => ({ id: day + i, start_at: day + 'T07:00:00' }));
     const week = { startDate: '2026-09-18', endDateStr: '2026-09-22' };
@@ -192,7 +202,8 @@ module.exports = async function (t) {
     const fortnight = { startDate: '2026-09-18', endDateStr: '2026-10-02' };
     m = ctx._pagerModelFor(byDay, fortnight, true, 0, {}, '2026-09-26');
     eq(m.states, { '2026-09-27': 'unknown', '2026-09-28': 'unopened', '2026-09-29': 'unopened', '2026-09-30': 'unopened', '2026-10-01': 'unopened', '2026-10-02': 'unopened' },
-      'the model carries which empty days may not say "no classes": past what the adopted cache held → unknown; in a week not released yet → unopened');
+      'the model carries which empty days may not say "no classes": past what the adopted cache held → unknown; not on the timetable yet → unopened (asked per DAY)');
+    ok(/opensMs: _dayListedMs \}/.test(fnSrc(app, 'function _pagerModelFor(byDay, filters, done, dataAt, maps, heldEnd) {')), '…and it asks the observed model when a day is LISTED (a listed day with nothing on really is empty)');
     eq([m.counts['2026-09-27'], win._pagerDay], [0, '2026-09-19'], '…their count stays 0, so neither is ever picked as the first day with classes nor as an empty day\'s way on');
     eq(ctx._pagerModelFor(byDay, week, true, 0, {}).states, {}, 'a complete window over released days: nothing to qualify');
     const renderSrc = app.slice(app.indexOf('function render(events, relations, filters, done) {'), app.indexOf('// ── Discover: one day at a time'));
@@ -336,8 +347,8 @@ module.exports = async function (t) {
     ok(/countEl\.textContent = dayEvents\.length \? _pagerCountText\(dayEvents\.length\) : '';/.test(group) && (group.replace(/\/\/[^\n]*/g, '').match(/No classes on this day\./g) || []).length === 1,
       'an empty day says so ONCE: the line — the heading carries no "No classes" over it');
     ok(/const state = \(m\.states && m\.states\[day\]\) \|\| null;/.test(group) &&
-      /const line = \(state === 'unopened' && _pagerOpensText\(day, m\.todayStr\)\) \|\| 'No classes on this day\.';/.test(group),
-    'a day in a week Psycle has not released says when booking opens instead (and keeps the way on)');
+      /const line = \(state === 'unopened' && _pagerOpensText\(_dayOpensMs\(day\), m\.todayStr\)\) \|\| 'No classes on this day\.';/.test(group),
+    'a day Psycle has not listed yet says when booking for it opens instead (and keeps the way on)');
     ok(/if \(state === 'unknown'\) \{\n\s*empty\.innerHTML = _revalInFlight\n\s*\? '<div class="day-empty-line empty-loading">Checking the latest timetable…<\/div>'\n\s*: '<div class="day-empty-line">Couldn\\'t check this day<\/div><button type="button" class="empty-action primary" data-pager-retry>Try again<\/button>';/.test(group),
       'a day a provisional window never held: "Checking…" while the real range loads, else "Couldn\'t check this day" + Try again — never "No classes"');
     ok(/document\.querySelector\('#results \.empty-loading'\)\) _renderWindowInPlace\(\);/.test(app), '…and a refresh that fails swaps the "Checking…" line for it (_runRevalidate repaints whatever carries .empty-loading)');

@@ -137,7 +137,8 @@ module.exports = function (t) {
     const held = P._pagerHeldDays({ 1: { slots: [4] } }, { 1: { start_at: '2026-09-21 18:30:00', _typeName: 'Strength 45' } }, ['2026-09-21'], {});
     eq([held['2026-09-21'].time, P._pagerHeldSpoken(held['2026-09-21'])], ['18:30', '. You have Strength 45 at 18:30'], 'the dot, said: "You have Strength 45 at 18:30"');
     eq(P._pagerHeldDays({ 1: { slots: [4] } }, { 1: { start_at: '2026-09-21Txx:yy', _typeName: 'Ride' } }, ['2026-09-21'], {})['2026-09-21'].time, '', 'digits that are not digits: the dot stays, the time is left out');
-    eq(P._pagerOpensText('2026-09-30', '2026-09-19'), 'Booking opens Monday 21 September, 12:00', 'the release was already 24-hour');
+    // (Wave 13: it words the release INSTANT that opens the day — Monday 12:00 London is 11:00 UTC in September.)
+    eq(P._pagerOpensText(Date.UTC(2026, 8, 21, 11, 0, 0), '2026-09-19'), 'Booking usually opens Monday 21 September, 12:00', 'the release was already 24-hour');
 
     const D = t.loadPure('js/app.js', 'discover');
     eq(t.vm.runInContext('TIME_BANDS.map(function (b) { return [b.key, b.label, b.from, b.to]; })', D),
