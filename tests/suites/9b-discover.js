@@ -233,7 +233,7 @@ module.exports = function (t) {
   t.section('Header and tab bar: the wordmark, soft round controls, the boards\' four marks');
   {
     const header = page.slice(page.indexOf('<header>'), page.indexOf('</header>'));
-    ok(/<div class="brand-mark" aria-hidden="true">(<i data-ct="(yoga|ride|pilates|barre|strength)"><\/i>){5}<\/div>\s*<h1>Psync<\/h1>/.test(header), 'five rising bars in the class colours (decorative, data-ct so they follow the member\'s choices) beside the <h1>');
+    ok(/<div class="brand-mark" aria-hidden="true"><svg viewBox="136 136 752 752" aria-hidden="true" focusable="false">[\s\S]*?<\/svg><\/div>\s*<h1>Psync<\/h1>/.test(header), 'the mark (the app icon\'s two engraved halves, decorative) beside the <h1>');
     ok(!/header-subtitle|Psycle Companion/.test(header), 'no subtitle under the wordmark');
     ok(!/<span/.test(header.slice(header.indexOf('brand-mark'), header.indexOf('<h1>'))), 'the mark uses no <span> (older sheets style every `header span`)');
     ok(/font-family:\s*var\(--font-display\)/.test(rule(mine, 'header h1')) && /font-weight:\s*var\(--weight-black\)/.test(rule(mine, 'header h1')) && /text-transform:\s*none/.test(rule(mine, 'header h1')), 'the wordmark: display face, black weight, as written');

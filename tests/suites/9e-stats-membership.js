@@ -324,8 +324,8 @@ module.exports = function (t) {
     ok(/\.brand \.word \{[^}]*font-family: var\(--font-display\);[^}]*font-weight: 900;/.test(style) && /\n  h1 \{[^}]*font-family: var\(--font-display\)/.test(style), 'wordmark and heading in the display face');
     ok(/\.btn \{[^}]*min-height: var\(--tap-lg\);[^}]*border-radius: var\(--radius-full\);/.test(style) && !/\.btn \{[^}]*text-transform: uppercase/.test(style), 'the primary action is a tall full pill, sentence case');
     ok(/\.card \{[^}]*border-radius: var\(--radius-8xl\);/.test(style) && !/\.card \{[^}]*border: 1px/.test(style), 'one surface card with the sheet radius and no outline');
-    eq((login.match(/<rect x="\d+" y="\d+" width="4" height="\d+" rx="2" fill="#[0-9A-F]{6}"\/>/g) || []).length, 5, 'the five-bar mark');
-    ok(/\[data-theme="terminal"\] \.brand svg rect, \[data-theme="gameboy"\] \.brand svg rect \{ fill: var\(--accent\); \}/.test(style), '…which follows the accent on the two one-colour themes');
+    ok(/<div class="brand">\s*<svg viewBox="136 136 752 752"[^>]*>[\s\S]*?class="bm-top"[\s\S]*?class="bm-bot"[\s\S]*?<\/svg>\s*<span class="word">Psync<\/span>/.test(login), 'the mark (the app icon\'s two engraved halves) beside the wordmark');
+    ok(/\.brand svg \.bm-top \{ fill: var\(--text-heading\); \} \.brand svg \.bm-bot \{ fill: var\(--text-ghost\); \}/.test(style), '…in the theme\'s two inks, so it is right in every theme without a special case');
     ok(!/Psycle Companion/.test(login) && /not affiliated with or endorsed by Psycle\./.test(login), 'no "Psycle Companion" tag under the wordmark; the page that takes a Psycle password says it is independent');
     ['email', 'password', 'loginBtn', 'errMsg', 'sLogin', 'sDone', 'loginForm'].forEach((id) => ok(new RegExp('id="' + id + '"').test(login), '#' + id + ' is still there (the sign-in logic and its tests read it)'));
   }

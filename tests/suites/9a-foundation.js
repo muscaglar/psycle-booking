@@ -502,10 +502,10 @@ module.exports = function (t) {
     const body = finder.slice(finder.indexOf('<body')).replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
     const statics = body.match(/<[a-z0-9]+\b[^>]*\bdata-ct="[^"]*"[^>]*>/g) || [];
     const unpainted = statics.filter((tag) => !/style="display:none"/.test(tag));
-    ok(statics.length >= 5 && unpainted.every((tag) => /^<i data-ct="[a-z]+">$/.test(tag)), 'the only static class-coloured elements that could paint are the header mark\'s five bars (' + unpainted.length + '; the sub-pill rows are display:none until app.js fills them)');
-    ok(/<div class="brand-mark" aria-hidden="true">(<i data-ct="[a-z]+"><\/i>){5}<\/div>/.test(body), '…inside .brand-mark, which is decorative (aria-hidden)');
-    ok(/\nhtml:not\(\[data-ct-intensity\]\) \.brand-mark \{ visibility: hidden; \}/.test(noComments(crispCss)),
-      'css/crisp.css keeps the mark unpainted until then — visibility, so its box is held and nothing shifts (it painted the DEFAULT colours, then flipped to the member\'s own)');
+    eq(unpainted, [], 'nothing in the static markup is class-coloured and paintable before theme.js has run (the sub-pill rows are display:none until app.js fills them; the header mark is hue-less)');
+    ok(/<div class="brand-mark" aria-hidden="true"><svg [^>]*>[\s\S]*?class="bm-top"[\s\S]*?class="bm-bot"[\s\S]*?<\/svg><\/div>/.test(body) && !/<div class="brand-mark"[^>]*>[\s\S]{0,1400}?data-ct=/.test(body.slice(body.indexOf('brand-mark') - 20, body.indexOf('<h1>'))), 'the header mark is the two engraved halves, decorative (aria-hidden), with no data-ct in it');
+    ok(!/data-ct-intensity\]\) \.brand-mark/.test(noComments(crispCss)) && /\n\.bm-top \{ fill: var\(--text-heading\); \}\n\.bm-bot \{ fill: var\(--text-ghost\); \}/.test(noComments(crispCss)),
+      'css/crisp.css paints it from the theme\'s two inks — right from the first paint, so the old "hold it unpainted until the class colours arrive" rule is gone');
     ok(!/so at first paint/.test(t.readSource('CLAUDE.md')), 'CLAUDE.md no longer claims apply() runs at first paint');
   }
 

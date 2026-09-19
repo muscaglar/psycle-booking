@@ -12614,13 +12614,16 @@ function _onboardArt(id) {
   return inner ? `<div class="onboard-art onboard-art-${id}" aria-hidden="true">${inner}</div>` : '';
 }
 
+// The mark, as the header draws it (psycle-finder.html) — its own mask id, because the
+// welcome can be up over the page that already carries the header's.
+const _BRAND_MARK_SVG = '<svg viewBox="136 136 752 752" aria-hidden="true" focusable="false"><defs><mask id="welcomeGrooves" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><path d="M304.2 367.7A180 180 0 0 1 551.2 328.6" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/><path d="M719.8 656.3A180 180 0 0 1 591.7 727.3" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/></mask></defs><g mask="url(#welcomeGrooves)"><path class="bm-top" d="M201.2 476A40 40 0 0 1 161.7 429.6A290 290 0 0 1 734.3 429.6A40 40 0 0 1 694.8 476L534.5 476A16 16 0 0 1 518.8 462.9A72 72 0 0 0 377.2 462.9A16 16 0 0 1 361.5 476Z"/><path class="bm-bot" d="M822.8 548A40 40 0 0 1 862.3 594.4A290 290 0 0 1 289.7 594.4A40 40 0 0 1 329.2 548L489.5 548A16 16 0 0 1 505.2 561.1A72 72 0 0 0 646.8 561.1A16 16 0 0 1 662.5 548Z"/></g></svg>';
+
 function _onboardPageHTML(page, i) {
   return `<section class="onboard-page" aria-hidden="${i !== 0}"><div class="onboard-page-inner">` +
     (page.id === 'welcome'
-      // The wordmark with the five-bar mark (the class colours, shortest to
-      // tallest), the class-type tiles, then the line as the page's headline.
-      ? '<div class="onboard-brand"><span class="onboard-mark" aria-hidden="true">' +
-          ['yoga', 'ride', 'pilates', 'barre', 'strength'].map(ct => `<i data-ct="${ct}"></i>`).join('') +
+      // The wordmark with the mark (the app icon's two engraved halves, in the
+      // theme's two inks), the class-type tiles, then the line as the headline.
+      ? '<div class="onboard-brand"><span class="onboard-mark" aria-hidden="true">' + _BRAND_MARK_SVG +
         `</span><h2 class="onboard-wordmark">${escapeHTML(page.title)}</h2></div>` + _onboardArt(page.id)
       : _onboardArt(page.id) + `<h2 class="onboard-title">${escapeHTML(page.title)}</h2>`) +
     // (The headline: one sentence to a line, as drawn — never "Book a / spot.")

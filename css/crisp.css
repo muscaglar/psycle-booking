@@ -448,28 +448,16 @@ header {
 .brand { flex-direction: row; align-items: center; gap: var(--space-4); }
 .brand-mark {
   flex: none;
-  display: flex;
-  align-items: flex-end;
-  gap: calc(var(--space-1) * 0.75);
-  height: var(--space-9);
-}
-.brand-mark > i {
   display: block;
-  width: var(--space-1);
-  height: var(--space-9);
-  border-radius: var(--radius-full);
-  background: var(--ct-base);
+  width: var(--space-10);
+  height: var(--space-10);
 }
-.brand-mark > i:nth-child(1) { height: var(--space-3); }
-.brand-mark > i:nth-child(2) { height: var(--space-5); }
-.brand-mark > i:nth-child(3) { height: var(--space-7); }
-.brand-mark > i:nth-child(4) { height: var(--space-8); }
-/* The mark is the one class-coloured thing in the STATIC markup, and the
-   member's own colours only arrive with the deferred js/theme.js — which sets
-   html[data-ct-intensity] in the same call that writes them. Until then the
-   mark holds its box but does not paint, so it never shows the default colours
-   first and then changes (decorative and aria-hidden: nothing is lost). */
-html:not([data-ct-intensity]) .brand-mark { visibility: hidden; }
+.brand-mark > svg { display: block; width: 100%; height: 100%; }
+/* The app icon's two halves in the theme's two inks: it has no hue of its own,
+   so it is right from the first paint in every theme (the old five-bar mark was
+   class-coloured and had to stay unpainted until js/theme.js had run). */
+.bm-top { fill: var(--text-heading); }
+.bm-bot { fill: var(--text-ghost); }
 header h1 {
   font-family: var(--font-display);
   font-size: var(--text-6xl);
@@ -3890,13 +3878,8 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 /* ── 9e.8 First-run welcome: the welcome board's look ────────────── */
 .onboard-page-inner { align-items: stretch; text-align: left; }
 .onboard-brand { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-8); }
-.onboard-mark { display: flex; align-items: flex-end; gap: calc(var(--space-1) * 0.75); height: var(--space-9); }
-.onboard-mark i { display: block; width: var(--space-1); border-radius: var(--radius-xs); background: var(--ct-base); }
-.onboard-mark i:nth-child(1) { height: 40%; }
-.onboard-mark i:nth-child(2) { height: 55%; }
-.onboard-mark i:nth-child(3) { height: 70%; }
-.onboard-mark i:nth-child(4) { height: 85%; }
-.onboard-mark i:nth-child(5) { height: 100%; }
+.onboard-mark { display: block; width: var(--space-10); height: var(--space-10); }
+.onboard-mark > svg { display: block; width: 100%; height: 100%; }
 .onboard-wordmark { margin: 0; font-size: var(--text-6xl); font-weight: var(--weight-black); letter-spacing: 0; }
 .onboard-title { margin: var(--space-10) 0 var(--space-4); font-size: var(--type-time); font-weight: var(--weight-black); letter-spacing: 0; line-height: 1.05; }
 .onboard-body { max-width: 34ch; font-size: var(--type-title); font-weight: var(--weight-medium); line-height: 1.45; }

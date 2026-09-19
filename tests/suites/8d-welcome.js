@@ -394,12 +394,13 @@ module.exports = function (t) {
     ok(/not affiliated with or endorsed by Psycle/.test(w.q('.onboard-note').textContent), '…and the affiliation sentence');
     eq(w.ov().querySelectorAll('.onboard-art').map((a) => a.getAttribute('aria-hidden')), ['true', 'true', 'true', 'true'], 'four illustrations (wave 9: page one has the class-type tiles), all hidden from assistive tech');
     eq([w.ov().querySelectorAll('.onboard-tile').length, w.q('.onboard-headline').textContent, w.q('.onboard-mark').getAttribute('aria-hidden')], [6, 'Find a class. Book a spot.', 'true'],
-      'page one: five class-type tiles and the time tile, the headline, and the five-bar mark as decoration');
+      'page one: five class-type tiles and the time tile, the headline, and the mark as decoration');
     ok(w.ov().querySelectorAll('.onboard-mini-card').every((c) => c.classList.contains('ct-card') && /^(ride|strength|yoga|pilates)$/.test(c.getAttribute('data-ct'))),
       'every miniature class card IS the Crisp class component: .ct-card + data-ct (css/crisp.css colours it)');
     eq([w.ov().querySelectorAll('.onboard-mini-day').length, w.ov().querySelectorAll('.onboard-mini-seat').length, w.ov().querySelectorAll('.onboard-mini-card').length],
       [5, 18, 6], 'built from miniatures of real components: a day strip, picker seats, class cards');
-    ok(!/<svg|<img/.test(domSrc) && !/[\u{1F300}-\u{1FAFF}]/u.test(domSrc), 'no images or emoji, and no icon drawn here: the only marks are the class pictograms');
+    const domSrcNoBrand = domSrc.replace(/const _BRAND_MARK_SVG = '[^']*';/, '');
+    ok(domSrcNoBrand !== domSrc && !/<svg|<img/.test(domSrcNoBrand) && !/[\u{1F300}-\u{1FAFF}]/u.test(domSrc), 'no images or emoji, and no icon drawn here: the only marks are the class pictograms and the ONE brand mark (tests/suites/12-brand-mark.js holds its geometry)');
     ok(/typeof classPictogram === 'function' \? classPictogram\(ct, size\) : ''/.test(domSrc), '…which come from app.js classPictogram, behind a typeof guard (this block also runs on its own)');
     eq(w.ov().querySelectorAll('.onboard-dot').map((x) => x.classList.contains('active')), [true, false, false, false], 'dots show the position');
     eq(w.log.announced, [], 'opening announces nothing extra (the dialog label is what is read)');

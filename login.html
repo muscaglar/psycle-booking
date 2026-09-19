@@ -120,7 +120,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
   /* The five-bar mark wears the default class colours (presentation
      attributes in the markup). Terminal and Handheld are one-colour themes:
      there the bars follow the accent, like every class type in the app. */
-  [data-theme="terminal"] .brand svg rect, [data-theme="gameboy"] .brand svg rect { fill: var(--accent); }
+  .brand svg .bm-top { fill: var(--text-heading); } .brand svg .bm-bot { fill: var(--text-ghost); }
   .brand .word { font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing: 0.2px; color: var(--text-heading); line-height: 1; }
   h1 { font-family: var(--font-display); font-size: 34px; font-weight: 900; line-height: 1.05; color: var(--text-heading); margin-bottom: 8px; }
   .sub { font-size: 15px; font-weight: 500; color: var(--text-muted); margin-bottom: 24px; line-height: 1.45; }
@@ -159,13 +159,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
 <body>
 <div class="card">
   <div class="brand">
-    <svg width="32" height="24" viewBox="0 0 32 24" aria-hidden="true" focusable="false">
-      <rect x="0" y="16" width="4" height="8" rx="2" fill="#0A7A64"/>
-      <rect x="7" y="12" width="4" height="12" rx="2" fill="#2D5FD6"/>
-      <rect x="14" y="8" width="4" height="16" rx="2" fill="#7045D0"/>
-      <rect x="21" y="4" width="4" height="20" rx="2" fill="#B82A8E"/>
-      <rect x="28" y="0" width="4" height="24" rx="2" fill="#CC3A1F"/>
-    </svg>
+    <svg viewBox="136 136 752 752" aria-hidden="true" focusable="false" width="32" height="32"><defs><mask id="loginGrooves" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><path d="M304.2 367.7A180 180 0 0 1 551.2 328.6" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/><path d="M719.8 656.3A180 180 0 0 1 591.7 727.3" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/></mask></defs><g mask="url(#loginGrooves)"><path class="bm-top" d="M201.2 476A40 40 0 0 1 161.7 429.6A290 290 0 0 1 734.3 429.6A40 40 0 0 1 694.8 476L534.5 476A16 16 0 0 1 518.8 462.9A72 72 0 0 0 377.2 462.9A16 16 0 0 1 361.5 476Z"/><path class="bm-bot" d="M822.8 548A40 40 0 0 1 862.3 594.4A290 290 0 0 1 289.7 594.4A40 40 0 0 1 329.2 548L489.5 548A16 16 0 0 1 505.2 561.1A72 72 0 0 0 646.8 561.1A16 16 0 0 1 662.5 548Z"/></g></svg>
     <span class="word">Psync</span>
   </div>
 
