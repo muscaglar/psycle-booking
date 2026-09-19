@@ -1,34 +1,25 @@
-/* ── Display face: Archivo Black (SIL OFL), self-hosted in fonts/.
-   Wide ultra-bold grotesque — poster impact that stays legible at
-   small sizes (Anton was too condensed to read).
-   Must stay a file URL — iOS WebKit silently rejects large data-URI
-   fonts (the face never registers in document.fonts). The iOS sync
-   script rewrites ../fonts/ for the flattened www/ copy. ── */
+/* ── Crisp Colour faces (SIL OFL), self-hosted variable woff2 (latin subset)
+   in fonts/. Sofia Sans Condensed = display: the wordmark, every time, big
+   numerals, headings, seat numbers (800 / 900, tabular numerals). Sofia Sans
+   = everything else (400–800). They reach components ONLY through
+   --font-display / --font-body below.
+   Must stay file URLs — iOS WebKit silently rejects large data-URI fonts (the
+   face never registers in document.fonts). ios-app/build.js rewrites
+   ../fonts/ for the flattened www/ copy — in THIS file only, so an @font-face
+   belongs nowhere else. ── */
 @font-face {
-  font-family: 'AppDisplay';
+  font-family: 'Sofia Sans';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 800;
   font-display: swap;
-  src: url('../fonts/display.woff2') format('woff2');
-}
-
-/* ── Psync redesign faces (SIL OFL), self-hosted variable woff2 (latin
-   subset) in fonts/. Bricolage Grotesque = display (wordmark, numerals,
-   headlines, titles); Hanken Grotesk = body/UI. File URLs only — iOS
-   WebKit rejects large data-URI fonts. ── */
-@font-face {
-  font-family: 'Bricolage Grotesque';
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-  src: url('../fonts/bricolage.woff2') format('woff2');
+  src: url('../fonts/sofia-sans.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Hanken Grotesk';
+  font-family: 'Sofia Sans Condensed';
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 600 900;
   font-display: swap;
-  src: url('../fonts/hanken.woff2') format('woff2');
+  src: url('../fonts/sofia-sans-condensed.woff2') format('woff2');
 }
 
 /* ================================================================
@@ -63,12 +54,38 @@
   --radius-3xl: 14px;
   --radius-4xl: 16px;
   --radius-5xl: 18px;
+  /* Crisp Colour continues the scale: 22 card, 24 large card / track, 28 sheet. */
+  --radius-6xl: 22px;
+  --radius-7xl: 24px;
+  --radius-8xl: 28px;
   --radius-full: 9999px;
+  /* What a shape IS, for the Crisp components (css/crisp.css). Aliases of the
+     steps above, so Handheld, which zeroes every --radius-* token, squares
+     them too. Pills, buttons, chips-as-pills and seats use --radius-full. */
+  --radius-tile: var(--radius-xl);
+  --radius-chip: var(--radius-4xl);
+  --radius-card: var(--radius-6xl);
+  --radius-sheet: var(--radius-8xl);
 
   /* ── Tap targets ───────────────────────────────────────────── */
   /* Fingertip minimum: the invisible hit area behind glyph-sized controls
      (×, Skip) and the min-height of text buttons on touch screens. */
   --tap-min: 44px;
+  /* The one tall call to action of a screen or sheet (welcome, class sheet). */
+  --tap-lg: 56px;
+  /* Ring weight of outlined pills, chips and dashed waitlist edges. */
+  --hairline: 1.5px;
+  /* Pictogram tiles (css/crisp.css .ct-tile): chip 24, class card 28, list
+     row 32, hero 48 — and the small class-colour dot. */
+  --tile-sm: 24px;
+  --tile-md: 28px;
+  --tile-lg: 32px;
+  --tile-xl: 48px;
+  --dot: 8px;
+  /* Keyboard focus on a Crisp control: the body ink, which holds ≥4.5:1 on
+     the ground, the surface AND every class tint (an accent ring would not). */
+  --focus-ring: 2px solid var(--text);
+  --focus-offset: 2px;
 
   /* ── Font size scale ───────────────────────────────────────── */
   --text-2xs: 9px;
@@ -84,17 +101,58 @@
   --text-5xl: 26px;
   --text-6xl: 28px;
 
+  /* ── Crisp Colour type roles (the StyleGuide board) ─────────── */
+  /* Named --type-*, never --text-*: that prefix is shared with the text
+     COLOURS below (--text-heading is an ink, not a size). Display face:
+     time, time-compact, time-sheet, numeral, display, heading, day. Body
+     face: title, body, meta, caption, label. */
+  --type-label: 12px;
+  --type-caption: 13px;
+  --type-meta: 13.5px;
+  --type-body: 15px;
+  --type-title: 17px;
+  --type-heading: 21px;
+  --type-day: 22px;
+  --type-time-compact: 21px;
+  --type-time: 34px;
+  --type-display: 56px;
+  --type-time-sheet: 60px;
+  --type-numeral: 88px;
+
   /* ── Font weight scale ─────────────────────────────────────── */
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
   --weight-bold: 700;
   --weight-extrabold: 800;
+  /* Display face only (Sofia Sans Condensed runs 600–900): times and numerals. */
+  --weight-black: 900;
 
   /* ── Shadow scale ──────────────────────────────────────────── */
   --shadow-sm: 0 1px 4px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.25);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.2), 0 12px 40px rgba(0,0,0,0.4);
+  /* Crisp Colour has ONE soft neutral shadow in two sizes: a raised control
+     (a pill on a tinted card, the segmented track) and a floating layer
+     (toast, sheet). No offset shadows, no gradient washes. */
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.35);
+  --shadow-float: 0 10px 24px -10px rgba(0,0,0,0.6);
+
+  /* ── Glow ──────────────────────────────────────────────────── */
+  /* ONLY for what is selected or yours: the chosen day, your seat, your
+     booked class, the one primary action of a sheet. The recipe is geometry
+     that TAKES a colour where it is used, because a custom property that
+     contains var() is resolved where it is declared, not where it is read:
+       box-shadow: var(--glow-ring) var(--ct-ring), var(--glow-drop) var(--ct-drop);
+     Small marks (seat, tile, pill) use ring + drop; a whole card uses edge
+     (solid class base) + drop-card. The chosen day and other neutral picks
+     take --glow-sel-ring / --glow-sel-drop, which each theme sets. */
+  --glow-ring: 0 0 0 4px;
+  --glow-drop: 0 8px 20px -2px;
+  --glow-edge: 0 0 0 2px;
+  --glow-drop-card: 0 12px 30px -8px;
+  --glow-sel-ring: rgba(255,255,255,0.14);
+  --glow-sel-drop: rgba(0,0,0,0.5);
 
   /* ── Transition scale ──────────────────────────────────────── */
   --transition-fast: 0.12s ease;
@@ -103,10 +161,12 @@
   --transition-spring: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ── Fonts ─────────────────────────────────────────────────── */
-  /* Display face — wordmark, numerals, headlines, titles.
-     Body stays on the system stack for small-size legibility. */
-  --font-display: 'Bricolage Grotesque', 'AppDisplay', -apple-system, sans-serif;
-  --font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Display face — wordmark, times, big numerals, headings, seat numbers.
+     Body face — everything else (Terminal and Handheld swap in a mono stack).
+     The fallbacks are the boards': a condensed system face first, so a
+     missing font never widens a time column. */
+  --font-display: 'Sofia Sans Condensed', 'Avenir Next Condensed', 'Helvetica Neue', sans-serif;
+  --font-body: 'Sofia Sans', 'Helvetica Neue', Helvetica, sans-serif;
   --bg: #09090b;
   --bg-panel: #111113;
   --bg-input: #19191d;
@@ -171,6 +231,20 @@
      heading lime, so it stays in palette. */
   --danger:      var(--badge-full-text);
   --danger-ink:  var(--bg-panel);
+
+  /* ── Crisp Colour chrome roles ───────────────────────────────
+     The boards name five chrome roles. Ground, surface, hairline and the
+     inks are the existing tokens (--bg, --surface, --line, --ink / --ink-2 /
+     --ink-3); "sunken" is the well under a count, a neutral chip, a taken seat. */
+  --ground:      var(--bg);
+  --sunken:      var(--bg-deep);
+
+  /* Toast: its own ground, ink and type-glyph inks, so a theme may wear an
+     inverse toast (Cloud and Graphite do). Defaults are the old pairs. */
+  --toast-ink:   var(--text);
+  --toast-ok:    var(--accent);
+  --toast-err:   var(--badge-full-text);
+  --toast-track: var(--spinner-track);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -180,47 +254,61 @@
    below, whose selectors include them); Graphite is a calm dark base.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Cloud · warm off-white + jade (default) ──────────────────── */
+/* ── Cloud · Crisp Colour's cool graphite chrome (default) ───────
+   The boards' chrome, value for value: ground #E6E9EE, surface #FCFDFE,
+   sunken #D9DEE6, hairline #D3D9E1, ink 900 / 700 / 500. It has no hue of its
+   own — colour means class type (the --ct-* tokens at the end of this file),
+   so the accent is the ink itself: the chosen day, the lit segment and every
+   primary action outside a class are graphite with a white label. */
 [data-theme="cloud"] {
-  --bg: #efeee9;
-  --bg-panel: #ffffff;
-  --bg-input: #f5f4ef;
-  --bg-deep: #e7e5df;
-  --border: #e7e5df;
-  --border-light: #d9d7cf;
-  --border-subtle: #e1dfd8;
-  --text: #17181c;
-  --text-heading: #0e0f12;
+  --bg: #e6e9ee;
+  --bg-panel: #fcfdfe;
+  --bg-input: #eef1f5;
+  --bg-deep: #d9dee6;
+  --border: #d3d9e1;
+  --border-light: #c3cad5;
+  --border-subtle: #dce1e8;
+  --text: #1b2130;
+  --text-heading: #1b2130;
   /* muted → ghost all carry real copy (meta lines, hints, chart labels),
-     so every step holds ≥4.5:1 on BOTH --bg and --bg-panel; the ladder is
-     evenly spaced so the tiers still read as tiers. --text-off is
-     decorative/disabled only (≥3:1 on the panel for control outlines). */
-  --text-muted: #5c5e63;
-  --text-dim: #606267;
-  --text-faint: #65676c;
-  --text-ghost: #6a6c71;
-  --text-off: #8e9094;
-  --accent: #1f6f5c;
-  --accent-hover: #195c4c;
+     so every step holds ≥4.5:1 on --bg, --bg-panel AND the sunken --bg-deep;
+     muted is the boards' ink 700 and ghost their ink 500, which also holds
+     ≥4.8:1 on every class tint. --text-off is decorative/disabled only
+     (≥3:1 on the panel for control outlines). */
+  --text-muted: #3a4252;
+  --text-dim: #485165;
+  --text-faint: #515b6e;
+  --text-ghost: #566073;
+  --text-off: #8a93a3;
+  --accent: #1b2130;
+  --accent-hover: #2a3245;
   --accent-ink: #ffffff;
-  --accent-soft: #e2ede7;
+  --accent-soft: #d9dee6;
   /* Badge inks also colour the class sheet's availability line, which sits
-     on --bg-deep — each is ≥4.5:1 there as well as on its own chip. */
-  --badge-bg: #f0efe9; --badge-border: #e0ded6; --badge-text: #606267;
-  --badge-full-bg: #fde8ec; --badge-full-text: #b82d46; --badge-full-border: #f5b3bf;
-  --badge-waitlist-bg: #fef6e3; --badge-waitlist-text: #7a5f03; --badge-waitlist-border: #f0dda0;
-  --badge-highlight-bg: #e3eef0; --badge-highlight-text: #1f6f5c; --badge-highlight-border: #b9d6cd;
-  --booked-bg: #ffffff; --booked-border: #1f6f5c;
-  --spinner-track: #dad8d0;
-  --modal-overlay: rgba(20,22,20,0.40);
-  --toast-bg: #ffffff; --toast-border: #e0ded6;
-  --skeleton-base: #e7e5df; --skeleton-shine: #f3f2ed;
-  --section-border: #e7e5df;
-  --upcoming-bg: #ffffff; --upcoming-border: #e7e5df;
-  --shadow-sm: 0 1px 4px rgba(40,40,30,0.06);
-  --shadow-md: 0 4px 14px rgba(40,40,30,0.08);
-  --shadow-lg: 0 4px 14px rgba(40,40,30,0.06), 0 14px 44px rgba(40,40,30,0.10);
-  --shadow-overlay: rgba(40,40,30,0.14);
+     on --bg-deep — each is ≥4.5:1 there as well as on its own chip. The red
+     is the boards' late-cancel red (#C3262F), one step darker so it holds
+     as ink on the sunken ground. */
+  --badge-bg: #e6e9ee; --badge-border: #d3d9e1; --badge-text: #485165;
+  --badge-full-bg: #fbe1e2; --badge-full-text: #a81f28; --badge-full-border: #f2b8bc;
+  --badge-waitlist-bg: #fbefc9; --badge-waitlist-text: #6e4a00; --badge-waitlist-border: #ebd48a;
+  --badge-highlight-bg: #e0e9fa; --badge-highlight-text: #23428f; --badge-highlight-border: #b9cbf0;
+  --booked-bg: #fcfdfe; --booked-border: #1b2130;
+  --spinner-track: #c3cad5;
+  --modal-overlay: rgba(27,33,48,0.45);
+  /* Inverse toast, as drawn: an ink pill with a white line. */
+  --toast-bg: #1b2130; --toast-border: #1b2130;
+  --toast-ink: #ffffff; --toast-ok: #7bdcbb; --toast-err: #ffa3a8; --toast-track: rgba(255,255,255,0.28);
+  --skeleton-base: #d9dee6; --skeleton-shine: #eef1f5;
+  --section-border: #d3d9e1;
+  --upcoming-bg: #fcfdfe; --upcoming-border: #d3d9e1;
+  --shadow-sm: 0 1px 2px rgba(27,33,48,0.10);
+  --shadow-md: 0 6px 16px -6px rgba(27,33,48,0.18);
+  --shadow-lg: 0 16px 40px -12px rgba(27,33,48,0.28);
+  --shadow-overlay: rgba(27,33,48,0.16);
+  --shadow-soft: 0 1px 2px rgba(27,33,48,0.12);
+  --shadow-float: 0 10px 24px -10px rgba(27,33,48,0.5);
+  --glow-sel-ring: rgba(27,33,48,0.14);
+  --glow-sel-drop: rgba(27,33,48,0.45);
 }
 
 /* ── Linen · warm sand + terracotta ───────────────────────────── */
@@ -260,48 +348,62 @@
   --shadow-md: 0 4px 14px rgba(60,50,40,0.09);
   --shadow-lg: 0 4px 14px rgba(60,50,40,0.07), 0 14px 44px rgba(60,50,40,0.12);
   --shadow-overlay: rgba(60,50,40,0.16);
+  --shadow-soft: 0 1px 2px rgba(60,50,40,0.12);
+  --shadow-float: 0 10px 24px -10px rgba(60,50,40,0.45);
+  --glow-sel-ring: rgba(181,87,60,0.18);
+  --glow-sel-drop: rgba(181,87,60,0.40);
 }
 
-/* ── Graphite · calm dark + sage ──────────────────────────────── */
+/* ── Graphite · Cloud's dark counterpart ────────────────────────
+   The same hue-less cool graphite, turned over (the boards only drew light):
+   a deep ground that is never pure black, Cloud's ink 900 as the card
+   surface, Cloud's ground as the ink. The accent is the pale ink with a
+   graphite label — the chosen day is a light pill here. */
 [data-theme="graphite"] {
-  --bg: #131418;
-  --bg-panel: #1c1e24;
-  --bg-input: #23262d;
-  --bg-deep: #0e0f12;
-  --border: #2c2f37;
-  --border-light: #3a3e47;
-  --border-subtle: #33373f;
-  --text: #ececea;
+  --bg: #12161f;
+  --bg-panel: #1b2130;
+  --bg-input: #262d3e;
+  --bg-deep: #0c0f16;
+  --border: #2b3345;
+  --border-light: #3b4459;
+  --border-subtle: #323b4e;
+  --text: #eef1f5;
   --text-heading: #ffffff;
-  /* dim → ghost sit one step lighter than a naive dark ramp so each holds
-     ≥4.5:1 on --bg AND the lighter --bg-panel cards. */
-  --text-muted: #9da0a8;
-  --text-dim: #93969d;
-  --text-faint: #8b8e95;
-  --text-ghost: #83858c;
-  --text-off: #494c54;
-  --accent: #7fc2a6;
-  --accent-hover: #6aae92;
-  --accent-ink: #0e1a15;
-  --accent-soft: #1e2a26;
-  --badge-bg: #23262d; --badge-border: #33373f; --badge-text: #9da0a8;
-  --badge-full-bg: #2a1416; --badge-full-text: #f08a9a; --badge-full-border: #4a242a;
-  --badge-waitlist-bg: #2a2410; --badge-waitlist-text: #d8b24a; --badge-waitlist-border: #4a3f1c;
-  --badge-highlight-bg: #142a26; --badge-highlight-text: #7fc2a6; --badge-highlight-border: #2a463e;
-  --booked-bg: #16231e; --booked-border: #7fc2a6;
-  --spinner-track: #33373f;
-  --modal-overlay: rgba(8,9,11,0.80);
-  --toast-bg: #1c1e24; --toast-border: #33373f;
-  --skeleton-base: #23262d; --skeleton-shine: #2c2f37;
-  --section-border: #23262d;
-  --upcoming-bg: #1c1e24; --upcoming-border: #2c2f37;
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.30);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.30), 0 12px 40px rgba(0,0,0,0.45);
+  /* Every step holds ≥4.5:1 on --bg, --bg-panel AND the lighter --bg-input
+     wells; text and muted also hold it on every dark class tint. */
+  --text-muted: #b7bfcc;
+  --text-dim: #a7b0bf;
+  --text-faint: #99a2b3;
+  --text-ghost: #8d97a9;
+  --text-off: #4c566a;
+  --accent: #dde3ec;
+  --accent-hover: #c5cdd9;
+  --accent-ink: #1b2130;
+  --accent-soft: #2b3347;
+  --badge-bg: #262d3e; --badge-border: #3b4459; --badge-text: #b7bfcc;
+  --badge-full-bg: #3a1b20; --badge-full-text: #ff9aa2; --badge-full-border: #5e2b33;
+  --badge-waitlist-bg: #33290f; --badge-waitlist-text: #e8c25a; --badge-waitlist-border: #594719;
+  --badge-highlight-bg: #18284a; --badge-highlight-text: #a9c2ff; --badge-highlight-border: #2c447a;
+  --booked-bg: #222a3b; --booked-border: #dde3ec;
+  --spinner-track: #3b4459;
+  --modal-overlay: rgba(5,7,11,0.78);
+  /* Inverse toast here too: a pale pill with a graphite line. */
+  --toast-bg: #eef1f5; --toast-border: #eef1f5;
+  --toast-ink: #1b2130; --toast-ok: #0a6b58; --toast-err: #a81f28; --toast-track: rgba(27,33,48,0.22);
+  --skeleton-base: #262d3e; --skeleton-shine: #323b4e;
+  --section-border: #2b3345;
+  --upcoming-bg: #1b2130; --upcoming-border: #2b3345;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-md: 0 6px 16px -6px rgba(0,0,0,0.55);
+  --shadow-lg: 0 16px 40px -12px rgba(0,0,0,0.70);
   --shadow-overlay: rgba(0,0,0,0.60);
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-float: 0 10px 24px -10px rgba(0,0,0,0.70);
+  --glow-sel-ring: rgba(221,227,236,0.16);
+  --glow-sel-drop: rgba(221,227,236,0.22);
 }
 
-/* Graphite: recolor the hardcoded-pink booked button to the sage accent */
+/* Graphite: recolor the hardcoded-pink booked button to the theme accent */
 [data-theme="graphite"] .book-btn.booked {
   background: var(--booked-bg);
   color: var(--accent);
@@ -342,13 +444,18 @@ header span { color: var(--text-faint); }
 /* The 12px uppercase section eyebrows (.insights-title, .cost-title, …) are
    small UI labels: they stay on the body face, like .ms-section-title. */
 
-/* Bricolage Grotesque is a variable display face — give headlines real
-   weight (the prior AppDisplay-only face shipped a single 400 weight and
-   had to be pinned; that's no longer the case). */
+/* Sofia Sans Condensed is a variable display face (600–900): headlines and
+   numerals carry real weight — 800 here, 900 (--weight-black) where a
+   Crisp component makes the time or a numeral the hero. */
 header h1, .stat-value, .cost-value, .explore-map-stat-value,
 .class-time, .modal-title, .instructor-name-title, .reco-class,
 .discover-empty-title {
-  font-weight: 700;
+  font-weight: var(--weight-extrabold);
+}
+/* Times and counts line up in a column: tabular figures wherever the display
+   face sets a numeral. */
+.stat-value, .cost-value, .explore-map-stat-value, .class-time {
+  font-variant-numeric: tabular-nums;
 }
 
 .controls {
@@ -546,7 +653,7 @@ select:focus, input:focus { border-color: var(--accent); }
 .toast {
   background: var(--toast-bg);
   border-color: var(--toast-border);
-  color: var(--text);
+  color: var(--toast-ink);
 }
 
 /* Upcoming panel */
@@ -598,12 +705,18 @@ select:focus, input:focus { border-color: var(--accent); }
 /* .sub-progress / .sub-progress-fill are tokenised at source (styles.css):
    the old pink fill override here outlived the jade/terracotta accents. */
 
-/* Heatmap */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-0 { background: #ebedf0; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-1 { background: #9be9a8; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-2 { background: #40c463; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-3 { background: #30a14e; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-4 { background: #216e39; }
+/* Heatmap — a neutral ink ramp built from the theme's own tokens (it was a
+   fixed green). Colour keeps ONE meaning in Crisp Colour: class type. */
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-0 { background: var(--bg); }
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-1 { background: var(--border-light); }
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-2 { background: var(--text-off); }
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-3 { background: var(--text-ghost); }
+:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .hm-level-4 { background: var(--text); }
+[data-theme="graphite"] .hm-level-0 { background: var(--bg-input); }
+[data-theme="graphite"] .hm-level-1 { background: var(--border-light); }
+[data-theme="graphite"] .hm-level-2 { background: var(--text-ghost); }
+[data-theme="graphite"] .hm-level-3 { background: var(--text-muted); }
+[data-theme="graphite"] .hm-level-4 { background: var(--text-heading); }
 
 /* Week view */
 .week-event {
@@ -637,12 +750,10 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 .cal-btn:hover { background: var(--bg-input); }
 
-/* My Bookings booked cards in light mode */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .my-booking-card.is-booked {
-  background: var(--bg-panel);
-  border-color: var(--border);
-  border-left: 3px solid var(--accent);
-}
+/* (The light-base "booked card = white panel + accent bar" rule lived here. It
+   is gone, not overridden: every My Bookings card is the shared class card now
+   — tinted by class type, css/crisp.css 9b.7 — and at (0,3,0) this rule outranked
+   that card's root, so it washed the tint out on Cloud and Linen.) */
 
 /* Accent-on-accent-soft chips are tokenised at source (styles.css). Linen is
    the one theme where that pair misses AA for small text (terracotta #b5573c
@@ -1019,12 +1130,11 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* ── settings.css: Tier System ───────────────────────────────────── */
 
-/* Ink comes from the text tokens (#999 was 2.85:1 on the white panel); only
-   the outline needs a light-base value. */
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .tier-btn {
-  border-color: #ccc;
-  color: var(--text-ghost);
-}
+/* (The light-base ".tier-btn" rule lived here — a #ccc outline and the
+   --text-ghost ink. The rank buttons are css/crisp.css's tiles now, keyed on
+   the bare class (0,1,0) so every host wears them: at (0,2,0) this rule would
+   have re-inked them on Cloud and Linen. Removed, not overridden. The hover
+   rule stays: tests/suites/9f-one-card.js holds a chosen rank's ink against it.) */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .tier-btn:hover {
   border-color: #aaa;
   color: var(--text-muted);
@@ -1043,14 +1153,16 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* ── styles.css: Pull-to-Refresh ─────────────────────────────────── */
 
+/* The pill wears the toast's ground, so it takes the toast's ink too (on
+   Cloud / Graphite that ground is inverse: --text-muted / --accent vanish on it). */
 .pull-indicator {
   background: var(--toast-bg);
   border-color: var(--toast-border);
 }
-.pull-text { color: var(--text-muted); }
+.pull-text { color: var(--toast-ink); }
 .pull-spinner {
-  border-color: var(--spinner-track);
-  border-top-color: var(--accent);
+  border-color: var(--toast-track);
+  border-top-color: var(--toast-ink);
 }
 
 /* ── styles.css: Misc light mode fixes ───────────────────────────── */
@@ -1086,10 +1198,11 @@ select:focus, input:focus { border-color: var(--accent); }
 /* "Booked!" tick: the bright green is 2.0:1 on its own tint over a light toast */
 :is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .bc-check { color: #1a7a1a; }
 
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .mb-past .class-card {
-  border-left-color: var(--border-light);
-  background: var(--bg);
-}
+/* (A light-base ".mb-past .class-card" ground lived here. Gone for the same
+   reason as the booked-card rule above: at (0,3,0) it outranked the shared class
+   card's root and painted a PAST booking the page ground instead of its class
+   tint on Cloud and Linen. A class that has been is the same tinted card, dimmed
+   — css/crisp.css crisp:9d-bookings §1.) */
 
 /* ── styles.css: Bike slot light mode ────────────────────────────── */
 
@@ -1174,8 +1287,11 @@ select:focus, input:focus { border-color: var(--accent); }
 .explore-top-rank { color: var(--text-ghost); }
 .explore-top-name { color: var(--text-heading); }
 .explore-top-count { color: var(--text-dim); }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .explore-tier-bar { background: #ebedf0; }
-:is([data-theme="light"], [data-theme="cloud"], [data-theme="linen"]) .explore-tier-seg.tier-unranked { background: #d0d0d0; color: #888; }
+/* (Two light-base tier-bar rules lived here — a hex track and a hex "unranked"
+   segment. The bar has NO track now and its segments wear the one neutral rank
+   recipe (css/crisp.css 9e.5); at (0,2,0) the track outranked crisp's plain
+   ".explore-tier-bar { background: none }" on Cloud and Linen, and the segment
+   rule was already dead.) */
 
 /* ═══════════════════════════════════════════════════════════════════
    Flavour themes — picked in Membership → Theme (?theme=id deep link).
@@ -1208,6 +1324,8 @@ select:focus, input:focus { border-color: var(--accent); }
   --shadow-md: 0 4px 12px rgba(22,163,74,0.12);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 32px rgba(22,163,74,0.12);
   --shadow-overlay: rgba(0,0,0,0.6);
+  --glow-sel-ring: rgba(22,163,74,0.24);
+  --glow-sel-drop: rgba(22,163,74,0.45);
   --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
 }
 
@@ -1255,6 +1373,8 @@ select:focus, input:focus { border-color: var(--accent); }
   --shadow-md: 0 4px 16px rgba(255, 45, 149, 0.18);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 0 40px rgba(255, 45, 149, 0.18);
   --shadow-overlay: rgba(0,0,0,0.6);
+  --glow-sel-ring: rgba(255,45,149,0.24);
+  --glow-sel-drop: rgba(255,45,149,0.5);
 }
 
 /* Cyan→pink gradient headlines + neon CTAs */
@@ -1295,10 +1415,17 @@ select:focus, input:focus { border-color: var(--accent); }
   --shadow-sm: none; --shadow-md: none;
   --shadow-lg: 0 4px 0 rgba(0, 0, 0, 0.25);
   --shadow-overlay: rgba(0,0,0,0.5);
+  /* No soft shadows on a four-shade screen: the glow is a hard lime ring. */
+  --shadow-soft: none;
+  --shadow-float: 0 4px 0 rgba(0, 0, 0, 0.25);
+  --glow-sel-ring: rgba(155,188,15,0.45);
+  --glow-sel-drop: transparent;
   /* Pixel hardware: no rounded corners anywhere */
   --radius-xs: 0; --radius-sm: 0; --radius-md: 0; --radius-lg: 0;
   --radius-xl: 0; --radius-2xl: 0; --radius-3xl: 0; --radius-4xl: 0;
-  --radius-5xl: 0; --radius-full: 0;
+  --radius-5xl: 0; --radius-6xl: 0; --radius-7xl: 0; --radius-8xl: 0;
+  --radius-full: 0;
+  --radius-tile: 0; --radius-chip: 0; --radius-card: 0; --radius-sheet: 0;
   --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
 }
 
@@ -1352,6 +1479,8 @@ select:focus, input:focus { border-color: var(--accent); }
   --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.35), 0 12px 40px rgba(0,0,0,0.5);
   --shadow-overlay: rgba(0,0,0,0.6);
+  --glow-sel-ring: rgba(56,189,248,0.22);
+  --glow-sel-drop: rgba(56,189,248,0.4);
 }
 
 /* Graph-paper grid over everything, faint */
@@ -1371,3 +1500,65 @@ select:focus, input:focus { border-color: var(--accent); }
 [data-theme="blueprint"] .hm-level-2 { background: rgba(56, 189, 248, 0.45); }
 [data-theme="blueprint"] .hm-level-3 { background: rgba(56, 189, 248, 0.7); }
 [data-theme="blueprint"] .hm-level-4 { background: rgba(56, 189, 248, 1); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Class-type colours — the CSS defaults.
+   Colour means CLASS TYPE. window.PsycleClassColours (js/theme.js, section A2)
+   owns these tokens and writes the member's own choice inline on <html>; what
+   follows is exactly what it writes for the DEFAULT map at the default
+   intensity ("soft") — light bases, then dark bases — so the page is right
+   before that script has run. tests/suites/9a-foundation.js holds the two
+   together: change a swatch in js/theme.js and this block fails until it
+   follows. Per class type <key> (ride, strength, yoga, hiit, pilates, lagree,
+   barre, other):
+     --ct-<key>-tint   pale ground of a card, a lit chip, a free seat
+     --ct-<key>-wash   the boards' full-strength tint, whatever the intensity —
+                       the calm pictogram tile of "soft"
+     --ct-<key>-base   strong fill: pictogram tile, badge, your seat, the action
+     --ct-<key>-deep   ink of the hue, for copy on the tint
+     --ct-<key>-ring / -drop   the base at low alpha — the glow of what is yours
+     --ct-on-base      the label on any base fill
+   Components never read these: css/crisp.css maps them onto [data-ct="<key>"]
+   as --ct-tint / --ct-wash / --ct-base / --ct-deep / --ct-ring / --ct-drop.
+   (Selectors start with `html` on purpose: several suites find a theme's
+   token block as the first "[data-theme=…] {" at the start of a line.)
+   ═══════════════════════════════════════════════════════════════════ */
+html {
+  --ct-ride-tint: #E9F0FF; --ct-ride-wash: #D6E2FF; --ct-ride-base: #2D5FD6; --ct-ride-deep: #1A3785; --ct-ride-ring: rgba(45, 95, 214, 0.18); --ct-ride-drop: rgba(45, 95, 214, 0.5);
+  --ct-strength-tint: #FEEBE7; --ct-strength-wash: #FFD8D0; --ct-strength-base: #CC3A1F; --ct-strength-deep: #7A1E0C; --ct-strength-ring: rgba(204, 58, 31, 0.18); --ct-strength-drop: rgba(204, 58, 31, 0.5);
+  --ct-yoga-tint: #E0F4EF; --ct-yoga-wash: #C4EBDF; --ct-yoga-base: #0A7A64; --ct-yoga-deep: #064A3C; --ct-yoga-ring: rgba(10, 122, 100, 0.18); --ct-yoga-drop: rgba(10, 122, 100, 0.5);
+  --ct-hiit-tint: #F7F0CB; --ct-hiit-wash: #F2E398; --ct-hiit-base: #A26403; --ct-hiit-deep: #623800; --ct-hiit-ring: rgba(162, 100, 3, 0.18); --ct-hiit-drop: rgba(162, 100, 3, 0.5);
+  --ct-pilates-tint: #F1EDFF; --ct-pilates-wash: #E6DCFF; --ct-pilates-base: #7045D0; --ct-pilates-deep: #42238C; --ct-pilates-ring: rgba(112, 69, 208, 0.18); --ct-pilates-drop: rgba(112, 69, 208, 0.5);
+  --ct-lagree-tint: #DEF3F9; --ct-lagree-wash: #BFE8F3; --ct-lagree-base: #057890; --ct-lagree-deep: #004858; --ct-lagree-ring: rgba(5, 120, 144, 0.18); --ct-lagree-drop: rgba(5, 120, 144, 0.5);
+  --ct-barre-tint: #FBEAF8; --ct-barre-wash: #FAD6F2; --ct-barre-base: #B82A8E; --ct-barre-deep: #6E1454; --ct-barre-ring: rgba(184, 42, 142, 0.18); --ct-barre-drop: rgba(184, 42, 142, 0.5);
+  --ct-other-tint: #ECF0F6; --ct-other-wash: #DBE2EE; --ct-other-base: #57647B; --ct-other-deep: #313B4D; --ct-other-ring: rgba(87, 100, 123, 0.18); --ct-other-drop: rgba(87, 100, 123, 0.5);
+  --ct-on-base: #FFFFFF;
+}
+html:is([data-theme="graphite"], [data-theme="synthwave"], [data-theme="blueprint"]) {
+  --ct-ride-tint: #1F2C4A; --ct-ride-wash: #233560; --ct-ride-base: #3A6EE7; --ct-ride-deep: #D6E2FF; --ct-ride-ring: rgba(58, 110, 231, 0.26); --ct-ride-drop: rgba(58, 110, 231, 0.5);
+  --ct-strength-tint: #35252F; --ct-strength-wash: #4B292D; --ct-strength-base: #D34126; --ct-strength-deep: #FFD8D0; --ct-strength-ring: rgba(211, 65, 38, 0.26); --ct-strength-drop: rgba(211, 65, 38, 0.5);
+  --ct-yoga-tint: #1B2F39; --ct-yoga-wash: #1C3A40; --ct-yoga-base: #1D836D; --ct-yoga-deep: #C4EBDF; --ct-yoga-ring: rgba(29, 131, 109, 0.26); --ct-yoga-drop: rgba(29, 131, 109, 0.5);
+  --ct-hiit-tint: #2E2B2B; --ct-hiit-wash: #3F3326; --ct-hiit-base: #A5670B; --ct-hiit-deep: #F2E398; --ct-hiit-ring: rgba(165, 103, 11, 0.26); --ct-hiit-drop: rgba(165, 103, 11, 0.5);
+  --ct-pilates-tint: #292949; --ct-pilates-wash: #36305F; --ct-pilates-base: #825AE6; --ct-pilates-deep: #E6DCFF; --ct-pilates-ring: rgba(130, 90, 230, 0.26); --ct-pilates-drop: rgba(130, 90, 230, 0.5);
+  --ct-lagree-tint: #1A2E3E; --ct-lagree-wash: #1A394B; --ct-lagree-base: #177F97; --ct-lagree-deep: #BFE8F3; --ct-lagree-ring: rgba(23, 127, 151, 0.26); --ct-lagree-drop: rgba(23, 127, 151, 0.5);
+  --ct-barre-tint: #33253F; --ct-barre-wash: #48284C; --ct-barre-base: #C83B9C; --ct-barre-deep: #FAD6F2; --ct-barre-ring: rgba(200, 59, 156, 0.26); --ct-barre-drop: rgba(200, 59, 156, 0.5);
+  --ct-other-tint: #262D3D; --ct-other-wash: #2F3748; --ct-other-base: #68758D; --ct-other-deep: #DBE2EE; --ct-other-ring: rgba(104, 117, 141, 0.26); --ct-other-drop: rgba(104, 117, 141, 0.5);
+  --ct-on-base: #FFFFFF;
+}
+/* Terminal and Handheld are near-monochrome by design: every class type wears
+   the theme's OWN accent ladder (the pictograms still tell types apart), and
+   apply() writes nothing over it unless the member explicitly chose "bold".
+   Handheld gets no tint at all — a four-shade screen has none. */
+html[data-theme="terminal"] { --ct-mono-tint: var(--booked-bg); --ct-mono-wash: var(--border); --ct-mono-ring: rgba(22, 163, 74, 0.26); --ct-mono-drop: rgba(22, 163, 74, 0.5); }
+html[data-theme="gameboy"] { --ct-mono-tint: var(--bg-panel); --ct-mono-wash: var(--bg-input); --ct-mono-ring: rgba(155, 188, 15, 0.45); --ct-mono-drop: transparent; }
+html:is([data-theme="terminal"], [data-theme="gameboy"]) {
+  --ct-ride-tint: var(--ct-mono-tint); --ct-ride-wash: var(--ct-mono-wash); --ct-ride-base: var(--accent); --ct-ride-deep: var(--text-heading); --ct-ride-ring: var(--ct-mono-ring); --ct-ride-drop: var(--ct-mono-drop);
+  --ct-strength-tint: var(--ct-mono-tint); --ct-strength-wash: var(--ct-mono-wash); --ct-strength-base: var(--accent); --ct-strength-deep: var(--text-heading); --ct-strength-ring: var(--ct-mono-ring); --ct-strength-drop: var(--ct-mono-drop);
+  --ct-yoga-tint: var(--ct-mono-tint); --ct-yoga-wash: var(--ct-mono-wash); --ct-yoga-base: var(--accent); --ct-yoga-deep: var(--text-heading); --ct-yoga-ring: var(--ct-mono-ring); --ct-yoga-drop: var(--ct-mono-drop);
+  --ct-hiit-tint: var(--ct-mono-tint); --ct-hiit-wash: var(--ct-mono-wash); --ct-hiit-base: var(--accent); --ct-hiit-deep: var(--text-heading); --ct-hiit-ring: var(--ct-mono-ring); --ct-hiit-drop: var(--ct-mono-drop);
+  --ct-pilates-tint: var(--ct-mono-tint); --ct-pilates-wash: var(--ct-mono-wash); --ct-pilates-base: var(--accent); --ct-pilates-deep: var(--text-heading); --ct-pilates-ring: var(--ct-mono-ring); --ct-pilates-drop: var(--ct-mono-drop);
+  --ct-lagree-tint: var(--ct-mono-tint); --ct-lagree-wash: var(--ct-mono-wash); --ct-lagree-base: var(--accent); --ct-lagree-deep: var(--text-heading); --ct-lagree-ring: var(--ct-mono-ring); --ct-lagree-drop: var(--ct-mono-drop);
+  --ct-barre-tint: var(--ct-mono-tint); --ct-barre-wash: var(--ct-mono-wash); --ct-barre-base: var(--accent); --ct-barre-deep: var(--text-heading); --ct-barre-ring: var(--ct-mono-ring); --ct-barre-drop: var(--ct-mono-drop);
+  --ct-other-tint: var(--ct-mono-tint); --ct-other-wash: var(--ct-mono-wash); --ct-other-base: var(--accent); --ct-other-deep: var(--text-heading); --ct-other-ring: var(--ct-mono-ring); --ct-other-drop: var(--ct-mono-drop);
+  --ct-on-base: var(--accent-ink);
+}

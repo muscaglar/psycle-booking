@@ -317,7 +317,15 @@ module.exports = function (t) {
   ['js/app.js', 'js/settings.js', 'js/tabs.js'].forEach((file) => {
     t.ok(!/style="[^"]*color:\s*#555/.test(t.readSource(file)), file + ' has no inline color:#555 left');
   });
+  // Wave 9 (Crisp Colour): the swatches are class-styled marks (.seat-key) —
+  // no inline colour at all — and "Your pick" reads the very token the map's
+  // selected seat is filled with (css/crisp.css; the class colour of the class
+  // being booked, the accent as its fallback).
   const legend = /<div class="bike-legend">[\s\S]*?<\/div>/.exec(html);
-  t.ok(!!legend && !/background:#[0-9a-f]{3,6}/i.test(legend[0]) && /background:var\(--accent\)/.test(legend[0]),
-    'bike-picker legend "Your pick" swatch follows --accent like the map');
+  const crisp = t.readSource('css/crisp.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  t.ok(!!legend && !/style=/.test(legend[0]) && /<i class="seat-key is-pick"><\/i> Your pick/.test(legend[0]) &&
+    /\.bike-legend \.seat-key\.is-pick, \.bike-legend \.seat-key\.is-mine \{ background: var\(--seat-mine-fill\);/.test(crisp) &&
+    /#bikeSvg \.bike-slot\.selected, #bikeSvg \.bike-slot\.mine \{ --seat-fill: var\(--seat-mine-fill\);/.test(crisp) &&
+    /--seat-mine-fill: var\(--ct-base, var\(--accent\)\);/.test(crisp),
+    'bike-picker legend "Your pick" swatch is filled from the same token as the map\'s selected seat');
 };

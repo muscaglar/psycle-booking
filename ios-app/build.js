@@ -86,8 +86,8 @@ function flattenAssetPaths(content) {
 }
 
 /**
- * Rewrite the @font-face url() in theme.css from '../fonts/display.woff2' to
- * 'display.woff2'. Matches the original sed: 's|\.\./fonts/||g'.
+ * Rewrite the @font-face url() in theme.css from '../fonts/sofia-sans.woff2' to
+ * 'sofia-sans.woff2'. Matches the original sed: 's|\.\./fonts/||g'.
  */
 function flattenThemeFontPath(content) {
   return content.replace(/\.\.\/fonts\//g, '');
@@ -165,7 +165,7 @@ function buildPlan() {
   }
 
   // 3. Flattened CSS — copied verbatim EXCEPT theme.css, whose @font-face url
-  //    must be de-pathed (../fonts/display.woff2 -> display.woff2).
+  //    must be de-pathed (../fonts/sofia-sans.woff2 -> sofia-sans.woff2).
   for (const f of cssFiles) {
     let buf = fs.readFileSync(path.join(ROOT, 'css', f));
     if (f === 'theme.css') {

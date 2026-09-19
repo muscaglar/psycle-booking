@@ -264,21 +264,20 @@
 .instructor-class-item[data-event-id]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .instructor-class-item .badge { flex-shrink: 0; }
 
-/* ★ + S–F under the instructor's name: the Membership tab's own controls
-   (.tier-fav / .tier-btn, css/settings.css) — only their row is laid out here. */
+/* ★ + S–F: the Membership tab's own controls (.tier-fav / .tier-btn — their
+   look is the one rank control of css/crisp.css, 9e) — only their row is laid
+   out here. ONE line under the profile header, the width of the modal: the
+   star, then six equal tiles sharing the rest. (The row used to sit in the
+   column beside the photo — ~240px on a phone, where six fingertip-sized tiles
+   cannot fit.) The extra class outranks settings.css's ".tier-btns" (which may
+   not shrink), and Membership's own .tier-row is untouched. */
 .instructor-rank {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-5);
 }
-/* Beside a photo on a phone ≤375px wide this column is ~130px, and the six
-   S–F buttons are a fixed 183px that may not shrink (.tier-btns,
-   css/settings.css): F was clipped and the whole modal panned sideways. Here
-   the buttons wrap instead (4+2); the extra class outranks that later rule,
-   and Membership's own .tier-row is untouched. */
-.instructor-rank .tier-btns { flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }
+.instructor-rank .tier-btns { flex: 1 1 0; min-width: 0; }
 .instructor-tier-slot:empty { display: none; }
 
 .instructor-class-day {

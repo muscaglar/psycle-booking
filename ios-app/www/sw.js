@@ -1,12 +1,12 @@
-const CACHE = 'psycle-0cc8936b';
+const CACHE = 'psycle-895779ad';
 const SHELL = [
   './psycle-finder.html',
   './index.html',
   './login.html',
   './manifest.json',
-  './bricolage.woff2',
-  './display.woff2',
-  './hanken.woff2',
+  './sofia-sans-condensed.woff2',
+  './sofia-sans.woff2',
+  './crisp.css',
   './discover-layout-fix.css',
   './explore.css',
   './features.css',

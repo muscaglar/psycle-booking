@@ -706,21 +706,24 @@
         var count = data.tierCounts[tierKeys[ti]];
         if (count === 0) continue;
         var pct = (count / tierTotal * 100).toFixed(1);
-        var label = pct >= 10 ? tierKeys[ti] + ' (' + count + ')' : count > 0 ? tierKeys[ti] : '';
+        var tierName = tierKeys[ti] === 'unranked' ? 'Unranked' : tierKeys[ti];
+        var label = pct >= 10 ? tierName + ' (' + count + ')' : count > 0 ? tierName : '';
         html += '<div class="explore-tier-seg tier-' + tierKeys[ti] + '" ' +
           'style="flex:' + count + '" title="' + tierKeys[ti] + ': ' + count + '">' +
           label + '</div>';
       }
       html += '</div>';
 
-      // Legend
+      // Legend. Each dot wears the SAME tier class as its segment above, so the
+      // stylesheet colours both (css/crisp.css — a neutral rank ramp: colour is
+      // kept for class types). The dots used to carry a second, hard-coded
+      // copy of the colours, and "unranked" did not match its segment.
       html += '<div class="explore-tier-legend">';
-      var tierColors = { S: '#b8860b', A: '#2a7a2a', B: '#2a5a8a', C: '#555', D: '#8a5a2a', F: '#8a2a2a', unranked: '#222' };
       for (var tl = 0; tl < tierKeys.length; tl++) {
         if (data.tierCounts[tierKeys[tl]] === 0) continue;
         html += '<span class="explore-tier-legend-item">' +
-          '<span class="explore-tier-legend-dot" style="background:' + tierColors[tierKeys[tl]] + '"></span>' +
-          tierKeys[tl] + ' (' + data.tierCounts[tierKeys[tl]] + ')</span>';
+          '<span class="explore-tier-legend-dot tier-' + tierKeys[tl] + '" aria-hidden="true"></span>' +
+          (tierKeys[tl] === 'unranked' ? 'Unranked' : tierKeys[tl]) + ' (' + data.tierCounts[tierKeys[tl]] + ')</span>';
       }
       html += '</div>';
       html += '</div>';
@@ -770,16 +773,22 @@
   function instrCard(profile, whyLabel) {
     var tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(profile.id) : '';
 
-    // Class type tags (color-coded)
+    // Class type tags, in the member's class-type colours: the tag only says
+    // which type it is (data-ct) and css/crisp.css colours it — deep ink on the
+    // class wash, which holds on light AND dark bases (the base colour as TEXT
+    // was ~2.5:1 on a dark panel). One tag per category: three kinds of Ride
+    // used to print "Ride" three times.
     var tagHtml = '';
     if (profile.classTypes.size > 0) {
+      var seenTags = {};
       tagHtml = '<div class="explore-tags">';
       profile.classTypes.forEach(function (typeName) {
         var cat = (typeof getCategory === 'function') ? getCategory(typeName) : null;
-        var color = cat ? cat.color : '#888';
         var label = cat ? cat.label : typeName;
-        tagHtml += '<span class="explore-type-tag" style="color:' + color + ';border-color:' + color + '">' +
-          escapeHtml(label) + '</span>';
+        if (seenTags['t:' + label]) return;
+        seenTags['t:' + label] = true;
+        var ct = (typeof classTypeKey === 'function') ? classTypeKey(typeName) : 'other';
+        tagHtml += '<span class="explore-type-tag" data-ct="' + ct + '">' + escapeHtml(label) + '</span>';
       });
       tagHtml += '</div>';
     }

@@ -37,12 +37,15 @@ module.exports = function (t) {
     eq(made.slice().sort(), all.slice().sort(), 'every section initTabs can build sits on exactly one page, keyed by its own id (' + made.length + ')');
     eq(all.length, 13, 'all thirteen sections survived the move');
   }
-  eq([p._statsPageOfSection('statsBar'), p._statsPageOfSection('streakSection'), p._statsPageOfSection('yearReviewSection'), p._statsPageOfSection('shareSection')],
-    ['overview', 'overview', 'overview', 'overview'], 'Overview: the tiles, streaks & milestones, the year wrap, share');
-  eq([p._statsPageOfSection('habitSection'), p._statsPageOfSection('recoSection'), p._statsPageOfSection('classTypeSection')],
-    ['habits', 'habits', 'habits'], 'Habits: usual slots, routine, class types');
-  eq(p._statsPageOfSection('heatmapSection'), 'habits', 'the heatmap is a weekday × hour grid — WHEN you train — so it sits with Habits');
-  ok(/var day = \(dt\.getDay\(\) \+ 6\) % 7;[\s\S]{0,80}var hour = dt\.getHours\(\);/.test(tabsSrc), '…which is still what renderHeatmap plots (if it becomes a calendar of volume, move it back)');
+  // Wave 9 (Crisp Colour): the approved Stats board IS Overview — all time with
+  // this month and upcoming, the week streak, "When you train", class types,
+  // the year wrap — so the heatmap and the class types moved there from Habits.
+  eq(PAGES[0].sections, ['statsBar', 'streakSection', 'heatmapSection', 'classTypeSection', 'yearReviewSection', 'shareSection'],
+    'Overview, in the board\'s order: the tiles, the streak, When you train, class types, the year wrap, share');
+  eq([p._statsPageOfSection('habitSection'), p._statsPageOfSection('recoSection')],
+    ['habits', 'habits'], 'Habits: what repeats, each with its action — usual slots, routine');
+  eq([p._statsPageOfSection('heatmapSection'), p._statsPageOfSection('classTypeSection')], ['overview', 'overview'], 'the two charts of the board sit on Overview');
+  ok(/var model = _heatmapModel\(allEvents\.map\(function \(evt\) \{ return evt\.start_at; \}\)\);/.test(tabsSrc), 'renderHeatmap still plots WHEN you train (weekday × time of day, pure:stats-charts) — not a calendar of volume');
   eq(p._statsPageOfSection('varietySection'), 'instructors', '"Instructor variety" counts unique INSTRUCTORS per month — who, not what');
   eq(['exploreMapSection', 'lapsedSection', 'exploreLikeSection', 'exploreNewSection'].map(p._statsPageOfSection),
     ['instructors', 'instructors', 'instructors', 'instructors'], 'Instructors: the map, lapsed favourites and both suggestion rows');
@@ -190,26 +193,26 @@ module.exports = function (t) {
   {
     const w = world();
     w.ctx._syncStatsPages(false); // what renderInsights does on switchTab('stats')
-    eq(w.log.paints, ['statsBar', 'streakSection', 'yearReviewSection'], 'a Stats visit builds the page on screen and nothing else (it built all thirteen sections)');
+    eq(w.log.paints, ['statsBar', 'streakSection', 'heatmapSection', 'classTypeSection', 'yearReviewSection'], 'a Stats visit builds the page on screen and nothing else (it built all thirteen sections)');
     eq(w.log.explore, 0, '…explore.js is not asked for sections that sit on a closed page');
     w.log.paints.length = 0;
 
     eq(w.ctx.window.showStatsPage('habits'), true, 'showStatsPage answers true for a page it knows');
     eq([w.selected(), w.open()], [['habits'], ['habits']], 'Habits is selected, and only Habits is displayed');
     eq(PAGES.map((pg) => w.els[pg.tab].tabIndex), [-1, 0, -1], 'the Tab stop moved with it');
-    eq(w.log.paints, ['habitSection', 'recoSection', 'heatmapSection', 'classTypeSection'], 'its sections are built when it is first opened, in page order');
+    eq(w.log.paints, ['habitSection', 'recoSection'], 'its sections are built when it is first opened, in page order');
     eq([w.log.announced, w.session.get('psycle_stats_page'), w.log.actions], [['Habits'], 'habits', ['stats:page to=habits']],
       'announced by name, remembered for the session, and left on the bug-report trail');
     eq(w.log.scrolls, [], 'opened from the top of the tab: nothing scrolls');
 
     w.ctx.window.showStatsPage('overview');
     w.ctx.window.showStatsPage('habits');
-    eq(w.log.paints.length, 4, 'there and back again: nothing is built twice in one visit');
+    eq(w.log.paints.length, 2, 'there and back again: nothing is built twice in one visit');
     w.ctx.window.showStatsPage('habits');
     eq(w.log.announced, ['Habits', 'Overview', 'Habits'], 'a tap on the page already open is not announced again');
 
     w.ctx.window.showStatsPage('instructors');
-    eq([w.log.paints.slice(4), w.log.explore], [['varietySection', 'lapsedSection'], 1], 'Instructors: its own two sections, and explore.js is asked once for its three');
+    eq([w.log.paints.slice(2), w.log.explore], [['varietySection', 'lapsedSection'], 1], 'Instructors: its own two sections, and explore.js is asked once for its three');
 
     eq([w.ctx.window.showStatsPage('nonsense'), w.ctx.window.showStatsPage(undefined), w.selected()], [false, false, ['instructors']], 'an id it does not know changes nothing');
 
@@ -231,7 +234,7 @@ module.exports = function (t) {
     w.ctx._syncStatsPages(false);
     eq(w.log.paints, ['varietySection', 'lapsedSection'], 'renderInsights again = new data: the page on screen is rebuilt — and only that one');
     w.ctx.window.showStatsPage('overview');
-    eq(w.log.paints.slice(2), ['statsBar', 'streakSection', 'yearReviewSection'], '…the others when they are next opened');
+    eq(w.log.paints.slice(2), ['statsBar', 'streakSection', 'heatmapSection', 'classTypeSection', 'yearReviewSection'], '…the others when they are next opened');
     eq([w.ctx.window._statsPageStep(1), w.ctx.window._statsPageStep(-1)], ['habits', null], 'window._statsPageStep tells a swipe helper where a swipe would lead from here');
   }
   {
@@ -296,7 +299,7 @@ module.exports = function (t) {
     w.ctx.window.showStatsPage('habits');
     eq([w.open(), w.log.paints], [[], []], '…a page asked for meanwhile is remembered, not shown');
     w.ctx._syncStatsPages(false);
-    eq([w.els.__bar.hidden, w.open(), w.log.paints], [false, ['habits'], ['habitSection', 'recoSection', 'heatmapSection', 'classTypeSection']], 'signed in again: the switcher is back, on that page');
+    eq([w.els.__bar.hidden, w.open(), w.log.paints], [false, ['habits'], ['habitSection', 'recoSection']], 'signed in again: the switcher is back, on that page');
   }
   {
     const w = world({ synced: true });

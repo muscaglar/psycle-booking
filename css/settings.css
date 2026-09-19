@@ -307,12 +307,8 @@
 
 .tier-btn:hover { border-color: var(--text-faint, #666); color: var(--text-muted, #aaa); }
 
-.tier-btn.active-S { background: #b8860b; border-color: #d4a017; color: #fff; }
-.tier-btn.active-A { background: #2a7a2a; border-color: #3a9a3a; color: #fff; }
-.tier-btn.active-B { background: #2a5a8a; border-color: #3a7aba; color: #fff; }
-.tier-btn.active-C { background: #555; border-color: #777; color: #fff; }
-.tier-btn.active-D { background: #8a5a2a; border-color: #ba7a3a; color: #fff; }
-.tier-btn.active-F { background: #8a2a2a; border-color: #ba3a3a; color: #fff; }
+/* (A chosen rank's fill, and the rank tile's: css/crisp.css, crisp:9e — the
+   neutral rank recipe. Colour is kept for class types.) */
 
 /* Tier badge on class cards */
 .tier-badge {
@@ -325,12 +321,6 @@
   letter-spacing: 0.02em;
 }
 
-.tier-S { background: #b8860b; color: #fff; }
-.tier-A { background: #2a7a2a; color: #fff; }
-.tier-B { background: #2a5a8a; color: #fff; }
-.tier-C { background: #555; color: #fff; }
-.tier-D { background: #8a5a2a; color: #fff; }
-.tier-F { background: #8a2a2a; color: #fff; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Bike Preferences (per studio)

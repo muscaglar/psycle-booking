@@ -111,7 +111,10 @@ module.exports = function (t) {
         document: { getElementById: (id) => (id === 'streakSection' ? box : null) },
         getFullHistory: () => history,
       });
-      t.vm.runInContext(grab(tabsSrc, '  function _weekIndex(', '  }') + '\n' + grab(tabsSrc, '  function renderStreaks() {', '  }'), ctx, { filename: 'js/tabs.js[streaks]' });
+      // Wave 9: the streak block draws its weekly bars through pure:stats-charts.
+      const charts = tabsSrc.slice(tabsSrc.indexOf('  // ── pure:stats-charts:start'), tabsSrc.indexOf('  // ── pure:stats-charts:end'));
+      ok(charts.length > 0, 'pure:stats-charts found in js/tabs.js (anchor moved?)');
+      t.vm.runInContext(charts + '\n' + grab(tabsSrc, '  function _weekIndex(', '  }') + '\n' + grab(tabsSrc, '  function renderStreaks() {', '  }'), ctx, { filename: 'js/tabs.js[streaks]' });
       ctx.renderStreaks();
       return box;
     };
@@ -123,16 +126,22 @@ module.exports = function (t) {
 
     let box = streaks(weekly(3));
     eq(hints(box.innerHTML), ['7 to 10'], 'three weeks running: ONE hint, and it is a number (it read "Keep it alive!" · "Best run of weeks" · "7 to 10")');
-    ok(/streak-live/.test(box.innerHTML) && /<div class="streak-value">3<\/div><div class="streak-label">Week streak<\/div><\/div>/.test(box.innerHTML),
+    ok(/streak-live/.test(box.innerHTML) && /<div class="streak-value">3<\/div><div class="streak-text"><div class="streak-label">week streak<\/div>/.test(box.innerHTML),
       'the live streak is still marked — by the card, not by a sentence');
     ok(!/!/.test(text(box.innerHTML)), 'no exclamation mark anywhere in the section');
-    eq(text(box.innerHTML).replace(/\d+/g, '#'), 'Streaks & milestones # Week streak # Longest streak # Classes # to # # classes # classes # classes # classes',
-      'everything the section prints: a heading, three labelled numbers, one distance, four badges');
+    // Wave 9 (the Stats board): one block — the streak, "Longest N", twelve
+    // weekly bars (no text) — then the milestones with their unit said once.
+    eq(text(box.innerHTML).replace(/\d+/g, '#'), '# week streak Longest # # # # # classes # to #',
+      'everything the section prints: the streak and its name, the longest run, four milestones, their unit once, one distance');
+    eq((box.innerHTML.match(/class="streak-week[ "]/g) || []).length, 12, 'the last twelve weeks as bars');
+    eq([(box.innerHTML.match(/streak-week is-on is-live/g) || []).length, /role="img" aria-label="Last 12 weeks: 3 with a class, 3 in a row now\."/.test(box.innerHTML)], [3, true],
+      'three weeks running: three lit bars, and the chart says so in words');
 
     box = streaks(weekly(1));
     eq(hints(box.innerHTML), ['9 to 10'], 'a first class: no "Book this week to build it" under a streak of 1');
     box = streaks(weekly(120));
-    eq([hints(box.innerHTML), /!|Century/.test(text(box.innerHTML))], [[], false], 'past the last milestone: no hint at all (it read "Century club!")');
+    eq([hints(box.innerHTML), /!|Century/.test(text(box.innerHTML)), /milestone-row/.test(box.innerHTML)], [[], false, false],
+      'past the last milestone: no hint at all (it read "Century club!") — and no row of four reached badges either');
     box = streaks([]);
     eq(box.style.display, 'none', 'no history: the section still hides');
   }

@@ -939,16 +939,18 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
    Synthwave and Handheld. Two classes, so these outrank theme.css's later
    .toast border colour. The second `content` gives the glyph empty alt text
    (a screen reader hears the message only); an engine without that syntax
-   keeps the first. 'info' stays plain. */
+   keeps the first. 'info' stays plain. The two inks are the toast's OWN tokens
+   (--toast-err / --toast-ok: by default the Full-chip red and the accent), so
+   a theme with an inverse toast ground — Cloud, Graphite — can tune them. */
 .toast.error, .toast.success { border-left-width: 3px; }
-.toast.error { border-left-color: var(--badge-full-text); }
-.toast.success { border-left-color: var(--accent); }
+.toast.error { border-left-color: var(--toast-err); }
+.toast.success { border-left-color: var(--toast-ok); }
 .toast.error::before, .toast.success::before {
   margin-right: var(--space-3);
   font-weight: var(--weight-bold);
 }
-.toast.error::before { content: '!'; content: '!' / ''; color: var(--badge-full-text); }
-.toast.success::before { content: '\2713\FE0E'; content: '\2713\FE0E' / ''; color: var(--accent); }
+.toast.error::before { content: '!'; content: '!' / ''; color: var(--toast-err); }
+.toast.success::before { content: '\2713\FE0E'; content: '\2713\FE0E' / ''; color: var(--toast-ok); }
 
 /* For assistive tech only: the #srStatus / #srAlert live regions that
    announce() (js/app.js) writes toasts and the Booked! line into. Clipped, not
@@ -1886,7 +1888,9 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   transform: translateX(-50%) translateY(120%);
   width: calc(100% - var(--space-10));
   max-width: 380px;
-  background: var(--toast-bg, #1a1a1a);
+  /* A sheet, not a toast: the panel ground (--toast-bg is an inverse pill on
+     Cloud / Graphite now; in every other theme the two were the same value). */
+  background: var(--bg-panel, #1a1a1a);
   border: 1px solid var(--border-subtle, #2a2a2a);
   border-radius: var(--radius-3xl);
   padding: var(--space-7);

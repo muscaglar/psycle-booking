@@ -270,7 +270,6 @@
   height: var(--space-9);
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: #161b22;
 }
 
 .explore-tier-seg {
@@ -279,18 +278,12 @@
   justify-content: center;
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
-  color: #fff;
   min-width: 0;
   transition: flex 0.3s;
 }
-
-.explore-tier-seg.tier-S { background: #b8860b; }
-.explore-tier-seg.tier-A { background: #2a7a2a; }
-.explore-tier-seg.tier-B { background: #2a5a8a; }
-.explore-tier-seg.tier-C { background: #555; }
-.explore-tier-seg.tier-D { background: #8a5a2a; }
-.explore-tier-seg.tier-F { background: #8a2a2a; }
-.explore-tier-seg.tier-unranked { background: #222; color: #555; }
+/* (The segments' and the legend's colours: css/crisp.css, crisp:9e — one
+   neutral rank recipe per tier class. The hard-coded gold / green / blue
+   ramp that lived here, and its second copy in js/explore.js, are gone.) */
 
 .explore-tier-legend {
   display: flex;

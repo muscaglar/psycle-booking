@@ -1,0 +1,3875 @@
+/* ================================================================
+   crisp.css — the "Crisp Colour" design, built into the app.
+   Linked LAST in psycle-finder.html, so at equal specificity it overrides
+   styles.css … discover-layout-fix.css. (login.html does NOT link it: that
+   page is copied as-is into the flat iOS www/ folder, where a css/ path does
+   not resolve, and it inlines the few tokens it needs — tests hold it to that.)
+
+   THE RULES OF THIS FILE
+   • Tokens only. Every colour, size, radius, shadow and font comes from a
+     custom property of css/theme.css. No hex, no rgb(), no px literal — extend
+     the token set in theme.css when a step is missing. No @font-face here:
+     ios-app/build.js rewrites ../fonts/ in theme.css only.
+   • Colour means CLASS TYPE. A component receives its class type as
+     data-ct="ride|strength|yoga|hiit|pilates|lagree|barre|other"
+     (app.js: classTypeKey(typeName)) and reads --ct-tint / --ct-wash /
+     --ct-base / --ct-deep / --ct-ring / --ct-drop (+ --ct-on-base) from the ONE
+     mapping block below. It never names a class colour itself, and never reads
+     --ct-<key>-* directly. Pictograms come from app.js classPictogram(key, size).
+   • The member chooses the colours: window.PsycleClassColours (js/theme.js)
+     writes the --ct-<key>-* tokens and html[data-ct-intensity="off|soft|bold"].
+     "soft" is the default, and what a missing attribute means.
+   • The glow marks ONLY what is selected or yours: the chosen day, your seat,
+     your booked class, the one primary action of a sheet.
+   • One section per agent, in this order. Add rules only inside your own.
+   ================================================================ */
+
+
+/* == crisp:9a-foundation == */
+
+/* ── 1. Class type → colour: the ONE mapping block ────────────────
+   Put data-ct on the component's root; everything inside it inherits.
+   An unknown or empty data-ct wears "other". */
+[data-ct] {
+  --ct-tint: var(--ct-other-tint); --ct-wash: var(--ct-other-wash); --ct-base: var(--ct-other-base);
+  --ct-deep: var(--ct-other-deep); --ct-ring: var(--ct-other-ring); --ct-drop: var(--ct-other-drop);
+}
+[data-ct="ride"] {
+  --ct-tint: var(--ct-ride-tint); --ct-wash: var(--ct-ride-wash); --ct-base: var(--ct-ride-base);
+  --ct-deep: var(--ct-ride-deep); --ct-ring: var(--ct-ride-ring); --ct-drop: var(--ct-ride-drop);
+}
+[data-ct="strength"] {
+  --ct-tint: var(--ct-strength-tint); --ct-wash: var(--ct-strength-wash); --ct-base: var(--ct-strength-base);
+  --ct-deep: var(--ct-strength-deep); --ct-ring: var(--ct-strength-ring); --ct-drop: var(--ct-strength-drop);
+}
+[data-ct="yoga"] {
+  --ct-tint: var(--ct-yoga-tint); --ct-wash: var(--ct-yoga-wash); --ct-base: var(--ct-yoga-base);
+  --ct-deep: var(--ct-yoga-deep); --ct-ring: var(--ct-yoga-ring); --ct-drop: var(--ct-yoga-drop);
+}
+[data-ct="hiit"] {
+  --ct-tint: var(--ct-hiit-tint); --ct-wash: var(--ct-hiit-wash); --ct-base: var(--ct-hiit-base);
+  --ct-deep: var(--ct-hiit-deep); --ct-ring: var(--ct-hiit-ring); --ct-drop: var(--ct-hiit-drop);
+}
+[data-ct="pilates"] {
+  --ct-tint: var(--ct-pilates-tint); --ct-wash: var(--ct-pilates-wash); --ct-base: var(--ct-pilates-base);
+  --ct-deep: var(--ct-pilates-deep); --ct-ring: var(--ct-pilates-ring); --ct-drop: var(--ct-pilates-drop);
+}
+[data-ct="lagree"] {
+  --ct-tint: var(--ct-lagree-tint); --ct-wash: var(--ct-lagree-wash); --ct-base: var(--ct-lagree-base);
+  --ct-deep: var(--ct-lagree-deep); --ct-ring: var(--ct-lagree-ring); --ct-drop: var(--ct-lagree-drop);
+}
+[data-ct="barre"] {
+  --ct-tint: var(--ct-barre-tint); --ct-wash: var(--ct-barre-wash); --ct-base: var(--ct-barre-base);
+  --ct-deep: var(--ct-barre-deep); --ct-ring: var(--ct-barre-ring); --ct-drop: var(--ct-barre-drop);
+}
+[data-ct="other"] {
+  --ct-tint: var(--ct-other-tint); --ct-wash: var(--ct-other-wash); --ct-base: var(--ct-other-base);
+  --ct-deep: var(--ct-other-deep); --ct-ring: var(--ct-other-ring); --ct-drop: var(--ct-other-drop);
+}
+
+/* ── 2. Intensity ─────────────────────────────────────────────────
+   What the three intensities change, in ONE place. Components use the derived
+   tokens and never test the attribute themselves:
+     --ct-card      ground of a class card / sheet header
+     --ct-tile      fill of the pictogram tile      --ct-tile-ink  its pictogram
+   bold  the boards as drawn: card = the full tint, tile = base + white mark
+   soft  (default, and a missing attribute) card = the pale tint, and a calmer
+         tile: the full tint with the pictogram in the deep ink
+   off   the card stays the neutral surface; the tile keeps the base fill, so
+         the type still reads at a glance from the one small mark
+   Guaranteed inks on --ct-card in every theme, swatch and intensity (≥ 4.5:1,
+   tests/suites/9a-foundation.js): --ct-ink, --ct-ink-2, and --ct-deep. */
+[data-ct] {
+  --ct-card: var(--ct-tint);
+  --ct-tile: var(--ct-wash);
+  --ct-tile-ink: var(--ct-deep);
+  --ct-ink: var(--text);
+  --ct-ink-2: var(--text-muted);
+}
+html[data-ct-intensity="bold"] [data-ct],
+html[data-ct-intensity="off"] [data-ct] {
+  --ct-tile: var(--ct-base);
+  --ct-tile-ink: var(--ct-on-base);
+}
+html[data-ct-intensity="off"] [data-ct] { --ct-card: var(--surface); }
+/* …where a surface pill would vanish into the surface card: one step down. */
+html[data-ct-intensity="off"] [data-ct] .pill-secondary { --pill-fill: var(--surface-2); }
+
+/* ── 3. Primitives ────────────────────────────────────────────────
+   Shared by every Crisp component. Add the class in markup you own; where an
+   old rule outranks one of these, override it in your own section — do not
+   raise the specificity here. */
+
+/* .ct-tile — the pictogram tile. <span class="ct-tile" aria-hidden="true">
+   ${classPictogram(key, 18)}</span> inside a [data-ct] root. Sizes: is-sm 24
+   (chip, pictogram 15) · default 28 (class card, 18) · is-lg 32 (list row, 20)
+   · is-xl 48 (hero, 28). */
+.ct-tile {
+  --tile: var(--tile-md);
+  width: var(--tile);
+  height: var(--tile);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-tile);
+  background: var(--ct-tile);
+  color: var(--ct-tile-ink);
+}
+.ct-tile.is-sm { --tile: var(--tile-sm); border-radius: var(--radius-lg); }
+.ct-tile.is-lg { --tile: var(--tile-lg); border-radius: var(--radius-2xl); }
+.ct-tile.is-xl { --tile: var(--tile-xl); border-radius: var(--radius-5xl); }
+/* is-solid: always the base fill with the white mark, whatever the intensity
+   (a legend, the Class colours control, a lit chip). */
+.ct-tile.is-solid { background: var(--ct-base); color: var(--ct-on-base); }
+.ct-tile svg, .ct-pic { display: block; flex: none; }
+
+/* .ct-card — the tinted surface of a class (card, sheet header, compact
+   usual-week row). Edge to edge, no border, the card radius. Copy on it uses
+   --ct-ink / --ct-ink-2; the one hue line ("Bench 7 is yours") uses --ct-deep. */
+.ct-card {
+  background: var(--ct-card);
+  color: var(--ct-ink);
+  border-radius: var(--radius-card);
+}
+.ct-card:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+/* A waitlist place: the same card with a dashed class edge. */
+.ct-card.is-dashed { border: var(--hairline) dashed var(--ct-base); }
+
+/* .ct-dot — the small class-colour mark (a held class on the day strip, a
+   legend row). is-ringed lifts it off a filled ground. */
+.ct-dot {
+  display: inline-block;
+  width: var(--dot);
+  height: var(--dot);
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--ct-base);
+}
+.ct-dot.is-ringed { box-shadow: 0 0 0 var(--hairline) var(--surface); }
+
+/* Glow — ONLY what is selected or yours.
+   .glow-mine      your seat, your seat chip, the primary action of a sheet
+                   (needs a [data-ct] context)
+   .glow-mine-card your booked class: a solid class edge + the soft drop
+   .glow-selected  the chosen day and other neutral picks (the theme's own
+                   --glow-sel-* colours: graphite on Cloud) */
+.glow-mine { box-shadow: var(--glow-ring) var(--ct-ring), var(--glow-drop) var(--ct-drop); }
+.glow-mine-card { position: relative; z-index: 1; box-shadow: var(--glow-edge) var(--ct-base), var(--glow-drop-card) var(--ct-drop); }
+.glow-selected { box-shadow: var(--glow-ring) var(--glow-sel-ring), var(--glow-drop) var(--glow-sel-drop); }
+
+/* .pill-btn — every button is a full pill, --tap-min tall. Pick ONE look:
+   .pill-primary    the action. Graphite (the theme accent) on its own; the
+                    class base inside a [data-ct] context
+   .pill-secondary  the quiet fill on a tinted card ("Book"): surface + the
+                    soft shadow, labelled in the class deep ink
+   .pill-outline    a calm ink outline ("Cancel booking")
+   .pill-ct-outline the class outline on a tint ("Join waitlist")
+   .pill-quiet      text only ("Change spot") — still a --tap-min target
+   .pill-danger     destructive, calm: a danger outline. Add .is-solid ONLY
+                    where a late-cancel charge or a deletion is being confirmed
+   .is-block        full width; .is-lg the one tall call to action of a screen */
+.pill-btn {
+  --pill-fill: transparent;
+  --pill-ink: var(--text);
+  --pill-line: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--pill-fill);
+  color: var(--pill-ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--pill-line);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-fast);
+}
+.pill-btn:active { transform: scale(0.98); }
+.pill-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.pill-btn.is-block { display: flex; width: 100%; }
+.pill-btn.is-lg { min-height: var(--tap-lg); padding: 0 var(--space-9); font-size: var(--text-2xl); font-weight: var(--weight-extrabold); }
+
+.pill-primary { --pill-fill: var(--accent); --pill-ink: var(--accent-ink); font-weight: var(--weight-extrabold); }
+[data-ct] .pill-primary, .pill-primary[data-ct] { --pill-fill: var(--ct-base); --pill-ink: var(--ct-on-base); }
+.pill-secondary { --pill-fill: var(--surface); --pill-ink: var(--text); box-shadow: var(--shadow-soft); }
+[data-ct] .pill-secondary, .pill-secondary[data-ct] { --pill-ink: var(--ct-deep); }
+.pill-outline { --pill-fill: var(--surface); --pill-ink: var(--text); --pill-line: var(--text); font-size: var(--type-meta); }
+.pill-ct-outline { --pill-ink: var(--ct-deep); --pill-line: var(--ct-base); font-size: var(--type-caption); }
+.pill-quiet { --pill-ink: var(--text-muted); padding: 0 var(--space-2); font-size: var(--type-caption); font-weight: var(--weight-semibold); }
+.pill-danger { --pill-fill: var(--surface); --pill-ink: var(--danger); --pill-line: var(--danger); }
+.pill-danger.is-solid { --pill-fill: var(--danger); --pill-ink: var(--danger-ink); --pill-line: transparent; }
+/* A pill that glows — "the one primary action of a sheet". .pill-btn sets a
+   box-shadow of its own (the hairline) AFTER .glow-mine, at the same (0,1,0),
+   so on a pill the glow never painted: the class sheet's Book computed no ring
+   and no drop in any theme. Both shadows, said together — and never on a
+   disabled pill. */
+.pill-btn.glow-mine { box-shadow: inset 0 0 0 var(--hairline) var(--pill-line), var(--glow-ring) var(--ct-ring), var(--glow-drop) var(--ct-drop); }
+.pill-btn.glow-mine:disabled, .pill-btn.glow-mine[aria-disabled="true"] { box-shadow: inset 0 0 0 var(--hairline) var(--pill-line); }
+
+/* Disabled: a filled pill goes to the disabled grey with the body ink (the
+   pair the app's .btn:disabled uses); the others simply fade. */
+.pill-btn:disabled, .pill-btn[aria-disabled="true"] { cursor: not-allowed; transform: none; opacity: 0.55; }
+.pill-primary:disabled, .pill-primary[aria-disabled="true"],
+.pill-danger.is-solid:disabled, .pill-danger.is-solid[aria-disabled="true"] {
+  --pill-fill: var(--text-off); --pill-ink: var(--text); opacity: 1;
+}
+
+/* .chip — a filter chip: off, on, removable. A <button aria-pressed>. On its
+   own it is neutral (studios, time bands); with data-ct it lights in its class
+   colour and may lead with a .ct-tile.is-sm.is-solid.
+   .chip.is-compact  the removable summary chip: shorter, with a full-height
+                     hit area; give it the × as an aria-hidden svg. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
+}
+/* A chip that leads with a tile sits tighter on that side. Two rules on
+   purpose: an engine without :has() (iOS < 15.4) drops only the first. */
+.chip:has(> .ct-tile) { padding-left: var(--space-4); }
+.chip.has-tile { padding-left: var(--space-4); }
+.chip[aria-pressed="true"], .chip.is-on {
+  background: var(--sunken);
+  color: var(--text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--text);
+  font-weight: var(--weight-bold);
+}
+.chip[data-ct][aria-pressed="true"], .chip[data-ct].is-on {
+  background: var(--ct-tint);
+  color: var(--ct-deep);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ct-base);
+}
+.chip:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.chip.is-compact {
+  position: relative;
+  min-height: calc(var(--tap-min) - var(--space-3));
+  padding: 0 var(--space-4) 0 var(--space-5);
+  background: var(--sunken);
+  color: var(--text);
+  box-shadow: none;
+  font-weight: var(--weight-bold);
+}
+.chip.is-compact[data-ct] { background: var(--ct-wash); color: var(--ct-deep); }
+.chip.is-compact::after { content: ''; position: absolute; inset: calc(var(--space-1) * -1) 0; }
+
+/* .seg — the segmented track (Stats pages, the intensity control): a surface
+   pill holding equal segments; the chosen one is graphite. Works with
+   role=tab (aria-selected), role=radio (aria-checked) or aria-pressed. */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  padding: calc(var(--space-1) / 2);
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.seg-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.seg-btn[aria-selected="true"], .seg-btn[aria-checked="true"], .seg-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: var(--weight-bold);
+}
+.seg-btn:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
+/* The ring is the body ink, drawn INSIDE the segment — and the chosen segment is
+   the accent fill, which in Cloud and Handheld IS the body ink. On a fill the
+   ring takes the one ink every theme holds on --accent. (A radiogroup's only
+   tab stop is its checked segment, so without this the ring was never seen.) */
+.seg-btn[aria-selected="true"]:focus-visible,
+.seg-btn[aria-checked="true"]:focus-visible,
+.seg-btn[aria-pressed="true"]:focus-visible { outline-color: var(--accent-ink); }
+
+/* .ct-badge — the small filled badge in the class colour ("Only 2 left").
+   .is-seat    your seat ("Bench 7"): taller, the display face
+   .is-dashed  a waitlist place ("Waitlisted"): dashed class edge on surface
+   .badge-late the ONE red badge: a late-cancel penalty. Never for "full". */
+.ct-badge, .badge-late {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--ct-base);
+  color: var(--ct-on-base);
+  font-family: var(--font-body);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--space-8);
+  white-space: nowrap;
+}
+.ct-badge.is-seat {
+  padding: 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--space-9);
+}
+.ct-badge.is-dashed {
+  padding: 0 var(--space-4);
+  border: var(--hairline) dashed var(--ct-base);
+  background: var(--surface);
+  color: var(--ct-deep);
+  line-height: var(--space-9);
+}
+.badge-late { background: var(--danger); color: var(--danger-ink); }
+
+/* Type roles — so the time of a class is the same block on Discover, in My
+   Bookings, on the usual-week card and in the sheet.
+   .t-time 34/900 (class card) · .t-time.is-compact 21 · .t-time.is-sheet 60 ·
+   .t-numeral 88 (the Stats hero) · .t-heading 21/800 · .t-title 17/700 ·
+   .t-meta 13.5/500 · .t-caption 13/600 · .tnum tabular figures anywhere. */
+.tnum, .t-time, .t-numeral { font-variant-numeric: tabular-nums; }
+.t-time, .t-numeral {
+  font-family: var(--font-display);
+  font-weight: var(--weight-black);
+  font-size: var(--type-time);
+  line-height: 1;
+  letter-spacing: 0;
+}
+.t-time.is-compact { font-size: var(--type-time-compact); }
+.t-time.is-sheet { font-size: var(--type-time-sheet); }
+.t-numeral { font-size: var(--type-numeral); }
+.t-heading { font-family: var(--font-display); font-weight: var(--weight-extrabold); font-size: var(--type-heading); line-height: 1.15; }
+.t-title { font-family: var(--font-body); font-weight: var(--weight-bold); font-size: var(--type-title); line-height: 1.3; }
+.t-meta { font-family: var(--font-body); font-weight: var(--weight-medium); font-size: var(--type-meta); line-height: 1.5; }
+.t-caption { font-family: var(--font-body); font-weight: var(--weight-semibold); font-size: var(--type-caption); line-height: 1.4; }
+
+/* Toast — the new look: an ink pill that floats, with its type glyph in a
+   round tile (the '!' / tick of styles.css, so error and success are still
+   told apart by shape, not colour alone). Never class-coloured. Long lines
+   wrap: the radius is the track radius, which is a full pill at one line. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--space-12);
+  padding: var(--space-3) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-7xl);
+  box-shadow: var(--shadow-float);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: 1.4;
+}
+.toast.error, .toast.success { border-left-width: 0; padding-left: var(--space-5); }
+.toast.error::before, .toast.success::before {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-9);
+  height: var(--space-9);
+  margin-right: 0;
+  border-radius: var(--radius-full);
+  color: var(--toast-bg);
+  font-size: var(--text-md);
+  font-weight: var(--weight-extrabold);
+  line-height: 1;
+}
+.toast.error::before { background: var(--toast-err); }
+.toast.success::before { background: var(--toast-ok); }
+@media (max-width: 640px) {
+  /* A centred pill as wide as its line, not a full-width bar. */
+  .toast { width: fit-content; max-width: calc(100% - var(--space-7) * 2); margin-inline: auto; }
+}
+
+/* Reduced motion: nothing here moves except the press feedback. */
+@media (prefers-reduced-motion: reduce) {
+  .pill-btn, .chip, .seg-btn { transition: none; }
+  .pill-btn:active { transform: none; }
+}
+
+
+/* == crisp:9b-discover == */
+/* App header + tab bar · Discover's freshness line, date row, Filters bar,
+   chips and filter groups · the day strip and heading · THE CLASS CARD ·
+   skeletons and empty states. Layout, type and shape here; every colour, size,
+   radius and shadow is a token (sizes the scale has no step for are composed
+   from it with calc()). Where an older rule in styles.css / theme.css /
+   redesign.css still applies, it is overridden here at its own specificity —
+   this sheet is last — rather than edited there. */
+
+/* ── 9b.1 App header ──────────────────────────────────────────────
+   The wordmark sits on the ground, not on a band of its own: five rising bars
+   in the member's own class colours (decorative) and "Psync" in the display
+   face. Only padding-BLOCK is set on the bar itself: at >=1024px
+   discover-layout-fix.css insets header and tab bar to the content column. */
+header {
+  background: var(--ground);
+  border-bottom: 0;
+  gap: var(--space-5);
+  padding-block: calc(var(--space-3) + env(safe-area-inset-top)) var(--space-2);
+}
+@media (max-width: 1023px) {
+  header, .tab-bar { padding-inline: var(--space-7); }
+}
+.brand { flex-direction: row; align-items: center; gap: var(--space-4); }
+.brand-mark {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--space-1) * 0.75);
+  height: var(--space-9);
+}
+.brand-mark > i {
+  display: block;
+  width: var(--space-1);
+  height: var(--space-9);
+  border-radius: var(--radius-full);
+  background: var(--ct-base);
+}
+.brand-mark > i:nth-child(1) { height: var(--space-3); }
+.brand-mark > i:nth-child(2) { height: var(--space-5); }
+.brand-mark > i:nth-child(3) { height: var(--space-7); }
+.brand-mark > i:nth-child(4) { height: var(--space-8); }
+/* The mark is the one class-coloured thing in the STATIC markup, and the
+   member's own colours only arrive with the deferred js/theme.js — which sets
+   html[data-ct-intensity] in the same call that writes them. Until then the
+   mark holds its box but does not paint, so it never shows the default colours
+   first and then changes (decorative and aria-hidden: nothing is lost). */
+html:not([data-ct-intensity]) .brand-mark { visibility: hidden; }
+header h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-6xl);
+  font-weight: var(--weight-black);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--ink);
+}
+
+/* The two header controls: soft round surface buttons, a fingertip across. */
+.header-right { gap: var(--space-3); }
+.header-avatar,
+header .theme-toggle {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+.header-avatar {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-extrabold);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+/* (styles.css styles every `header span`: the initials are one.) */
+.header-avatar span { color: inherit; font-size: inherit; letter-spacing: inherit; }
+.header-avatar:hover, .header-avatar:focus-visible,
+header .theme-toggle:hover { background: var(--surface); color: var(--ink); }
+.header-avatar:focus-visible,
+header .theme-toggle:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.auth-pill a.signin-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-7);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+}
+.auth-pill a.signin-pill:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* ── 9b.2 Tab bar ─────────────────────────────────────────────────
+   ONE bar for all four tabs, so its metrics cannot differ between them. Wider
+   than a phone it is a row of text pills on the ground; on a phone it docks to
+   the bottom as the boards draw it — a surface sheet with round shoulders, each
+   tab a mark in a 48 x 28 pill over its label. The current tab is told by the
+   pill's fill (and aria-current): icon size and stroke never change. */
+.tab-bar {
+  gap: var(--space-2);
+  padding-block: var(--space-2) var(--space-3);
+  background: var(--ground);
+  border-bottom: 0;
+}
+.tab-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-full);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: var(--weight-bold); }
+.tab-btn.active::after { display: none; }
+.tab-btn:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
+/* Wider than a phone the current tab is an accent pill and the ring is inside
+   it: --accent-ink there. (On a phone the active tab has no fill of its own —
+   see below — so it keeps the body ink.) */
+@media (min-width: 641px) {
+  .tab-btn.active:focus-visible { outline-color: var(--accent-ink); }
+}
+.tab-badge {
+  min-width: 1.4em;
+  padding: 0 0.35em;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+.tab-btn.active .tab-badge { background: var(--accent-ink); color: var(--accent); }
+
+@media (max-width: 640px) {
+  .tab-bar {
+    gap: 0;
+    padding: var(--space-3) var(--space-3) env(safe-area-inset-bottom);
+    border-top: 0;
+    border-radius: var(--radius-7xl) var(--radius-7xl) 0 0;
+    background: var(--surface);
+    box-shadow: 0 calc(var(--space-3) * -1) var(--space-9) calc(var(--space-6) * -1) var(--shadow-overlay);
+  }
+  .tab-btn,
+  .tab-btn.active {
+    min-height: var(--tap-lg);
+    padding: 0 0 var(--space-2);
+    gap: calc(var(--space-1) * 0.75);
+    border-radius: 0;
+    background: none;
+    color: var(--ink-3);
+    font-size: var(--type-label);
+    font-weight: var(--weight-semibold);
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+  .tab-btn.active { color: var(--ink); font-weight: var(--weight-bold); }
+  /* The pill is the mark's own box: an inline <svg> takes padding, a fill and
+     a radius like any other box, so no wrapper is needed. */
+  .tab-bar .tab-icon {
+    box-sizing: content-box;
+    width: var(--space-8);
+    height: var(--space-8);
+    padding: var(--space-1) var(--space-6);
+    border-radius: var(--radius-full);
+    transition: background var(--transition-base), color var(--transition-base);
+  }
+  .tab-btn.active .tab-icon { background: var(--accent); color: var(--accent-ink); animation: none; }
+  .tab-btn:focus-visible { outline-offset: calc(var(--focus-offset) * -2); border-radius: var(--radius-4xl); }
+  .tab-badge,
+  .tab-btn.active .tab-badge {
+    top: var(--space-1);
+    left: calc(50% + var(--space-2));
+    min-width: 1.4em;
+    padding: 0 0.35em;
+    border: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: var(--type-caption);
+    box-shadow: 0 0 0 var(--hairline) var(--surface);
+  }
+}
+
+/* ── 9b.3 Discover: the page, and its one quiet line ──────────────
+   No headline over a loaded timetable. What is left of the old hero row is
+   freshness + Refresh (and, where the Filters bar is hidden, "Clear filters"),
+   right-aligned like the boards' header slot. The two links keep the stacked
+   hit areas redesign.css gives them (tests/suites/3d-leftovers.js). */
+#tab-discover { padding: var(--space-1) var(--space-7) calc(var(--space-12) + var(--space-9)); }
+@media (min-width: 1024px) {
+  #tab-discover { padding-inline: var(--space-9); }
+}
+.disc-header { justify-content: flex-end; margin-bottom: 0; }
+.disc-actions { padding-top: 0; }
+.disc-actions .last-updated:empty { display: none; }
+.disc-actions .last-updated,
+.disc-clear-btn {
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--space-8);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.disc-actions .refresh-link { color: var(--ink); font-weight: var(--weight-bold); text-decoration: underline; text-underline-offset: 0.2em; }
+.disc-actions .refresh-link:disabled { color: var(--ink-3); text-decoration: none; }
+.disc-actions .refresh-link:focus-visible,
+.disc-clear-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+.controls { margin-top: var(--space-1); gap: var(--space-3); background: var(--ground); }
+.controls-body { gap: var(--space-6); padding-top: var(--space-2); }
+.control-group > label,
+.controls-body label {
+  font-family: var(--font-body);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+/* ── 9b.4 Date row ────────────────────────────────────────────────
+   A round calendar button beside ONE segmented track (.date-track) holding the
+   five ranges; the chosen range is the graphite segment. The row itself still
+   scrolls sideways when the track cannot fit (320px, the mono themes): the
+   block padding is room for the soft shadow inside that scroll box. */
+#tab-discover .date-presets {
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) calc(var(--space-1) / 2);
+}
+.date-quick-btn.date-pick,
+.date-track .date-quick-btn {
+  border: 0;
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.date-quick-btn.date-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-12);
+  height: var(--space-12);
+  padding: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+.date-pick svg { width: var(--space-8); height: var(--space-8); }
+.date-track {
+  flex: 1 0 auto;
+  display: flex;
+  align-items: stretch;
+  padding: calc(var(--space-1) / 2);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.date-track .date-quick-btn {
+  flex: 1 0 auto;
+  height: var(--tap-min);
+  padding: 0 calc(var(--space-1) / 2);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink-2);
+}
+.date-track .date-quick-btn:hover { background: transparent; color: var(--ink); }
+.date-quick-btn.date-pick.active,
+.date-track .date-quick-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: var(--weight-bold);
+}
+.date-track .date-quick-btn.active { padding: 0 var(--space-3); }
+/* Terminal and Handheld swap in a monospace body face: five ranges cannot fit
+   a phone there whatever the padding, the row scrolls — so the segments may as
+   well breathe (at the tight padding their labels ran into each other). */
+html:is([data-theme="terminal"], [data-theme="gameboy"]) .date-track .date-quick-btn { padding: 0 var(--space-3); }
+/* Wide screens: the track hugs its five ranges instead of spanning the column. */
+@media (min-width: 1024px) {
+  .date-track { flex: 0 0 auto; }
+  .date-track .date-quick-btn,
+  .date-track .date-quick-btn.active { padding: 0 var(--space-8); }
+}
+.date-quick-btn.date-pick:focus-visible,
+.date-track .date-quick-btn:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -2); }
+/* …inside the control because the row is a scroll box (an outer ring would be
+   clipped) — so on the chosen range's accent fill the ring is --accent-ink. */
+.date-quick-btn.date-pick.active:focus-visible,
+.date-track .date-quick-btn.active:focus-visible { outline-color: var(--accent-ink); }
+
+/* The inline calendar: a surface card; the chosen day is the graphite disc. */
+.date-picker {
+  margin-top: var(--space-3);
+  padding: var(--space-7);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.cal-title { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); line-height: 1.15; }
+.cal-nav {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--ink);
+}
+.cal-wd span { font-size: var(--type-label); font-weight: var(--weight-bold); color: var(--ink-3); }
+.cal-cell { border-radius: var(--radius-full); font-family: var(--font-display); font-size: var(--text-xl); font-weight: var(--weight-extrabold); font-variant-numeric: tabular-nums; }
+.cal-cell.today { box-shadow: inset 0 0 0 var(--hairline) var(--ink); }
+.cal-cell.sel { box-shadow: var(--glow-ring) var(--glow-sel-ring); }
+.cal-cell:focus-visible, .cal-nav:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.cal-legend { font-size: var(--type-label); color: var(--ink-3); }
+
+/* ── 9b.5 Filters bar, its chips, and the open panel ──────────────
+   Colour means class type: ONLY a class-type chip or pill wears one (data-ct).
+   Studios, times and instructors are neutral — lit, they sink into the sunken
+   well with an ink ring. No chevron: open, the bar itself is lit. */
+.controls-bar { gap: var(--space-2); }
+.controls-toggle {
+  height: var(--tap-min);
+  gap: var(--space-2);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.controls-icon { flex: none; display: block; }
+.controls-count {
+  min-width: 1.45em;
+  height: 1.45em;
+  padding: 0 0.35em;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+  line-height: 1;
+}
+.controls:not(.filters-collapsed) .controls-toggle { background: var(--accent); color: var(--accent-ink); }
+.controls:not(.filters-collapsed) .controls-count { background: var(--accent-ink); color: var(--accent); }
+
+.filter-chip {
+  height: calc(var(--tap-min) - var(--space-3));
+  gap: var(--space-2);
+  padding: 0 var(--space-3) 0 var(--space-5);
+  border: 0;
+  background: var(--sunken);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.filter-chip[data-ct] { background: var(--ct-wash); color: var(--ct-deep); }
+.filter-chip-x { color: inherit; font-size: var(--text-2xl); font-weight: var(--weight-medium); }
+.controls-clear { height: calc(var(--tap-min) - var(--space-3)); color: var(--ink-2); font-family: var(--font-body); font-size: var(--type-caption); font-weight: var(--weight-semibold); }
+.controls-toggle:focus-visible,
+.filter-chip:focus-visible,
+.controls-clear:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* The panel's pill rows. */
+#tab-discover .location-chips,
+#tab-discover #categoryPills,
+#tab-discover .instr-matches { gap: var(--space-2); padding: calc(var(--space-1) / 2); }
+.loc-chip,
+.cat-pill,
+.sub-pill {
+  height: auto;
+  min-height: var(--tap-min);
+  gap: var(--space-2);
+  padding: 0 var(--space-6);
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
+}
+.loc-chip:hover, .cat-pill:hover, .sub-pill:hover { color: var(--ink); }
+.loc-chip.active,
+.cat-pill.active {
+  background: var(--sunken);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ink);
+  font-weight: var(--weight-bold);
+}
+/* A class type: led by its pictogram tile, and lit in its own colour. */
+.cat-pill[data-ct] { padding-left: var(--space-3); }
+.cat-pill[data-ct].active,
+.sub-pill.active {
+  background: var(--ct-tint);
+  color: var(--ct-deep);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ct-base);
+  font-weight: var(--weight-bold);
+}
+.sub-pill { min-height: calc(var(--tap-min) - var(--space-3)); padding: 0 var(--space-5); font-size: var(--type-caption); }
+.chip-count,
+.pill-count {
+  min-width: 1.5em;
+  height: 1.5em;
+  margin-left: 0;
+  padding: 0 0.35em;
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.loc-chip.active .chip-count,
+.cat-pill.active .pill-count { background: var(--surface); color: inherit; }
+.loc-chip:focus-visible,
+.cat-pill:focus-visible,
+.sub-pill:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -2); }
+
+/* "★ Favs" / "S/A" beside the Instructor label: two quiet neutral pills (they
+   were gold — colour means class type), with a taller hit area than they draw. */
+.controls-body .fav-btn {
+  position: relative;
+  margin-left: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-body);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.controls-body .fav-btn:hover { background: var(--surface); color: var(--ink); }
+.controls-body .fav-btn::after { content: ''; position: absolute; inset: calc(var(--space-3) * -1) 0; }
+.controls-body .fav-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* Instructors: a surface well; a chosen instructor is a neutral chip. */
+.instr-box {
+  min-height: var(--space-12);
+  padding: var(--space-1) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.instr-box:focus-within { box-shadow: inset 0 0 0 var(--hairline) var(--ink); }
+.instr-search { font-family: var(--font-body); font-size: var(--type-body); color: var(--ink); }
+.instr-chip {
+  height: calc(var(--tap-min) - var(--space-3));
+  padding: 0 var(--space-3) 0 var(--space-5);
+  border: 0;
+  background: var(--sunken);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-bold);
+}
+.instr-chip button { color: inherit; }
+
+/* ── 9b.6 Day strip + day heading ─────────────────────────────────
+   Neutral: seven days fit a phone's width exactly (a longer range scrolls, and
+   wraps at >=1024px). A day is a small word over its date over its count. The
+   CHOSEN day is graphite with the glow; a day with nothing on is a quiet dashed
+   outline; a day on which you hold a class carries one small dot in that
+   class's colour — the only class colour in the strip. The padding is room for
+   the glow inside the strip's own scroll box; the inline margin gives it back. */
+#tab-discover .results { padding-top: var(--space-1); }
+#results[data-day-mode="list"] > .day-group:first-of-type { margin-top: var(--space-5); }
+/* A single day: once the load is over its heading carries the count, so the
+   "N classes" line above it has said its piece — as over a paged range
+   (redesign.css). It stays while results stream in: the spinner lives there. */
+#results[data-day-mode="list"] > .summary.is-settled { display: none; }
+.day-strip {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-7);
+  margin: var(--space-1) calc(var(--space-3) * -1) 0;
+  border-bottom: 0;
+  background: var(--ground);
+}
+.day-pill {
+  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--space-1) / 2);
+  width: calc((100% - 6 * var(--space-2)) / 7);
+  min-width: var(--tap-min);
+  height: auto;
+  min-height: calc(var(--tap-min) + var(--type-day));
+  padding: var(--space-1) 0;
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-6xl);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
+}
+@media (min-width: 1024px) {
+  .day-pill { width: calc(var(--tap-lg) + var(--space-7)); }
+}
+.day-pill::after { inset: 0; }
+.day-pill-label { font-size: var(--type-label); font-weight: var(--weight-semibold); line-height: 1.2; color: var(--ink-3); }
+.day-pill-num {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: var(--type-day);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.day-pill-count {
+  min-width: var(--space-9);
+  height: auto;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: var(--sunken);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--space-7);
+}
+.day-pill.is-empty { background: transparent; border: var(--hairline) dashed var(--text-off); color: var(--ink-3); }
+.day-pill.is-empty .day-pill-num { font-weight: var(--weight-bold); }
+.day-pill.is-empty .day-pill-count { background: transparent; color: inherit; font-weight: var(--weight-bold); }
+.day-pill.is-target { border: var(--hairline) solid var(--accent); color: var(--ink); }
+.day-pill.active {
+  z-index: 1;
+  border: var(--hairline) solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--glow-ring) var(--glow-sel-ring), 0 var(--space-3) var(--space-7) calc(var(--space-2) * -1) var(--glow-sel-drop);
+}
+.day-pill.active .day-pill-label { color: inherit; font-weight: var(--weight-bold); }
+.day-pill.active .day-pill-count { border: 0; background: var(--accent-ink); color: var(--accent); }
+/* The held-class dot sits at the numeral's shoulder — clear of the word above
+   ("Today" fills the pill) and inside the pill's round corner. */
+.day-pill-dot {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--space-1) / 2);
+  width: calc(var(--dot) * 0.75);
+  height: calc(var(--dot) * 0.75);
+}
+.day-pill.active .day-pill-dot { box-shadow: 0 0 0 var(--hairline) var(--accent-ink); }
+.day-pill:focus-visible,
+.day-hint:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* "Thursday 24 September · 14 classes": one left-aligned line in the display
+   face, the count quiet beside it (it wraps under on a narrow mono screen). No
+   previous / next buttons — the pills and the swipe move days. */
+.day-group { margin-bottom: var(--space-9); }
+.day-header,
+#dayPager .day-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  column-gap: var(--space-2);
+  row-gap: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border-bottom: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--type-day);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+  text-align: left;
+  text-transform: none;
+}
+.day-count,
+#dayPager .day-header > .day-count {
+  margin-left: 0;
+  color: var(--ink-3);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+}
+.day-count:not(:empty)::before { content: '\00B7\00A0'; }
+.day-hint { color: var(--ink-3); font-size: var(--type-caption); font-weight: var(--weight-semibold); }
+.summary { font-family: var(--font-body); font-size: var(--type-caption); font-weight: var(--weight-semibold); color: var(--ink-3); }
+
+/* ── 9b.7 THE CLASS CARD ──────────────────────────────────────────
+   One anatomy (js/app.js eventCard builds it; My Bookings and the usual-week
+   card reuse it). Every rule hangs off `.class-card[data-ct]`, so a card that
+   has not moved to this anatomy yet is left exactly as it was.
+
+     <div class="class-card ct-card [is-booked|is-waitlisted]" data-ct="ride">
+       <div class="cc-time">                        the TIME leads
+         <span class="cc-time-h">6:30</span>
+         <span class="cc-dur"><span class="cc-ampm">pm</span> · 45 min</span>
+       </div>
+       <div class="cc-info">
+         <span class="cc-head"><span class="ct-tile">pictogram</span>
+           <span class="cc-name">Ride 45</span></span>
+         <span class="cc-sub"><span class="cc-who">Instructor + rank</span>
+           <span class="cc-loc">Studio</span></span>   plain text, never coloured
+         <span class="cc-spots [low]">…</span>          availability
+       </div>
+       <div class="cc-action"><button class="book-btn [booked|waitlist]"></div>
+     </div>
+
+   Inks on the tinted ground are ONLY --ct-ink, --ct-ink-2 and --ct-deep (the
+   three the contrast matrix guarantees in every theme, swatch and intensity).
+   The pill is styled from its state classes, never from a primitive class on
+   the button: the booking code assigns className = 'book-btn[ booked|
+   waitlist]' wholesale and compares it as a string. Yours glows; a waitlist
+   place is dashed.
+
+   ONE component, two wearers. My Bookings' card (js/app.js renderMyBookings)
+   has the same root, so everything SHARED is said here, once: the tinted
+   surface, the dashed place, the glow, --cc-pill, the TIME block (.cc-time —
+   one builder for every wearer, js/app.js _ccTimeHTML; a held class only adds
+   its day), the title row (.cc-head), the meta line (.cc-sub · .cc-who ·
+   .cc-loc) and where the rank tile sits. crisp:9d-bookings adds only
+   what a held class needs on top (its grid, the day, seat chips, the actions
+   and More) and may not name .class-card at all (tests/suites/9d-bookings.js).
+   The rank tile's LOOK is neither's: it is the one neutral recipe of 9e.5. */
+.class-grid { gap: var(--space-4); }
+.class-card[data-ct] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  min-height: calc(var(--tap-lg) + var(--tap-min));
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--ct-card);
+  color: var(--ct-ink);
+  box-shadow: none;
+  /* The fill of the quiet pill (Book, the bell). A property, not a second
+     selector: the state rules below then win on their own specificity. */
+  --cc-pill: var(--surface);
+}
+/* Where the card IS the surface, a surface pill would vanish into it: "off"
+   (neutral cards), and Handheld (its class tint is the panel, and the theme has
+   no shadows). The pill steps one shade down instead. */
+html[data-ct-intensity="off"] .class-card[data-ct],
+html[data-theme="gameboy"] .class-card[data-ct] { --cc-pill: var(--surface-2); }
+.class-card[data-ct].is-waitlisted { border: var(--hairline) dashed var(--ct-base); }
+/* Yours glows: ONE recipe, two triggers. Discover — the card you hold
+   (.is-booked follows the in-place sync, which cannot add a primitive class).
+   My Bookings — every card there is held, so renderMyBookings marks only the
+   NEXT seat, with .glow-mine-card. */
+.class-card[data-ct].is-booked:not(.my-booking-card),
+.class-card[data-ct].glow-mine-card {
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--glow-edge) var(--ct-base), var(--glow-drop-card) var(--ct-drop);
+}
+/* (Not in My Bookings: there only the place is un-booked, and one card of a
+   list lifting on its own reads as a state.) */
+@media (hover: hover) and (min-width: 1024px) {
+  .class-card[data-ct]:not(.is-booked):not(.my-booking-card):hover { box-shadow: var(--shadow-float); }
+}
+
+/* Time block: the digits over ONE small line — am/pm, then the duration. The
+   column is sized in em of the time itself (so it grows with the text) to the
+   widest time there is, "12:30": every card's text then starts on one grid
+   line, as on the boards' fixed-width 24-hour column. */
+.class-card[data-ct] .cc-time {
+  flex: none;
+  width: auto;
+  min-width: 2.4em;
+  gap: calc(var(--space-1) / 2);
+  font-size: var(--type-time);
+}
+.class-card[data-ct] .cc-time-h {
+  color: var(--ct-ink);
+  font-family: var(--font-display);
+  font-size: var(--type-time);
+  font-weight: var(--weight-black);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.class-card[data-ct] .cc-dur {
+  color: var(--ct-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+/* am/pm is part of the TIME, not of the duration beside it: the card's own ink, bold. */
+.class-card[data-ct] .cc-ampm {
+  margin-left: 0;
+  color: var(--ct-ink);
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: 0;
+}
+
+/* Info: title row, meta line, availability. The basis is the width below which
+   the action drops to a row of its own instead of crushing the text: what the
+   title row's FIRST line needs — the tile, its gap and nine characters of the
+   title (the longest class family, "REFORMER:", at the 0.6em advance of
+   Terminal's and Handheld's mono body face). It was the pre-tile 100px: beside
+   a wide action ("Full" + the bell is 114px; any pill in the mono themes) the
+   column was ~116px at 390px, "STRENGTH:" no longer fitted after the tile, and
+   the tile sat alone on the first line with the whole name under it. */
+.class-card[data-ct] .cc-info {
+  flex: 1 1 calc(var(--tile-md) + var(--space-2) + 5.4 * var(--type-title));
+  min-width: 0;
+  justify-content: center;
+  gap: calc(var(--space-1) * 0.75);
+}
+/* The title flows INLINE after its tile, so a long name's second line starts
+   under the tile with the whole column to itself ("REFORMER: Foundations 50"
+   is two lines at 390px, not three beside a tile-wide gutter). */
+.class-card[data-ct] .cc-head { display: block; min-width: 0; }
+.class-card[data-ct] .cc-head > .ct-tile { display: inline-flex; vertical-align: middle; margin-right: var(--space-2); }
+.class-card[data-ct] .cc-name {
+  vertical-align: middle;
+  color: var(--ct-ink);
+  font-family: var(--font-body);
+  font-size: var(--type-title);
+  font-weight: var(--weight-bold);
+  line-height: 1.25;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.class-card[data-ct] .cc-name:focus-visible,
+.class-card[data-ct] .instructor-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}
+/* "Instructor [rank] · Studio". The studio is ONE no-wrap unit that carries its
+   own separator in the gap to its left; when the unit wraps to a new line that
+   gap lies outside the line's left edge, where the clip takes the dot away —
+   so a wrapped line never ends, or starts, on a bare "·". (The clip leaves
+   --space-1 of slack on that side: room for a focus ring.) */
+.class-card[data-ct] .cc-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-5);
+  row-gap: 0;
+  color: var(--ct-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  line-height: 1.45;
+  clip-path: inset(calc(var(--space-2) * -1) calc(var(--space-2) * -1) calc(var(--space-2) * -1) calc(var(--space-1) * -1));
+}
+/* Inline, not a flex row: when a long name wraps, its rank tile follows the
+   last word instead of floating beside the block. */
+.class-card[data-ct] .cc-who { min-width: 0; }
+.class-card[data-ct] .cc-loc { position: relative; white-space: nowrap; }
+.class-card[data-ct] .cc-loc::before {
+  content: '\00B7';
+  position: absolute;
+  right: 100%;
+  width: var(--space-5);
+  text-align: center;
+}
+/* The rank tile rides inline after the instructor's name: only its PLACE is
+   said here. Its look is the one neutral rank recipe (crisp:9e-stats-membership,
+   9e.5) and is never re-coloured on a card — S to C are opaque tiles, and D / F
+   read in --text-muted, which IS --ct-ink-2: a pair the contrast matrix holds
+   on every tint. */
+.class-card[data-ct] .tier-badge { flex: none; margin-left: var(--space-1); vertical-align: middle; }
+
+.class-card[data-ct] .cc-spots {
+  color: var(--ct-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+}
+.class-card[data-ct] .cc-spots.low {
+  align-self: flex-start;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--ct-base);
+  color: var(--ct-on-base);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--space-8);
+  white-space: nowrap;
+}
+/* A label such as "Online": the same sentence-case full pill it is on a held
+   class's card (crisp:9d-bookings) — not the older sheets' 4px uppercase tag. */
+.class-card[data-ct] .cc-meta .badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ct-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--space-9);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+/* The ONE action. Book = the quiet surface pill in the class deep ink · Join
+   waitlist = the class outline · Booked = the class base fill · Waitlisted =
+   the dashed class edge on surface · Full = a quiet, disabled outline. */
+.class-card[data-ct] .cc-action { flex: none; align-self: center; gap: var(--space-2); margin-left: auto; }
+.class-card[data-ct] .book-btn {
+  width: auto;
+  height: auto;
+  min-width: calc(var(--tap-lg) + var(--space-3));
+  min-height: var(--tap-min);
+  margin-top: 0;
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--cc-pill);
+  color: var(--ct-deep);
+  box-shadow: var(--shadow-soft);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-fast);
+}
+.class-card[data-ct] .book-btn:active { transform: scale(0.98); }
+.class-card[data-ct] .book-btn:focus-visible,
+.class-card[data-ct] .notify-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.class-card[data-ct] .book-btn.waitlist {
+  padding: 0 var(--space-5);
+  background: transparent;
+  color: var(--ct-deep);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ct-base);
+  font-size: var(--type-caption);
+}
+.class-card[data-ct] .book-btn.booked {
+  background: var(--ct-base);
+  color: var(--ct-on-base);
+  box-shadow: none;
+}
+.class-card[data-ct].is-waitlisted .book-btn.booked {
+  padding: 0 var(--space-5);
+  border: var(--hairline) dashed var(--ct-base);
+  background: var(--surface);
+  color: var(--ct-deep);
+  font-size: var(--type-caption);
+}
+.class-card[data-ct] .book-btn:disabled {
+  background: transparent;
+  color: var(--ct-ink-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--text-off);
+  opacity: 1;
+  cursor: not-allowed;
+  transform: none;
+}
+/* The "notify me" bell features.js adds beside a Full pill: a round control in
+   the same family, its bell a stroke mark (a mask, so it takes the ink) — not
+   an emoji. Watching = the class base fill. */
+.class-card[data-ct] .notify-btn {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-top: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--cc-pill);
+  color: var(--ct-deep);
+  box-shadow: var(--shadow-soft);
+}
+.class-card[data-ct] .notify-btn::before {
+  content: '';
+  display: block;
+  width: var(--space-8);
+  height: var(--space-8);
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4s2-1.5 2-6.5'/%3E%3Cpath d='M10 19.5a2 2 0 0 0 4 0'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4s2-1.5 2-6.5'/%3E%3Cpath d='M10 19.5a2 2 0 0 0 4 0'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.class-card[data-ct] .notify-btn:hover { background: var(--cc-pill); color: var(--ct-deep); }
+.class-card[data-ct] .notify-btn.watching,
+.class-card[data-ct] .notify-btn.watching:hover { background: var(--ct-base); color: var(--ct-on-base); box-shadow: none; }
+
+/* ── 9b.8 Skeletons + empty states, in the card's shape ───────────
+   A loading card is the neutral surface (a class colour is only known once the
+   class is): the same radius, height and three-part row. An empty state is a
+   plain line and the ways on — no box, no illustration. */
+.skeleton-grid { display: flex; flex-direction: column; gap: var(--space-4); }
+.skeleton-card {
+  align-items: center;
+  gap: var(--space-4);
+  min-height: calc(var(--tap-lg) + var(--tap-min));
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.skeleton-bar { border-radius: var(--radius-md); }
+.skeleton-time { display: flex; flex-direction: column; gap: var(--space-2); width: auto; min-width: 2.4em; font-size: var(--type-time); }
+.sk-time-hour { width: 1.9em; height: 0.85em; margin: 0; }
+.sk-time-ampm { width: 2.1em; height: 0.35em; }
+.skeleton-info { gap: var(--space-3); min-width: 0; }
+.sk-type { width: 68%; height: var(--space-7); }
+.sk-instr { width: 52%; height: var(--space-5); }
+.sk-loc { width: 34%; height: var(--space-5); }
+.sk-button { flex: none; width: calc(var(--tap-lg) + var(--space-3)); height: var(--tap-min); margin: 0; border-radius: var(--radius-full); }
+.skeleton-studio { border: 0; border-radius: var(--radius-card); background: var(--surface); }
+
+.no-results {
+  padding: var(--space-10) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--type-body);
+  font-weight: var(--weight-medium);
+}
+.empty-state { padding: var(--space-11) var(--space-7); gap: var(--space-5); }
+.empty-state .empty-title {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.15;
+}
+.empty-state .empty-subtitle,
+.day-empty-line,
+.discover-empty-sub { color: var(--ink-2); font-family: var(--font-body); font-size: var(--type-body); font-weight: var(--weight-medium); line-height: 1.45; }
+.day-empty { padding: var(--space-10) 0; gap: var(--space-7); }
+.empty-action,
+.discover-quick-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.empty-action.primary { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+/* Discover's own signed-out hero only — the other tabs' heroes have their owners. */
+.discover-empty-state .tab-empty-btn {
+  min-height: var(--tap-lg);
+  padding: 0 var(--space-10);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.discover-empty-state .tab-empty-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.discover-quick-btn:hover { background: var(--surface); color: var(--ink); }
+.empty-action:focus-visible,
+.discover-quick-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.discover-empty-title {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: var(--weight-black);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-btn, .tab-bar .tab-icon, .date-quick-btn.date-pick, .date-track .date-quick-btn,
+  .controls-toggle, .loc-chip, .cat-pill, .sub-pill, .day-pill, .class-card[data-ct] .book-btn { transition: none; }
+  .class-card[data-ct] .book-btn:active { transform: none; }
+}
+
+
+/* == crisp:9c-sheets == */
+/* The class sheet, the seat picker, the Booked sheet, dialogs, the Find-similar
+   popup, the instructor / history modals and the banners. Older rules for the
+   same parts stay in styles.css / features.css / settings.css (several suites
+   pin them); this section is linked after them and overrides. Where one of
+   them is more specific — .cds-book-btn:hover, .btn:disabled, the seat rules
+   under [data-theme], settings.css's !important seat inks — the override here
+   matches its weight and says so. */
+
+/* ── 1. Scrim + panel: every sheet and dialog ─────────────────────
+   No glass: the scrim is the theme's flat overlay colour. A panel is a soft
+   surface — sheet radius, no border, the one floating shadow. */
+.modal-overlay, .history-modal, .instructor-modal, .confirm-overlay {
+  background: var(--modal-overlay);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.modal, .confirm-dialog {
+  border: 0;
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-float);
+}
+.modal-header { align-items: flex-start; gap: var(--space-5); margin-bottom: var(--space-7); }
+.modal-header > div { flex: 1; min-width: 0; }
+.modal-title {
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+.modal-subtitle { font-size: var(--type-caption); color: var(--text-muted); }
+/* × — a round, quiet control. (Its fingertip area is the ::after of
+   styles.css "Tap targets", which sizes itself from this box.) */
+.modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--tile-lg);
+  height: var(--tile-lg);
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text);
+  font-size: var(--text-3xl);
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text-heading); }
+.modal-close:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+/* On a class tint the × sits on the surface instead. */
+.ct-card .modal-close, #bikeModal .modal-header .modal-close { background: var(--surface); }
+/* …except at "off", where the class block IS the surface. */
+html[data-ct-intensity="off"] .ct-card .modal-close, html[data-ct-intensity="off"] #bikeModal .modal-header .modal-close { background: var(--sunken); }
+
+/* .pill-neutral — local to the sheets: the calm second button of a pair
+   ("Keep it", "View my bookings"), a sunken fill in the body ink. */
+.pill-neutral { --pill-fill: var(--sunken); --pill-ink: var(--text); }
+
+/* A sheet's action row. The old .btn pair now carries the pill classes; .btn's
+   :hover / :disabled (0,2,0) would repaint them, so both are answered here. */
+.modal-actions { align-items: center; gap: var(--space-3); }
+.btn.pill-btn, .btn.pill-btn:hover, .btn.pill-btn:disabled {
+  border: 0;
+  background: var(--pill-fill);
+  color: var(--pill-ink);
+}
+.modal-actions .pill-primary { flex: 1; }
+/* A sheet still on the bare .btn pair (the history-sync prompt, the year in
+   review — their markup is pinned or not this lane's): the same two shapes. */
+.modal-actions .btn:not(.pill-btn) {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-7);
+  border: 0;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.modal-actions .btn-ghost:not(.pill-btn), .modal-actions .btn-ghost:not(.pill-btn):hover { background: var(--sunken); color: var(--text); }
+
+/* ── 2. The class sheet (js/app.js openClassDetail) ────────────────
+   data-ct on the sheet. A block in the class's colour — time first, in the
+   display face — then one grouped list and ONE action on the surface. */
+.class-detail-sheet {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: var(--shadow-float);
+  max-height: 90vh;
+}
+.cds-hero {
+  padding: var(--space-5) var(--space-7) var(--space-7);
+  border-radius: 0;
+}
+.cds-handle {
+  width: var(--space-11);
+  height: var(--space-1);
+  margin: 0 auto var(--space-10); /* clears the × beside it */
+  border-radius: var(--radius-full);
+  background: var(--ct-deep);
+  opacity: 0.32;
+}
+.cds-when { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-5); }
+.cds-when-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.cds-time { color: var(--ct-ink); white-space: nowrap; }
+.cds-ampm { margin-left: var(--space-1); font-size: var(--type-heading); font-weight: var(--weight-extrabold); }
+.cds-date { font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.4; color: var(--ct-ink-2); }
+.ct-tile.cds-tile { --tile: calc(var(--tile-lg) * 2); border-radius: var(--radius-6xl); }
+.cds-type {
+  display: block;
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-6xl);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.1;
+  letter-spacing: 0;
+  color: var(--ct-deep);
+  overflow-wrap: anywhere;
+}
+.cds-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--type-body);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  color: var(--ct-ink-2);
+}
+.cds-who .cds-photo { width: var(--tile-md); height: var(--tile-md); margin-right: var(--space-1); }
+.cds-who .cds-instr-name { font-size: inherit; font-weight: var(--weight-bold); color: var(--ct-ink); }
+.cds-where { min-width: 0; }
+
+.cds-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-7) 0;
+}
+/* One grouped list on the ground colour: free-cancel · availability · clash. */
+.cds-details {
+  gap: 0;
+  margin: 0;
+  padding: 0 var(--space-6);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-5xl);
+  background: var(--ground);
+}
+.cds-detail-row {
+  gap: var(--space-4);
+  min-height: var(--tap-min);
+  padding: var(--space-3) 0;
+  font-size: var(--type-body);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.cds-detail-row + .cds-detail-row { border-top: var(--hairline) solid var(--line); }
+.cds-detail-row strong { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; color: var(--text); }
+.cds-icon { display: inline-flex; width: auto; color: var(--text-muted); }
+/* Availability is said in words and in the body ink: on this sheet colour
+   means the class type (the old green / amber / red status inks were tuned
+   for a different ground). */
+.cds-detail-row .cds-avail, .cds-detail-row .cds-avail-full, .cds-detail-row .cds-avail-waitlist {
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+.cds-detail-row .late-cancel-note { border: 0; border-radius: var(--radius-full); font-size: var(--type-caption); font-weight: var(--weight-semibold); }
+/* A clash is a caution, not an error: the caution pair every theme tunes (the
+   dialog warning's), bold ink, and the other class's own tile closing the row. */
+.cds-detail-row.cds-clash {
+  margin: 0 calc(var(--space-6) * -1);
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+  border-top: 0;
+  background: var(--badge-waitlist-bg);
+}
+.cds-clash .cds-avail-full, .cds-clash .cds-avail-waitlist { flex: 1; min-width: 0; font-weight: var(--weight-bold); color: var(--text-heading); }
+.cds-clash .cds-icon { color: var(--text-heading); }
+.cds-bio { margin: 0; font-size: var(--text-lg); line-height: 1.55; color: var(--text-muted); }
+.cds-keywords { gap: var(--space-2); margin: 0; }
+.cds-keyword, .instructor-keyword {
+  padding: var(--space-1) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* The action stays under the thumb: it sticks to the sheet's bottom edge while
+   a long bio scrolls behind it (the sheet is the scroller), on its own strip of
+   surface; the sheet's bottom inset — safe area included — belongs to it. */
+.cds-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  gap: var(--space-2);
+  margin-top: 0;
+  padding: var(--space-3) 0 calc(var(--space-7) + env(safe-area-inset-bottom));
+  background: var(--surface);
+}
+/* The action and, beside it, what it uses ("1 class · 4 left this month"). */
+.cds-cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-7); }
+.cds-cta > .cds-book-btn { flex: 1 1 60%; width: auto; }
+.cds-cta > .cds-view-instr { flex: 1 0 100%; }
+.cds-note { display: flex; flex: none; flex-direction: column; line-height: 1.35; }
+.cds-note-main { font-size: var(--type-body); font-weight: var(--weight-bold); color: var(--text); }
+.cds-note-sub { font-size: var(--type-caption); font-weight: var(--weight-medium); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* styles.css still paints .cds-book-btn on :hover / :disabled / .booked /
+   .waitlist at (0,2,0)–(0,3,0): the pill's own fill and ink win here. */
+.cds-book-btn.pill-btn { border: 0; }
+.cds-book-btn.pill-btn, .cds-book-btn.pill-btn:hover, .cds-book-btn.pill-btn:disabled, .cds-book-btn.pill-btn.booked:disabled {
+  background: var(--pill-fill);
+  color: var(--pill-ink);
+}
+/* A waitlist place you hold: the dashed class edge, as on the class card. */
+.cds-book-btn.pill-btn.is-place { border: var(--hairline) dashed var(--ct-base); box-shadow: none; }
+.cds-view-instr.pill-btn { border: 0; }
+
+@media (min-width: 1024px) {
+  .class-detail-sheet { border-radius: var(--radius-sheet); }
+  .cds-hero { padding-top: var(--space-12); } /* no handle here: the × keeps its row */
+}
+
+/* ── 3. The seat picker (js/app.js showBikePicker, #bikeModal) ─────
+   data-ct on #bikeModal. Seats are full circles (rx ← --radius-full, which
+   Handheld zeroes: square there), numbered in the display face.
+     available   surface + hairline (at "bold": the boards' tint + class ink)
+     taken       sunken, muted numeral (--text-dim holds 4.5:1 on --sunken)
+     your pick   the class base + the glow
+     your seat   the same, with a tick mark      your usual: a class ring + a ring mark
+   Every rule carries the #bikeSvg id: the older seat rules reach (0,3,1) under
+   [data-theme], and settings.css inks fav / avoid numbers with !important —
+   the number keeps its state's ink here (the fav / avoid MARKS say the rest),
+   hence the one !important below. */
+#bikeModal {
+  --seat-free-fill: var(--surface);
+  --seat-free-line: var(--line);
+  --seat-free-ink: var(--text);
+  --seat-mine-fill: var(--ct-base, var(--accent));
+  --seat-mine-ink: var(--ct-on-base, var(--accent-ink));
+  --seat-mark: var(--ct-deep, var(--text));
+}
+html[data-ct-intensity="bold"] #bikeModal[data-ct] {
+  --seat-free-fill: var(--ct-tint);
+  --seat-free-line: var(--ct-ring);
+  --seat-free-ink: var(--ct-deep);
+}
+#bikeModal .modal { padding: 0; }
+#bikeModal .modal-header {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-7) var(--space-7) var(--space-6);
+  background: var(--ct-card, var(--surface));
+  color: var(--ct-ink, var(--text));
+}
+#bikeModal .modal-title { color: inherit; }
+#bikeModal .modal-subtitle { margin-top: var(--space-1); font-size: var(--text-lg); line-height: 1.45; color: var(--ct-ink-2, var(--text-muted)); }
+#bikeModal .modal-subtitle-line:first-child { font-weight: var(--weight-semibold); color: var(--ct-ink, var(--text)); }
+#modalTile:empty { display: none; }
+.modal-clash {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--badge-waitlist-bg);
+  color: var(--text-heading);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+}
+#bikeModal .bike-legend, #bikeModal .bike-map-wrap, #bikeModal .modal-hint, #bikeModal .modal-policy {
+  margin-left: var(--space-7);
+  margin-right: var(--space-7);
+}
+.bike-legend {
+  justify-content: center;
+  gap: var(--space-2) var(--space-7);
+  margin-bottom: var(--space-5);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+.bike-legend span { gap: var(--space-2); }
+#bikeModal:not([data-held="1"]) .seat-key-held, #bikeModal:not([data-usual="1"]) .seat-key-usual { display: none; }
+/* The legend's marks are the map's own states, from the same tokens. */
+.bike-legend .seat-key {
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: var(--space-7);
+  height: var(--space-7);
+  border-radius: var(--radius-full);
+  background: var(--seat-free-fill);
+  box-shadow: inset 0 0 0 var(--hairline) var(--seat-free-line);
+}
+.bike-legend .seat-key.is-taken { background: var(--sunken); box-shadow: none; }
+.bike-legend .seat-key.is-pick, .bike-legend .seat-key.is-mine { background: var(--seat-mine-fill); box-shadow: none; }
+.bike-legend .seat-key.is-usual { box-shadow: inset 0 0 0 var(--hairline) var(--seat-mine-fill); }
+.bike-legend .seat-key.is-usual, .bike-legend .seat-key.is-mine { margin-right: var(--space-1); } /* room for the corner mark */
+.bike-legend .seat-key.is-usual::after, .bike-legend .seat-key.is-mine::after {
+  content: '';
+  position: absolute;
+  top: calc(var(--space-1) * -0.75);
+  right: calc(var(--space-1) * -1);
+  box-sizing: border-box;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: calc(var(--hairline) * 2) solid var(--seat-mark);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+}
+.bike-legend .seat-key.is-mine::after {
+  content: '\2713\FE0E';
+  content: '\2713\FE0E' / '';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-width: var(--hairline);
+  color: var(--seat-mark);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
+  line-height: 1;
+}
+/* fav / avoid (settings.js): a dot and a bar — two shapes, not two colours. */
+.bike-legend .seat-key.is-prefer, .bike-legend .seat-key.is-avoid { width: var(--space-3); height: var(--space-3); background: var(--seat-mark); box-shadow: none; }
+.bike-legend .seat-key.is-avoid { width: var(--space-5); height: var(--space-1); background: var(--text); }
+
+.bike-map-wrap {
+  margin-bottom: var(--space-5);
+  padding: var(--space-5);
+  border: 0;
+  border-radius: var(--radius-5xl);
+  background: var(--ground);
+}
+#bikeSvg { overflow: visible; }
+#bikeSvg .bike-slot { --seat-fill: var(--seat-free-fill); --seat-line: var(--seat-free-line); --seat-ink: var(--seat-free-ink); }
+#bikeSvg .bike-slot.taken { --seat-fill: var(--sunken); --seat-line: transparent; --seat-ink: var(--text-dim); }
+#bikeSvg .bike-slot.usual { --seat-line: var(--seat-mine-fill); }
+#bikeSvg .bike-slot.selected, #bikeSvg .bike-slot.mine { --seat-fill: var(--seat-mine-fill); --seat-line: var(--ct-ring, transparent); --seat-ink: var(--seat-mine-ink); }
+#bikeSvg .bike-slot rect {
+  rx: var(--radius-full);
+  ry: var(--radius-full);
+  fill: var(--seat-fill);
+  stroke: var(--seat-line);
+  stroke-width: var(--hairline);
+}
+#bikeSvg .bike-slot.usual rect { stroke-width: calc(var(--hairline) * 1.4); }
+/* The glow, for a shape that takes no box-shadow: the ring is a wide stroke
+   painted UNDER the fill (its outer half shows), the drop a drop-shadow. */
+#bikeSvg .bike-slot.selected rect, #bikeSvg .bike-slot.mine rect {
+  stroke-width: calc(var(--space-1) * 2);
+  paint-order: stroke;
+  filter: drop-shadow(0 var(--space-1) var(--space-2) var(--ct-drop, transparent));
+}
+#bikeSvg .bike-slot text {
+  fill: var(--seat-ink) !important;
+  font-family: var(--font-display);
+  font-size: var(--type-body);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+}
+#bikeSvg .bike-slot.selected text, #bikeSvg .bike-slot.mine text { font-weight: var(--weight-black); }
+@media (hover: hover) {
+  #bikeSvg .bike-slot.available:hover { --seat-line: var(--text); }
+  /* A seat you hold: the hover previews what a tap does — it cancels. */
+  #bikeSvg .bike-slot.mine:hover { --seat-fill: var(--danger); --seat-line: transparent; --seat-ink: var(--danger-ink); }
+}
+/* Keyboard focus: the body-ink ring, drawn ON the seat (as styles.css does),
+   over whichever state — the glow's under-fill stroke would halve it. */
+#bikeSvg .bike-slot:focus-visible rect { stroke: var(--text); stroke-width: calc(var(--hairline) * 2); paint-order: normal; }
+/* The small marks: drawn once by showBikePicker / settings.js, shown from the
+   seat's own classes (cancelBikeSlot turns `mine` into `available` in place). */
+#bikeSvg .seat-mark, #bikeSvg .pref-dot { pointer-events: none; }
+#bikeSvg .seat-mark { display: none; fill: var(--surface); stroke: var(--seat-mark); stroke-linecap: round; stroke-linejoin: round; }
+#bikeSvg .bike-slot.usual .seat-mark-usual { display: inline; stroke-width: calc(var(--hairline) * 2); }
+#bikeSvg .bike-slot.mine .seat-mark-mine { display: inline; stroke-width: var(--hairline); }
+#bikeSvg .seat-mark-mine path { fill: none; }
+#bikeSvg .pref-dot { stroke: var(--surface); stroke-width: var(--hairline); paint-order: stroke; }
+#bikeSvg .pref-dot-prefer { fill: var(--seat-mark); }
+#bikeSvg .pref-dot-avoid { fill: var(--text); }
+#bikeSvg .bike-object { stroke: none; fill: var(--sunken); rx: var(--radius-xl); ry: var(--radius-xl); }
+#bikeSvg .bike-object-mark { fill: var(--text-dim); }
+
+.modal-hint { margin-bottom: var(--space-5); font-size: var(--type-meta); font-weight: var(--weight-medium); line-height: 1.4; color: var(--text-muted); }
+.modal-policy { margin: calc(var(--space-2) - var(--space-5)) 0 var(--space-5); font-size: var(--type-caption); color: var(--text-muted); }
+.modal-policy.is-late { border: 0; border-radius: var(--radius-chip); padding: var(--space-3) var(--space-5); font-weight: var(--weight-semibold); }
+/* The actions ride the sheet's bottom edge, as the class sheet's do (.cds-actions):
+   on a short phone (375 x 667) the header, the legend and the map pushed Book —
+   the only way forward — under the fold of a panel that gives no hint it scrolls.
+   Its own surface, full width (padding, not margins), so the map passes under
+   it; the top padding is room for the pill's glow ring. */
+#bikeModal .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  padding: var(--space-3) var(--space-7) var(--space-7);
+  background: var(--surface);
+}
+/* The one primary action of the sheet glows — once it can be pressed. */
+#confirmBookBtn:not(:disabled) { box-shadow: var(--glow-ring) var(--ct-ring, transparent), var(--glow-drop) var(--ct-drop, transparent); }
+/* Change spot: the seat chips in the hint line. */
+.change-chip {
+  min-height: var(--space-10);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text);
+  box-shadow: none;
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+}
+.change-chip.is-active { background: var(--seat-mine-fill, var(--accent)); color: var(--seat-mine-ink, var(--accent-ink)); }
+@media (max-width: 640px) {
+  #bikeModal .modal {
+    padding: 0;
+    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  }
+  #bikeModal .modal-actions { padding-bottom: calc(var(--space-7) + env(safe-area-inset-bottom)); }
+}
+
+/* ── 4. Dialogs (js/app.js confirmModal — and the usual-week sheet,
+   which wears the same .confirm-* family) ───────────────────────────
+   Two pills. The safe choice is the sunken one; the action is the theme's
+   primary. A destructive action is a CALM danger outline — and filled red
+   (.is-solid, app.js _confirmTone) only where a late-cancel charge or a
+   deletion that cannot be undone is being confirmed. */
+.confirm-overlay { padding: var(--space-7); }
+.confirm-dialog { padding: var(--space-9) var(--space-9) var(--space-8); }
+.confirm-title {
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+.confirm-body { font-size: var(--type-body); line-height: 1.45; color: var(--text-muted); }
+.confirm-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-chip);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  line-height: 1.45;
+}
+/* The caution mark: a round "!" tile in the caution ink — not the warning-sign
+   glyph, which iOS draws as an emoji. (.confirm-dialog for weight: Handheld
+   re-inks the old glyph at (0,2,1).) */
+.confirm-dialog .confirm-warn::before {
+  content: '!';
+  content: '!' / '';
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  margin-right: 0;
+  border-radius: var(--radius-full);
+  background: var(--badge-waitlist-text);
+  color: var(--badge-waitlist-bg);
+  font-size: var(--text-md);
+  font-weight: var(--weight-extrabold);
+  line-height: 1;
+}
+.confirm-actions { gap: var(--space-3); margin-top: var(--space-7); }
+.confirm-btn {
+  /* the safe choice ("Keep it", "Not now") is the default: the sunken pill */
+  --pill-fill: var(--sunken);
+  --pill-ink: var(--text);
+  --pill-line: transparent;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: var(--space-3) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--pill-fill);
+  color: var(--pill-ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--pill-line);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
+  transition: background var(--transition-base), color var(--transition-base), transform var(--transition-fast);
+}
+.confirm-btn:active { transform: scale(0.98); }
+.confirm-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.confirm-btn-cancel:hover { background: var(--pill-fill); }
+.confirm-btn-primary { --pill-fill: var(--accent); --pill-ink: var(--accent-ink); font-weight: var(--weight-extrabold); }
+.confirm-btn-danger { --pill-fill: var(--surface); --pill-ink: var(--danger); --pill-line: var(--danger); }
+.confirm-btn-danger.is-solid { --pill-fill: var(--danger); --pill-ink: var(--danger-ink); --pill-line: transparent; }
+.confirm-btn:disabled { cursor: not-allowed; opacity: 0.55; transform: none; }
+
+/* ── 5. Booked / On the waitlist (js/app.js showBookingConfirmation) ─
+   data-ct on .bc-content: the tick in the class's colour, your seat as the
+   seat badge with the glow. The two buttons are neutral pills. */
+.booking-confirmation {
+  padding: var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-float);
+}
+.bc-content { align-items: flex-start; gap: var(--space-6); margin-bottom: var(--space-7); }
+.bc-content .bc-check {
+  width: var(--tile-xl);
+  height: var(--tile-xl);
+  margin-top: 0;
+  border-radius: var(--radius-full);
+  background: var(--ct-base);
+  color: var(--ct-on-base);
+}
+.bc-title {
+  margin-bottom: var(--space-1);
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.bc-detail { font-size: var(--text-lg); line-height: 1.45; }
+.bc-detail.late-cancel-note { border: 0; border-radius: var(--radius-full); font-size: var(--type-caption); font-weight: var(--weight-semibold); }
+.bc-content .bc-slot { margin-top: var(--space-4); border-radius: var(--radius-full); color: var(--ct-on-base); letter-spacing: 0; }
+.bc-actions { gap: var(--space-3); }
+.bc-actions .pill-btn { flex: 1 1 0; min-width: 0; padding: 0 var(--space-5); }
+
+/* ── 6. Find similar (js/app.js findSimilar) ───────────────────────── */
+.find-similar-popup {
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-float);
+}
+.find-similar-title {
+  padding: var(--space-2) var(--space-4) var(--space-1);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.find-similar-option {
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: var(--tap-min);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-chip);
+}
+.find-similar-option:hover { background: var(--sunken); }
+.find-similar-option:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
+.find-similar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tile-md);
+  height: var(--tile-md);
+  border-radius: var(--radius-tile);
+  background: var(--sunken);
+  color: var(--text);
+}
+.find-similar-label { font-size: var(--text-lg); font-weight: var(--weight-bold); line-height: 1.3; }
+.find-similar-desc {
+  margin-top: 0;
+  padding-left: calc(var(--tile-md) + var(--space-3));
+  font-size: var(--type-caption);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.find-similar-predicted { border-top: var(--hairline) solid var(--line); border-radius: 0 0 var(--radius-chip) var(--radius-chip); }
+.find-similar-predicted .find-similar-label { color: var(--text); }
+
+/* ── 7. Instructor profile + class history (js/features.js) ──────── */
+@media (max-width: 640px) {
+  /* A phone has no room for two insets: a slimmer scrim gap and panel padding. */
+  .history-modal, .instructor-modal { padding: var(--space-5); }
+  .history-modal .modal, .instructor-modal .modal { padding: var(--space-8) var(--space-7); }
+}
+.instructor-profile { gap: var(--space-6); padding: 0 0 var(--space-5); }
+.instructor-photo { width: calc(var(--tile-lg) * 2); height: calc(var(--tile-lg) * 2); border: 0; }
+.instructor-name-title { font-size: var(--text-4xl); font-weight: var(--weight-extrabold); line-height: 1.1; }
+.instructor-bio { padding: 0 0 var(--space-5); font-size: var(--text-lg); line-height: 1.55; }
+.instructor-class-list { gap: var(--space-3); }
+/* A row is the compact class component: its type's tint, tile and inks. */
+.instructor-class-item {
+  gap: var(--space-4);
+  min-height: var(--tap-lg);
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-5xl);
+  background: var(--ct-card, var(--ground));
+  color: var(--ct-ink, var(--text));
+}
+/* "Off": --ct-card is the surface, and so is the modal panel the rows sit on —
+   they would lose their shape entirely. The same step down the usual-week rows
+   take (and for the same reason not --surface-2: the rows carry --ct-ink-2). */
+html[data-ct-intensity="off"] .instructor-class-item { background: var(--sunken); }
+.instructor-class-item[data-event-id]:active { background: var(--ct-wash, var(--sunken)); }
+.instructor-class-item[data-event-id]:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+/* Day over time, the day in the class's deep ink: the compact order the
+   usual-week rows and My Bookings use. */
+.instructor-class-when { display: flex; flex: none; flex-direction: column; gap: var(--space-1); min-width: calc(var(--space-12) + var(--space-7)); }
+.instructor-class-day {
+  min-width: 0;
+  text-align: left;
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  color: var(--ct-deep, var(--text-muted));
+}
+.instructor-class-time {
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-time-compact);
+  font-weight: var(--weight-black);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  color: inherit;
+}
+.instructor-class-ampm { margin-left: calc(var(--space-1) / 2); font-size: var(--type-caption); font-weight: var(--weight-extrabold); }
+.instructor-class-type { font-size: var(--text-lg); font-weight: var(--weight-bold); color: inherit; }
+.instructor-class-loc { font-size: var(--type-caption); color: var(--ct-ink-2, var(--text-muted)); }
+/* The row's status. Yours / nearly full are the .ct-badge primitives (features.js
+   classStatusChip); anything else is this quiet line, in Discover's own words
+   ("14 spots left", "Waitlist open", "Fully booked") — never the old .badge tag. */
+.instructor-class-status {
+  flex: none;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  color: var(--ct-ink-2, var(--text-muted));
+}
+.instructor-actions { gap: var(--space-3); padding: 0; }
+.instructor-actions .pill-btn { flex: 1 1 0; margin-top: var(--space-6); }
+
+.history-month-header {
+  padding: var(--space-7) 0 var(--space-3);
+  margin-bottom: 0;
+  border-bottom: 0;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.history-item {
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--ground);
+}
+/* The class type, as the small colour mark (data-ct on the row). */
+.history-item[data-ct]::before {
+  content: '';
+  flex: none;
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: var(--radius-full);
+  background: var(--ct-base);
+}
+/* A cancelled class is struck through in a readable ink — not faded to half. */
+.history-item.cancelled { opacity: 1; }
+.history-item.cancelled[data-ct]::before { background: transparent; box-shadow: inset 0 0 0 var(--hairline) var(--text-dim); }
+.history-modal .history-item.cancelled .history-class-name { color: var(--text-muted); }
+.history-date { min-width: var(--space-12); font-size: var(--type-label); font-weight: var(--weight-semibold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+.history-class-name { font-size: var(--text-lg); font-weight: var(--weight-bold); }
+.history-sub { font-size: var(--type-caption); color: var(--text-muted); }
+.history-time {
+  min-width: var(--space-12);
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: var(--type-body);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.history-item .history-cancelled-tag {
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── 8. Banners (session, update, offline) ─────────────────────────
+   Soft, inset cards below the desktop width; full-bleed bars on desktop, where
+   discover-layout-fix.css aligns their text with the page column. No box
+   metrics of theirs are set here: tests/suites/2e-css-layout.js keeps this
+   file off the banners' own spacing. */
+.app-banner { border-bottom: 0; font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: 1.4; }
+.app-banner-info { box-shadow: var(--shadow-soft); }
+.app-banner-action { font-weight: var(--weight-bold); }
+@media (max-width: 1023px) {
+  .app-banner { margin: var(--space-3) var(--space-5) 0; border-radius: var(--radius-5xl); }
+}
+
+/* ── 9. Motion ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .class-detail-sheet, .find-similar-popup { animation: none; }
+  .confirm-overlay, .confirm-dialog, .confirm-btn, .booking-confirmation, .bike-slot { transition: none; }
+  .confirm-btn:active { transform: none; }
+}
+
+
+/* == crisp:9d-bookings == */
+
+/* My Bookings, "Your usual week" and the next-class pill (the Bookings board).
+   Built on the primitives above — .ct-card, .ct-tile, .t-time, .t-title,
+   .t-meta, .ct-badge.is-seat, .glow-mine-card, .pill-btn, .seg — and scoped to
+   #tab-bookings / #usualWeekCard / #usualWeekSheet / .next-class-pill, so the
+   rules sit beside 9b's shared class-card rules without touching them and
+   outrank the older sheets by id.
+   The card's BUTTONS keep the class names the booking flows and the suites
+   read (.book-btn.booked.mb-primary-btn, .booking-action-btn): a flow may
+   rewrite a button's className, so their look is keyed on WHERE they sit and
+   on the card's state, through the same --pill-fill / --pill-ink / --pill-line
+   recipe as .pill-btn. */
+
+#tab-bookings {
+  /* One desktop column is a phone-wide card. */
+  --mb-col: calc(var(--space-12) * 7);
+  /* A one-device-pixel step, from the scale. */
+  --mb-hair: calc(var(--space-1) / 4);
+}
+
+/* ── 1. The panel: no chrome of its own — cards sit on the ground ── */
+#tab-bookings .upcoming-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible; /* the next class's glow and the More menu reach past it */
+}
+#tab-bookings .upcoming-header { padding: 0 var(--space-1) var(--space-4); }
+#tab-bookings .upcoming-header h2 {
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--type-day);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-heading);
+}
+#tab-bookings .upcoming-count {
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--space-9);
+}
+#tab-bookings .upcoming-body { padding: 0; }
+#tab-bookings .upcoming-list { gap: 0; }
+#tab-bookings .mb-day-group { margin-bottom: var(--space-3); }
+#tab-bookings .class-grid { gap: var(--space-3); }
+/* A day that has been: dimmed on its cards, not on the wrapper — at desktop
+   widths the wrapper is display:contents and has no box to dim. */
+#tab-bookings .mb-past { opacity: 1; }
+#tab-bookings .mb-past .my-booking-card { opacity: 0.6; }
+#tab-bookings .upcoming-list > .mb-waitlist-status {
+  font-size: var(--type-caption);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ── 2. Plan usage: "8 of 12 this month · Resets 12 Oct" ── */
+#tab-bookings .sub-bar {
+  margin: 0 var(--space-1) var(--space-6);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+#tab-bookings .mb-usage { display: flex; flex-direction: column; gap: var(--space-2); }
+#tab-bookings .mb-usage-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--space-5);
+}
+#tab-bookings .mb-usage-count {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+#tab-bookings .mb-usage-num {
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-heading);
+}
+#tab-bookings .mb-usage-when {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+#tab-bookings .mb-usage-bar {
+  width: 100%;
+  height: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--spinner-track);
+  overflow: hidden;
+}
+#tab-bookings .mb-usage-bar .sub-progress-fill { border-radius: var(--radius-full); background: var(--accent); }
+/* One segment per class. */
+#tab-bookings .mb-usage-bar.is-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: calc(var(--mb-hair) * 3);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+#tab-bookings .mb-usage-bar.is-segmented > i {
+  display: block;
+  border-radius: var(--radius-full);
+  background: var(--spinner-track);
+}
+#tab-bookings .mb-usage-bar.is-segmented > i.is-on { background: var(--accent); }
+
+/* Two billing periods: each bar folds its own cards away. */
+#tab-bookings .mb-period-section {
+  margin: 0 0 var(--space-5);
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+#tab-bookings .mb-period-bar {
+  flex-wrap: nowrap;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: transparent;
+}
+#tab-bookings .mb-period-bar:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+#tab-bookings .mb-period-section.collapsed .mb-period-bar { margin-bottom: 0; }
+#tab-bookings .mb-period-chevron { display: inline-flex; flex: none; color: var(--text-muted); }
+#tab-bookings .mb-period-body { padding: 0; background: transparent; }
+
+#tab-bookings .mb-past-toggle { display: flex; justify-content: flex-end; margin: 0 0 var(--space-2); }
+
+/* ── 3. The class card: tint · day + time · tile + title · meta · what you hold ──
+   It IS the shared class card (crisp:9b-discover, 9b.7): the tinted surface,
+   radius, ink, the dashed waitlist place, the glow on the NEXT seat
+   (.glow-mine-card), --cc-pill and the meta line all come from there. Only
+   what a held class adds is said here — starting with its own grid. */
+#tab-bookings .my-booking-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-3) var(--space-3) var(--space-6);
+}
+#tab-bookings .my-booking-card:hover { transform: none; }
+/* Its open More menu rides over the cards below. */
+#tab-bookings .my-booking-card[data-more-open] { z-index: 5; }
+
+/* The time block IS the shared one (js/app.js _ccTimeHTML → .cc-time ·
+   .cc-time-h · .cc-dur · .cc-ampm, sized by 9b.7): the same class reads the
+   same on Discover and here. A held class only adds its day over the digits,
+   and says which grid column the block takes. */
+#tab-bookings .my-booking-card .mb-when { grid-column: 1; }
+#tab-bookings .my-booking-card .mb-day {
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  line-height: 1.25;
+  color: var(--ct-deep);
+}
+
+/* The title row is the shared one too (.cc-head > .ct-tile + .cc-name, 9b.7):
+   the name flows inline after its tile, so a long name wraps the same way on
+   both tabs. Only what a held class adds is said here. */
+#tab-bookings .my-booking-card .mb-what { grid-column: 2; min-width: 0; }
+#tab-bookings .my-booking-card .mb-title {
+  margin: 0;
+  /* …clear of the More button in the corner. */
+  padding-right: calc(var(--tap-min) - var(--space-2));
+}
+#tab-bookings .my-booking-card.is-saved-copy .mb-title { padding-right: 0; }
+#tab-bookings .my-booking-card .mb-name { cursor: pointer; }
+#tab-bookings .my-booking-card.is-saved-copy .mb-name { cursor: default; }
+/* The meta line is the shared one (.cc-sub · .cc-who · .cc-loc, 9b.7): its "·"
+   is drawn in the gap and clipped away when the place wraps, so a line neither
+   ends nor starts on a bare dot. Here the place is "Location · Studio" — longer
+   than Discover's — so it still moves down as ONE unit ("Studio / 1" left an
+   orphaned digit), but may break INSIDE once it is wider than the whole column
+   rather than run off a narrow phone. (inherit: the unit keeps the legacy
+   .class-location hook, which the older sheets size and paint --text-faint —
+   not an ink a tint guarantees; the line's own --ct-ink-2 must win.) */
+#tab-bookings .my-booking-card .mb-meta { margin: var(--space-1) 0 0; }
+#tab-bookings .my-booking-card .cc-loc { white-space: normal; font-size: inherit; color: inherit; }
+
+/* What you hold: seat chips, then the small print (countdown, state). */
+#tab-bookings .my-booking-card .mb-badges {
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+#tab-bookings .my-booking-card .up-seats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-4);
+  margin: 0;
+}
+#tab-bookings .my-booking-card .up-seat-chip {
+  gap: var(--space-1);
+  border: 0;
+  background: var(--ct-base);
+  color: var(--ct-on-base);
+  letter-spacing: 0.01em;
+}
+/* A seat in a class that has been: no longer yours to hold, so not filled. */
+#tab-bookings .my-booking-card .up-seat-chip.is-past {
+  background: transparent;
+  color: var(--ct-deep);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ct-base);
+}
+#tab-bookings .my-booking-card .up-seat-chip button {
+  padding: 0;
+  color: var(--ct-on-base);
+  font-family: var(--font-body);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+}
+/* Its fingertip area (about --tap-min square) grows evenly, not upwards, and
+   a row of several seats stands a little further from its neighbours: the row
+   above is the instructor's name, which is a button too. */
+#tab-bookings .my-booking-card .up-seats.is-multi { margin-block: var(--space-2); }
+#tab-bookings .my-booking-card .up-seat-chip button::after {
+  inset: calc(var(--space-6) * -1) calc(var(--space-3) * -1) calc(var(--space-6) * -1) calc(var(--space-9) * -1);
+}
+#tab-bookings .my-booking-card .up-seat-chip button:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: var(--radius-full); }
+
+#tab-bookings .my-booking-card .badge,
+#tab-bookings .my-booking-card .mb-countdown {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ct-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--space-9);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+/* "In 2h 15m": words in the class ink, not another chip. */
+#tab-bookings .my-booking-card .mb-countdown {
+  padding: 0;
+  background: transparent;
+  color: var(--ct-deep);
+  font-variant-numeric: tabular-nums;
+}
+/* Waitlisted / Spot offered / From waitlist: the dashed class badge. */
+#tab-bookings .my-booking-card .badge.waitlist {
+  border: var(--hairline) dashed var(--ct-base);
+  color: var(--ct-deep);
+  line-height: calc(var(--space-9) - var(--hairline) * 2);
+}
+/* The ONE red badge: cancelling now costs a credit. */
+#tab-bookings .my-booking-card .badge.late-cancel-note { background: var(--danger); color: var(--danger-ink); }
+
+#tab-bookings .my-booking-card .mb-status { grid-column: 1 / -1; min-width: 0; }
+#tab-bookings .my-booking-card .mb-waitlist-status {
+  margin: 0;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  line-height: 1.45;
+  color: var(--ct-ink-2);
+}
+#tab-bookings .my-booking-card .mb-waitlist-status.is-offer {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  color: var(--ct-deep);
+}
+#tab-bookings .my-booking-card .mb-status .booking-actions { margin: 0; }
+
+/* ── 4. Actions: the primary, one quiet companion, and More ── */
+#tab-bookings .my-booking-card .mb-actions {
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0 var(--space-4);
+  min-width: 0;
+  margin: 0;
+}
+/* The .pill-btn recipe, on the class names the booking flows keep. */
+#tab-bookings .my-booking-card .mb-primary-btn,
+#tab-bookings .my-booking-card .booking-action-btn,
+#tab-bookings .mb-saved-note .booking-action-btn,
+#tab-bookings .mb-past-btn {
+  --pill-fill: transparent;
+  --pill-ink: var(--ct-ink-2);
+  --pill-line: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: auto;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  margin: 0;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--pill-fill);
+  color: var(--pill-ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--pill-line);
+  font-family: var(--font-body);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
+}
+#tab-bookings .my-booking-card .mb-primary-btn:focus-visible,
+#tab-bookings .my-booking-card .booking-action-btn:focus-visible,
+#tab-bookings .mb-saved-note .booking-action-btn:focus-visible,
+#tab-bookings .mb-past-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+#tab-bookings .my-booking-card .mb-primary-btn:disabled,
+#tab-bookings .my-booking-card .booking-action-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+#tab-bookings .mb-past-btn { --pill-ink: var(--text-muted); }
+
+/* Cancel booking / Cancel all N: a calm ink outline (.pill-outline)… */
+#tab-bookings .my-booking-card .mb-primary-btn {
+  --pill-fill: var(--surface);
+  --pill-ink: var(--text);
+  --pill-line: var(--text);
+  padding: 0 var(--space-5);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-bold);
+}
+/* …red only once cancelling costs a credit (.pill-danger). */
+#tab-bookings .my-booking-card.is-late .mb-primary-btn.booked { --pill-ink: var(--danger); --pill-line: var(--danger); }
+/* Leave waitlist: the quiet fill on a tinted card (.pill-secondary). It has no
+   line of its own, so its fill is the shared card's --cc-pill (9b.7): the
+   surface, stepping one shade down wherever the card IS the surface — "off",
+   and Handheld, which has no shadow to lift it either (there it was invisible). */
+#tab-bookings .my-booking-card.is-waitlisted .mb-primary-btn.booked {
+  --pill-fill: var(--cc-pill);
+  --pill-ink: var(--ct-deep);
+  --pill-line: transparent;
+  padding: 0 var(--space-7);
+  box-shadow: var(--shadow-soft);
+}
+/* Claim spot / Check for a spot while it leads: the class primary (.pill-primary). */
+#tab-bookings .my-booking-card .mb-primary-btn:not(.booked) {
+  --pill-fill: var(--ct-base);
+  --pill-ink: var(--ct-on-base);
+  --pill-line: transparent;
+  padding: 0 var(--space-7);
+  font-weight: var(--weight-extrabold);
+}
+/* A place's companion action speaks in the class ink. */
+#tab-bookings .my-booking-card.is-waitlisted .mb-actions .booking-action-btn { --pill-ink: var(--ct-deep); font-weight: var(--weight-bold); }
+
+/* "Free cancel until / Thu 6:30am" beside the button; what follows it
+   (Change spot) is pushed to the far end. */
+#tab-bookings .my-booking-card .mb-cancel-deadline {
+  margin: 0 auto 0 0;
+  font-size: var(--type-label);
+  font-weight: var(--weight-medium);
+  line-height: 1.3;
+  color: var(--ct-ink-2);
+}
+#tab-bookings .my-booking-card .mb-cancel-deadline strong {
+  display: block;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--ct-ink);
+}
+
+/* More: a round quiet button in the card's corner; its menu drops under it.
+   The menu shows off aria-expanded alone (js/app.js toggleBookingMore). */
+#tab-bookings .my-booking-card .mb-more {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: block;
+  margin: 0;
+}
+#tab-bookings .my-booking-card .mb-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ct-ink-2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition-base), box-shadow var(--transition-base);
+}
+#tab-bookings .my-booking-card .mb-more-btn:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
+#tab-bookings .my-booking-card .mb-more-btn[aria-expanded="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); }
+#tab-bookings .my-booking-card .mb-more-menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 20;
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  gap: var(--mb-hair);
+  width: max-content;
+  max-width: calc(100vw - var(--space-12));
+  padding: var(--space-2);
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+#tab-bookings .my-booking-card .mb-more-btn[aria-expanded="true"] + .mb-more-menu { display: grid; }
+#tab-bookings .my-booking-card .mb-more-menu .booking-action-btn {
+  --pill-ink: var(--text);
+  justify-content: flex-start;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-xl);
+  font-size: var(--type-meta);
+}
+#tab-bookings .my-booking-card .mb-more-menu .booking-action-btn:focus-visible { outline-offset: calc(var(--focus-offset) * -1); }
+@media (hover: hover) {
+  #tab-bookings .my-booking-card .mb-more-btn:hover,
+  #tab-bookings .my-booking-card .mb-more-menu .booking-action-btn:hover { background: var(--surface-2); }
+}
+
+/* Desktop: room for everything — the same buttons inline, no More button. */
+@media (min-width: 1024px) {
+  #tab-bookings .upcoming-list,
+  #tab-bookings .mb-period-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--mb-col), 1fr));
+    align-items: start;
+    gap: var(--space-5);
+  }
+  /* …and a FOLDED billing period still folds: the grid rule above is id-scoped
+     (1,1,0) and beat css/styles.css's `.collapsed .mb-period-body { display:
+     none }` (0,3,0) — the bar said "collapsed" over cards that stayed up. */
+  #tab-bookings .mb-period-section.collapsed .mb-period-body { display: none; }
+  #tab-bookings .upcoming-list > :not(.mb-day-group),
+  #tab-bookings .mb-period-body > :not(.mb-day-group) { grid-column: 1 / -1; }
+  /* Every card is a cell of its own: two classes on one day sit side by side. */
+  #tab-bookings .mb-day-group,
+  #tab-bookings .mb-day-group > .class-grid { display: contents; }
+  #tab-bookings .my-booking-card .mb-title { padding-right: 0; }
+  #tab-bookings .my-booking-card .mb-more { position: static; grid-column: 1 / -1; }
+  #tab-bookings .my-booking-card .mb-more-btn { display: none; }
+  #tab-bookings .my-booking-card .mb-more-menu,
+  #tab-bookings .my-booking-card .mb-more-btn[aria-expanded="true"] + .mb-more-menu {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-3);
+    width: auto;
+    max-width: none;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  #tab-bookings .my-booking-card .mb-more-menu .booking-action-btn {
+    --pill-ink: var(--ct-ink-2);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-full);
+    font-size: var(--type-caption);
+  }
+}
+
+/* ── 5. Saved copy, skeleton, calendar row, history, queue line ── */
+#tab-bookings .mb-saved-note { margin: 0 0 var(--space-5); border-color: var(--line); border-radius: var(--radius-chip); font-size: var(--type-caption); }
+#tab-bookings .mb-saved-note .booking-action-btn {
+  --pill-fill: var(--surface);
+  --pill-ink: var(--text);
+  --pill-line: var(--text);
+  padding: 0 var(--space-6);
+  font-weight: var(--weight-bold);
+}
+#tab-bookings .mb-skeleton {
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+/* (calendar.js injects its own .cal-btn styles after every sheet: the id wins.) */
+#tab-bookings .cal-actions {
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  border-top: 0;
+}
+#tab-bookings .cal-btn,
+#tab-bookings .history-in-bookings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: color var(--transition-base), box-shadow var(--transition-base);
+}
+#tab-bookings .cal-btn:focus-visible,
+#tab-bookings .history-in-bookings-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+@media (hover: hover) {
+  #tab-bookings .cal-btn:hover,
+  #tab-bookings .history-in-bookings-btn:hover { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 var(--hairline) var(--text); }
+}
+#tab-bookings .history-in-bookings-btn { display: flex; width: fit-content; margin: var(--space-8) auto 0; }
+#tab-bookings .mb-queue-status {
+  width: fit-content;
+  max-width: calc(100% - var(--space-7) * 2);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-7xl);
+  background: var(--sunken);
+  color: var(--text);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+}
+
+/* ── 6. "Book again?" ── */
+#tab-bookings .rebook-hint {
+  gap: var(--space-5);
+  max-width: none;
+  margin: var(--space-5) var(--space-7) 0;
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+#tab-bookings .rebook-hint-eyebrow {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+#tab-bookings .rebook-hint-main { font-size: var(--type-title); font-weight: var(--weight-bold); color: var(--text-heading); }
+#tab-bookings .rebook-hint-sub { font-size: var(--type-caption); color: var(--text-muted); }
+#tab-bookings .rebook-hint-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  /* (a <button> does not inherit the page's face) */
+  font-family: var(--font-body);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-extrabold);
+}
+#tab-bookings .rebook-hint-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* ── 7. Your usual week: a surface card of COMPACT class components ── */
+#usualWeekCard.has-template {
+  padding: var(--space-3) var(--space-5) var(--space-3) var(--space-7);
+  border: 0;
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+/* Heading · count · Clear. The count takes the slack, so Clear ends the row. */
+#usualWeekCard .usual-week-head { align-items: center; gap: var(--space-3); margin-bottom: var(--space-1); }
+#usualWeekCard .usual-week-eyebrow { margin: 0; letter-spacing: 0; text-transform: none; color: var(--text-heading); }
+#usualWeekCard .usual-week-count {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+/* minmax(0, …): a long "Class · Instructor" ends in its ellipsis instead of
+   pushing the row — and its × — out of the card. */
+#usualWeekCard .usual-week-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+#usualWeekCard .usual-week-entry {
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 0 0 0 var(--space-3);
+  border-top: 0;
+  border-radius: var(--radius-chip);
+  font-size: var(--type-meta);
+}
+/* "Off": a surface row on the surface card would vanish — so it steps down to
+   the sunken well. NOT --surface-2: the row carries --ct-ink-2 copy (studio,
+   am/pm, the ×), and Handheld's --text-muted is 3.8:1 there; on --sunken every
+   theme holds both inks and every swatch's deep ink (tests/suites/9a-foundation.js). */
+html[data-ct-intensity="off"] #usualWeekCard .usual-week-entry { background: var(--sunken); }
+#usualWeekCard .usual-week-when,
+#usualWeekSheet .usual-week-row-when {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  /* "12:15pm" at the compact time size: every row's class starts on one line. */
+  min-width: calc(var(--space-12) + var(--space-9));
+  color: inherit;
+}
+#usualWeekCard .usual-week-day,
+#usualWeekSheet .usual-week-day {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
+  color: var(--ct-deep);
+}
+#usualWeekCard .usual-week-entry .class-time-ampm,
+#usualWeekSheet .usual-week-row .class-time-ampm {
+  display: inline;
+  margin: 0 0 0 calc(var(--space-1) / 2);
+  font-family: var(--font-body);
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  color: var(--ct-ink-2);
+}
+#usualWeekCard .usual-week-what { font-weight: var(--weight-semibold); line-height: 1.35; color: var(--ct-ink); }
+#usualWeekCard .usual-week-where { font-weight: var(--weight-medium); color: var(--ct-ink-2); }
+#usualWeekCard .usual-week-remove { border-radius: var(--radius-full); color: var(--ct-ink-2); }
+#usualWeekCard .usual-week-remove:hover { background: var(--surface); color: var(--ct-ink); }
+#usualWeekCard .usual-week-remove:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
+#usualWeekCard .usual-week-actions { align-items: center; gap: 0 var(--space-1); padding-top: var(--space-3); border-top: 0; }
+/* tabs.css paints .week-template-btn (and its :hover) with more weight than a
+   primitive: hand the pill its own recipe back. */
+#usualWeekCard .pill-btn,
+#usualWeekCard .pill-btn:hover {
+  flex: 0 0 auto;
+  border: 0;
+  background: var(--pill-fill);
+  color: var(--pill-ink);
+}
+@media (min-width: 1024px) {
+  #usualWeekCard .usual-week-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
+}
+#usualWeekCard .usual-week-invite { gap: var(--space-5); }
+#usualWeekCard .usual-week-invite-text { font-size: var(--type-meta); color: var(--text-muted); }
+
+/* …and the same compact component in the sheet that books it. */
+#usualWeekSheet .usual-week-pick { align-items: center; gap: var(--space-4); }
+#usualWeekSheet .usual-week-pick input { margin: 0; }
+#usualWeekSheet .usual-week-row-when .usual-week-day { color: var(--text-muted); }
+#usualWeekSheet .usual-week-row .class-time-ampm { color: var(--text-muted); }
+#usualWeekSheet .usual-week-row-main { font-size: var(--type-body); font-weight: var(--weight-bold); }
+#usualWeekSheet .usual-week-row-sub,
+#usualWeekSheet .usual-week-row-note { font-size: var(--type-caption); }
+#usualWeekSheet .usual-week-switch { gap: 0; }
+#usualWeekSheet .usual-week-switch-btn,
+#usualWeekSheet .usual-week-switch-btn.active { flex: none; border: 0; }
+
+/* ── 8. The next-class pill: docked over the tab bar, the list padded under it ── */
+.next-class-pill {
+  gap: 0;
+  padding: var(--space-2) var(--space-5) var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.next-class-pill:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.next-class-pill .ncp-body { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.next-class-pill .ncp-countdown {
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-time-compact);
+  font-weight: var(--weight-black);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-heading);
+}
+.next-class-pill .ncp-class { font-size: var(--type-meta); font-weight: var(--weight-bold); line-height: 1.3; color: var(--text); }
+.next-class-pill .ncp-detail { font-size: var(--type-label); line-height: 1.3; color: var(--text-muted); }
+.next-class-pill .ncp-seat { margin: 0; border: 0; background: var(--ct-base); color: var(--ct-on-base); }
+/* While it shows, My Bookings ends a pill higher, so the last card's actions
+   can always be scrolled clear of it. (Wider screens: css/settings.css.) */
+@media (max-width: 640px) {
+  body.has-next-pill #tab-bookings { padding-bottom: calc(var(--tap-lg) + var(--space-10) + env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tab-bookings .my-booking-card .mb-primary-btn,
+  #tab-bookings .my-booking-card .booking-action-btn,
+  #tab-bookings .my-booking-card .mb-more-btn,
+  #tab-bookings .mb-period-chevron,
+  #tab-bookings .cal-btn,
+  #tab-bookings .history-in-bookings-btn { transition: none; }
+}
+
+
+/* == crisp:9e-stats-membership == */
+
+/* Stats (js/tabs.js, js/explore.js), Membership + the Class colours control
+   (js/tabs.js), the Settings panel chrome (js/settings.js), rank tiles, and the
+   first-run welcome's look (js/app.js _onboard*). The Stats board is the spec
+   for Overview; Habits, Instructors and Membership carry the same language:
+   surface cards on the ground with the ONE soft shadow and no outline,
+   headings in the display face, numerals large and tabular, pills for every
+   action. Colour appears only where a class type does. Old rules in
+   tabs.css / explore.css / settings.css / redesign.css / styles.css are
+   overridden here at their own specificity (this sheet loads last). */
+
+/* A <button> does not inherit the page's face: every action of these two tabs
+   (and the Settings panel) says so once. */
+.explore-sync-btn, .habit-find-btn, .year-review-btn, .share-insights-btn, .explore-card-action,
+.explore-unranked-item, .ms-row, .ms-signout, .theme-chip, .tier-btn, .app-advanced-btn, .app-row,
+.tab-empty .tab-empty-btn { font-family: var(--font-body); }
+
+/* ── 9e.1 Stats: insets, headings, the switcher ─────────────────── */
+#tab-stats { --stats-inset: var(--space-9); }
+@media (max-width: 640px) {
+  #tab-stats { --stats-inset: var(--space-7); }
+}
+/* Wide screens: these two tabs are a readable column, not cards a metre wide. */
+@media (min-width: 1024px) {
+  #tab-stats > .explore-section, #tab-stats .stats-page, #tab-membership > * { max-width: 45rem; }
+}
+
+/* Section headings: the board's Heading 21 / 800 — sentence case, the ink. */
+#tab-stats .insights-title, #tab-stats .explore-title, #tab-stats .reco-title,
+#tab-stats .heatmap-title, #tab-stats .habit-title,
+#tab-membership .insights-title, #tab-membership .cost-title {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-heading);
+}
+
+/* The segmented track: a surface pill, the chosen page in graphite. Geometry
+   (tap height, the ::before hit area, equal segments) stays css/tabs.css's. */
+.stats-switcher {
+  border-color: transparent;
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.stats-switcher-tab { border-radius: var(--radius-full); font-size: var(--text-lg); }
+.stats-switcher-tab[aria-selected="true"] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+.stats-switcher-tab:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* The history-sync banner: a surface card with pill actions. */
+.explore-sync-banner {
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.explore-sync-text { font-size: var(--type-caption); color: var(--text-muted); }
+.explore-sync-text strong { font-size: var(--type-body); color: var(--text-heading); }
+.explore-sync-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--text-lg);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.explore-sync-btn-secondary {
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--text);
+  font-size: var(--type-meta);
+  padding: 0 var(--space-7);
+}
+.explore-sync-btn-secondary:hover { background: var(--surface-2); color: var(--text); }
+.explore-sync-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* ── 9e.2 Overview: all time as the hero ────────────────────────── */
+.stats-page > .stats-bar {
+  display: block;
+  overflow: visible;
+  padding: 0 var(--stats-inset) var(--space-3);
+}
+.stats-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-7);
+  align-items: end;
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.stats-bar .stat-card {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  animation: none;
+}
+.stats-bar .stat-label {
+  margin: 0;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-ghost);
+  white-space: nowrap;
+}
+.stats-bar .stat-value { font-weight: var(--weight-black); letter-spacing: 0; color: var(--text-heading); }
+/* Value first in the markup; the hero wears its label on top, as drawn. */
+.stats-bar .stat-card.is-hero { display: flex; flex-direction: column-reverse; gap: var(--space-3); }
+.stats-bar .is-hero .stat-value { font-size: var(--type-numeral); line-height: 0.8; letter-spacing: -0.01em; }
+.stats-hero-side { display: grid; row-gap: var(--space-4); }
+.stats-bar .stat-card.is-side { display: flex; align-items: baseline; gap: var(--space-4); }
+.stats-bar .is-side .stat-value { min-width: 1.1ch; font-size: var(--type-time); line-height: 1; }
+
+/* Everything else the tiles used to scroll sideways for: quiet surface tiles. */
+.stats-more {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.stats-bar .stat-card.is-tile {
+  padding: var(--space-5) var(--space-7);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.stats-bar .is-tile .stat-value { font-size: var(--text-6xl); line-height: 1; }
+.stats-bar .is-tile .stat-label { margin-top: var(--space-1); white-space: normal; }
+.stats-bar .is-name .stat-value {
+  font-family: var(--font-body);
+  font-size: var(--type-title);
+  font-weight: var(--weight-bold);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.stats-bar .stat-detail { margin-top: var(--space-1); font-size: var(--type-caption); color: var(--text-muted); }
+
+/* Week streak: numeral, name, the last twelve weeks. No glow — a streak is
+   not something you hold. */
+.stats-page > .streak-section { padding: 0 var(--stats-inset) var(--space-3); }
+.streak-card.streak-main,
+.streak-card.streak-main.streak-live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
+  padding: var(--space-5) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.streak-main .streak-value,
+.streak-card.streak-live .streak-value {
+  flex: none;
+  font-size: var(--type-display);
+  font-weight: var(--weight-black);
+  line-height: 0.9;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-heading);
+}
+.streak-text { min-width: 0; }
+.streak-main .streak-label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: var(--weight-extrabold);
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+.streak-sub { font-size: var(--type-caption); font-weight: var(--weight-medium); line-height: 1.4; color: var(--text-ghost); white-space: nowrap; }
+.streak-weeks {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  height: calc(var(--space-10) + var(--space-1));
+  overflow: hidden;
+}
+.streak-week {
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+}
+.streak-week.is-on { height: 100%; background: var(--border-light); }
+.streak-week.is-live { background: var(--accent); }
+
+/* Milestones (only while one is still ahead): reached = the ink, next = an
+   outline to aim for, later ones sunken; the unit once, the distance at the end. */
+.milestone-row { align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding: 0 var(--space-3); }
+.milestone-badge,
+.milestone-badge.earned,
+.milestone-badge.next {
+  min-width: var(--space-11);
+  min-height: var(--space-10);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  opacity: 1;
+}
+/* (The ink itself, labelled in the surface: ≥ 4.5:1 in every theme — an accent
+   fill is only 3.3:1 under a small number on Terminal and Synthwave.) */
+.milestone-badge.earned { background: var(--text); }
+.milestone-badge.next { background: var(--surface); box-shadow: inset 0 0 0 var(--hairline) var(--text); }
+.milestone-num,
+.milestone-badge:not(.earned) .milestone-num {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.milestone-badge.next .milestone-num { color: var(--text); }
+.milestone-badge.earned .milestone-num { color: var(--bg-panel); }
+.milestone-cap { margin: 0 0 0 var(--space-1); font-size: var(--type-caption); font-weight: var(--weight-semibold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+.milestone-row .streak-hint { margin: 0 0 0 auto; font-size: var(--type-caption); font-weight: var(--weight-semibold); color: var(--text-muted); }
+
+/* A Stats section that IS a card. */
+#heatmapSection, #classTypeSection, #varietySection, #lapsedSection {
+  margin: 0 var(--stats-inset) var(--space-3);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+/* "When you train": seven days across, five bands down. The cell ramp is the
+   theme's own neutral ramp (css/theme.css .hm-level-N) — never a class colour. */
+.heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); margin-bottom: var(--space-4); }
+#tab-stats .heatmap-head .heatmap-title { margin: 0; }
+.heatmap-grid {
+  grid-template-columns: var(--space-9) repeat(7, minmax(0, 1fr));
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  align-items: center;
+  max-width: none;
+}
+.heatmap-grid .hm-cell { aspect-ratio: auto; height: var(--space-9); border-radius: var(--radius-lg); }
+.hm-cell:hover { transform: none; }
+.hm-day-label {
+  display: block;
+  padding: 0;
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  text-align: center;
+  color: var(--text-ghost);
+}
+.hm-hour-label {
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: left;
+  color: var(--text-ghost);
+}
+.hm-legend { margin: 0; max-width: none; gap: var(--space-1); }
+.hm-legend span { font-size: var(--type-label); font-weight: var(--weight-medium); color: var(--text-ghost); }
+.hm-legend span:first-child { padding-right: calc(var(--space-1) / 2); }
+.hm-legend span:last-child { padding-left: calc(var(--space-1) / 2); }
+.hm-legend .hm-cell { display: block; width: var(--space-5); height: var(--space-5); border-radius: var(--radius-sm); }
+
+/* Class types: one bar, split by type, and a legend that carries the numbers.
+   The segment and the dot read the class colour through data-ct. */
+.ctd-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-5); margin-bottom: var(--space-3); }
+#tab-stats .ctd-head .insights-title { margin: 0; }
+.ctd-total { font-size: var(--type-caption); font-weight: var(--weight-medium); color: var(--text-ghost); white-space: nowrap; }
+.ctd-bar { display: flex; gap: calc(var(--space-1) * 0.75); height: var(--space-5); margin-bottom: var(--space-4); }
+.ctd-seg { flex: 0 1 0; min-width: var(--space-3); border-radius: var(--radius-md); background: var(--ct-base); }
+.ctd-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+.ctd-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ctd-item .ct-dot { width: var(--space-4); height: var(--space-4); }
+/* The mono body face of Terminal and Handheld is wider: two columns there. */
+[data-theme="terminal"] .ctd-legend, [data-theme="gameboy"] .ctd-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctd-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ctd-count {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-heading);
+}
+.ct-gaps { margin-top: var(--space-4); font-size: var(--type-caption); font-style: normal; color: var(--text-ghost); }
+
+/* Year in review: one pill, an arrow in a graphite disc. */
+.stats-page > #yearReviewSection { padding: 0 var(--stats-inset) var(--space-3); }
+.year-review-btn {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  min-height: calc(var(--tap-min) + var(--space-3));
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.year-review-btn-text { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: var(--space-3); min-width: 0; }
+.year-review-btn-main { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); line-height: 1.15; }
+.year-review-btn-year {
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-ghost);
+}
+.year-review-btn-go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--space-10) + var(--space-1));
+  height: calc(var(--space-10) + var(--space-1));
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.year-review-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+/* No glass: a plain scrim, as every Crisp sheet. */
+.year-review-modal { background: var(--modal-overlay); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.year-review-modal .modal { border: 0; border-radius: var(--radius-sheet); box-shadow: var(--shadow-float); }
+.yr-row { border-bottom: var(--hairline) solid var(--line); }
+.yr-row-label { font-size: var(--type-caption); font-weight: var(--weight-semibold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+.yr-row-value { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); font-variant-numeric: tabular-nums; }
+
+/* Share: the quiet pill that closes Overview; the one action of the wrap. */
+.stats-page > #shareSection { padding: var(--space-3) var(--stats-inset) var(--space-8); }
+.share-insights-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-9);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.share-insights-btn:hover { color: var(--text); }
+.modal-actions .share-insights-btn { min-height: var(--tap-lg); background: var(--accent); color: var(--accent-ink); box-shadow: none; font-size: var(--text-2xl); font-weight: var(--weight-extrabold); }
+.share-insights-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* ── 9e.3 Habits: the compact class component ───────────────────── */
+.stats-page > .habit-section, .stats-page > .reco-section { padding: 0 var(--stats-inset) var(--space-8); }
+.habit-cards, .reco-cards { gap: var(--space-3); padding-bottom: var(--space-3); }
+.habit-card.ct-card, .reco-card.ct-card {
+  min-width: calc(var(--space-12) * 4.5);
+  padding: var(--space-6) var(--space-7);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--ct-card);
+  color: var(--ct-ink);
+  cursor: default;
+}
+.habit-card .habit-line, .reco-card .reco-badge {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-time-compact);
+  font-weight: var(--weight-black);
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--ct-ink);
+}
+.habit-card .habit-line strong { color: inherit; font-weight: inherit; }
+.habit-card .habit-class, .reco-card .reco-class {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-body);
+  font-size: var(--type-body);
+  font-weight: var(--weight-bold);
+  line-height: 1.3;
+  color: var(--ct-ink);
+}
+.habit-card .habit-meta, .reco-card .reco-detail { margin-top: var(--space-1); font-size: var(--type-caption); color: var(--ct-ink-2); }
+/* The instructor's name on a routine card: a link like any other on a class
+   component — no dashed underline (features.css's; the class card dropped it). */
+.reco-card .instructor-link { border-bottom: 0; color: inherit; }
+.habit-card .habit-find-btn {
+  min-height: var(--tap-min);
+  margin-top: var(--space-5);
+  padding: 0 var(--space-8);
+  background: var(--surface);
+  color: var(--ct-deep);
+  box-shadow: var(--shadow-soft);
+  font-size: var(--text-lg);
+  letter-spacing: 0;
+  text-transform: none;
+}
+html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--surface-2); }
+.habit-card .habit-find-btn:hover { background: var(--surface); }
+.habit-card .habit-find-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.stats-page-empty-line { font-size: var(--type-body); }
+
+/* ── 9e.4 Instructors ───────────────────────────────────────────── */
+.stats-page > .explore-section { padding: var(--space-5) var(--stats-inset) var(--space-8); }
+.explore-map-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  overflow: visible;
+}
+@media (min-width: 641px) {
+  .explore-map-stats { grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 3), 1fr)); }
+}
+.explore-map-stat {
+  min-width: 0;
+  padding: var(--space-5) var(--space-7);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.explore-map-stat-value { font-size: var(--text-6xl); font-weight: var(--weight-black); }
+.explore-map-stat-label { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+.explore-tier-bar-label { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+.explore-tier-bar { gap: calc(var(--space-1) / 2); border-radius: var(--radius-full); background: none; }
+.explore-tier-seg { font-family: var(--font-display); font-size: var(--type-label); font-weight: var(--weight-extrabold); border-radius: var(--radius-sm); overflow: hidden; white-space: nowrap; }
+.explore-tier-legend-item { font-size: var(--type-label); font-weight: var(--weight-semibold); color: var(--text-muted); }
+.explore-tier-legend-dot { border-radius: var(--radius-xs); }
+.explore-unranked-item {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-7);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+.explore-unranked-item:hover { background: var(--surface-2); }
+.explore-unranked-item:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.explore-unranked-name { font-size: var(--type-meta); }
+.explore-unranked-count { font-size: var(--type-label); color: var(--text-muted); }
+.explore-top-item {
+  padding: var(--space-4) var(--space-7);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.explore-top-rank { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-black); color: var(--text-ghost); }
+.explore-top-name { font-size: var(--type-body); font-weight: var(--weight-bold); }
+.explore-top-count { font-size: var(--type-caption); color: var(--text-muted); }
+
+/* Instructor suggestion cards. */
+.explore-grid { gap: var(--space-3); padding-bottom: var(--space-3); }
+.explore-card,
+.explore-card:hover {
+  padding: var(--space-6) var(--space-7);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.explore-card-name { font-size: var(--type-title); font-weight: var(--weight-bold); }
+.explore-card-name:hover { color: var(--text-heading); text-decoration: underline; }
+.explore-why { font-size: var(--type-label); font-weight: var(--weight-semibold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+/* A class-type tag: the deep ink on the class wash (≥ 7:1 on either base). */
+.explore-type-tag {
+  padding: calc(var(--space-1) / 2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--ct-wash);
+  color: var(--ct-deep);
+  font-size: var(--type-label);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.explore-loc-tag { font-size: var(--type-caption); color: var(--text-muted); }
+.explore-card-action {
+  align-self: flex-start;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--type-meta);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.explore-card-action:hover { color: var(--text); background: var(--sunken); }
+.explore-card-action:focus-visible, .explore-card-name:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.explore-empty, .explore-loading { padding: var(--space-3) 0; font-size: var(--type-body); color: var(--text-muted); }
+
+/* Lapsed favourites, instructors per month: rows and bars inside their card. */
+.lapsed-item { padding: var(--space-4) 0; border: 0; border-bottom: var(--hairline) solid var(--line); border-radius: 0; background: none; }
+.lapsed-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.lapsed-name { font-size: var(--type-body); font-weight: var(--weight-bold); }
+.lapsed-detail { font-size: var(--type-caption); color: var(--text-muted); }
+.variety-bar { border-radius: var(--radius-sm); background: var(--accent); }
+.variety-value { font-family: var(--font-display); font-size: var(--type-caption); font-weight: var(--weight-extrabold); color: var(--text-heading); }
+.variety-label { font-size: var(--text-xs); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+
+/* ── 9e.5 Rank tiles (S–F): neutral, as drawn — colour is kept for class
+   types. One recipe for the tile on a card, the rank buttons, the tier bar's
+   segments and its legend (which used to carry a second copy of the colours):
+   S the ink, A an ink outline, B the hairline fill, then quieter. ── */
+.tier-S, .active-S { --rank-fill: var(--text); --rank-ink: var(--bg-panel); --rank-line: var(--text); }
+.tier-A, .active-A { --rank-fill: var(--bg-panel); --rank-ink: var(--text); --rank-line: var(--text); }
+.tier-B, .active-B { --rank-fill: var(--border); --rank-ink: var(--text-heading); --rank-line: var(--border); }
+.tier-C, .active-C { --rank-fill: var(--bg-deep); --rank-ink: var(--text-muted); --rank-line: var(--bg-deep); }
+.tier-D, .active-D { --rank-fill: transparent; --rank-ink: var(--text-muted); --rank-line: var(--border-light); }
+.tier-F, .active-F { --rank-fill: transparent; --rank-ink: var(--text-muted); --rank-line: var(--border-light); }
+.tier-unranked { --rank-fill: transparent; --rank-ink: var(--text-muted); --rank-line: var(--border-light); }
+.tier-badge.tier-S, .tier-badge.tier-A, .tier-badge.tier-B, .tier-badge.tier-C, .tier-badge.tier-D, .tier-badge.tier-F,
+.explore-tier-seg.tier-S, .explore-tier-seg.tier-A, .explore-tier-seg.tier-B, .explore-tier-seg.tier-C, .explore-tier-seg.tier-D, .explore-tier-seg.tier-F,
+.explore-tier-bar .explore-tier-seg.tier-unranked,
+.explore-tier-legend-dot,
+.tier-btn.active-S, .tier-btn.active-A, .tier-btn.active-B, .tier-btn.active-C, .tier-btn.active-D, .tier-btn.active-F {
+  border-color: transparent;
+  background: var(--rank-fill);
+  color: var(--rank-ink);
+  box-shadow: inset 0 0 0 var(--hairline) var(--rank-line);
+}
+/* …and the chosen rank stays readable under the pointer. The older light-base
+   ".tier-btn:hover" (css/theme.css) is (0,3,0): it outranked the rule above and
+   re-inked the letter --text-muted — on the S tile's ink fill that is 1.6:1, and
+   on iOS :hover sticks after the very tap that chose it (seen in the instructor
+   modal on Cloud; Membership's own rows are id-scoped and never had it). */
+.tier-btn.active-S:hover, .tier-btn.active-A:hover, .tier-btn.active-B:hover,
+.tier-btn.active-C:hover, .tier-btn.active-D:hover, .tier-btn.active-F:hover { border-color: transparent; color: var(--rank-ink); }
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-7);
+  height: var(--space-7);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: var(--type-label);
+  font-weight: var(--weight-extrabold);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+/* ── 9e.6 Membership ─────────────────────────────────────────────── */
+/* ONE left edge on a phone: the wordmark, Discover, My Bookings and Stats
+   (--stats-inset) all sit on the boards' 16; css/redesign.css left this tab on
+   22, so its cards started 6px inside everything above them. Sides only — the
+   top and the pill clearance at the bottom stay redesign.css's. */
+@media (max-width: 640px) {
+  #tab-membership { padding-inline: var(--space-7); }
+}
+.ms-account,
+#tab-membership .membership-card,
+#tab-membership .cost-section,
+.ms-list,
+#tab-membership > .insights-section:not(#membershipInfo) {
+  border: 0;
+  border-radius: var(--radius-7xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.ms-account-avatar { background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); letter-spacing: 0; }
+.ms-account-name { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); line-height: 1.15; }
+.ms-account-email { font-size: var(--type-caption); color: var(--text-muted); }
+.membership-plan { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); line-height: 1.15; }
+#tab-membership .membership-status { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+.membership-period, .membership-period-item { font-size: var(--type-caption); }
+.membership-period-item { border-bottom: var(--hairline) solid var(--line); }
+.membership-usage { font-size: var(--type-body); font-weight: var(--weight-bold); }
+.membership-upcoming-title { font-size: var(--type-caption); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+.membership-pausable { border: 0; border-radius: var(--radius-full); padding: calc(var(--space-1) / 2) var(--space-3); background: var(--sunken); color: var(--text-muted); font-size: var(--text-sm); letter-spacing: 0; text-transform: none; }
+.membership-price { font-family: var(--font-display); font-size: var(--text-6xl); font-weight: var(--weight-black); font-variant-numeric: tabular-nums; color: var(--text-heading); }
+#tab-membership .sub-progress { height: var(--space-3); border-radius: var(--radius-full); background: var(--sunken); overflow: hidden; }
+#tab-membership .sub-progress-fill { height: 100%; border-radius: var(--radius-full); background: var(--accent); }
+
+/* Cost tracker: sunken wells inside the card (captions hold ≥ 4.5:1 on the
+   sunken ground in every theme); the figure that matters wears an ink edge. */
+#tab-membership .cost-cards { gap: var(--space-3); }
+#tab-membership .cost-card { min-width: calc(var(--space-12) * 2.75); padding: var(--space-5) var(--space-7); border: 0; border-radius: var(--radius-chip); background: var(--sunken); }
+#tab-membership .cost-card.cost-main { background: var(--surface); box-shadow: inset 0 0 0 calc(var(--space-1) / 2) var(--text); }
+#tab-membership .cost-value { font-size: var(--text-6xl); font-weight: var(--weight-black); letter-spacing: 0; color: var(--text-heading); }
+#tab-membership .cost-label { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+#tab-membership .cost-hint { font-size: var(--type-label); color: var(--text-muted); }
+#tab-membership .cost-savings, #tab-membership .forecast-block { border: 0; border-radius: var(--radius-chip); background: var(--sunken); color: var(--text); }
+#tab-membership .forecast-num { font-size: var(--text-6xl); font-weight: var(--weight-black); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+#tab-membership .forecast-cap { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+#tab-membership .forecast-meta { font-size: var(--type-label); color: var(--text-muted); }
+#tab-membership .forecast-verdict { font-size: var(--type-meta); color: var(--text); }
+
+.ms-section-title { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+.ms-section-title-sub { margin-top: var(--space-8); }
+
+/* Appearance: each chip is a miniature of its theme's OWN chrome — the
+   swatch carries data-theme, so that theme's token block applies inside it
+   (the primary tokens only: aliases such as --surface resolve on <html>). */
+#tab-membership .theme-chip {
+  align-items: stretch;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+#tab-membership .theme-chip.active { box-shadow: inset 0 0 0 calc(var(--space-1) / 2) var(--text); }
+#tab-membership .theme-chip:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+#tab-membership .theme-swatch {
+  display: block;
+  width: auto;
+  height: calc(var(--space-12) + var(--space-1));
+  padding: var(--space-3);
+  border-radius: var(--radius-4xl);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border);
+}
+.theme-swatch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 100%;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-xl);
+  background: var(--bg-panel);
+}
+.theme-swatch-ink { flex: 1 1 auto; max-width: var(--space-9); height: var(--space-2); border-radius: var(--radius-full); background: var(--text); }
+.theme-swatch-pill { flex: none; width: var(--space-8); height: var(--space-5); border-radius: var(--radius-full); background: var(--accent); }
+#tab-membership .theme-chip-name { padding: 0 var(--space-1) var(--space-1); font-size: var(--type-meta); }
+
+/* Class colours: strength, one row per class type, a live preview. */
+.cc-control { display: grid; gap: var(--space-4); }
+/* The preview is a real class card (js/tabs.js builds eventCard's anatomy), so
+   its look is 9b.7's, not a copy of it. Only this is its own: it is a picture. */
+.cc-preview {
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* (Its Book is a <span>, not a <button>: a span does not centre its own label.) */
+.cc-preview .book-btn { display: inline-flex; align-items: center; justify-content: center; }
+.cc-note { margin: 0; font-size: var(--type-caption); color: var(--text-muted); }
+.cc-rows { border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-soft); overflow: hidden; }
+.cc-row + .cc-row { border-top: var(--hairline) solid var(--line); }
+.cc-row-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  width: 100%;
+  min-height: var(--tap-lg);
+  padding: var(--space-3) var(--space-7);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--type-body);
+  font-weight: var(--weight-bold);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cc-row-btn:active { background: var(--surface-2); }
+.cc-row-btn:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -2); }
+.cc-row-name { flex: 1 1 auto; min-width: 0; }
+.cc-row-swatch { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--type-caption); font-weight: var(--weight-semibold); color: var(--text-muted); }
+.cc-row-dot { --cc-sw: var(--text-off); flex: none; width: var(--space-6); height: var(--space-6); border-radius: var(--radius-full); background: var(--cc-sw); }
+.cc-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tap-min), 1fr));
+  justify-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-5) var(--space-5);
+}
+.cc-swatches[hidden] { display: none; }
+/* A swatch: a fingertip-sized radio, the colour a disc inside it. The chosen
+   one carries a tick and an ink ring — never the colour alone. --cc-sw and
+   --cc-sw-ink are handed over by js/tabs.js from the engine's palette. */
+.cc-swatch {
+  --cc-sw: var(--text-off);
+  --cc-sw-ink: var(--accent-ink);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--cc-sw-ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cc-swatch::before {
+  content: '';
+  position: absolute;
+  inset: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--cc-sw);
+  transition: box-shadow var(--transition-base);
+}
+.cc-swatch[aria-checked="true"]::before { box-shadow: 0 0 0 calc(var(--space-1) / 2) var(--surface), 0 0 0 var(--space-1) var(--text); }
+.cc-swatch-tick { position: relative; display: none; }
+.cc-swatch[aria-checked="true"] .cc-swatch-tick { display: block; }
+.cc-swatch:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
+.cc-reset { justify-self: start; }
+
+/* Settings rows, sign out, rankings. */
+.ms-row { min-height: var(--tap-lg); border-bottom: var(--hairline) solid var(--line); }
+.ms-row-sub { font-size: var(--type-caption); color: var(--text-muted); }
+.ms-row-chev { color: var(--text-ghost); }
+.ms-row:focus-visible, .ms-signout:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -2); }
+/* Destructive, calm: a danger outline on the surface — never a red fill. */
+.ms-signout {
+  min-height: var(--tap-lg);
+  padding: 0 var(--space-9);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--danger);
+  font-size: var(--type-body);
+  font-weight: var(--weight-bold);
+}
+#tab-membership .tier-group-label { font-size: var(--type-caption); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+#tab-membership .tier-list { gap: 0; }
+#tab-membership .tier-list-short { max-height: calc(var(--space-12) * 7); padding: 0; border: 0; border-radius: 0; background: none; }
+/* Two lines on a phone: the name gets the width it needs (it was cut to a
+   first name and an ellipsis beside six buttons), the six ranks a full row of
+   fingertip-sized tiles under it. One line again where there is room. */
+#tab-membership .tier-row { flex-wrap: wrap; row-gap: var(--space-2); padding: var(--space-4) 0; border-bottom: var(--hairline) solid var(--line); }
+#tab-membership .tier-row:last-child { border-bottom: 0; }
+#tab-membership .tier-name { flex: 1 1 calc(100% - var(--tap-min) - var(--space-4)); font-size: var(--type-body); font-weight: var(--weight-semibold); }
+#tab-membership .tier-btns { flex: 1 1 100%; }
+@media (min-width: 641px) {
+  #tab-membership .tier-row { flex-wrap: nowrap; }
+  #tab-membership .tier-name { flex: 1 1 auto; }
+  #tab-membership .tier-btns { flex: 0 0 auto; }
+}
+#tab-membership .tier-empty { font-size: var(--type-caption); }
+#tab-membership .tier-search {
+  min-height: var(--tap-min);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-body);
+  font-size: var(--text-xl);
+}
+#tab-membership .tier-search:focus { box-shadow: inset 0 0 0 var(--hairline) var(--text); }
+/* The rank CONTROL — ★ + the six S–F buttons — has ONE look, keyed on its own
+   classes: Membership's rows (js/settings.js) and the instructor profile
+   (js/features.js instructorRankHtml) print the same buttons, and a host only
+   says where the row sits (above; css/features.css .instructor-rank). Scoped
+   to #tab-membership, the profile kept settings.css's 28×24px boxes. A chosen
+   rank's fill is 9e.5's ".tier-btn.active-*" (0,2,0), which outranks this.
+   Round-cornered tiles with a fingertip-sized hit area: it reaches up and down
+   to --tap-min, and half-way into the --space-2 gap on either side. */
+.tier-fav { width: var(--tap-min); height: var(--tap-min); margin-left: calc(var(--space-4) * -1); font-size: var(--text-3xl); }
+.tier-btns { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); }
+@media (min-width: 641px) {
+  .tier-btns { grid-template-columns: repeat(6, var(--tap-min)); }
+}
+.tier-btn {
+  position: relative;
+  width: auto;
+  height: calc(var(--tap-min) - var(--space-2));
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+}
+.tier-btn::after { content: ''; position: absolute; inset: calc(var(--space-1) * -0.75) calc(var(--space-2) * -0.5); }
+.tier-btn:focus-visible, .tier-fav:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+#tab-membership .about-block { border-top: 0; }
+#tab-membership .about-mark { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-black); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+#tab-membership .about-text { font-size: var(--type-caption); color: var(--text-ghost); }
+
+/* The tab hero — "Nothing booked — yet", Sign in, Can't reach Psycle. Keyed on
+   the HOST class every such hero sits in (.tab-empty: #bookingsEmpty,
+   #statsEmpty, #membershipSignin — js/tabs.js), not on the ids: scoped by id,
+   Bookings was missed and kept the old uppercase title and a 36px button in
+   the browser's own face while Stats and Membership had moved on. */
+.tab-empty .tab-empty-title {
+  font-size: var(--type-time);
+  font-weight: var(--weight-black);
+  line-height: 1.05;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.tab-empty .tab-empty-sub { font-size: var(--type-body); line-height: 1.5; }
+.tab-empty .tab-empty-btn {
+  min-height: var(--tap-lg);
+  padding: 0 var(--space-10);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.tab-empty .tab-empty-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+/* ── 9e.7 Settings panel chrome ──────────────────────────────────── */
+.settings-overlay { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.settings-panel { border: 0; border-radius: var(--radius-sheet); box-shadow: var(--shadow-float); }
+.settings-header { padding: var(--space-5) var(--space-5) var(--space-5) var(--space-9); border-bottom: var(--hairline) solid var(--line); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; }
+.settings-title { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-extrabold); }
+.settings-panel .settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-4xl);
+}
+.settings-close:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.settings-section { padding: var(--space-8) var(--space-9); border-bottom: var(--hairline) solid var(--line); }
+.settings-panel .settings-section-title { margin-bottom: var(--space-5); font-size: var(--type-title); letter-spacing: 0; text-transform: none; color: var(--text-heading); }
+.settings-panel .app-row { min-height: var(--tap-lg); border: 0; border-radius: var(--radius-chip); background: var(--sunken); }
+.settings-panel .app-row-label { font-size: var(--type-body); font-weight: var(--weight-bold); }
+.settings-panel .app-row-detail { font-size: var(--type-caption); color: var(--text-muted); white-space: normal; }
+.settings-panel .app-row:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.settings-panel .app-advanced { gap: var(--space-3); padding: 0; }
+.settings-panel .app-advanced-btn {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--text);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+}
+.settings-panel .app-advanced-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.settings-panel .bike-pref-studio-select {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-body);
+  font-size: var(--text-xl);
+}
+.settings-panel .bike-pref-legend { font-size: var(--type-caption); color: var(--text-muted); }
+.settings-panel .bike-pref-legend i { border-radius: var(--radius-full); }
+.settings-panel .bike-pref-grid { border: 0; border-radius: var(--radius-chip); background: var(--sunken); }
+@media (max-width: 640px) {
+  .settings-panel, .settings-header { border-radius: 0; }
+  .settings-panel { box-shadow: none; }
+}
+
+/* ── 9e.8 First-run welcome: the welcome board's look ────────────── */
+.onboard-page-inner { align-items: stretch; text-align: left; }
+.onboard-brand { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-8); }
+.onboard-mark { display: flex; align-items: flex-end; gap: calc(var(--space-1) * 0.75); height: var(--space-9); }
+.onboard-mark i { display: block; width: var(--space-1); border-radius: var(--radius-xs); background: var(--ct-base); }
+.onboard-mark i:nth-child(1) { height: 40%; }
+.onboard-mark i:nth-child(2) { height: 55%; }
+.onboard-mark i:nth-child(3) { height: 70%; }
+.onboard-mark i:nth-child(4) { height: 85%; }
+.onboard-mark i:nth-child(5) { height: 100%; }
+.onboard-wordmark { margin: 0; font-size: var(--text-6xl); font-weight: var(--weight-black); letter-spacing: 0; }
+.onboard-title { margin: var(--space-10) 0 var(--space-4); font-size: var(--type-time); font-weight: var(--weight-black); letter-spacing: 0; line-height: 1.05; }
+.onboard-body { max-width: 34ch; font-size: var(--type-title); font-weight: var(--weight-medium); line-height: 1.45; }
+.onboard-body.onboard-headline {
+  max-width: none;
+  margin-top: var(--space-10);
+  font-family: var(--font-display);
+  font-size: var(--type-display);
+  font-weight: var(--weight-black);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--text-heading);
+}
+.onboard-headline span { display: block; white-space: nowrap; }
+.onboard-note { margin-top: var(--space-6); max-width: 40ch; font-size: var(--type-body); font-weight: var(--weight-medium); color: var(--text-muted); }
+.onboard-skip { font-size: var(--text-xl); color: var(--text-muted); }
+.onboard-dots { justify-content: flex-start; margin-bottom: var(--space-8); }
+.onboard-dot { background: var(--text-off); }
+.onboard-btn { min-height: var(--tap-lg); border: 0; background: var(--surface); box-shadow: inset 0 0 0 var(--hairline) var(--text); font-size: var(--text-2xl); font-weight: var(--weight-extrabold); }
+.onboard-btn-primary { background: var(--accent); box-shadow: none; }
+.onboard-look { min-height: var(--tap-min); background: none; box-shadow: none; font-size: var(--text-xl); font-weight: var(--weight-semibold); }
+.onboard-btn:focus-visible, .onboard-skip:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.onboard-overlay.is-holding .onboard-art { visibility: hidden; opacity: 0; }
+
+.onboard-art { max-width: none; align-self: center; }
+.onboard-art.onboard-art-welcome { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.onboard-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-8);
+  min-height: calc(var(--space-12) * 2.5);
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  border-radius: var(--radius-sheet);
+}
+.onboard-tile-name { font-size: var(--type-body); font-weight: var(--weight-bold); line-height: 1.2; color: var(--ct-deep); white-space: nowrap; }
+.onboard-tile.is-time { background: var(--accent); color: var(--accent-ink); }
+.onboard-tile-day { font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3; }
+.onboard-tile-time span, .onboard-mini-time span { margin-left: calc(var(--space-1) / 2); font-family: var(--font-body); font-size: var(--type-label); font-weight: var(--weight-bold); color: inherit; }
+
+/* Room for the chosen day's glow inside the strip's own clipping box. */
+.onboard-mini-strip { padding: var(--space-4) var(--space-2) var(--space-7); margin: calc(var(--space-4) * -1) calc(var(--space-2) * -1) calc(var(--space-7) * -1); }
+.onboard-mini-day { padding: var(--space-4) var(--space-6); border: 0; background: var(--surface); box-shadow: var(--shadow-soft); font-size: var(--type-caption); }
+.onboard-mini-day.is-on { background: var(--accent); color: var(--accent-ink); box-shadow: var(--glow-ring) var(--glow-sel-ring), var(--glow-drop) var(--glow-sel-drop); }
+.onboard-mini-card,
+.onboard-mini-card.is-held,
+.onboard-mini-card.is-waitlisted { gap: var(--space-5); padding: var(--space-5) var(--space-6); border: 0; border-radius: var(--radius-card); background: var(--ct-card); }
+.onboard-mini-card.is-dashed { border: var(--hairline) dashed var(--ct-base); }
+.onboard-mini-time { min-width: var(--space-12); color: var(--ct-ink); }
+.onboard-mini-name { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-body); font-size: var(--type-body); font-weight: var(--weight-bold); color: var(--ct-ink); }
+.onboard-mini-sub, .onboard-mini-deadline { font-size: var(--type-label); color: var(--ct-ink-2); }
+.onboard-mini-pill { padding: var(--space-4) var(--space-6); background: var(--surface); color: var(--ct-deep); box-shadow: var(--shadow-soft); font-size: var(--type-caption); font-weight: var(--weight-bold); }
+.onboard-mini-chip.ct-badge, .onboard-mini-badge.ct-badge { border-radius: var(--radius-full); letter-spacing: 0; text-transform: none; }
+.onboard-mini-chip.ct-badge { border: 0; background: var(--ct-base); color: var(--ct-on-base); }
+.onboard-mini-badge.ct-badge { border: var(--hairline) dashed var(--ct-base); background: var(--surface); color: var(--ct-deep); font-size: var(--type-label); }
+/* Seats are full circles: available = surface + hairline, taken = sunken,
+   yours = the class colour with the glow. */
+.onboard-mini-map { gap: var(--space-3); padding: var(--space-7); border: 0; border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-soft); }
+.onboard-mini-seat {
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+  font-variant-numeric: tabular-nums;
+}
+.onboard-mini-seat.is-taken { background: var(--sunken); color: var(--text-muted); box-shadow: none; }
+.onboard-mini-seat.is-on,
+.onboard-mini-seat.is-on.glow-mine { border-color: transparent; background: var(--ct-base); color: var(--ct-on-base); box-shadow: var(--glow-ring) var(--ct-ring), var(--glow-drop) var(--ct-drop); }
+.onboard-mini-caution { border-radius: var(--radius-full); padding: var(--space-3) var(--space-6); font-size: var(--type-caption); font-weight: var(--weight-semibold); }
+
+/* A short phone (375 × 667): page one still shows the affiliation sentence
+   without a scroll — smaller tiles, a smaller headline. */
+@media (max-height: 700px) {
+  .onboard-brand { margin-bottom: var(--space-6); }
+  .onboard-tile { min-height: calc(var(--space-12) * 2); gap: var(--space-4); padding: var(--space-5); }
+  .onboard-body.onboard-headline { margin-top: var(--space-8); font-size: calc(var(--type-display) * 0.75); }
+  .onboard-note { margin-top: var(--space-4); }
+  .onboard-title { margin-top: var(--space-8); }
+  .onboard-dots { margin-bottom: var(--space-6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-swatch::before { transition: none; }
+}

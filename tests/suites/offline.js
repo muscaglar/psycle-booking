@@ -88,7 +88,13 @@ module.exports = async function (t) {
   t.ok(/onclick="retrySavedBookings\(this\)"/.test(html), 'painter: Retry goes to retrySavedBookings');
   t.ok(html.indexOf('data-id') === -1 && html.indexOf('book-btn') === -1 && html.indexOf('mb-primary-btn') === -1, 'painter: no data-id / booking buttons — swipe, Similar and button re-sync cannot mistake a saved card for a live one');
   t.ok(/my-booking-card is-saved-copy/.test(html) && /is-waitlisted/.test(html) && /badge waitlist">Waitlisted/.test(html), 'painter: saved cards are marked, a place reads Waitlisted');
-  t.ok(/7:05<span class="class-time-ampm">pm/.test(html) && /12:15<span class="class-time-ampm">am/.test(html), 'painter: the class time is the string\'s own wall-clock digits (7:05pm, 12:15am)');
+  // The time block is the shared card's (_ccTimeHTML, pure:class-type) — typeof-guarded in
+  // the painter, like the pictogram; with the real helper in reach:
+  const timed = t.loadPure('js/app.js', 'offline', { escapeHTML: esc, slotLabel, _ccTimeHTML: t.loadPure('js/app.js', 'class-type', { getCategory: () => null })._ccTimeHTML });
+  const timedHtml = timed._savedBookingsHTML([item({ start_at: '2026-09-18 19:05:00' }), item({ id: '9', waitlisted: true, slots: [], start_at: '2026-09-19 00:15:00', type: 'Yoga' })], 'Saved copy · 14:05', false);
+  t.ok(/<span class="cc-time-h">7:05<\/span><span class="cc-dur"><span class="cc-ampm">pm<\/span>/.test(timedHtml) && /<span class="cc-time-h">12:15<\/span><span class="cc-dur"><span class="cc-ampm">am<\/span>/.test(timedHtml),
+    'painter: the class time is the string\'s own wall-clock digits (7:05 pm, 12:15 am), in the shared time block');
+  t.ok(html.indexOf('cc-time') === -1 && html.indexOf('NaN') === -1, 'painter: evaluated on its own there is no time block — never a ReferenceError');
   t.ok(/up-seat-chip">Spot 7</.test(html), 'painter: the seat chip carries the class type\'s noun');
   const waitingHtml = pure._savedBookingsHTML([item({})], 'Saved copy · 14:05', true);
   t.ok(waitingHtml.indexOf('onclick=') === -1 && /Checking with Psycle/.test(waitingHtml), 'painter: while Psycle is still being asked there is nothing to retry');

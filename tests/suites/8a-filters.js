@@ -333,13 +333,16 @@ module.exports = function (t) {
       eq((bodyHtml.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1, '#' + id + ' is still in the panel');
     });
     eq((bodyHtml.match(/<label>[^<]+/g) || []).map((m) => m.slice('<label>'.length).trim()),
-      ['Time', 'Location', 'Class Type', 'Instructor'], 'Time · Location · Class Type · Instructor, as before');
+      ['Time', 'Location', 'Class type', 'Instructor'], 'Time · Location · Class type · Instructor, as before (sentence case, like every other Crisp label)');
     const tag = (/<button[^>]*id="controlsToggle"[^>]*>/.exec(panel) || [''])[0];
     ok(/^<button type="button"/.test(tag) && /aria-expanded="false"/.test(tag) && /aria-controls="controlsBody"/.test(tag) && /onclick="toggleFilters\(\)"/.test(tag),
       '#controlsToggle is a real button: aria-expanded, aria-controls="controlsBody", toggleFilters()');
     const inner = between(panel, tag, '</button>', 'the bar\'s content');
-    ok(/>Filters</.test(inner) && /id="controlsCount"[^>]*aria-hidden="true"[^>]*hidden/.test(inner) && /<svg class="controls-chevron"[^>]*aria-hidden="true"/.test(inner),
-      'the word "Filters", a count (hidden at 0; the spoken count is in the name) and a chevron drawn as SVG — no glyph, no emoji');
+    // Wave 9b (Crisp Colour): Discover carries no chevron, the Filters bar
+    // included. It leads with a sliders mark instead; its open state is the lit
+    // bar (css/crisp.css, asserted below) and aria-expanded.
+    ok(/>Filters</.test(inner) && /id="controlsCount"[^>]*aria-hidden="true"[^>]*hidden/.test(inner) && /<svg class="controls-icon"[^>]*aria-hidden="true"/.test(inner) && !/chevron/i.test(inner),
+      'the word "Filters", a count (hidden at 0; the spoken count is in the name) and a leading mark drawn as SVG — no glyph, no emoji, no chevron');
     ok(/<div class="controls-summary" id="controlsSummary"><\/div>/.test(panel) && at('id="controlsSummary"') > at('</button>') && at('id="controlsSummary"') < at('id="controlsBody"'),
       '#controlsSummary sits beside the bar, outside the button (chips are buttons of their own) and outside the panel');
     eq((html.match(/id="controls(Panel|Toggle|Body|Summary)"/g) || []).length, 4, 'the shared ids exist exactly once each');
@@ -387,8 +390,10 @@ module.exports = function (t) {
     const hit = rule(redesign, '.controls-toggle::after, .filter-chip::after, .controls-clear::after');
     ok(/height:\s*var\(--tap-min\)/.test(hit) && /left:\s*0/.test(hit) && /right:\s*0/.test(hit), 'bar, chips and "Clear" each get a --tap-min tall hit area, grown up and down only (never over a neighbour)');
     ok(/outline:\s*2px solid var\(--accent/.test(rule(redesign, '.controls-toggle:focus-visible, .filter-chip:focus-visible, .controls-clear:focus-visible')), 'a keyboard focus ring on all three');
-    ok(/\.controls-chevron \{\s*transition:\s*none;?\s*\}/.test(media(redesign, '(prefers-reduced-motion: reduce)')), 'the chevron\'s turn respects prefers-reduced-motion');
-    ok(/\.controls\.filters-collapsed \.controls-chevron/.test(redesign), 'the chevron shows the state');
+    const crisp = noComments(t.readSource('css/crisp.css'));
+    ok(!/controls-chevron|controlsChevron/.test(redesign + crisp + html), 'no chevron rule or markup is left behind (nothing turns, so there is no motion to reduce)');
+    ok(/\.controls:not\(\.filters-collapsed\) \.controls-toggle \{[^}]*background:\s*var\(--accent\);[^}]*color:\s*var\(--accent-ink\);/.test(crisp),
+      'the BAR shows the state: open, it is lit — an accent fill labelled with --accent-ink (collapsed it is a quiet surface pill)');
     const mine = ['.controls-bar', '.controls-toggle', '.controls-count', '.controls-chevron', '.filter-chip', '.filter-chip-label', '.filter-chip-x', '.controls-clear'].map((s) => rule(redesign, s)).join('\n');
     const literals = mine.replace(/var\(--[a-z0-9-]+,\s*#[0-9a-fA-F]{3,8}\)/g, 'var()').match(/#[0-9a-fA-F]{3,8}\b|rgba?\(/g) || [];
     eq(literals, [], 'every colour is a token (a hex only ever as a var() fallback, like the rest of redesign.css)');

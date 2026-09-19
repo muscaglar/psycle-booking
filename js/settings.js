@@ -64,7 +64,7 @@
     // Only a known tier letter reaches the markup: the stored value can come
     // from an imported settings file, and it lands in a class attribute.
     if (!tier || TIERS.indexOf(tier) === -1) return '';
-    return '<span class="tier-badge tier-' + tier + '">' + tier + '</span>';
+    return '<span class="tier-badge tier-' + tier + '" role="img" aria-label="Ranked ' + tier + '">' + tier + '</span>';
   };
 
 
@@ -168,15 +168,24 @@
       ? formatSlots(_slPill, booking.slots)
       : '';
 
+    // Crisp Colour: the class's pictogram tile and your seat in the class colour.
+    // data-ct rides on an inner wrapper, not on the pill (the pill is only ever
+    // handed markup and classes); typeof: settings.js can run without app.js.
+    var ctKey = typeof classTypeKey === 'function' ? classTypeKey(next._typeName) : 'other';
+    var tile = typeof classPictogram === 'function'
+      ? '<span class="ct-tile is-sm" aria-hidden="true">' + classPictogram(ctKey, 15) + '</span>' : '';
+
     _pillEl.innerHTML =
-      '<div class="ncp-countdown">' + countdown + '</div>' +
-      '<div class="ncp-info">' +
-        '<div class="ncp-class">' + escapeHTML(next._typeName || 'Class') +
-          (next._instrName ? ' — ' + escapeHTML(next._instrName) : '') + '</div>' +
-        '<div class="ncp-detail">' + escapeHTML(next._locName || '') +
-          (next._studioName ? ' · ' + escapeHTML(next._studioName) : '') + '</div>' +
-      '</div>' +
-      (slots ? '<div class="ncp-seat">' + slots + '</div>' : '');
+      '<div class="ncp-body" data-ct="' + ctKey + '">' + tile +
+        '<div class="ncp-countdown">' + countdown + '</div>' +
+        '<div class="ncp-info">' +
+          '<div class="ncp-class">' + escapeHTML(next._typeName || 'Class') +
+            (next._instrName ? ' — ' + escapeHTML(next._instrName) : '') + '</div>' +
+          '<div class="ncp-detail">' + escapeHTML(next._locName || '') +
+            (next._studioName ? ' · ' + escapeHTML(next._studioName) : '') + '</div>' +
+        '</div>' +
+        (slots ? '<div class="ct-badge is-seat ncp-seat">' + escapeHTML(slots) + '</div>' : '') +
+      '</div>';
 
     _pillEl.classList.remove('hidden');
     _pillA11y('Next class in ' + countdown + ': ' + (next._typeName || 'Class') +
@@ -585,6 +594,7 @@
       confirmText: 'Use this calendar',
       cancelText: cancelText || 'Choose another',
       danger: true,
+      irreversible: true, // events get deleted: the one filled-red confirm besides a late cancel (app.js _confirmTone)
     }));
   }
 
@@ -911,41 +921,40 @@
           if (!rect) return;
           var rx = Number(rect.getAttribute('x'));
           var ry = Number(rect.getAttribute('y'));
-          var rw = Number(rect.getAttribute('width'));
 
+          // Crisp Colour: the two marks differ by SHAPE, not by a green / red
+          // pair — a dot for a seat you prefer, a short bar for one you avoid —
+          // and take their inks from css/crisp.css (.pref-dot-*), never an inline
+          // colour. Top-LEFT: the top-right corner is where showBikePicker draws
+          // the "your usual" ring and the tick of a seat you hold.
           if (preferSet.has(slot)) {
             g.classList.add('pref-prefer');
-            // Green dot in top-right corner
             var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            dot.setAttribute('cx', rx + rw - 5);
-            dot.setAttribute('cy', ry + 5);
-            dot.setAttribute('r', '3');
-            dot.setAttribute('fill', '#5dba5d');
-            dot.classList.add('pref-dot');
+            dot.setAttribute('cx', rx + 6);
+            dot.setAttribute('cy', ry + 6);
+            dot.setAttribute('r', '4');
+            dot.classList.add('pref-dot', 'pref-dot-prefer');
             g.appendChild(dot);
           }
           if (avoidSet.has(slot)) {
             g.classList.add('pref-avoid');
-            // Red dot in top-right corner
-            var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            dot.setAttribute('cx', rx + rw - 5);
-            dot.setAttribute('cy', ry + 5);
-            dot.setAttribute('r', '3');
-            dot.setAttribute('fill', '#e94560');
-            dot.classList.add('pref-dot');
-            g.appendChild(dot);
+            // (A path, not a <rect>: the seat rules style every rect in the seat.)
+            var bar = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            bar.setAttribute('d', 'M' + (rx + 2) + ' ' + (ry + 4) + 'h8a2 2 0 0 1 0 4h-8a2 2 0 0 1 0-4z');
+            bar.classList.add('pref-dot', 'pref-dot-avoid');
+            g.appendChild(bar);
           }
         });
-        // The marks above are colour only: have app.js re-read the seats so
+        // The marks above are visual only: have app.js re-read the seats so
         // each one's spoken name says "one you prefer" / "one you avoid" too.
         if (typeof _syncBikeSlotsA11y === 'function') _syncBikeSlotsA11y();
 
-        // Update legend if prefs exist
+        // Update legend if prefs exist (the same two shapes — css/crisp.css .seat-key)
         if (prefs.avoid.length || prefs.prefer.length) {
           var legend = document.querySelector('.bike-legend');
           if (legend && !legend.querySelector('.pref-legend')) {
-            legend.innerHTML += '<span class="pref-legend"><i style="background:#5dba5d;border-radius:50%;width:8px;height:8px"></i> Your fav</span>' +
-              '<span class="pref-legend"><i style="background:#e94560;border-radius:50%;width:8px;height:8px"></i> Avoid</span>';
+            legend.innerHTML += '<span class="pref-legend"><i class="seat-key is-prefer"></i> Your fav</span>' +
+              '<span class="pref-legend"><i class="seat-key is-avoid"></i> Avoid</span>';
           }
         }
       }, 50);
@@ -965,8 +974,10 @@
     var tier = getInstructorTier(instructorId);
     // This definition is the one that wins (it replaces the one above), so it
     // carries the same guard: an imported tier that is not a known letter
-    // must never be interpolated into markup.
-    return tier && TIERS.indexOf(tier) !== -1 ? '<span class="tier-badge tier-' + tier + '">' + tier + '</span>' : '';
+    // must never be interpolated into markup. The tile SAYS what it is: after
+    // an instructor's name a screen reader heard a bare "S" (role=img + a name;
+    // `tier` is a checked letter, so it is safe in the attribute too).
+    return tier && TIERS.indexOf(tier) !== -1 ? '<span class="tier-badge tier-' + tier + '" role="img" aria-label="Ranked ' + tier + '">' + tier + '</span>' : '';
   };
 
 
@@ -980,6 +991,7 @@
     'psycle_fav_instructors',
     'psycle_saved_filters',
     'psycle_theme',
+    'psycle_class_colours',
     'psycle_class_history',
     'psycle_history_synced',
     'psycle_notify_watchlist',
@@ -1074,13 +1086,14 @@
   // JSON has that key's shape (cleaned by app.js's pure:stored-data helpers,
   // handed in as `clean`). And the file only ever ADDS: classes this device has
   // no record of, rankings / bike prefs for instructors / studios it has none
-  // for, favourites and spot alerts it lacks; theme, filters and the sync stamp
-  // only where the device has none. Nothing the member already has is replaced.
+  // for, favourites and spot alerts it lacks; theme, class colours, filters and
+  // the sync stamp only where the device has none. Nothing the member already
+  // has is replaced.
   var IMPORT_MAX_FILE = 5242880;  // bytes — a full 2,000-class export is under 1 MB
   var IMPORT_MAX_VALUE = 1048576; // chars per key
 
   // data: the parsed file. deviceGet(key) → this device's raw stored string.
-  // opts: { clean: {history, tiers, idList, bikePrefs}, themes: [ids], historyMax }
+  // opts: { clean: {history, tiers, idList, bikePrefs, classColours}, themes: [ids], historyMax }
   // → { writes: {key: string}, added: {…counts}, accepted (keys that passed), skipped: [{key, reason}],
   //     exportedAt, deviceHasData }
   function _planSettingsImport(data, deviceGet, opts) {
@@ -1188,6 +1201,23 @@
         if ((opts.themes || []).indexOf(deviceRaw('psycle_theme')) === -1) { plan.writes.psycle_theme = theme; plan.added.theme = 1; }
       }
     }
+    // Class colours — like the theme: only where this device has no choice of
+    // its own. clean.classColours (js/theme.js PsycleClassColours.clean) keeps
+    // known class types, known swatches and a known intensity, and answers null
+    // for anything that is not a class-colours object at all.
+    var colours = jsonOf('psycle_class_colours');
+    if (colours !== undefined) {
+      var cleanColours = typeof clean.classColours === 'function' ? clean.classColours : function () { return null; };
+      var pickedColours = cleanColours(colours);
+      if (!pickedColours) skip('psycle_class_colours', 'wrong shape');
+      else {
+        plan.accepted++;
+        if (!cleanColours(deviceJson('psycle_class_colours', null))) {
+          plan.writes.psycle_class_colours = JSON.stringify(pickedColours);
+          plan.added.colours = 1;
+        }
+      }
+    }
     var filters = jsonOf('psycle_saved_filters');
     if (filters !== undefined) {
       if (!isMap(filters)) skip('psycle_saved_filters', 'wrong shape');
@@ -1227,6 +1257,7 @@
     if (added.bikeStudios) parts.push('bike preferences for ' + n(added.bikeStudios, 'studio', 'studios'));
     if (added.alerts) parts.push(n(added.alerts, 'spot alert', 'spot alerts'));
     if (added.theme) parts.push('your theme');
+    if (added.colours) parts.push('your class colours');
     if (added.filters) parts.push('your last search filters');
     if (parts.length < 2) return parts.join('');
     return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
@@ -1270,7 +1301,10 @@
       try {
         var data = JSON.parse(e.target.result);
         var plan = _planSettingsImport(data, function (key) { return localStorage.getItem(key); }, {
-          clean: { history: _cleanStoredHistory, tiers: _cleanStoredTiers, idList: _cleanStoredIdList, bikePrefs: _cleanStoredBikePrefs },
+          clean: {
+            history: _cleanStoredHistory, tiers: _cleanStoredTiers, idList: _cleanStoredIdList, bikePrefs: _cleanStoredBikePrefs,
+            classColours: window.PsycleClassColours ? window.PsycleClassColours.clean : null,
+          },
           themes: (window.APP_THEMES || []).map(function (t) { return t.id; }),
           historyMax: window.PSYCLE_HISTORY_MAX || 2000,
         });

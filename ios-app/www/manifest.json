@@ -4,8 +4,8 @@
   "description": "Find, book and sync your Psycle classes \u2014 a fast, independent companion for Psycle London riders.",
   "start_url": "./psycle-finder.html",
   "display": "standalone",
-  "background_color": "#efeee9",
-  "theme_color": "#efeee9",
+  "background_color": "#e6e9ee",
+  "theme_color": "#e6e9ee",
   "orientation": "portrait-primary",
   "icons": [
     {

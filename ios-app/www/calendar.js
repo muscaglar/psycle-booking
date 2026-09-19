@@ -331,11 +331,11 @@ function renderCalendarActions() {
   // Membership → Settings replaces them, so don't render dead buttons.
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     return `<div class="cal-actions">
-      <button class="cal-btn" onclick="event.stopPropagation();openSettings()" title="Native calendar sync">📅 Calendar sync settings</button>
+      <button class="cal-btn" onclick="event.stopPropagation();openSettings()" title="Native calendar sync">Calendar sync settings</button>
     </div>`;
   }
   return `<div class="cal-actions">
-    <button class="cal-btn" onclick="event.stopPropagation();openICSInCalendar()" title="Open in Calendar app">📅 Add to Calendar</button>
+    <button class="cal-btn" onclick="event.stopPropagation();openICSInCalendar()" title="Open in Calendar app">Add to Calendar</button>
     <button class="cal-btn" onclick="event.stopPropagation();addToGoogleCalendar()" title="Open in Google Calendar">Google Cal</button>
     <button class="cal-btn" onclick="event.stopPropagation();downloadICS()" title="Download .ics file">Download</button>
   </div>`;

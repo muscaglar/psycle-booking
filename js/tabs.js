@@ -30,14 +30,17 @@
 
     // Create tab bar: Discover, Bookings, Stats, Membership.
     // Icons only show on mobile, where the bar docks to the bottom.
+    // Crisp Colour: the boards' four marks on a 24 grid, stroke 2, round ends —
+    // search, calendar-check, bars, card. Size and stroke never change with
+    // state; the current tab is told by the pill css/crisp.css draws behind it.
     var icon = function (paths) {
-      return '<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+      return '<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
     };
     var TAB_ICONS = {
-      discover: icon('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
-      bookings: icon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>'),
-      stats: icon('<path d="M5 20v-6M12 20V8M19 20V5"/>'),
-      membership: icon('<circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/>'),
+      discover: icon('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>'),
+      bookings: icon('<rect x="3.5" y="5" width="17" height="15" rx="4"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 13l2.5 2.5 4.5-5"/>'),
+      stats: icon('<path d="M6 19v-6"/><path d="M12 19V5"/><path d="M18 19v-9"/>'),
+      membership: icon('<rect x="3" y="6" width="18" height="12.5" rx="3.5"/><path d="M3 10.5h18"/><path d="M7 14.5h4"/>'),
     };
     var tabBar = document.createElement('div');
     tabBar.className = 'tab-bar';
@@ -67,18 +70,17 @@
 
     controls.parentNode.insertBefore(discoverPanel, controls);
 
-    // Redesign: header row — title left, freshness/refresh + clear filters right
+    // Crisp Colour: no headline over a loaded timetable (the boards go straight
+    // from the wordmark to the date row; "Find your next class" stays the title
+    // of the EMPTY state in #results). What is left is one quiet line:
+    // freshness / refresh, and "Clear filters" where the Filters bar is hidden.
     var discHeader = document.createElement('div');
     discHeader.className = 'disc-header';
-    var discTitle = document.createElement('div');
-    discTitle.className = 'disc-title';
-    discTitle.innerHTML = 'Find your<br>next class';
     var discActions = document.createElement('div');
     discActions.className = 'disc-actions';
     discActions.innerHTML =
       '<span id="lastUpdated" class="last-updated"></span>' +
       '<button type="button" class="disc-clear-btn" onclick="clearFilters()">Clear filters</button>';
-    discHeader.appendChild(discTitle);
     discHeader.appendChild(discActions);
     discoverPanel.appendChild(discHeader);
 
@@ -183,12 +185,19 @@
     // (theme, reminders, data) live in the Settings panel.
     membershipPanel.innerHTML =
       '<div id="membershipSignin" class="tab-empty" style="display:none"></div>' +
-      '<div id="costSection" class="cost-section" style="display:none"></div>' +
+      // Who, their plan, then what it costs per class (the tracker used to sit
+      // above the member's own name).
       '<div id="membershipInfo" class="insights-section" style="display:none"></div>' +
+      '<div id="costSection" class="cost-section" style="display:none"></div>' +
       // Appearance (theme cards) — moved out of the Settings overlay
       '<div class="ms-section">' +
         '<div class="ms-section-title">Appearance</div>' +
         '<div id="themePicker"></div>' +
+        // Class colours (Crisp Colour): strength + one swatch per class type.
+        // Filled by renderClassColours; everything goes through
+        // window.PsycleClassColours (js/theme.js).
+        '<div class="ms-section-title ms-section-title-sub" id="classColoursTitle">Class colours</div>' +
+        '<div id="classColours" class="cc-control" role="group" aria-labelledby="classColoursTitle"></div>' +
       '</div>' +
       // Settings list — each row opens the Settings panel AT its own section,
       // and promises only what that section holds ("Default studio", "waitlist
@@ -423,16 +432,17 @@
   // ── pure:stats-pages:start ── (DOM-free; tests/suites/8c-stats-pages.js evaluates this block)
   // THE grouping. initTabs builds the pages from it, the switcher and the lazy
   // paint read it: moving a section is an edit to this table and nothing else.
-  //  · Overview    — how much: the tiles, streaks & milestones, the year wrap, share.
-  //  · Habits      — when and what: usual slots, routine, the weekday × hour
-  //                  heatmap (it plots WHEN you train, not how much), class types.
+  //  · Overview    — the Crisp Colour Stats board, in its order: all time with
+  //                  this month and upcoming, the week streak, "When you
+  //                  train", class types, the year wrap, share.
+  //  · Habits      — what repeats, each with its action: usual slots, routine.
   //  · Instructors — who: the map, variety (unique INSTRUCTORS per month),
   //                  lapsed favourites, and the two suggestion rows.
   var STATS_PAGES = [
     { id: 'overview', label: 'Overview', tab: 'statsTabOverview', panel: 'statsPageOverview',
-      sections: ['statsBar', 'streakSection', 'yearReviewSection', 'shareSection'] },
+      sections: ['statsBar', 'streakSection', 'heatmapSection', 'classTypeSection', 'yearReviewSection', 'shareSection'] },
     { id: 'habits', label: 'Habits', tab: 'statsTabHabits', panel: 'statsPageHabits',
-      sections: ['habitSection', 'recoSection', 'heatmapSection', 'classTypeSection'] },
+      sections: ['habitSection', 'recoSection'] },
     { id: 'instructors', label: 'Instructors', tab: 'statsTabInstructors', panel: 'statsPageInstructors',
       sections: ['exploreMapSection', 'varietySection', 'lapsedSection', 'exploreLikeSection', 'exploreNewSection'] },
   ];
@@ -895,45 +905,56 @@
     }
 
     container.style.display = '';
+    // Crisp Colour (the Stats board): ONE card with all time as the hero
+    // numeral, this month and upcoming beside it; everything else is a quiet
+    // tile underneath. Every figure keeps its .stat-value + .stat-label pair,
+    // value first (tests and the old order of reading rely on it) — the hero
+    // puts its label on top in css/crisp.css.
     var html =
-      '<div class="stat-card">' +
-        '<div class="stat-value">' + upcoming + '</div>' +
-        '<div class="stat-label">Upcoming</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-value">' + thisMonth + '</div>' +
-        '<div class="stat-label">This month</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-value">' + totalClasses + '</div>' +
-        '<div class="stat-label">All time</div>' +
+      '<div class="stats-hero">' +
+        '<div class="stat-card is-hero">' +
+          '<div class="stat-value">' + totalClasses + '</div>' +
+          '<div class="stat-label">All time</div>' +
+        '</div>' +
+        '<div class="stats-hero-side">' +
+          '<div class="stat-card is-side">' +
+            '<div class="stat-value">' + thisMonth + '</div>' +
+            '<div class="stat-label">This month</div>' +
+          '</div>' +
+          '<div class="stat-card is-side">' +
+            '<div class="stat-value">' + upcoming + '</div>' +
+            '<div class="stat-label">Upcoming</div>' +
+          '</div>' +
+        '</div>' +
       '</div>';
 
+    var more = '';
     // Solo vs Social breakdown
     if (socialClasses > 0) {
-      html +=
-        '<div class="stat-card">' +
+      more +=
+        '<div class="stat-card is-tile">' +
           '<div class="stat-value">' + soloClasses + '</div>' +
           '<div class="stat-label">Solo</div>' +
         '</div>' +
-        '<div class="stat-card">' +
+        '<div class="stat-card is-tile">' +
           '<div class="stat-value">' + socialClasses + '</div>' +
           '<div class="stat-label">With a friend</div>' +
           '<div class="stat-detail">' + Math.round(socialClasses / totalClasses * 100) + '% of classes</div>' +
         '</div>';
     }
 
-    html +=
-      (favStudio ? '<div class="stat-card">' +
-        '<div class="stat-value" style="font-size:16px">' + escapeHTML(favStudio[0]) + '</div>' +
+    more +=
+      (favStudio ? '<div class="stat-card is-tile is-name">' +
+        '<div class="stat-value">' + escapeHTML(favStudio[0]) + '</div>' +
         '<div class="stat-label">Top studio</div>' +
         '<div class="stat-detail">' + _plural(favStudio[1], 'class', 'classes') + '</div>' +
       '</div>' : '') +
-      (favInstr ? '<div class="stat-card">' +
-        '<div class="stat-value" style="font-size:16px">' + escapeHTML(favInstr[0]) + '</div>' +
+      (favInstr ? '<div class="stat-card is-tile is-name">' +
+        '<div class="stat-value">' + escapeHTML(favInstr[0]) + '</div>' +
         '<div class="stat-label">Top instructor</div>' +
         '<div class="stat-detail">' + _plural(favInstr[1], 'class', 'classes') + '</div>' +
       '</div>' : '');
+    if (more) html += '<div class="stats-more">' + more + '</div>';
 
     container.innerHTML = html;
   }
@@ -1106,6 +1127,48 @@
 
   function _uwPlural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
+  // ── pure:usual-week-crisp:start ── (DOM-free; tests/suites/9d-bookings.js evaluates this block)
+  // The card and the sheet show each class as a COMPACT form of the class
+  // component: pictogram tile in the class colour, day, a smaller time.
+
+  // A template entry's label is "Type · Instructor" (app.js _templateFromSeats).
+  // Only the type decides the colour: an instructor called Barrett is not Barre.
+  function _uwTypeOf(label) {
+    return String(label == null ? '' : label).split(' · ')[0];
+  }
+
+  // Minutes after midnight → the time's two parts, so the am/pm can be set small.
+  function _uwTimeParts(totalMin) {
+    var min = Math.max(0, Math.round(Number(totalMin) || 0)) % 1440;
+    var h = Math.floor(min / 60);
+    return { clock: (h % 12 || 12) + ':' + String(min % 60).padStart(2, '0'), ampm: h >= 12 ? 'pm' : 'am' };
+  }
+
+  // The tile + data-ct of a class type. `keyOf` / `pictogram` are app.js's
+  // classTypeKey / classPictogram; without them (tabs.js on its own) the row
+  // simply has no tile and wears the neutral colour.
+  function _uwClassMark(typeName, keyOf, pictogram) {
+    var key = typeof keyOf === 'function' ? keyOf(typeName) : 'other';
+    // It lands in an attribute: a lower-case word, whatever handed it over.
+    key = String(key == null ? '' : key).toLowerCase().replace(/[^a-z]/g, '') || 'other';
+    return {
+      key: key,
+      tile: typeof pictogram === 'function' ? '<span class="ct-tile is-sm" aria-hidden="true">' + pictogram(key, 15) + '</span>' : '',
+    };
+  }
+  // ── pure:usual-week-crisp:end ──
+
+  function _uwTimeHtml(totalMin) {
+    var p = _uwTimeParts(totalMin);
+    return '<span class="t-time is-compact">' + p.clock + '<span class="class-time-ampm">' + p.ampm + '</span></span>';
+  }
+
+  function _uwMark(typeName) {
+    return _uwClassMark(typeName,
+      typeof classTypeKey === 'function' ? classTypeKey : null,
+      typeof classPictogram === 'function' ? classPictogram : null);
+  }
+
   function _usualWeekTemplate() {
     try {
       var arr = typeof window.loadWeeklyTemplate === 'function' ? window.loadWeeklyTemplate() : [];
@@ -1270,10 +1333,15 @@
 
     if (template.length) {
       var rows = template.map(function (en, i) {
-        var when = (UW_DAYS[Number(en.dayOfWeek)] || '') + ' ' + _uwTime((Number(en.hour) || 0) * 60 + (Number(en.minute) || 0));
+        var min = (Number(en.hour) || 0) * 60 + (Number(en.minute) || 0);
+        var day = UW_DAYS[Number(en.dayOfWeek)] || '';
+        var when = day + ' ' + _uwTime(min); // as words, for the remove button's name
         var label = String(en.label || 'Class');
-        return '<li class="usual-week-entry">' +
-          '<span class="usual-week-when">' + escapeHTML(when) + '</span>' +
+        // A compact class component: tile, day, a smaller time — tinted by type.
+        var mark = _uwMark(_uwTypeOf(label));
+        return '<li class="usual-week-entry ct-card" data-ct="' + mark.key + '">' +
+          mark.tile +
+          '<span class="usual-week-when"><span class="usual-week-day">' + escapeHTML(day) + '</span>' + _uwTimeHtml(min) + '</span>' +
           '<span class="usual-week-what">' + escapeHTML(label) +
             // The separator has a span of its own: the card puts the studio on a second line (styles.css), where it is dropped.
             (en.locName ? '<span class="usual-week-where"><span class="usual-week-sep"> · </span>' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
@@ -1282,15 +1350,19 @@
         '</li>';
       }).join('');
       card.innerHTML =
+        // Crisp primitives: the one graphite primary, the rest quiet text. "Clear"
+        // sits in the head beside the count — on a phone the two actions under
+        // the list fill their row, and a third wrapped onto a line of its own.
+        // (Its name says what it clears: up here it no longer follows the list.)
         '<div class="usual-week-head">' +
-          '<span class="usual-week-eyebrow">Your usual week</span>' +
+          '<h2 class="usual-week-eyebrow t-heading">Your usual week</h2>' +
           '<span class="usual-week-count">' + _uwPlural(template.length, 'class', 'classes') + '</span>' +
+          '<button type="button" class="week-template-btn pill-btn pill-quiet usual-week-clear" onclick="clearUsualWeek()" aria-label="Clear your usual week">Clear</button>' +
         '</div>' +
         '<ul class="usual-week-list">' + rows + '</ul>' +
         '<div class="usual-week-actions">' +
-          '<button type="button" class="week-template-btn week-template-book" onclick="bookTemplateWeek()">Book my usual week</button>' +
-          '<button type="button" class="week-template-btn" onclick="saveWeekAsTemplate()">Update from my bookings</button>' +
-          '<button type="button" class="week-template-btn" onclick="clearUsualWeek()">Clear</button>' +
+          '<button type="button" class="week-template-btn week-template-book pill-btn pill-primary" onclick="bookTemplateWeek()">Book my usual week</button>' +
+          '<button type="button" class="week-template-btn pill-btn pill-quiet" onclick="saveWeekAsTemplate()">Update from my bookings</button>' +
         '</div>';
       card.style.display = '';
     } else if (signedIn && (_collectDisplayedWeekTemplate().length || _usualWeekFromHistory().length)) {
@@ -1298,7 +1370,7 @@
       card.innerHTML =
         '<div class="usual-week-invite">' +
           '<span class="usual-week-invite-text">Same classes every week? Save them once, then book them together.</span>' +
-          '<button type="button" class="week-template-btn" onclick="saveWeekAsTemplate()">Save my usual week</button>' +
+          '<button type="button" class="week-template-btn pill-btn pill-outline" onclick="saveWeekAsTemplate()">Save my usual week</button>' +
         '</div>';
       card.style.display = '';
     } else {
@@ -1359,15 +1431,18 @@
     var en = row.entry || {};
     var wall = (row.startAt && typeof _templateWall === 'function') ? _templateWall(row.startAt) : null;
     var min = wall ? wall.min : (Number(en.hour) || 0) * 60 + (Number(en.minute) || 0);
-    var main = [_uwDateLabel(row.date), _uwTime(min), row.typeName || (row.eventId == null ? String(en.label || 'Class') : 'Class')].filter(Boolean).join(' · ');
+    var name = row.typeName || (row.eventId == null ? String(en.label || 'Class') : 'Class');
     var sub = [row.instrName, row.locName].filter(Boolean).join(' · ');
-    var text =
+    // The compact class component again: tile · day over a smaller time · class.
+    var mark = _uwMark(row.typeName || _uwTypeOf(en.label));
+    var text = mark.tile +
+      '<span class="usual-week-row-when"><span class="usual-week-day">' + escapeHTML(_uwDateLabel(row.date)) + '</span>' + _uwTimeHtml(min) + '</span>' +
       '<span class="usual-week-row-text">' +
-        '<span class="usual-week-row-main">' + escapeHTML(main) + '</span>' +
+        '<span class="usual-week-row-main">' + escapeHTML(name) + '</span>' +
         (sub ? '<span class="usual-week-row-sub">' + escapeHTML(sub) + '</span>' : '') +
         '<span class="usual-week-row-note' + (note.warn ? ' is-warn' : '') + (note.ok ? ' is-ok' : '') + '" data-uw-note="' + row.index + '">' + escapeHTML(note.text || '') + '</span>' +
       '</span>';
-    return '<li class="usual-week-row">' +
+    return '<li class="usual-week-row" data-ct="' + mark.key + '">' +
       (checkbox != null
         ? '<label class="usual-week-pick"><input type="checkbox" data-uw-row="' + row.index + '"' + (checkbox ? ' checked' : '') + '>' + text + '</label>'
         : '<div class="usual-week-pick">' + text + '</div>') +
@@ -1512,7 +1587,8 @@
         var starts = weekStarts();
         var sw = function (mode, label) {
           var active = plan.mode === mode;
-          return '<button type="button" class="usual-week-switch-btn' + (active ? ' active' : '') + '" aria-pressed="' + active + '" data-uw-start="' + starts[mode] + '">' + escapeHTML(label) + '</button>';
+          // .seg-btn: the Crisp segmented track lights the segment off aria-pressed.
+          return '<button type="button" class="seg-btn usual-week-switch-btn' + (active ? ' active' : '') + '" aria-pressed="' + active + '" data-uw-start="' + starts[mode] + '">' + escapeHTML(label) + '</button>';
         };
         body.innerHTML =
           '<div class="confirm-body">' + escapeHTML(_uwDateLabel(plan.weekStart) + ' – ' + _uwDateLabel(plan.weekEnd)) +
@@ -1520,7 +1596,7 @@
             // An empty week is usually an unreleased one, not a changed timetable.
             (anyFound ? '' : ' None of your classes were found — Psycle opens each new week on Monday at 12:00, so these days may not be bookable yet.') +
           '</div>' +
-          '<div class="usual-week-switch" role="group" aria-label="Which week">' +
+          '<div class="seg usual-week-switch" role="group" aria-label="Which week">' +
             sw('next7', 'Next 7 days') + sw('nextweek', 'Week of ' + _uwDateLabel(starts.nextweek)) +
           '</div>' +
           '<ul class="usual-week-plan">' + rows + '</ul>' +
@@ -1650,6 +1726,13 @@
     }
   };
 
+  // The small pictogram tile that leads a class name on a Stats card (app.js
+  // classPictogram; css/crisp.css .ct-tile). '' when app.js is not there.
+  function _statsTile(ct) {
+    return (typeof classPictogram === 'function')
+      ? '<span class="ct-tile is-sm" aria-hidden="true">' + classPictogram(ct, 15) + '</span>' : '';
+  }
+
   // ── Recommendations ────────────────────────────────────────────
 
   function renderRecommendations() {
@@ -1699,9 +1782,12 @@
     var html = '<div class="reco-title">Your routine</div><div class="reco-cards">';
     patterns.forEach(function (p) {
       var dayCapital = p.day.charAt(0).toUpperCase() + p.day.slice(1);
-      html += '<div class="reco-card">' +
+      // The compact class component: tinted by class type, the slot first.
+      // (typeof: tests run this function on its own, without app.js.)
+      var ct = (typeof classTypeKey === 'function') ? classTypeKey(p.type) : 'other';
+      html += '<div class="reco-card ct-card" data-ct="' + ct + '">' +
         '<div class="reco-badge">' + dayCapital + 's at ' + p.timeAmPm + '</div>' +
-        '<div class="reco-class">' + escapeHTML(p.type) + '</div>' +
+        '<div class="reco-class">' + (typeof _statsTile === 'function' ? _statsTile(ct) : '') + escapeHTML(p.type) + '</div>' +
         '<div class="reco-detail">' + instrLink(p.instr) + (p.loc ? ' · ' + escapeHTML(p.loc) : '') + '</div>' +
         '<div class="reco-detail">' + p.count + 'x booked</div>' +
       '</div>';
@@ -1782,9 +1868,12 @@
       // type is only the 'Class' placeholder: better no filter than a wrong one.
       var catKey = (typeof getCategory === 'function' && s.type !== 'Class') ? String((getCategory(s.type) || {}).key || '') : '';
 
-      html += '<div class="habit-card">' +
+      // The compact class component: tinted by class type, the slot first.
+      // (typeof: tests run this function on its own, without app.js.)
+      var ct = (typeof classTypeKey === 'function') ? classTypeKey(s.type) : 'other';
+      html += '<div class="habit-card ct-card" data-ct="' + ct + '">' +
         '<div class="habit-line"><strong>' + escapeHTML(dayName) + 's ~' + timeLabel + '</strong></div>' +
-        '<div class="habit-class">' + escapeHTML(s.type) + '</div>' +
+        '<div class="habit-class">' + (typeof _statsTile === 'function' ? _statsTile(ct) : '') + escapeHTML(s.type) + '</div>' +
         '<div class="habit-meta">' + s.count + 'x in your history</div>' +
         '<button class="habit-find-btn" data-date="' + dateStr + '" data-cat="' + escapeHTML(catKey) + '">Find this week</button>' +
       '</div>';
@@ -1884,46 +1973,158 @@
     }
 
     container.style.display = '';
-    var html = '<div class="streak-title">Streaks & milestones</div>';
-    html += '<div class="streak-cards">';
-
-    html += '<div class="streak-card' + (current >= 2 ? ' streak-live' : '') + '">' +
+    // Crisp Colour (the Stats board): one block — the streak as a big numeral,
+    // "Longest N" under its name, and the last twelve weeks as bars (the run
+    // that is still going in the ink, earlier weeks quieter, a missed week a
+    // stub). No glow: a streak is not something you hold.
+    var bars = _streakWeeks(weeks, thisWeek, 12);
+    var html = '<div class="streak-card streak-main' + (current >= 2 ? ' streak-live' : '') + '">' +
       '<div class="streak-value">' + current + '</div>' +
-      '<div class="streak-label">Week streak</div>' +
+      '<div class="streak-text">' +
+        '<div class="streak-label">week streak</div>' +
+        '<div class="streak-sub">Longest ' + longest + '</div>' +
+      '</div>' +
+      '<div class="streak-weeks" role="img" aria-label="' + _streakWeeksLabel(bars) + '">' +
+        bars.map(function (b) { return '<span class="streak-week' + (b.on ? ' is-on' : '') + (b.live ? ' is-live' : '') + '"></span>'; }).join('') +
+      '</div>' +
     '</div>';
 
-    html += '<div class="streak-card">' +
-      '<div class="streak-value">' + longest + '</div>' +
-      '<div class="streak-label">Longest streak</div>' +
-    '</div>';
-
-    // The one hint left is a number: how far the next badge below is.
-    html += '<div class="streak-card">' +
-      '<div class="streak-value">' + total + '</div>' +
-      '<div class="streak-label">Classes</div>' +
-      (nextMilestone ? '<div class="streak-hint">' + (nextMilestone - total) + ' to ' + nextMilestone + '</div>' : '') +
-    '</div>';
-
-    html += '</div>';
-
-    // Milestone badges — earned ones glow, the next is outlined as a target.
-    html += '<div class="milestone-row">';
-    MILESTONES.forEach(function (m) {
-      var earned = total >= m;
-      var isNext = !earned && m === nextMilestone;
-      html += '<div class="milestone-badge' + (earned ? ' earned' : '') + (isNext ? ' next' : '') + '">' +
-        '<span class="milestone-num">' + m + '</span>' +
-        '<span class="milestone-cap">classes</span>' +
-      '</div>';
-    });
-    html += '</div>';
+    // Milestones, while there is still one to reach: earned ones are filled,
+    // the next is outlined as a target — and the one hint is a number: how far
+    // that next one is. Past the last one the row has nothing left to say (four
+    // filled badges under a member's 214 classes were only noise).
+    if (nextMilestone) {
+      html += '<div class="milestone-row">';
+      MILESTONES.forEach(function (m) {
+        var earned = total >= m;
+        var isNext = !earned && m === nextMilestone;
+        html += '<div class="milestone-badge' + (earned ? ' earned' : '') + (isNext ? ' next' : '') + '">' +
+          '<span class="milestone-num">' + m + '</span>' +
+        '</div>';
+      });
+      // The unit once, after the four numbers — not under each of them.
+      html += '<span class="milestone-cap">classes</span>';
+      html += '<div class="streak-hint">' + (nextMilestone - total) + ' to ' + nextMilestone + '</div>';
+      html += '</div>';
+    }
 
     container.innerHTML = html;
   }
 
+  // ── pure:stats-charts:start ── (DOM-free; tests/suites/9e-stats-membership.js evaluates this block)
+  // The numbers behind the three Overview charts of the Crisp Colour Stats
+  // board: the streak's weekly bars, the weekday × time-of-day grid and the
+  // class-type bar. Class times are read off their wall-clock DIGITS (never
+  // new Date(string): the digits ARE the gym's clock, in every device zone,
+  // and older WebKit cannot parse 'YYYY-MM-DD HH:MM:SS' at all).
+
+  // Five bands of the day, as the board draws them. The first takes
+  // everything before 09:00 and the last everything from 18:00, so no class
+  // falls off the grid.
+  var HEAT_BANDS = [
+    { from: 0, label: '06', name: 'early morning' },
+    { from: 9, label: '09', name: 'morning' },
+    { from: 12, label: '12', name: 'lunchtime' },
+    { from: 15, label: '15', name: 'afternoon' },
+    { from: 18, label: '18', name: 'evening' },
+  ];
+  var HEAT_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // 'YYYY-MM-DD HH:MM…' (space or T) → { day: 0–6 Monday first, hour } | null.
+  function _wallParts(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s == null ? '' : s));
+    if (!m) return null;
+    var y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]), h = Number(m[4]);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23) return null;
+    var wd = new Date(Date.UTC(y, mo - 1, d)).getUTCDay(); // a calendar date has one weekday everywhere
+    return { day: (wd + 6) % 7, hour: h };
+  }
+
+  function _heatBandIndex(hour) {
+    var at = 0;
+    for (var i = 0; i < HEAT_BANDS.length; i++) if (hour >= HEAT_BANDS[i].from) at = i;
+    return at;
+  }
+
+  // 0 = never; 1–4 = quarters of the busiest cell (the old grid's own steps).
+  function _heatLevel(count, max) {
+    if (!(count > 0) || !(max > 0)) return 0;
+    var share = count / max;
+    return share < 0.25 ? 1 : share < 0.5 ? 2 : share < 0.75 ? 3 : 4;
+  }
+
+  // Class start times → { total, max, counts[band][day], levels[band][day],
+  // top: the (up to three) busiest cells, busiest first }.
+  function _heatmapModel(starts) {
+    var counts = HEAT_BANDS.map(function () { return [0, 0, 0, 0, 0, 0, 0]; });
+    var total = 0, max = 0;
+    (starts || []).forEach(function (s) {
+      var p = _wallParts(s);
+      if (!p) return;
+      var b = _heatBandIndex(p.hour);
+      counts[b][p.day]++;
+      total++;
+      if (counts[b][p.day] > max) max = counts[b][p.day];
+    });
+    var cells = [];
+    counts.forEach(function (row, b) { row.forEach(function (n, d) { if (n > 0) cells.push({ band: b, day: d, count: n }); }); });
+    // Ties keep calendar order (Monday first, then down the day).
+    cells.sort(function (a, b) { return b.count - a.count || a.day - b.day || a.band - b.band; });
+    return {
+      total: total, max: max, counts: counts,
+      levels: counts.map(function (row) { return row.map(function (n) { return _heatLevel(n, max); }); }),
+      top: cells.slice(0, 3),
+    };
+  }
+
+  // What the grid says to someone who cannot see it.
+  function _heatmapLabel(model) {
+    var lead = 'Classes by weekday and time of day.';
+    if (!model || !model.top || !model.top.length) return lead;
+    return lead + ' Most often: ' + model.top.map(function (c) { return HEAT_DAYS[c.day] + ' ' + HEAT_BANDS[c.band].name; }).join(', ') + '.';
+  }
+
+  // The streak's bars: the last `n` weeks, oldest first. `weeks` maps a week
+  // index to true; `on` = a class that week, `live` = part of the run that is
+  // still going (it may end last week: this week is not over yet).
+  function _streakWeeks(weeks, thisWeek, n) {
+    weeks = weeks || {};
+    var liveFrom = null, cursor = weeks[thisWeek] ? thisWeek : (weeks[thisWeek - 1] ? thisWeek - 1 : null);
+    if (cursor !== null) { liveFrom = cursor; while (weeks[liveFrom - 1]) liveFrom--; }
+    var out = [];
+    for (var w = thisWeek - n + 1; w <= thisWeek; w++) {
+      out.push({ on: !!weeks[w], live: !!weeks[w] && liveFrom !== null && w >= liveFrom && w <= cursor });
+    }
+    return out;
+  }
+
+  function _streakWeeksLabel(bars) {
+    var on = 0, live = 0;
+    (bars || []).forEach(function (b) { if (b.on) on++; if (b.live) live++; });
+    var n = (bars || []).length;
+    return 'Last ' + n + ' weeks: ' + on + ' with a class' + (live > 1 ? ', ' + live + ' in a row now' : '') + '.';
+  }
+
+  // counts by CATEGORY_MAP key + the category list → what the class-type bar
+  // draws: rows with a class, biggest first (ct = the data-ct value), and the
+  // labels of the types never tried ("Other" is not a type to try).
+  function _classTypeBreakdown(counts, cats) {
+    counts = counts || {};
+    var own = function (k) { return Object.prototype.hasOwnProperty.call(counts, k) ? (Number(counts[k]) || 0) : 0; };
+    var rows = [], gaps = [], total = 0;
+    (cats || []).forEach(function (c) {
+      var n = own(c.key);
+      if (n > 0) { rows.push({ key: c.key, ct: String(c.key).toLowerCase(), label: c.label, count: n }); total += n; }
+      else if (c.key !== 'OTHER') gaps.push(c.label);
+    });
+    rows.sort(function (a, b) { return b.count - a.count; });
+    return { total: total, rows: rows, gaps: gaps };
+  }
+  // ── pure:stats-charts:end ──
+
   // ── Activity Heatmap ────────────────────────────────────────────
-  // GitHub-style grid: rows = hours (5am–10pm), columns = days of week
-  // Color intensity shows how often that slot is booked
+  // "When you train": columns = days of the week, rows = five bands of the day.
+  // Ink intensity shows how often that slot is booked.
 
   function renderHeatmap() {
     var container = document.getElementById('heatmapSection');
@@ -1953,55 +2154,29 @@
     if (allEvents.length < 2) { container.style.display = 'none'; return; }
     container.style.display = '';
 
-    // Build frequency grid: [day 0-6][hour 5-22] = count
-    var HOUR_START = 5, HOUR_END = 22;
-    var grid = {};
-    var maxCount = 0;
+    // Crisp Colour (the Stats board): seven days across, five bands of the day
+    // down — 35 calm cells instead of 126 specks. Graphite, never a class
+    // colour: colour keeps ONE meaning. (pure:stats-charts does the counting.)
+    var model = _heatmapModel(allEvents.map(function (evt) { return evt.start_at; }));
+    var dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-    allEvents.forEach(function (evt) {
-      var dt = new Date(evt.start_at);
-      var day = (dt.getDay() + 6) % 7; // Monday=0
-      var hour = dt.getHours();
-      if (hour < HOUR_START || hour > HOUR_END) return;
-      var key = day + '-' + hour;
-      grid[key] = (grid[key] || 0) + 1;
-      if (grid[key] > maxCount) maxCount = grid[key];
-    });
+    var html = '<div class="heatmap-head">' +
+      '<div class="heatmap-title">When you train</div>' +
+      '<div class="hm-legend" aria-hidden="true"><span>Less</span>';
+    for (var l = 0; l <= 4; l++) html += '<i class="hm-cell hm-level-' + l + '"></i>';
+    html += '<span>More</span></div></div>';
 
-    var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    var html = '<div class="heatmap-title">Activity heatmap</div>';
-    html += '<div class="heatmap-grid">';
-
-    // Header row: hour labels
-    html += '<div class="hm-corner"></div>';
-    for (var h = HOUR_START; h <= HOUR_END; h++) {
-      var ampm = h >= 12 ? 'p' : 'a';
-      var h12 = h % 12 || 12;
-      html += '<div class="hm-hour-label">' + h12 + ampm + '</div>';
-    }
-
-    // Data rows
-    for (var d = 0; d < 7; d++) {
-      html += '<div class="hm-day-label">' + dayLabels[d] + '</div>';
-      for (var hr = HOUR_START; hr <= HOUR_END; hr++) {
-        var count = grid[d + '-' + hr] || 0;
-        var intensity = maxCount > 0 ? count / maxCount : 0;
-        var level = count === 0 ? 0 : intensity < 0.25 ? 1 : intensity < 0.5 ? 2 : intensity < 0.75 ? 3 : 4;
-        var title = count > 0 ? count + ' class' + (count !== 1 ? 'es' : '') + ' — ' + dayLabels[d] + ' ' + (hr % 12 || 12) + (hr >= 12 ? 'pm' : 'am') : '';
-        html += '<div class="hm-cell hm-level-' + level + '" title="' + title + '"></div>';
+    html += '<div class="heatmap-grid" role="img" aria-label="' + escapeHTML(_heatmapLabel(model)) + '">';
+    html += '<span class="hm-corner"></span>';
+    for (var d = 0; d < 7; d++) html += '<span class="hm-day-label">' + dayLetters[d] + '</span>';
+    for (var b = 0; b < HEAT_BANDS.length; b++) {
+      html += '<span class="hm-hour-label">' + HEAT_BANDS[b].label + '</span>';
+      for (var dd = 0; dd < 7; dd++) {
+        var count = model.counts[b][dd];
+        var title = count > 0 ? _plural(count, 'class', 'classes') + ' — ' + HEAT_DAYS[dd] + ' ' + HEAT_BANDS[b].name : '';
+        html += '<span class="hm-cell hm-level-' + model.levels[b][dd] + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
       }
     }
-
-    html += '</div>';
-
-    // Legend
-    html += '<div class="hm-legend">';
-    html += '<span>Less</span>';
-    for (var l = 0; l <= 4; l++) {
-      html += '<div class="hm-cell hm-level-' + l + '" style="width:12px;height:12px"></div>';
-    }
-    html += '<span>More</span>';
     html += '</div>';
 
     container.innerHTML = html;
@@ -2372,18 +2547,268 @@
       window.APP_THEMES.map(function (t) {
         // aria-pressed: the chosen theme was a border colour only. _pickTheme
         // re-renders the whole picker, so it can't go stale.
+        // The swatch is a miniature of the theme's own chrome: it carries
+        // data-theme, so css/theme.css's token block for THAT theme applies
+        // inside it (ground, a surface card with an ink line, the accent pill).
+        // No colour is copied here — and Cloud and Graphite, whose accent is
+        // their ink, no longer lose a dot against a chip of the same tone.
         return '<button class="theme-chip' + (t.id === current ? ' active' : '') + '" aria-pressed="' + (t.id === current) + '" onclick="window._pickTheme(\'' + t.id + '\')">' +
-          '<span class="theme-swatch"><i style="background:' + t.accent + '"></i><i style="background:' + t.bg + '"></i></span>' +
+          '<span class="theme-swatch" data-theme="' + t.id + '" aria-hidden="true">' +
+            '<span class="theme-swatch-card"><span class="theme-swatch-ink"></span><span class="theme-swatch-pill"></span></span>' +
+          '</span>' +
           '<span class="theme-chip-name">' + t.name + '</span>' +
         '</button>';
       }).join('') +
       '</div>';
+    renderClassColours();
   }
 
   window._pickTheme = function (id) {
     if (typeof setAppTheme === 'function') setAppTheme(id);
     renderThemePicker();
   };
+
+  // ── Class colours (Membership → Appearance) ────────────────────
+  // The member's control over Crisp Colour: how strong the class colours are
+  // (Off · Soft · Bold) and which swatch each class type wears. Everything is
+  // read from and written through window.PsycleClassColours (js/theme.js) —
+  // this file keeps no copy of the choices, names no colour of its own, and a
+  // change shows at once across the app (the engine rewrites the --ct-* tokens
+  // every class component reads).
+
+  // ── pure:class-colour-control:start ── (DOM-free; tests/suites/9e-stats-membership.js evaluates this block)
+  var CC_INTENSITY_LABELS = { off: 'Off', soft: 'Soft', bold: 'Bold' };
+  // What the preview card says for each class type (decoration — never timetable data).
+  // The tick on a chosen swatch. Every base of the engine's palette, on either
+  // side, carries white at ≥ 4.5:1 (tests/suites/9a-foundation.js holds it to
+  // that) — and a swatch shows the PALETTE colour even on a mono theme, where
+  // --ct-on-base is the theme's own label ink.
+  var CC_SWATCH_INK = '#FFFFFF';
+  var CC_PREVIEW = {
+    ride: 'Ride 45', strength: 'Strength 45', yoga: 'Yoga Flow', hiit: 'HIIT 45',
+    pilates: 'Reformer 50', lagree: 'Lagree 50', barre: 'Barre 55', other: 'Sound Bath',
+  };
+
+  function _ccHas(obj, k) { return !!obj && Object.prototype.hasOwnProperty.call(obj, k); }
+
+  // Everything the control draws, from what the engine says.
+  //   api   window.PsycleClassColours ({ KEYS, INTENSITIES, PALETTE, DEFAULTS, get() })
+  //   cats  app.js CATEGORY_MAP (the labels the Discover pills use)
+  //   theme the APP_THEMES entry on screen ({ base, mono })
+  //   open  the class type whose swatches are showing, or ''
+  // → { intensity, intensities: [{ id, label, checked }], muted, canReset,
+  //     preview: { key, name }, rows: [{ key, label, swatch, swatchName, open,
+  //     swatches: [{ id, name, colour, checked }] }] }
+  // `muted`: a mono theme below Bold wears its own accent ladder, so the
+  // per-type choices do not show — the control says so instead of looking broken.
+  // A swatch id or class key the engine does not know never reaches the markup.
+  function _ccControlModel(api, cats, theme, open) {
+    if (!api || typeof api.get !== 'function') return null;
+    var state = api.get() || {};
+    var map = state.map || {};
+    var side = theme && theme.base === 'dark' ? 'dark' : 'light';
+    var labels = {};
+    (cats || []).forEach(function (c) { if (c && c.key) labels[String(c.key).toLowerCase()] = c.label; });
+    var swatchIds = Object.keys(api.PALETTE || {});
+    var keys = (api.KEYS || []).slice();
+    var openKey = keys.indexOf(open) !== -1 ? open : '';
+    var custom = false;
+    var rows = keys.map(function (k) {
+      var chosen = _ccHas(api.PALETTE, map[k]) ? map[k] : (api.DEFAULTS || {})[k];
+      if (chosen !== (api.DEFAULTS || {})[k]) custom = true;
+      var swatches = swatchIds.map(function (id) {
+        // Only a plain hex colour goes into a style attribute.
+        var base = String(((api.PALETTE[id] || {})[side] || {}).base || '');
+        return { id: id, name: String(api.PALETTE[id].name || id), colour: /^#[0-9a-f]{6}$/i.test(base) ? base : '', checked: id === chosen };
+      });
+      var mine = swatches.filter(function (s) { return s.checked; })[0];
+      return {
+        key: k,
+        label: labels[k] || (k.charAt(0).toUpperCase() + k.slice(1)),
+        swatch: chosen,
+        swatchName: mine ? mine.name : '',
+        swatchColour: mine ? mine.colour : '',
+        open: k === openKey,
+        swatches: swatches,
+      };
+    });
+    var intensity = (api.INTENSITIES || []).indexOf(state.intensity) !== -1 ? state.intensity : api.DEFAULT_INTENSITY;
+    return {
+      intensity: intensity,
+      intensities: (api.INTENSITIES || []).map(function (id) { return { id: id, label: CC_INTENSITY_LABELS[id] || id, checked: id === intensity }; }),
+      muted: !!(theme && theme.mono) && intensity !== 'bold',
+      canReset: custom || intensity !== api.DEFAULT_INTENSITY,
+      preview: { key: openKey || keys[0] || 'other', name: CC_PREVIEW[openKey || keys[0]] || '' },
+      rows: rows,
+    };
+  }
+
+  // A key pressed on radio `index` of `count` → the radio to move to (and
+  // check: in a radio group selection follows focus), or -1 when the key is not
+  // the group's. Arrows wrap; Home / End jump to the ends.
+  function _ccRadioTarget(count, index, key) {
+    if (!(count > 0)) return -1;
+    if (key === 'ArrowRight' || key === 'ArrowDown') return (index + 1) % count;
+    if (key === 'ArrowLeft' || key === 'ArrowUp') return (index - 1 + count) % count;
+    if (key === 'Home') return 0;
+    if (key === 'End') return count - 1;
+    return -1;
+  }
+  // ── pure:class-colour-control:end ──
+
+  var _ccOpenKey = ''; // the row whose swatches are showing (one at a time) — memory only
+
+  function _ccThemeNow() {
+    var id = document.documentElement.getAttribute('data-theme');
+    var list = window.APP_THEMES || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+
+  var CC_TICK = '<svg class="cc-swatch-tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5.5 12.5l4.5 4.5 8.5-9.5"/></svg>';
+
+  function _ccControlHtml(m) {
+    var pic = function (key, size) { return (typeof classPictogram === 'function') ? classPictogram(key, size) : ''; };
+    // The preview IS the class card (js/app.js eventCard's anatomy: the shared
+    // time block, .cc-head, .cc-sub, .cc-spots, the Book pill — all styled by
+    // css/crisp.css 9b.7 from `.class-card[data-ct]`), so what the member sees
+    // here is what Discover will show. Nothing to press in it: spans, no ids,
+    // aria-hidden, and .cc-preview takes it out of reach of the pointer.
+    var html =
+      '<div class="cc-preview class-card ct-card" data-ct="' + m.preview.key + '" aria-hidden="true">' +
+        (typeof _ccTimeHTML === 'function' ? _ccTimeHTML({ hours: 18, mins: 30, duration: 45 }) : '') +
+        '<div class="cc-info">' +
+          '<span class="cc-head"><span class="ct-tile">' + pic(m.preview.key, 18) + '</span><span class="cc-name">' + escapeHTML(m.preview.name) + '</span></span>' +
+          '<span class="cc-sub"><span class="cc-who">Maya</span><span class="cc-loc">Shoreditch</span></span>' +
+          '<span class="cc-spots">25 spots left</span>' +
+        '</div>' +
+        '<div class="cc-action"><span class="book-btn">Book</span></div>' +
+      '</div>';
+
+    html += '<div class="seg cc-intensity" role="radiogroup" aria-label="Colour strength">' +
+      m.intensities.map(function (i) {
+        return '<button type="button" class="seg-btn" role="radio" aria-checked="' + i.checked + '" tabindex="' + (i.checked ? '0' : '-1') +
+          '" data-cc-intensity="' + i.id + '" data-cc-focus="int:' + i.id + '">' + i.label + '</button>';
+      }).join('') +
+    '</div>';
+    if (m.muted) html += '<p class="cc-note">Shown at Bold only in this theme.</p>';
+
+    html += '<div class="cc-rows">' + m.rows.map(function (r) {
+      var panelId = 'ccSwatches-' + r.key;
+      return '<div class="cc-row' + (r.open ? ' is-open' : '') + '" data-ct="' + r.key + '">' +
+        '<button type="button" class="cc-row-btn" aria-expanded="' + r.open + '" aria-controls="' + panelId + '" data-cc-row="' + r.key + '" data-cc-focus="row:' + r.key + '">' +
+          '<span class="ct-tile is-lg is-solid" aria-hidden="true">' + pic(r.key, 20) + '</span>' +
+          '<span class="cc-row-name">' + escapeHTML(r.label) + '</span>' +
+          // The dot is the CHOSEN swatch itself (the palette's colour), also on a
+          // mono theme, where the tile beside the name wears the theme's accent.
+          '<span class="cc-row-swatch"><span class="cc-row-swatch-name">' + escapeHTML(r.swatchName) + '</span><span class="cc-row-dot" aria-hidden="true" style="--cc-sw:' + r.swatchColour + '"></span></span>' +
+        '</button>' +
+        '<div class="cc-swatches" id="' + panelId + '" role="radiogroup" aria-label="' + escapeHTML(r.label) + ' colour"' + (r.open ? '' : ' hidden') + '>' +
+          (r.open ? r.swatches.map(function (s) {
+            // The swatch's own colour is data from the engine's palette, handed
+            // to the stylesheet as a custom property. Chosen = a tick and a
+            // ring, never the colour alone; its name is what is read out.
+            return '<button type="button" class="cc-swatch" role="radio" aria-checked="' + s.checked + '" tabindex="' + (s.checked ? '0' : '-1') +
+              '" aria-label="' + escapeHTML(s.name) + '" title="' + escapeHTML(s.name) + '" data-cc-key="' + r.key + '" data-cc-swatch="' + s.id +
+              '" data-cc-focus="sw:' + r.key + ':' + s.id + '" style="--cc-sw:' + s.colour + ';--cc-sw-ink:' + CC_SWATCH_INK + '">' + CC_TICK + '</button>';
+          }).join('') : '') +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+
+    html += '<button type="button" class="pill-btn pill-quiet cc-reset" data-cc-reset="1" data-cc-focus="reset"' + (m.canReset ? '' : ' disabled') + '>Reset colours</button>';
+    return html;
+  }
+
+  // Rebuilt whole on every change (it is small), with the focus put back where
+  // it was: a radio group rebuilt under the keyboard must not drop the member
+  // at the top of the page.
+  function renderClassColours() {
+    var box = document.getElementById('classColours');
+    if (!box) return;
+    var m = _ccControlModel(window.PsycleClassColours, (typeof CATEGORY_MAP !== 'undefined') ? CATEGORY_MAP : [], _ccThemeNow(), _ccOpenKey);
+    var title = document.getElementById('classColoursTitle');
+    if (title) title.style.display = m ? '' : 'none';
+    if (!m) { box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = '';
+    var html = _ccControlHtml(m);
+    if (box._ccHtml === html) return;
+    var held = document.activeElement && box.contains(document.activeElement) ? document.activeElement.getAttribute('data-cc-focus') : null;
+    box.innerHTML = html;
+    box._ccHtml = html;
+    _wireClassColours(box);
+    if (!held) return;
+    var back = null;
+    box.querySelectorAll('[data-cc-focus]').forEach(function (el) { if (el.getAttribute('data-cc-focus') === held && !el.disabled) back = el; });
+    // Reset disables itself once there is nothing to reset: the heading row of
+    // the first class type is the nearest thing still there.
+    if (!back) back = box.querySelector('.cc-row-btn');
+    if (back) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
+  }
+  window.renderClassColours = renderClassColours;
+
+  function _ccSet(partial, said) {
+    var api = window.PsycleClassColours;
+    if (!api) return;
+    api.set(partial);
+    if (typeof window.pushAction === 'function') window.pushAction('classcolours:set');
+    if (typeof haptic === 'function') haptic('tap');
+    renderClassColours(); // the engine only emits when something changed; this also covers a no-op tap
+    if (said && typeof announce === 'function') announce(said);
+  }
+
+  // Once per container (it outlives every repaint of its contents).
+  function _wireClassColours(box) {
+    if (box._ccWired) return;
+    box._ccWired = true;
+    box.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-cc-intensity], [data-cc-swatch], [data-cc-row], [data-cc-reset]') : null;
+      if (!t || !box.contains(t) || t.disabled) return;
+      if (t.hasAttribute('data-cc-intensity')) { _ccSet({ intensity: t.getAttribute('data-cc-intensity') }); return; }
+      if (t.hasAttribute('data-cc-swatch')) {
+        var map = {};
+        map[t.getAttribute('data-cc-key')] = t.getAttribute('data-cc-swatch');
+        _ccSet({ map: map });
+        return;
+      }
+      if (t.hasAttribute('data-cc-row')) {
+        var key = t.getAttribute('data-cc-row');
+        _ccOpenKey = _ccOpenKey === key ? '' : key;
+        renderClassColours();
+        return;
+      }
+      if (window.PsycleClassColours) {
+        window.PsycleClassColours.reset();
+        _ccOpenKey = '';
+        if (typeof window.pushAction === 'function') window.pushAction('classcolours:reset');
+        renderClassColours();
+        if (typeof announce === 'function') announce('Class colours reset');
+      }
+    });
+    // Radio groups: arrows move AND choose (selection follows focus), Home /
+    // End jump; Tab leaves the group — only the checked radio is a tab stop.
+    box.addEventListener('keydown', function (e) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      var radio = e.target && e.target.closest ? e.target.closest('[role="radio"]') : null;
+      var group = radio ? radio.closest('[role="radiogroup"]') : null;
+      if (!group || !box.contains(group)) return;
+      var radios = Array.prototype.slice.call(group.querySelectorAll('[role="radio"]'));
+      var to = _ccRadioTarget(radios.length, radios.indexOf(radio), e.key);
+      if (to === -1) return;
+      e.preventDefault();
+      radios[to].focus();
+      radios[to].click();
+    });
+  }
+
+  // The engine changed something (this control, an import, the iOS restore),
+  // or the theme did (the swatches show the palette side of its base).
+  if (typeof PsycleEvents !== 'undefined') {
+    PsycleEvents.on('classcolours:changed', function () { if (_currentTab === 'membership') renderClassColours(); });
+    // (The picker too: the header's sun / moon button changes the theme while
+    // Membership is open, and the pressed chip would go stale.)
+    PsycleEvents.on('theme:changed', function () { if (_currentTab === 'membership') renderThemePicker(); });
+  }
   // The picker + reminder row render inside the Settings panel, which
   // settings.js builds — expose so it can trigger them after opening.
   window.renderThemePicker = renderThemePicker;
@@ -2528,11 +2953,12 @@
     var history = getFullHistory();
     if (history.length === 0) { container.style.display = 'none'; return; }
 
-    // Count by category
+    // Count by category — classes TAKEN, the rows "All time" above counts
+    // (_takenRows): the bar sits under that figure and has to add up to it,
+    // not to it plus next week's bookings.
     var catCounts = {};
     var total = 0;
-    history.forEach(function (h) {
-      if (h.cancelledAt) return;
+    _takenRows(history, Date.now(), _historyStartMs()).forEach(function (h) {
       var cat = (typeof getCategory === 'function') ? getCategory(h.typeName) : null;
       var key = cat ? cat.key : 'OTHER';
       catCounts[key] = (catCounts[key] || 0) + 1;
@@ -2542,40 +2968,32 @@
     if (total === 0) { container.style.display = 'none'; return; }
     container.style.display = '';
 
-    // Sort by count descending
-    var cats = (typeof CATEGORY_MAP !== 'undefined') ? CATEGORY_MAP : [];
-    var sorted = cats
-      .map(function (c) { return { key: c.key, label: c.label, color: c.color, count: catCounts[c.key] || 0 }; })
-      .filter(function (c) { return c.count > 0; })
-      .sort(function (a, b) { return b.count - a.count; });
+    // Crisp Colour (the Stats board): ONE bar split by class type and a legend
+    // that carries the numbers. Every colour is the member's own class-type
+    // colour: the segment and the dot get data-ct and css/crisp.css does the
+    // rest — no colour is named here. The bar is decoration (aria-hidden); the
+    // legend is the text.
+    var data = _classTypeBreakdown(catCounts, (typeof CATEGORY_MAP !== 'undefined') ? CATEGORY_MAP : []);
 
-    var maxCount = sorted.length > 0 ? sorted[0].count : 1;
-
-    var html = '<div class="insights-title">Class types</div>';
-    html += '<div class="class-type-bars">';
-    for (var i = 0; i < sorted.length; i++) {
-      var c = sorted[i];
-      var pct = Math.round(c.count / total * 100);
-      var barW = Math.max(4, Math.round(c.count / maxCount * 100));
-      html += '<div class="ct-row">' +
-        '<span class="ct-label">' + c.label + '</span>' +
-        '<div class="ct-bar-wrap">' +
-          '<div class="ct-bar" style="width:' + barW + '%;background:' + c.color + '"></div>' +
-        '</div>' +
-        '<span class="ct-count">' + c.count + '</span>' +
-        '<span class="ct-pct">' + pct + '%</span>' +
-      '</div>';
-    }
+    var html = '<div class="ctd-head">' +
+      '<div class="insights-title">Class types</div>' +
+      '<div class="ctd-total">' + _plural(data.total, 'class', 'classes') + '</div>' +
+    '</div>';
+    html += '<div class="ctd-bar" aria-hidden="true">' +
+      data.rows.map(function (c) { return '<span class="ctd-seg" data-ct="' + c.ct + '" style="flex-grow:' + c.count + '"></span>'; }).join('') +
+    '</div>';
+    html += '<ul class="ctd-legend">' +
+      data.rows.map(function (c) {
+        return '<li class="ctd-item" data-ct="' + c.ct + '"><span class="ct-dot" aria-hidden="true"></span>' +
+          '<span class="ctd-name">' + escapeHTML(c.label) + '</span><span class="ctd-count">' + c.count + '</span></li>';
+      }).join('') +
+    '</ul>';
 
     // Show gaps — class types with 0 bookings
-    var gaps = cats
-      .filter(function (c) { return c.key !== 'OTHER' && !catCounts[c.key]; })
-      .map(function (c) { return c.label; });
-    if (gaps.length > 0) {
-      html += '<div class="ct-gaps">Never tried: ' + gaps.join(', ') + '</div>';
+    if (data.gaps.length > 0) {
+      html += '<div class="ct-gaps">Never tried: ' + escapeHTML(data.gaps.join(', ')) + '</div>';
     }
 
-    html += '</div>';
     container.innerHTML = html;
   }
 
@@ -2792,11 +3210,17 @@
     var summary = _computeYearReview(year);
     if (!summary) { container.style.display = 'none'; return; }
     container.style.display = '';
+    // Crisp Colour (the Stats board): one pill — its name, the year, and an
+    // arrow in a graphite disc (decoration: the button's name is its text).
     container.innerHTML =
-      '<div class="insights-title">' + year + ' in review</div>' +
-      '<button class="year-review-btn" onclick="openYearReview()">' +
-        '<span class="year-review-btn-main">See your ' + year + ' wrap</span>' +
-        '<span class="year-review-btn-sub">' + _plural(summary.total, 'class', 'classes') + ' · ' + _plural(summary.uniqueInstrs, 'instructor') + '</span>' +
+      '<button type="button" class="year-review-btn" onclick="openYearReview()">' +
+        '<span class="year-review-btn-text">' +
+          '<span class="year-review-btn-main">Year in review</span> ' +
+          '<span class="year-review-btn-year">' + year + '</span>' +
+        '</span>' +
+        '<span class="year-review-btn-go" aria-hidden="true">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>' +
+        '</span>' +
       '</button>';
   }
 
@@ -2857,7 +3281,7 @@
   // previous colour), so a token that cannot be read is never mixed with ones
   // that can: one theme's dark ink on another's dark paper is an unreadable
   // image. Any miss → this complete, known-good set.
-  var SHARE_FALLBACK = { bg: '#efeee9', panel: '#ffffff', border: '#e7e5df', heading: '#0e0f12', muted: '#5c5e63', accent: '#1f6f5c' };
+  var SHARE_FALLBACK = { bg: '#e6e9ee', panel: '#fcfdfe', border: '#d3d9e1', heading: '#1b2130', muted: '#3a4252', accent: '#1b2130' };
   // Small grey labels read `muted` (--text-muted), never --text-faint: faint
   // is under 3:1 in Handheld, and these labels are 9–13px.
   var SHARE_TOKENS = { bg: '--bg', panel: '--bg-panel', border: '--border', heading: '--text-heading', muted: '--text-muted', accent: '--accent' };
@@ -2903,12 +3327,20 @@
   // but never for long: navigator.share() spends the tap's activation, which a
   // slow font fetch would let lapse. The app header already uses this face, so
   // in practice it is loaded and this settles at once.
-  var SHARE_WORDMARK_FONT = "700 16px 'Bricolage Grotesque'";
+  // Crisp Colour's two faces (css/theme.css --font-display / --font-body): the
+  // condensed display face for the wordmark and every numeral, the body face
+  // for everything else. A canvas cannot read var(), so the stacks are here.
+  var SHARE_WORDMARK_FONT = "900 22px 'Sofia Sans Condensed'";
+  var SHARE_DISPLAY = "'Sofia Sans Condensed', 'Avenir Next Condensed', 'Helvetica Neue', sans-serif";
+  var SHARE_BODY = "'Sofia Sans', 'Helvetica Neue', Helvetica, sans-serif";
   function _shareFontReady() {
     try {
       if (!document.fonts || typeof document.fonts.load !== 'function') return Promise.resolve();
       return Promise.race([
-        document.fonts.load(SHARE_WORDMARK_FONT).catch(function () {}),
+        Promise.all([
+          document.fonts.load(SHARE_WORDMARK_FONT),
+          document.fonts.load("600 12px 'Sofia Sans'"),
+        ]).catch(function () {}),
         new Promise(function (resolve) { setTimeout(resolve, 250); }),
       ]);
     } catch (e) { return Promise.resolve(); }
@@ -2917,12 +3349,25 @@
   // "Psync" + the image's section label, on one baseline.
   function _shareWordmark(ctx, pal, y, label) {
     ctx.fillStyle = pal.heading;
-    ctx.font = SHARE_WORDMARK_FONT + ', -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = SHARE_WORDMARK_FONT + ", 'Avenir Next Condensed', 'Helvetica Neue', sans-serif";
     ctx.fillText('Psync', 32, y);
     var wordW = ctx.measureText('Psync').width;
     ctx.fillStyle = pal.muted;
-    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 12px ' + SHARE_BODY;
     ctx.fillText(label, 32 + wordW + 12, y);
+  }
+
+  // The class-type colour in effect, as a literal a canvas can paint: the
+  // member's own swatch through the engine (js/theme.js resolve() reads it
+  // back off the page, so the mono themes answer too), else the category's
+  // own colour, else the theme accent.
+  function _shareClassColour(cat, pal) {
+    try {
+      var r = (typeof window !== 'undefined' && window.PsycleClassColours) ? window.PsycleClassColours.resolve(cat.key) : null;
+      if (r && r.base) return r.base;
+    } catch (e) {}
+    var own = cat ? String(cat.color || '') : '';
+    return own && !/^var\(/.test(own) ? own : pal.accent; // canvas ignores a var(): never hand it one
   }
 
   window.shareYearReview = async function () {
@@ -2954,11 +3399,11 @@
 
     // Big year
     ctx.fillStyle = pal.heading;
-    ctx.font = 'bold 64px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '900 64px ' + SHARE_DISPLAY;
     ctx.fillText(String(year), 32, y);
     y += 28;
     ctx.fillStyle = pal.muted;
-    ctx.font = '15px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '500 15px ' + SHARE_BODY;
     ctx.fillText('Your year at Psycle', 32, y);
     // Room for the 88px hero below: its digits stand ~64px above their baseline
     // (y + 10), and at 48 their tops struck through this line. The canvas has
@@ -2967,10 +3412,10 @@
 
     // Hero number
     ctx.fillStyle = pal.accent;
-    ctx.font = 'bold 88px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '900 88px ' + SHARE_DISPLAY;
     ctx.fillText(String(s.total), 32, y + 10);
     ctx.fillStyle = pal.muted;
-    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 13px ' + SHARE_BODY;
     // "Taken", not "ridden": the count covers Reformer, Strength, Yoga… too.
     ctx.fillText(s.total === 1 ? 'CLASS TAKEN' : 'CLASSES TAKEN', 36, y + 36);
     y += 90;
@@ -2987,10 +3432,10 @@
 
     rows.forEach(function (r) {
       ctx.fillStyle = pal.muted;
-      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '700 12px ' + SHARE_BODY;
       ctx.fillText(String(r[0]).toUpperCase(), 32, y);
       ctx.fillStyle = pal.heading;
-      ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '800 22px ' + SHARE_DISPLAY;
       // maxWidth: a long instructor/studio name squeezes instead of running off the image.
       ctx.fillText(r[1], 32, y + 26, W - 64);
       y += 56;
@@ -3001,7 +3446,7 @@
     ctx.strokeStyle = pal.border;
     ctx.beginPath(); ctx.moveTo(32, y - 16); ctx.lineTo(W - 32, y - 16); ctx.stroke();
     ctx.fillStyle = pal.muted;
-    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '500 11px ' + SHARE_BODY;
     ctx.fillText(SHARE_FOOTER, 32, y, W - 64);
 
     try {
@@ -3121,18 +3566,18 @@
     // Divider
     ctx.strokeStyle = pal.border;
     ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
-    y += 28;
+    y += 40; // the 32px display title stands ~24px above its baseline: clear of the rule
 
     // Title (maxWidth: userName falls back to an email address)
     ctx.fillStyle = pal.heading;
-    ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '800 32px ' + SHARE_DISPLAY;
     ctx.fillText(userName ? userName + "'s Stats" : 'My Psycle Stats', 32, y, W - 64);
-    y += 14;
+    y += 20;
 
     // Date range
     if (firstDate) {
       ctx.fillStyle = pal.muted;
-      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '500 13px ' + SHARE_BODY;
       var fd = new Date(firstDate);
       ctx.fillText(
         fd.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) + ' — ' +
@@ -3153,20 +3598,17 @@
 
     statCards.forEach(function (card, i) {
       var cx = cardX + i * (cardW + cardGap);
+      // A surface tile on the ground, as the app's cards: no outline.
       ctx.fillStyle = pal.panel;
       ctx.beginPath();
-      ctx.roundRect(cx, y, cardW, cardH, 8);
+      ctx.roundRect(cx, y, cardW, cardH, 18);
       ctx.fill();
-      ctx.strokeStyle = pal.border;
-      ctx.beginPath();
-      ctx.roundRect(cx, y, cardW, cardH, 8);
-      ctx.stroke();
       ctx.fillStyle = pal.heading;
-      ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(card.value, cx + 14, y + 34);
+      ctx.font = '900 34px ' + SHARE_DISPLAY;
+      ctx.fillText(card.value, cx + 16, y + 38);
       ctx.fillStyle = pal.muted;
-      ctx.font = '600 9px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(card.label, cx + 14, y + 52);
+      ctx.font = '700 10px ' + SHARE_BODY;
+      ctx.fillText(card.label, cx + 16, y + 56);
     });
     y += cardH + 28;
 
@@ -3176,31 +3618,31 @@
     var nameMaxW = W / 2 - 48;
     if (topInstr) {
       ctx.fillStyle = pal.muted;
-      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '700 10px ' + SHARE_BODY;
       ctx.fillText('TOP INSTRUCTOR', 32, y);
       ctx.fillStyle = pal.heading;
-      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '800 21px ' + SHARE_DISPLAY;
       ctx.fillText(topInstr[0], 32, y + 22, nameMaxW);
       ctx.fillStyle = pal.muted;
-      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '500 13px ' + SHARE_BODY;
       ctx.fillText(_plural(topInstr[1], 'class', 'classes'), 32, y + 40);
     }
     if (topStudio) {
       ctx.fillStyle = pal.muted;
-      ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '700 10px ' + SHARE_BODY;
       ctx.fillText('TOP STUDIO', W / 2, y);
       ctx.fillStyle = pal.heading;
-      ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '800 21px ' + SHARE_DISPLAY;
       ctx.fillText(topStudio[0], W / 2, y + 22, nameMaxW);
       ctx.fillStyle = pal.muted;
-      ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '500 13px ' + SHARE_BODY;
       ctx.fillText(_plural(topStudio[1], 'class', 'classes'), W / 2, y + 40);
     }
     y += 64;
 
     // Class type bars
     ctx.fillStyle = pal.muted;
-    ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 10px ' + SHARE_BODY;
     ctx.fillText('CLASS TYPES', 32, y);
     y += 14;
 
@@ -3209,18 +3651,18 @@
       var barW = Math.max(6, Math.round(cat.count / catMax * barMaxW));
 
       ctx.fillStyle = pal.muted;
-      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '700 12px ' + SHARE_BODY;
       ctx.textAlign = 'right';
       ctx.fillText(cat.label, 100, y + 14);
       ctx.textAlign = 'left';
 
       ctx.fillStyle = pal.border;
-      ctx.beginPath(); ctx.roundRect(112, y + 2, barMaxW, 16, 3); ctx.fill();
-      ctx.fillStyle = cat.color;
-      ctx.beginPath(); ctx.roundRect(112, y + 2, barW, 16, 3); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(112, y + 4, barMaxW, 12, 6); ctx.fill();
+      ctx.fillStyle = _shareClassColour(cat, pal);
+      ctx.beginPath(); ctx.roundRect(112, y + 4, Math.max(12, barW), 12, 6); ctx.fill();
 
       ctx.fillStyle = pal.heading;
-      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '800 14px ' + SHARE_DISPLAY;
       ctx.fillText(String(cat.count), 112 + barMaxW + 8, y + 14);
 
       y += 24;
@@ -3232,7 +3674,7 @@
     ctx.beginPath(); ctx.moveTo(32, y); ctx.lineTo(W - 32, y); ctx.stroke();
     y += 20;
     ctx.fillStyle = pal.muted;
-    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '500 11px ' + SHARE_BODY;
     ctx.fillText(SHARE_FOOTER, 32, y, W - 64);
 
     // Crop: the card used to sit on top of 340–460px of empty background

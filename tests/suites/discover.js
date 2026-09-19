@@ -406,11 +406,15 @@ module.exports = async function (t) {
     ok(cardSrc.indexOf('capacity_remaining') === -1, 'eventCard no longer waits for a field the API never sends');
     ok(!/badges/.test(cardSrc), 'the dead badges block is gone');
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    // Wave 9b: the card wears its class type (data-ct) and leads its title with
+    // the pictogram — the SHIPPED helpers, not stand-ins.
+    const classType = t.loadPure('js/app.js', 'class-type', { getCategory: t.loadPure('js/app.js', 'core').getCategory });
     const mk = (bookings) => {
       const ctx = t.loadPure('js/app.js', 'discover', {
         _myBookings: bookings || {}, _studioMap: { 7: { has_layout: true } },
         escapeHTML: esc, instrLink: (n) => esc(n), window: {},
         formatSlots: (l, s) => l + ' ' + s.join(' & '), slotLabel: () => 'Bike',
+        classTypeKey: classType.classTypeKey, classPictogram: classType.classPictogram, _ccTimeHTML: classType._ccTimeHTML,
       });
       t.vm.runInContext('var _cardCountsFresh = true;\n' + cardSrc, ctx, { filename: 'js/app.js[eventCard]' });
       return ctx;

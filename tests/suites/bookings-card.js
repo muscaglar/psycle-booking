@@ -193,7 +193,11 @@ module.exports = async function (t) {
   t.ok(/shareClass\(\$\{evtId\}\)/.test(src), 'shareClass has a caller again');
   // The sheet must never blind-call bookClass for a booked class (a no-layout
   // seat would be asked "Book another space?").
-  t.ok(!/cds-book-btn booked" onclick="[^"]*bookClass\(/.test(src), "the sheet's booked button routes through _classDetailBookAction, not straight to bookClass");
+  // (Wave 9: the button's class list now continues — ' + pillMain + ' glow-mine" —
+  // before its handler, so the check reads the whole tag, in source form.)
+  const bookedBtns = src.match(/'<button class="cds-book-btn booked[^\n]*/g) || [];
+  t.ok(bookedBtns.length >= 3 && bookedBtns.some((l) => /_classDetailBookAction\(/.test(l)) && !bookedBtns.some((l) => /[^\w]bookClass\(/.test(l)),
+    "the sheet's booked button routes through _classDetailBookAction, not straight to bookClass");
   // A second 12h clock in changeSpot could refuse a swap the card still offers.
   const changeSpotSrc = sliceFn(src, 'window.changeSpot = async function(eventId) {', '};');
   t.ok(/_cancelDeadline\(evt\.start_at\)/.test(changeSpotSrc) && !/new Date\(evt\.start_at\) - new Date\(\)/.test(changeSpotSrc),

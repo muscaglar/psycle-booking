@@ -275,15 +275,20 @@
           const isCancelled = !!entry.cancelledAt;
           const _slH = (typeof slotLabel === 'function') ? slotLabel(entry.typeName) : 'Bike';
           // Escaped: history can come from an imported file, where a slot need not be a number.
-          const slotsStr = entry.slots && entry.slots.length > 0 ? ' | ' + escapeHtml(formatSlots(_slH, entry.slots)) : '';
+          // (No ' | ' in front: the row already joins with "·" — it read "· | Bike 12".)
+          const slotsStr = entry.slots && entry.slots.length > 0 ? escapeHtml(formatSlots(_slH, entry.slots)) : '';
+          // Crisp Colour: a row says its class type with the small colour mark
+          // css/crisp.css draws from data-ct — an attribute, not a pictogram, so
+          // 2,000 rows stay cheap. (classTypeKey only ever returns a fixed key.)
+          const ct = typeof classTypeKey === 'function' ? classTypeKey(String(entry.typeName || '')) : 'other';
           rows.push(lead + `
-            <div class="history-item${isCancelled ? ' cancelled' : ''}">
+            <div class="history-item${isCancelled ? ' cancelled' : ''}" data-ct="${ct}">
               <div class="history-date">${dayStr.replace(' ', '<br>')}</div>
               <div class="history-details">
                 <div class="history-class-name">${escapeHtml(entry.typeName)}</div>
                 <div class="history-sub">${escapeHtml(entry.instrName)}${entry.locName ? ' &middot; ' + escapeHtml(entry.locName) : ''}${slotsStr ? ' &middot; ' + slotsStr : ''}</div>
               </div>
-              ${timeStr ? '<div style="font-size:12px;color:#888;min-width:52px;text-align:right">' + timeStr + '</div>' : ''}
+              ${timeStr ? '<div class="history-time">' + timeStr + '</div>' : ''}
               ${isCancelled ? '<span class="history-cancelled-tag">Cancelled</span>' : ''}
             </div>`);
           lead = '';
@@ -420,17 +425,22 @@
      B. INSTRUCTOR PROFILES
      ═══════════════════════════════════════════════════════════════ */
 
-  // [label, .badge modifier] for one row of the modal's class list, or null.
-  // What the member most needs before tapping: is it theirs, is it full.
+  // [label, class] for one row of the modal's class list, or null. What the
+  // member most needs before tapping: is it theirs, is it full. Said the way
+  // the Discover card says it, with the Crisp primitives (css/crisp.css): yours
+  // is a badge in the class colour (a place: the dashed one), nearly full is
+  // the "Only 2 left" badge, everything else is quiet text — never the old
+  // uppercase .badge tag, and never red for "full" (red is a late-cancel charge).
   function classStatusChip(evt) {
     const held = window._myBookings?.[String(evt.id)];
-    if (held) return held.waitlisted ? ['Waitlisted', 'waitlist'] : ['Booked', 'highlight'];
-    if (evt.is_fully_booked) return evt.is_waitlistable ? ['Waitlist', 'waitlist'] : ['Full', 'full'];
+    if (held) return held.waitlisted ? ['Waitlisted', 'ct-badge is-dashed'] : ['Booked', 'ct-badge'];
+    if (evt.is_fully_booked) return [evt.is_waitlistable ? 'Waitlist open' : 'Fully booked', 'instructor-class-status'];
     // Same count, same freshness gate as the detail sheet: this list is built
     // from _eventCache, which can be hours old — no number beats a stale one.
     const fresh = typeof window._countsFresh === 'function' && window._countsFresh(evt._countsAt, Date.now());
     const left = fresh && typeof window._spotsLeft === 'function' ? window._spotsLeft(evt) : null;
-    if (left > 0) return [left + ' left', ''];
+    if (left >= 1 && left <= 3) return ['Only ' + left + ' left', 'ct-badge'];
+    if (left > 3) return [left + ' spots left', 'instructor-class-status'];
     return null;
   }
 
@@ -489,9 +499,6 @@
     profileHtml += '<div class="instructor-profile-info">';
     // The id names the dialog below (this modal has no .modal-title).
     profileHtml += `<div class="instructor-name-title" id="instructorModalName">${escapeHtml(instrName)} <span class="instructor-tier-slot">${tierBadge}</span></div>`;
-    // Only for a real instructor record: a name with no id has nothing to rank.
-    const rankHtml = instr ? instructorRankHtml(instr.id) : '';
-    if (rankHtml) profileHtml += `<div class="instructor-rank">${rankHtml}</div>`;
     if (keywords.length > 0) {
       profileHtml += '<div class="instructor-keywords">' +
         keywords.map(k => `<span class="instructor-keyword">${escapeHtml(k)}</span>`).join('') +
@@ -502,6 +509,12 @@
       profileHtml += `<a class="instructor-ig" href="https://instagram.com/${escapeHtml(instagram)}" target="_blank" rel="noopener">@${escapeHtml(instagram)}</a>`;
     }
     profileHtml += '</div></div>';
+    // ★ + S–F on a row of their own UNDER the header, the width of the modal:
+    // in the column beside the photo (~240px on a phone) six fingertip-sized
+    // tiles cannot fit. Only for a real instructor record: a name with no id
+    // has nothing to rank.
+    const rankHtml = instr ? instructorRankHtml(instr.id) : '';
+    if (rankHtml) profileHtml += `<div class="instructor-rank">${rankHtml}</div>`;
 
     // Bio
     let bioHtml = '';
@@ -521,20 +534,28 @@
         const dayStr = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
         const h = dt.getHours(), m = dt.getMinutes().toString().padStart(2, '0');
         const ampm = h >= 12 ? 'pm' : 'am';
-        const timeStr = (h % 12 || 12) + ':' + m + ampm;
         const chip = classStatusChip(evt);
+        // Crisp Colour: the row is the compact class component — its type's tile
+        // (data-ct → css/crisp.css; both helpers only ever emit fixed strings),
+        // then the day over the TIME in the display face — the order every
+        // compact wearer uses (the usual-week rows, My Bookings).
+        const ct = typeof classTypeKey === 'function' ? classTypeKey(String(evt._typeName || '')) : 'other';
+        const tile = typeof classPictogram === 'function' ? `<span class="ct-tile is-lg" aria-hidden="true">${classPictogram(ct, 20)}</span>` : '';
         // A row opens that class's sheet (its Book works with no Discover card
         // in the DOM — _classDetailBookAction). The id rides in data-*, read by
         // the overlay's click listener below.
         listHtml += `
-          <div class="instructor-class-item" role="button" tabindex="0" data-event-id="${escapeHtml(String(evt.id))}">
-            <div class="instructor-class-day">${dayStr.replace(' ', '<br>')}</div>
-            <div class="instructor-class-time">${timeStr}</div>
+          <div class="instructor-class-item" role="button" tabindex="0" data-ct="${ct}" data-event-id="${escapeHtml(String(evt.id))}">
+            ${tile}
+            <div class="instructor-class-when">
+              <div class="instructor-class-day">${dayStr}</div>
+              <div class="instructor-class-time">${(h % 12 || 12) + ':' + m}<span class="instructor-class-ampm">${ampm}</span></div>
+            </div>
             <div class="instructor-class-info">
               <div class="instructor-class-type">${escapeHtml(evt._typeName || 'Class')}</div>
               <div class="instructor-class-loc">${escapeHtml(evt._locName || '')}</div>
             </div>
-            ${chip ? `<span class="badge${chip[1] ? ' ' + chip[1] : ''}">${escapeHtml(chip[0])}</span>` : ''}
+            ${chip ? `<span class="${chip[1]}">${escapeHtml(chip[0])}</span>` : ''}
           </div>`;
       }
       listHtml += '</div>';
@@ -551,10 +572,10 @@
         ${bioHtml}
         ${listHtml}
         <div class="instructor-actions">
-          <button class="instructor-view-schedule" data-instr-schedule="1">
+          <button class="instructor-view-schedule pill-btn pill-primary" data-instr-schedule="1">
             View schedule
           </button>
-          <a class="instructor-view-schedule instructor-psycle-link" href="${psycleUrl}" target="_blank" rel="noopener">
+          <a class="instructor-view-schedule instructor-psycle-link pill-btn pill-outline" href="${psycleUrl}" target="_blank" rel="noopener">
             View on Psycle
           </a>
         </div>

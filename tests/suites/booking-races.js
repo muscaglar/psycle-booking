@@ -570,7 +570,7 @@ module.exports = async function (t) {
   t.section('Bike picker: the dismiss button never reads as "cancel my booking"');
   {
     let w = pickerWorld();
-    eq([w.els.modalTitle.textContent, w.dismiss.textContent], ['Select your bikes', 'Cancel'], 'a fresh booking: "Cancel" beside "Confirm booking" is clear — unchanged');
+    eq([w.els.modalTitle.textContent, w.dismiss.textContent], ['Select your bikes', 'Cancel'], 'a fresh booking: "Cancel" beside "Book" / "Book bike 12" is clear — unchanged');
     eq(w.els.modalHint.textContent, 'Select up to 2 bikes', 'fresh booking hint unchanged');
     w = pickerWorld({ mine: [7] });
     eq([w.els.modalTitle.textContent, w.dismiss.textContent], ['Your booking', 'Close'], 'under "Your booking" it says Close: "Cancel" there reads as cancelling the class (it only ever closed the sheet)');

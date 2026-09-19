@@ -82,7 +82,12 @@ module.exports = function (t) {
   const appJs = t.readSource('js/app.js');
   const toastSrc = (/function toast\([^)]*\)\s*\{[\s\S]*?\n\}/.exec(appJs) || [appJs])[0];
   t.ok(/class(?:Name|List)[^;\n]*\btype\b/.test(toastSrc), 'toast() still sets its type as a class on #toast');
-  [['error', '--badge-full-text', "'!'"], ['success', '--accent', "'\\2713\\FE0E'"]].forEach((row) => {
+  // Wave 9: the two inks are the toast's OWN tokens. Their :root defaults are
+  // still the Full-chip red and the accent (so five themes paint what they
+  // always did); Cloud and Graphite wear an inverse toast and tune them.
+  t.eq([root['--toast-err'], root['--toast-ok'], root['--toast-ink']], ['var(--badge-full-text)', 'var(--accent)', 'var(--text)'],
+    ':root: --toast-err / --toast-ok / --toast-ink default to the Full-chip red, the accent and the body ink');
+  [['error', '--toast-err', "'!'"], ['success', '--toast-ok', "'\\2713\\FE0E'"]].forEach((row) => {
     const sel = '.toast.' + row[0];
     t.eq(tokenOf(decls(styleRules, sel, 'border-left-color')[0]), row[1], sel + ' edge stripe reads ' + row[1]);
     const glyph = styleRules.filter((r) => r.selector === sel + '::before')[0];
@@ -100,6 +105,16 @@ module.exports = function (t) {
   t.ok(has(styleRules.filter((r) => /border-left-width:\s*3px/.test(r.body))[0] || { selector: '' }, '.toast.error'),
     'the stripe is a wider left border (two classes: it outranks theme.css\'s later .toast border colour)');
   t.eq(themeRules.filter((r) => /\.toast\.(error|success|info)/.test(r.selector)).length, 0, 'theme.css does not restyle the toast types');
+  // The message itself: --toast-ink on --toast-bg (an inverse ground must bring its own ink).
+  t.eq(tokenOf(decls(themeRules, '.toast', 'color')[0]), '--toast-ink', '.toast copy reads --toast-ink');
+  themeIds.forEach((id) => {
+    const tk = themeTokens(id);
+    const r = contrast(tk['--toast-ink'], tk['--toast-bg']);
+    t.ok(r >= 4.5, id + ': toast copy ' + tk['--toast-ink'] + ' on --toast-bg ' + tk['--toast-bg'] + ' is ' + r.toFixed(2) + ':1 (≥4.5)');
+  });
+  // The pull-to-refresh pill wears the same ground, so it takes the same ink.
+  t.eq([tokenOf(decls(themeRules, '.pull-indicator', 'background')[0]), tokenOf(decls(themeRules, '.pull-text', 'color')[0])], ['--toast-bg', '--toast-ink'],
+    'the pull-to-refresh pill: toast ground, toast ink');
 
   // ── Late-cancel caution treatment ────────────────────────────────────────
   t.section('Late-cancel note: one caution treatment');
@@ -195,11 +210,19 @@ module.exports = function (t) {
   });
 
   const html = t.readSource('psycle-finder.html');
+  // Wave 9 (Crisp Colour): the legend's swatches are class-styled marks
+  // (.seat-key, css/crisp.css) painted from the SAME tokens as the map's seats,
+  // so the two cannot drift; tests/suites/9c-sheets.js holds the pairs to 4.5:1.
   const legend = (/<div class="bike-legend">[\s\S]*?<\/div>/.exec(html) || [''])[0];
-  t.ok(/background:var\(--bg-input[,)][^"]*border:1px solid var\(--border-light[,)][^>]*><\/i> Available/.test(legend), 'legend Available = the available tile');
-  t.ok(/background:var\(--bg-deep\);border:1px solid var\(--border-light\)[^>]*><\/i> Taken/.test(legend), 'legend Taken = the taken tile (same outline as the map)');
-  t.ok(/background:var\(--booked-bg\);border:2px solid var\(--booked-border\)[^>]*><\/i> Your booking/.test(legend), 'legend has a swatch for a seat you already hold');
-  t.ok(!/#[0-9a-f]{6}\b/i.test(legend.replace(/var\(--bg-input,#1a1a1a\)|var\(--border-light,#444\)/g, '')), 'no maroon fallback literals left in the legend');
+  const crispCss = noComments(t.readSource('css/crisp.css'));
+  t.ok(/<i class="seat-key is-available"><\/i> Available/.test(legend) &&
+    /\.bike-legend \.seat-key \{[^}]*background: var\(--seat-free-fill\);[^}]*var\(--seat-free-line\)/.test(crispCss) &&
+    /#bikeSvg \.bike-slot \{ --seat-fill: var\(--seat-free-fill\); --seat-line: var\(--seat-free-line\);/.test(crispCss), 'legend Available = the available tile');
+  t.ok(/<i class="seat-key is-taken"><\/i> Taken/.test(legend) && /\.bike-legend \.seat-key\.is-taken \{ background: var\(--sunken\);/.test(crispCss) &&
+    /#bikeSvg \.bike-slot\.taken \{ --seat-fill: var\(--sunken\);/.test(crispCss), 'legend Taken = the taken tile (the same fill as the map)');
+  t.ok(/<i class="seat-key is-mine"><\/i> Your booking/.test(legend) && /\.bike-legend \.seat-key\.is-pick, \.bike-legend \.seat-key\.is-mine \{ background: var\(--seat-mine-fill\);/.test(crispCss),
+    'legend has a swatch for a seat you already hold');
+  t.ok(!/#[0-9a-f]{3,8}\b/i.test(legend) && !/style=/.test(legend), 'no colour literal — no inline style at all — left in the legend');
 
   // (.onboard-icon went with the old tour's icon circle. The welcome that
   // replaced it is held to "no colour literal anywhere" in 8d-welcome.js.)

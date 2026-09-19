@@ -205,6 +205,10 @@
     'psycle_fav_instructors', 'psycle_saved_filters',
     'psycle_instructor_tiers', 'psycle_bike_prefs',
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
+    // The member's class-type colours and intensity (js/theme.js
+    // PsycleClassColours): hand-picked, so a storage purge must not reset them.
+    // theme.js re-applies them once this restore has settled.
+    'psycle_class_colours',
     // Whose history that is (features.js): restored WITH it, or a storage
     // purge would hand the restored history to whoever is signed in next.
     'psycle_class_history_owner',

@@ -558,8 +558,11 @@ module.exports = async function (t) {
   }
   {
     let html = sheetWorld(placeOnly({ offer: { available: true, checkedAt: 0 } }));
-    ok(/<button class="cds-book-btn" onclick="[^"]*_classDetailClaimAction\(77\);">Claim spot<\/button>/.test(html), 'offer showing: the primary sheet button is "Claim spot" → _classDetailClaimAction');
-    ok(/<button class="cds-view-instr" onclick="[^"]*leaveWaitlist\(77, null\);">Leave waitlist<\/button>/.test(html) && !/Waitlisted ✓/.test(html), '…Leave is the secondary action; the ticked "Waitlisted ✓" is gone');
+    // (Wave 9: both buttons also carry the Crisp pill classes — the primary the
+    // filled pill, never .booked; Leave the quiet one.)
+    ok(/<button class="cds-book-btn pill-btn pill-primary[^"]*" onclick="[^"]*_classDetailClaimAction\(77\);">Claim spot<\/button>/.test(html) && !/cds-book-btn booked[^"]*"[^>]*>Claim spot/.test(html),
+      'offer showing: the primary sheet button is "Claim spot" → _classDetailClaimAction');
+    ok(/<button class="cds-view-instr pill-btn pill-quiet[^"]*" onclick="[^"]*leaveWaitlist\(77, null\);">Leave waitlist<\/button>/.test(html) && !/Waitlisted ✓/.test(html), '…Leave is the secondary action; the ticked "Waitlisted ✓" is gone');
     ok(/A spot is free right now/.test(html) && !/waitlist open/.test(html), '…and the availability row says "A spot is free right now", not "Full — waitlist open"');
     html = sheetWorld(placeOnly({ status: 'notified' }));
     ok(/Claim spot/.test(html) && /A spot has opened up/.test(html), "Psycle's own offered status (no probe yet) counts too");

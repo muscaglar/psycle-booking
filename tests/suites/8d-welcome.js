@@ -42,12 +42,13 @@ module.exports = function (t) {
   eq(d({ deepLink: true, smoke: false, completed: false }), 'skip', '"skip" leaves the flag alone, so the next plain launch asks again');
 
   // ── What it says ───────────────────────────────────────────────────────
-  t.section('Welcome: four pages, a title and one sentence each');
+  t.section('Welcome: four pages, a title and one sentence each (the first: the board\'s two-sentence headline)');
   const web = p._welcomePages(false);        // a desktop browser: a mouse, nothing to swipe with
   const phoneWeb = p._welcomePages(false, true); // the web build on a phone
   const ios = p._welcomePages(true, true);
   eq(web.map((x) => x.id), ['welcome', 'find', 'book', 'keep'], 'Welcome · Find · Book · Keep up, in that order');
   eq(ios.map((x) => x.id), web.map((x) => x.id), 'the iOS app has the same four');
+  eq([web[0].body, ios[0].body], ['Find a class. Book a spot.', 'Find a class. Book a spot.'], 'the first page\'s line is the headline of the approved welcome board');
   eq(web[0].title, 'Psync', 'the first page is the wordmark');
   ok(/independent companion/.test(web[0].note) && /not affiliated with/.test(web[0].note) && /Psycle/.test(web[0].note),
     'the first page says it is an independent companion, not affiliated with Psycle');
@@ -58,7 +59,8 @@ module.exports = function (t) {
       const copy = [pg.title, pg.body, pg.note || ''];
       ok(copy.every((s) => s.indexOf('!') === -1), build + ' · ' + pg.id + ': no exclamation marks');
       ok(pg.title.length > 0 && pg.title.length <= 20, build + ' · ' + pg.id + ': a short title');
-      eq((pg.body.match(/[.?]/g) || []).length, 1, build + ' · ' + pg.id + ': one sentence');
+      // Wave 9: page one's line is the Crisp Colour welcome board's headline, set large.
+      eq((pg.body.match(/[.?]/g) || []).length, pg.id === 'welcome' ? 2 : 1, build + ' · ' + pg.id + (pg.id === 'welcome' ? ': two short sentences (the headline)' : ': one sentence'));
       ok(/\.$/.test(pg.body), build + ' · ' + pg.id + ': …that ends');
       ok(!/[\u{1F300}-\u{1FAFF}☀-➿]/u.test(copy.join(' ')), build + ' · ' + pg.id + ': no emoji');
     });
@@ -390,10 +392,15 @@ module.exports = function (t) {
     eq([w.shown(), w.labels()], [0, ['Skip', 'Next']], 'page one: Skip and Next — no Back, no finish buttons');
     eq(w.q('.onboard-wordmark').textContent, 'Psync', 'page one carries the wordmark');
     ok(/not affiliated with or endorsed by Psycle/.test(w.q('.onboard-note').textContent), '…and the affiliation sentence');
-    eq(w.ov().querySelectorAll('.onboard-art').map((a) => a.getAttribute('aria-hidden')), ['true', 'true', 'true'], 'three illustrations, all hidden from assistive tech');
+    eq(w.ov().querySelectorAll('.onboard-art').map((a) => a.getAttribute('aria-hidden')), ['true', 'true', 'true', 'true'], 'four illustrations (wave 9: page one has the class-type tiles), all hidden from assistive tech');
+    eq([w.ov().querySelectorAll('.onboard-tile').length, w.q('.onboard-headline').textContent, w.q('.onboard-mark').getAttribute('aria-hidden')], [6, 'Find a class. Book a spot.', 'true'],
+      'page one: five class-type tiles and the time tile, the headline, and the five-bar mark as decoration');
+    ok(w.ov().querySelectorAll('.onboard-mini-card').every((c) => c.classList.contains('ct-card') && /^(ride|strength|yoga|pilates)$/.test(c.getAttribute('data-ct'))),
+      'every miniature class card IS the Crisp class component: .ct-card + data-ct (css/crisp.css colours it)');
     eq([w.ov().querySelectorAll('.onboard-mini-day').length, w.ov().querySelectorAll('.onboard-mini-seat').length, w.ov().querySelectorAll('.onboard-mini-card').length],
       [5, 18, 6], 'built from miniatures of real components: a day strip, picker seats, class cards');
-    ok(!/<svg|<img/.test(domSrc) && !/[\u{1F300}-\u{1FAFF}]/u.test(domSrc), 'no icons, images or emoji');
+    ok(!/<svg|<img/.test(domSrc) && !/[\u{1F300}-\u{1FAFF}]/u.test(domSrc), 'no images or emoji, and no icon drawn here: the only marks are the class pictograms');
+    ok(/typeof classPictogram === 'function' \? classPictogram\(ct, size\) : ''/.test(domSrc), '…which come from app.js classPictogram, behind a typeof guard (this block also runs on its own)');
     eq(w.ov().querySelectorAll('.onboard-dot').map((x) => x.classList.contains('active')), [true, false, false, false], 'dots show the position');
     eq(w.log.announced, [], 'opening announces nothing extra (the dialog label is what is read)');
 

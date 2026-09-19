@@ -213,6 +213,15 @@ module.exports = async function (t) {
     await settle();
     eq([cw.state, cw.keydown.length, e.defaultPrevented, cw.active === cw.opener], [true, 0, true, true], 'a fresh press confirms, the listener goes, and focus returns to what opened the dialog');
 
+    // …or to its visible stand-in: "Add spot" lives in a More menu that closed when the dialog took focus.
+    cw = confirmWorld();
+    const moreBtn = { name: 'more', offsetParent: {}, focus() { cw.active = this; } };
+    cw.opener.closest = (sel) => (sel === '.mb-more-menu' ? { offsetParent: null, parentElement: { querySelector: (q) => (q === '.mb-more-btn' ? moreBtn : null) } } : null);
+    cw.opener.focus = () => {}; // display: none — ignored
+    cw.key('Escape');
+    await settle();
+    ok(cw.state === false && cw.active === moreBtn, 'opened from a More menu that has closed meanwhile: focus goes to its More button, not nowhere');
+
     cw = confirmWorld();
     cw.key('Enter'); // focus has not moved into the dialog yet (the first 50ms)
     await settle();
@@ -269,6 +278,8 @@ module.exports = async function (t) {
     const ctx = t.vm.createContext({
       console,
       _bookingContext: null,
+      // The REAL helper: it sits beside confirmModal (pure:sheets), outside this slice.
+      _visibleOpener: t.loadPure('js/app.js', 'sheets')._visibleOpener,
       MutationObserver: function (cb) { observerCb = cb; this.observe = (target, opts) => doc.observed.push([target && target.id, opts]); },
       MouseEvent: function (type, init) { this.type = type; this.bubbles = !!(init && init.bubbles); },
       document: {
@@ -436,6 +447,32 @@ module.exports = async function (t) {
     bike.style.display = 'flex';
     w.tick();
     ok(w.doc.activeElement === free, 'else the first free seat — never a taken one');
+  }
+
+  // My Bookings on a phone: More → "Add spot" → the picker. By the time it closes,
+  // the menu holding "Add spot" has closed too (display: none): focus() on the
+  // opener is a no-op there, and focus used to be left on <body>.
+  {
+    const w = world();
+    const more = w.node({ kind: 'ctl', name: 'more' });
+    const wrap = { querySelector: (sel) => (sel === '.mb-more-btn' ? more : null) };
+    const menu = { offsetParent: null, parentElement: wrap }; // closed by the time the picker goes
+    const addSpot = w.node({ kind: 'ctl', name: 'add-spot', closest: (sel) => (sel === '.mb-more-menu' ? menu : null) });
+    addSpot.focus = () => {}; // inside display:none — the browser ignores it
+    w.ctx._bookingContext = { eventId: 1, btn: addSpot };
+    const bike = w.els.bikeModal;
+    bike.kids = bike.kids.concat([w.seat('available')]);
+    bike.style.display = 'flex';
+    w.tick();
+    w.key('Escape');
+    ok(w.doc.activeElement === more, 'the opener sits in a More menu that has closed: focus goes to that menu\'s More button — not to <body>');
+    menu.offsetParent = {}; // desktop: the same buttons are laid out inline
+    addSpot.focus = function () { w.doc.activeElement = addSpot; };
+    w.doc.activeElement = w.body;
+    bike.style.display = 'flex';
+    w.tick();
+    w.key('Escape');
+    ok(w.doc.activeElement === addSpot, '…and where the menu is on screen, to "Add spot" itself, as before');
   }
 
   // "Remove the class sheet, open the instructor's profile" in one tick.

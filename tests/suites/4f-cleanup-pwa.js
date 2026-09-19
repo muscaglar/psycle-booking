@@ -249,9 +249,18 @@ module.exports = async function (t) {
     ((/var BG = \{([^}]*)\}/.exec(finderBoot) || [])[1] || '').replace(/([a-z]+):\s*'(#[0-9a-f]{6})'/g, (m, id, bg) => { map.push([id, bg]); return m; });
     t.eq(map, themes, 'its id → background map is APP_THEMES, entry for entry');
 
+    // Cloud's and Graphite's grounds come from the registry (wave 9 re-valued
+    // both); what is pinned here is the RULE, and that the pages' <meta> starts
+    // as Cloud's.
+    const bgOf = (id) => (themes.filter((x) => x[0] === id)[0] || [])[1];
+    const CLOUD_BG = bgOf('cloud'), GRAPHITE_BG = bgOf('graphite');
+    t.ok(/^#[0-9a-f]{6}$/.test(CLOUD_BG || '') && /^#[0-9a-f]{6}$/.test(GRAPHITE_BG || '') && CLOUD_BG !== GRAPHITE_BG, 'Cloud and Graphite are in the registry with their own grounds');
+    [['psycle-finder.html', finder], ['login.html', login]].forEach((pg) => {
+      t.eq((/<meta name="theme-color" content="(#[0-9a-f]{6})">/.exec(pg[1]) || [])[1], CLOUD_BG, pg[0] + ': the theme-color meta starts as Cloud\'s ground (what <html data-theme="cloud"> paints if the script cannot run)');
+    });
     const run = (saved, systemDark, o) => {
       o = o || {};
-      const out = { attr: null, meta: '#efeee9' };
+      const out = { attr: null, meta: CLOUD_BG };
       const ctx = t.vm.createContext({
         localStorage: o.noStorage ? { getItem() { throw new Error('denied'); } } : { getItem: (k) => (k === 'psycle_theme' ? saved : null) },
         window: o.noMatchMedia ? {} : { matchMedia: (q) => ({ matches: /dark/.test(q) ? !!systemDark : !systemDark }) },
@@ -267,12 +276,12 @@ module.exports = async function (t) {
     themes.forEach((th) => {
       t.eq(run(th[0], th[0] === 'cloud'), [th[0], th[1]], 'saved "' + th[0] + '" wins over the system scheme, with its own status-area colour');
     });
-    t.eq(run(null, true), ['graphite', '#131418'], 'nothing saved + dark system → Graphite');
-    t.eq(run(null, false), ['cloud', '#efeee9'], 'nothing saved + light system → Cloud');
-    t.eq([run('dark', false), run('light', true)], [['cloud', '#efeee9'], ['graphite', '#131418']], 'a legacy "dark" / "light" value follows the system, exactly like theme.js');
+    t.eq(run(null, true), ['graphite', GRAPHITE_BG], 'nothing saved + dark system → Graphite');
+    t.eq(run(null, false), ['cloud', CLOUD_BG], 'nothing saved + light system → Cloud');
+    t.eq([run('dark', false), run('light', true)], [['cloud', CLOUD_BG], ['graphite', GRAPHITE_BG]], 'a legacy "dark" / "light" value follows the system, exactly like theme.js');
     t.eq([run('constructor', true)[0], run('__proto__', false)[0], run('', true)[0]], ['graphite', 'cloud', 'graphite'], 'only an OWN key of the map counts as a saved theme');
-    t.eq(run('synthwave', true, { noStorage: true }), ['graphite', '#131418'], 'localStorage denied → the system scheme, no throw');
-    t.eq(run(null, true, { noMatchMedia: true }), ['cloud', '#efeee9'], 'no matchMedia → Cloud');
+    t.eq(run('synthwave', true, { noStorage: true }), ['graphite', GRAPHITE_BG], 'localStorage denied → the system scheme, no throw');
+    t.eq(run(null, true, { noMatchMedia: true }), ['cloud', CLOUD_BG], 'no matchMedia → Cloud');
     t.eq(run('linen', false, { noMeta: true })[0], 'linen', 'no theme-color meta → the attribute is still set');
     // …and theme.js agrees on the rule it mirrors.
     t.ok(/if \(_themeById\(saved\)\) return saved;/.test(themeJs) && /\(prefers-color-scheme: dark\)'\)\.matches\) return 'graphite';/.test(themeJs) && /const DEFAULT_THEME = 'cloud';/.test(themeJs),

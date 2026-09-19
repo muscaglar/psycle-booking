@@ -150,16 +150,38 @@ function apiFetch(path, opts = {}) {
 
 // ── pure:core:start ──
 // ── Category mapping for smart filters ──────────────────────────
+// A category no longer carries a colour of its own: colour means class type,
+// the member chooses it, and it lives in the --ct-<key>-* tokens that
+// window.PsycleClassColours (js/theme.js) writes. A component gets its class
+// type as data-ct="<key lower-cased>" (classTypeKey) and css/crisp.css does the
+// rest. `color` stays readable for the older call sites (the Stats bars, the
+// instructor tags, the share-image canvas): it answers with the class BASE
+// colour in effect — a literal a canvas can paint — and, where there is no
+// page to ask, with the token itself.
 const CATEGORY_MAP = [
-  { key: 'RIDE',     label: 'Ride',     color: '#e94560', prefixes: ['RIDE'] },
-  { key: 'STRENGTH', label: 'Strength', color: '#4a9eff', prefixes: ['STRENGTH', 'LIFT', 'WEIGHTS', 'TREAD'] },
-  { key: 'YOGA',     label: 'Yoga',     color: '#9b59b6', prefixes: ['YOGA', 'FLOW', 'RESTORE', 'MEDITATION'] },
-  { key: 'HIIT',     label: 'HIIT',     color: '#e67e22', prefixes: ['HIIT', 'CIRCUIT', 'INTERVAL'] },
-  { key: 'PILATES',  label: 'Pilates',  color: '#27ae60', prefixes: ['PILATES', 'REFORMER'] },
-  { key: 'LAGREE',   label: 'Lagree',   color: '#1abc9c', prefixes: ['LAGREE', 'MEGAFORMER'] },
-  { key: 'BARRE',    label: 'Barre',    color: '#e91e8c', prefixes: ['BARRE'] },
-  { key: 'OTHER',    label: 'Other',    color: '#888',    prefixes: [] },
+  { key: 'RIDE',     label: 'Ride',     prefixes: ['RIDE'] },
+  { key: 'STRENGTH', label: 'Strength', prefixes: ['STRENGTH', 'LIFT', 'WEIGHTS', 'TREAD'] },
+  { key: 'YOGA',     label: 'Yoga',     prefixes: ['YOGA', 'FLOW', 'RESTORE', 'MEDITATION'] },
+  { key: 'HIIT',     label: 'HIIT',     prefixes: ['HIIT', 'CIRCUIT', 'INTERVAL'] },
+  { key: 'PILATES',  label: 'Pilates',  prefixes: ['PILATES', 'REFORMER'] },
+  { key: 'LAGREE',   label: 'Lagree',   prefixes: ['LAGREE', 'MEGAFORMER'] },
+  { key: 'BARRE',    label: 'Barre',    prefixes: ['BARRE'] },
+  { key: 'OTHER',    label: 'Other',    prefixes: [] },
 ];
+CATEGORY_MAP.forEach(function (cat) {
+  Object.defineProperty(cat, 'color', {
+    enumerable: true,
+    get: function () {
+      var token = 'var(--ct-' + cat.key.toLowerCase() + '-base)';
+      try {
+        if (typeof window !== 'undefined' && window.PsycleClassColours) {
+          return window.PsycleClassColours.resolve(cat.key).base || token;
+        }
+      } catch (e) {}
+      return token;
+    },
+  });
+});
 
 function getCategory(typeName) {
   const n = (typeName || '').toUpperCase();
@@ -195,6 +217,72 @@ function slotLabel(typeName) {
   return 'Spot';
 }
 // ── pure:core:end ──
+
+// ── pure:class-type:start ── (DOM-free; tests/suites/9a-foundation.js evaluates this block)
+// Crisp Colour: a class type is shown by its COLOUR (data-ct → css/crisp.css)
+// and by its PICTOGRAM — one family of inline stroke SVGs on a 24 grid, round
+// caps and joins, drawn in currentColor so the tile decides the ink. Never an
+// emoji. Bike, bench, reformer bed, mat and barre are the boards' own marks;
+// the bolt (HIIT), the two-post machine (Lagree) and the pulse (anything else)
+// were drawn to sit with them.
+var CLASS_PICTOGRAMS = {
+  ride: '<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5h7l-3-7.5h6l3 7.5"/><path d="M12.5 16.5l3-7.5"/><path d="M8 6.5h3.5"/><path d="M15.5 9l-.8-3h2.6"/>',
+  strength: '<rect x="3" y="11" width="18" height="3.5" rx="1.75"/><path d="M6.5 14.5V19"/><path d="M17.5 14.5V19"/><path d="M8 6.5h8"/><path d="M8 4.5v4"/><path d="M16 4.5v4"/>',
+  yoga: '<path d="M3 19h14"/><circle cx="17" cy="15.5" r="3.5"/><circle cx="17" cy="15.5" r="0.6"/>',
+  hiit: '<path d="M13.5 3L6 13.5h5.5L10.5 21 18 10.5h-5.5z"/>',
+  pilates: '<path d="M2.5 17.5h19"/><path d="M5 17.5V20"/><path d="M19 17.5V20"/><rect x="8" y="13" width="8" height="4.5" rx="1.5"/><path d="M4.5 17.5v-6"/><path d="M3 11.5h3"/><path d="M19.5 17.5V7.5"/><path d="M19.5 8.5l-4 4.5"/>',
+  lagree: '<path d="M2.5 17.5h19"/><path d="M5 17.5V20"/><path d="M19 17.5V20"/><rect x="9" y="13" width="6" height="4.5" rx="1.5"/><path d="M4.5 17.5V9.5"/><path d="M3 9.5h3"/><path d="M19.5 17.5V9.5"/><path d="M18 9.5h3"/><path d="M6.5 15.25H9"/>',
+  barre: '<path d="M2.5 8h19"/><path d="M6 5v14.5"/><path d="M18 5v14.5"/><path d="M6 13h12"/><path d="M3.5 19.5h5"/><path d="M15.5 19.5h5"/>',
+  other: '<path d="M2.5 12.5H7l2.5-6.5 4.5 12 2.5-5.5h5"/>',
+};
+
+// "RIDE: 45" → "ride". The value of data-ct for a class of that type.
+function classTypeKey(typeName) {
+  var cat = getCategory(typeName);
+  var key = String((cat && cat.key) || 'OTHER').toLowerCase();
+  return Object.prototype.hasOwnProperty.call(CLASS_PICTOGRAMS, key) ? key : 'other';
+}
+
+// The pictogram of a category, as an SVG string: classPictogram('RIDE', 18).
+// `key` is a CATEGORY_MAP key in either case (anything else → the neutral
+// mark); `size` is the px box (8–96, default 18). Decorative by contract —
+// aria-hidden, no title, no id — so the component names the class in text.
+// The stroke thickens as the mark shrinks, as on the boards (2 at 24px, 2.2 at
+// 18px, 2.5 at 13px). Nothing caller-supplied reaches the markup.
+function classPictogram(key, size) {
+  var k = String(key == null ? '' : key).toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(CLASS_PICTOGRAMS, k)) k = 'other';
+  var px = Math.round(Number(size));
+  if (!(px >= 8 && px <= 96)) px = 18;
+  var stroke = px <= 14 ? 2.5 : px <= 16 ? 2.3 : px <= 19 ? 2.2 : px <= 22 ? 2.1 : 2;
+  return '<svg class="ct-pic" width="' + px + '" height="' + px + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + stroke +
+    '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + CLASS_PICTOGRAMS[k] + '</svg>';
+}
+
+// THE TIME BLOCK of the class card — built here, ONCE, for every wearer of the
+// full-size component: Discover's eventCard, My Bookings' live card and its
+// saved copy, and the Class colours preview (js/tabs.js). The digits lead in
+// the display face, over ONE small line: am/pm, then the duration. am/pm sits
+// UNDER the digits, not beside them, so every time is one narrow column and
+// every card's text starts on the same grid line ("12:30" beside "pm" was
+// wider than "6:30pm"). A held class says its day first. css/crisp.css 9b.7
+// styles all of it from `.class-card[data-ct] .cc-time…`.
+//   o.hours 0–23 · o.mins 0–59 (a number or "05") · o.duration minutes (optional)
+//   o.dayHtml  "Thu 24", ALREADY escaped by the caller (optional)
+//   o.hook     a wearer's own layout hook on the block ("mb-when")
+// Apart from dayHtml only numbers reach the markup.
+function _ccTimeHTML(o) {
+  o = o || {};
+  var h = Math.floor(Number(o.hours)), m = Math.floor(Number(o.mins)), dur = Number(o.duration);
+  var known = h >= 0 && h <= 23 && m >= 0 && m <= 59;
+  var hook = String(o.hook == null ? '' : o.hook).replace(/[^\w -]/g, '');
+  return '<div class="cc-time' + (hook ? ' ' + hook : '') + '">' +
+    (o.dayHtml ? '<span class="mb-day">' + o.dayHtml + '</span>' : '') +
+    '<span class="cc-time-h">' + (known ? (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m : '--:--') + '</span>' +
+    '<span class="cc-dur">' + (known ? '<span class="cc-ampm">' + (h >= 12 ? 'pm' : 'am') + '</span>' : '') + (dur > 0 ? (known ? ' · ' : '') + dur + ' min' : '') + '</span>' +
+  '</div>';
+}
+// ── pure:class-type:end ──
 
 /** Get slot label from an event ID via the cache */
 function slotLabelForEvent(eventId) {
@@ -2185,8 +2273,11 @@ function updateFiltersSummary() {
 
   // kind + id ride on the button as data: an id can come out of storage, and an
   // attribute is escaped once where a quoted handler argument needs it twice.
+  // Colour means class type: ONLY a class-type chip wears one (data-ct, its
+  // category key lower-cased — css/crisp.css dresses an unknown key as "other");
+  // studios, times and instructors stay neutral.
   const html = chips.map(c =>
-    `<button type="button" class="filter-chip" data-kind="${escapeHTML(c.kind)}" data-id="${escapeHTML(c.id)}" onclick="removeFilterChip(this)" aria-label="Remove filter: ${escapeHTML(c.name || c.label)}"><span class="filter-chip-label">${escapeHTML(c.label)}</span><span class="filter-chip-x" aria-hidden="true">×</span></button>`
+    `<button type="button" class="filter-chip" data-kind="${escapeHTML(c.kind)}" data-id="${escapeHTML(c.id)}"${c.kind === 'category' ? ` data-ct="${escapeHTML(String(c.id).toLowerCase())}"` : ''} onclick="removeFilterChip(this)" aria-label="Remove filter: ${escapeHTML(c.name || c.label)}"><span class="filter-chip-label">${escapeHTML(c.label)}</span><span class="filter-chip-x" aria-hidden="true">×</span></button>`
   ).join('') + (chips.length ? '<button type="button" class="controls-clear" onclick="clearFilters()" aria-label="Clear all filters">Clear</button>' : '');
   if (el._summaryHtml === html) return; // same chips: nothing to rebuild under a finger or a focus ring
   el._summaryHtml = html;
@@ -4123,6 +4214,74 @@ async function bookClass(eventId, btn, studioId) {
   }
 }
 
+// ── pure:sheets:start ── (DOM-free; tests/suites/9c-sheets.js evaluates these blocks)
+// Crisp Colour sheets, picker and dialogs: the small decisions their markup
+// rests on. (The class pictograms are pure:class-type, further up.)
+
+// Line marks for a sheet row or a menu option — the pictograms' family: 24
+// grid, round caps and joins, currentColor, decorative (the row says it in
+// words). Never an emoji. An unknown name draws nothing, and nothing
+// caller-supplied reaches the markup.
+var UI_ICONS = {
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  clash: '<rect x="3.5" y="4.5" width="12" height="9" rx="3"/><rect x="8.5" y="10.5" width="12" height="9" rx="3"/>',
+  spots: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c0-3 2.4-5 5.5-5s5.5 2 5.5 5"/><circle cx="17.5" cy="9.5" r="2.3"/><path d="M17.5 14.2c1.9.4 3 1.9 3 4.3"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+  person: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>',
+  again: '<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M19 4.5V8h-3.5"/>',
+  tick: '<path d="M5.5 12.5l4.5 4.5 8.5-9.5"/>',
+};
+function _uiIcon(name, size) {
+  var k = String(name == null ? '' : name);
+  if (!Object.prototype.hasOwnProperty.call(UI_ICONS, k)) return '';
+  var px = Math.round(Number(size));
+  if (!(px >= 8 && px <= 96)) px = 19;
+  return '<svg class="ui-icon" width="' + px + '" height="' + px + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' +
+    (k === 'tick' ? 3 : 2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + UI_ICONS[k] + '</svg>';
+}
+
+// What the sheet says beside its Book button: what this booking uses, and what
+// is left — or null, because it only says what Psycle's own numbers can back:
+//   · a capped plan counts classes PER BILLING PERIOD, so "N left this month"
+//     is printed only for a class inside the period /profile is counting
+//     (the same split My Bookings draws); for a later class, the use alone.
+//     The period is NAMED from its own length (_mbPeriodWord, the word My
+//     Bookings' usage line uses): a weekly plan reads "2 left this week", never
+//     "this month", and a length that is neither says "this period";
+//   · an unlimited plan has nothing to run out of: no note;
+//   · no plan: the credit balance, when there is one.
+// `f`: { subscription, classMs, periodStartMs, periodEndMs, creditsRemaining }.
+function _sheetPlanNote(f) {
+  f = f || {};
+  var sub = f.subscription;
+  if (sub && typeof sub === 'object') {
+    var max = Number(sub.max_bookings);
+    if (!(max > 0)) return null;
+    var made = Math.max(0, Number(sub.bookings_made) || 0);
+    var inPeriod = f.classMs >= 0 && f.periodEndMs > 0 && f.classMs < f.periodEndMs &&
+      !(f.periodStartMs > 0 && f.classMs < f.periodStartMs);
+    if (!inPeriod) return { main: '1 class', sub: '' };
+    var left = Math.max(0, Math.round(max - made));
+    var word = _mbPeriodWord(f.periodStartMs, f.periodEndMs);
+    return { main: '1 class', sub: left === 0 ? 'None left this ' + word : left + ' left this ' + word };
+  }
+  var credits = Math.floor(Number(f.creditsRemaining));
+  if (credits > 0) return { main: '1 credit', sub: credits + ' left' };
+  return null;
+}
+
+// The picker's confirm button says what it will book: "Book bike 12",
+// "Book benches 3 & 4" — and plain "Book" (disabled) while nothing is picked.
+// A swap words its own button (changeSpot / executeSpotSwap).
+function _pickerConfirmLabel(slotWord, selected) {
+  var list = Array.isArray(selected) ? selected : [];
+  if (!list.length) return 'Book';
+  var word = String(slotWord || 'Spot').toLowerCase();
+  if (list.length > 1) word = /^bench$/.test(word) ? 'benches' : word + 's';
+  return 'Book ' + word + ' ' + list.join(' & ');
+}
+// ── pure:sheets:end ──
+
 function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studioName, opts) {
   _bookingContext = { eventId, btn };
   _selectedSlots = [];
@@ -4135,6 +4294,14 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
 
   // Feature 4: Enhanced class summary header
   const _evt = _eventCache[String(eventId)];
+  // Crisp Colour: the sheet wears the colour of the class being booked —
+  // css/crisp.css reads data-ct for the header tint, your seats and the confirm
+  // pill; the tile shows its pictogram. (typeof: the suites run this function
+  // on its own. #modalTile is in the page; a cached older shell goes without.)
+  const _ctKey = typeof classTypeKey === 'function' ? classTypeKey(_evt && _evt._typeName) : 'other';
+  document.getElementById('bikeModal').setAttribute('data-ct', _ctKey);
+  const _tileEl = document.getElementById('modalTile');
+  if (_tileEl && typeof classPictogram === 'function') _tileEl.innerHTML = classPictogram(_ctKey, 20);
   if (_evt) {
     const _d = new Date(_evt.start_at);
     const _days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -4195,7 +4362,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   // (and a stale "Swapping..." label) would leak into later normal bookings.
   const _confirmBtn = document.getElementById('confirmBookBtn');
   _confirmBtn.disabled = true;
-  _confirmBtn.textContent = 'Confirm booking';
+  _confirmBtn.textContent = 'Book'; // names the seat once one is picked — _syncPickerConfirmLabel
   _confirmBtn.onclick = confirmBikeBooking;
   // The dismiss button only ever closes the sheet. Under "Your booking" (or a
   // swap) a button reading "Cancel" looks like "cancel the booking": a member
@@ -4258,15 +4425,30 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     const click = isMine
       ? (isChangeSpot ? `onclick="setChangeSpotTarget(${id})"` : `onclick="cancelBikeSlot(${id}, ${Number(eventId)})"`)
       : isAvailable ? `onclick="selectBike(${id})"` : '';
+    // Crisp Colour: a seat is a full circle (rx = half the tile; css/crisp.css
+    // then sets rx from --radius-full, which Handheld zeroes — square there),
+    // its number centred by the baseline, not by a font-size-dependent nudge.
+    // One small mark at the top-right tells a seat apart without colour: a ring
+    // on your usual, a tick on a seat you hold. Each is drawn once, here, and
+    // shown by CSS from the seat's own classes — cancelBikeSlot turns `mine`
+    // into `available` on the live node and the tick goes with it. Numbers only.
+    const mx = sx(slot.x) + SLOT - 6, my = sy(slot.y) + 6;
+    const mark = isUsual ? `<circle class="seat-mark seat-mark-usual" cx="${mx}" cy="${my}" r="4.5"/>`
+      : isMine ? `<g class="seat-mark seat-mark-mine"><circle cx="${mx}" cy="${my}" r="6.5"/><path d="M${mx - 3} ${my + 0.4}l2.2 2.2 3.8-4.4"/></g>`
+      : '';
     return `<g class="bike-slot ${cls}" data-slot="${id}" ${click}>
-      <rect x="${sx(slot.x)}" y="${sy(slot.y)}" width="${SLOT}" height="${SLOT}" rx="6" stroke-width="1.5"/>
-      <text x="${sx(slot.x)+SLOT/2}" y="${sy(slot.y)+SLOT/2+4}"
-        text-anchor="middle" font-family="sans-serif" font-size="11">${escapeHTML(label)}</text>
+      <rect x="${sx(slot.x)}" y="${sy(slot.y)}" width="${SLOT}" height="${SLOT}" rx="${SLOT / 2}" stroke-width="1.5"/>
+      <text x="${sx(slot.x)+SLOT/2}" y="${sy(slot.y)+SLOT/2}" dominant-baseline="central"
+        text-anchor="middle" font-family="sans-serif" font-size="15">${escapeHTML(label)}</text>${mark}
     </g>`;
   }).join('');
 
   svg.innerHTML = inner;
-  document.getElementById('bikeModal').style.display = 'flex';
+  // Which legend entries this map needs (css/crisp.css hides the other two).
+  const _pickerEl = document.getElementById('bikeModal');
+  _pickerEl.setAttribute('data-held', hasMySlots ? '1' : '0');
+  _pickerEl.setAttribute('data-usual', usualAvailable ? '1' : '0');
+  _pickerEl.style.display = 'flex';
 
   // Where the map still overflows (small phones), open on the seat that
   // matters — the usual bike, a seat already held, else the first free one —
@@ -4290,6 +4472,15 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     document.getElementById('confirmBookBtn').disabled = false;
   }
   _syncBikeSlotsA11y();
+  if (typeof _syncPickerConfirmLabel === 'function') _syncPickerConfirmLabel(); // "Book bike 12" for the pre-selected usual
+}
+
+// The confirm button names what it books (_pickerConfirmLabel). Not in a swap:
+// changeSpot / executeSpotSwap word that button themselves.
+function _syncPickerConfirmLabel() {
+  if (window._changeSpotContext) return;
+  const btn = document.getElementById('confirmBookBtn');
+  if (btn) btn.textContent = _pickerConfirmLabel(_bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot', _selectedSlots);
 }
 
 // ── pure:booking:start ── (DOM-free; tests/suites/booking.js evaluates these blocks)
@@ -4389,6 +4580,7 @@ function selectBike(slotId) {
     : count === 1 ? `${_sl2} ${_selectedSlots[0]} selected — pick a second or confirm`
     : `${formatSlots(_sl2, _selectedSlots)} selected`;
   document.getElementById('confirmBookBtn').disabled = count === 0;
+  if (typeof _syncPickerConfirmLabel === 'function') _syncPickerConfirmLabel();
 }
 
 function closeBikePicker() {
@@ -4402,7 +4594,7 @@ function closeBikePicker() {
   const confirmBtn = document.getElementById('confirmBookBtn');
   if (confirmBtn) {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Confirm booking';
+    confirmBtn.textContent = 'Book';
     confirmBtn.onclick = confirmBikeBooking;
   }
 }
@@ -4792,10 +4984,11 @@ let _waitlistRepaintOwed = false; // an offer changed while a dialog / busy butt
 // A repaint swaps every card button out: never under a dialog or the class
 // sheet, never while one of those buttons is mid-request (its handler would
 // restore a detached node, and the fresh one would take a second tap), and
-// never from under an open "Similar" popup — it lives inside its card.
+// never from under an open "Similar" popup or More menu — they live inside
+// their card.
 function _bookingsRepaintSafe() {
   return !_dialogOpen() && !document.getElementById('classDetailOverlay') &&
-    !document.querySelector('#upcomingList button:disabled, #upcomingList .find-similar-popup');
+    !document.querySelector('#upcomingList button:disabled, #upcomingList .find-similar-popup, #upcomingList .mb-more-btn[aria-expanded="true"]');
 }
 
 // What the cards show for each seatless place: its offer state and where it
@@ -5958,24 +6151,30 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   // Shown in the sheet and spoken below: one string, so they can't drift.
   const title = opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist!') : 'Booked!';
 
+  // Crisp Colour: the tick sits in the class's own colour and the seat is the
+  // seat badge with the glow (it is yours now); the two buttons stay neutral
+  // pills, outside the data-ct block. (typeof: the suites run this on its own.)
+  const ctKey = typeof classTypeKey === 'function' ? classTypeKey(typeName) : 'other';
+  const tickMark = typeof _uiIcon === 'function' ? _uiIcon('tick', 22) : '&#10003;';
+
   const el = document.createElement('div');
   el.id = 'bookingConfirmation';
   el.className = 'booking-confirmation';
   el.innerHTML = `
-    <div class="bc-content">
-      <div class="bc-check">&#10003;</div>
+    <div class="bc-content" data-ct="${ctKey}">
+      <div class="bc-check" aria-hidden="true">${tickMark}</div>
       <div class="bc-text">
         <div class="bc-title">${title}</div>
         <div class="bc-detail">${escapeHTML(classLine)}</div>
         ${dateTimeStr ? `<div class="bc-detail bc-dim">${escapeHTML(dateTimeStr)}</div>` : ''}
         ${cancelLine ? `<div class="bc-detail ${cancelLineCls}">${escapeHTML(cancelLine)}</div>` : ''}
         ${waitlistLine ? `<div class="bc-detail bc-dim">${escapeHTML(waitlistLine)}</div>` : ''}
-        ${slotStr ? `<div class="bc-slot">${slotStr}</div>` : ''}
+        ${slotStr ? `<div class="bc-slot ct-badge is-seat glow-mine">${slotStr}</div>` : ''}
       </div>
     </div>
     <div class="bc-actions">
-      <button class="bc-btn bc-btn-secondary" onclick="dismissBookingConfirmation();(typeof switchTab==='function'?switchTab('bookings'):scrollToUpcoming())">View my bookings</button>
-      <button class="bc-btn bc-btn-primary" onclick="dismissBookingConfirmation()">Done</button>
+      <button class="bc-btn bc-btn-secondary pill-btn pill-neutral" onclick="dismissBookingConfirmation();(typeof switchTab==='function'?switchTab('bookings'):scrollToUpcoming())">View my bookings</button>
+      <button class="bc-btn bc-btn-primary pill-btn pill-primary" onclick="dismissBookingConfirmation()">Done</button>
     </div>
   `;
   document.body.appendChild(el);
@@ -6058,6 +6257,10 @@ function confirmModal(opts) {
     // copy on open instead of just "dialog". Fixed ids are safe: the dialog is
     // single-instance and a stale one is removed above, before this is built.
     const describedBy = [opts.body && 'psycleConfirmBody', opts.warn && 'psycleConfirmWarn'].filter(Boolean).join(' ');
+    // Crisp Colour: a destructive choice is a CALM danger outline; the filled red
+    // (.is-solid) is kept for the two confirms that cost something for good —
+    // see _confirmTone, right under this function.
+    const tone = _confirmTone(opts);
     overlay.innerHTML = `
       <div class="confirm-dialog" role="dialog" aria-modal="true" tabindex="-1"${opts.title ? ' aria-labelledby="psycleConfirmTitle"' : ''}${describedBy ? ` aria-describedby="${describedBy}"` : ''}>
         ${opts.title ? `<div class="confirm-title" id="psycleConfirmTitle">${escapeHTML(opts.title)}</div>` : ''}
@@ -6065,7 +6268,7 @@ function confirmModal(opts) {
         ${opts.warn ? `<div class="confirm-warn${opts.warnClass ? ' ' + escapeHTML(opts.warnClass) : ''}" id="psycleConfirmWarn">${escapeHTML(opts.warn)}</div>` : ''}
         <div class="confirm-actions">
           <button class="confirm-btn confirm-btn-cancel">${escapeHTML(opts.cancelText || 'Keep booking')}</button>
-          <button class="confirm-btn ${opts.danger ? 'confirm-btn-danger' : 'confirm-btn-primary'}">${escapeHTML(opts.confirmText || 'Confirm')}</button>
+          <button class="confirm-btn ${tone === 'primary' ? 'confirm-btn-primary' : 'confirm-btn-danger' + (tone === 'danger-solid' ? ' is-solid' : '')}">${escapeHTML(opts.confirmText || 'Confirm')}</button>
         </div>
       </div>
     `;
@@ -6083,9 +6286,11 @@ function confirmModal(opts) {
       overlay.classList.remove('show');
       setTimeout(() => overlay.remove(), 180);
       document.removeEventListener('keydown', onKey);
-      // Restore focus to the element that opened the modal
-      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-        try { previouslyFocused.focus(); } catch {}
+      // Restore focus to the element that opened the modal — or to its visible
+      // stand-in when that element has been hidden meanwhile (_visibleOpener).
+      const back = _visibleOpener(previouslyFocused);
+      if (back && typeof back.focus === 'function') {
+        try { back.focus(); } catch {}
       }
       if (typeof haptic === 'function') {
         try { haptic(result ? 'success' : 'tap'); } catch {}
@@ -6137,6 +6342,38 @@ function confirmModal(opts) {
     setTimeout(() => overlay.querySelector('.confirm-btn-primary, .confirm-btn-danger')?.focus(), 50);
   });
 }
+
+// ── pure:sheets:start ──
+// How a confirm's action button is drawn: 'primary' | 'danger' | 'danger-solid'.
+// `danger: true` alone is the calm outline — signing out, leaving a waitlist, a
+// free cancel: nothing is lost that cannot be had again. The filled red is for
+// the two confirms that cost something for good: a cancel inside the 12-hour
+// window (its warn line wears 'late-cancel-note' — confirmCancelWithPolicy is
+// the only caller that passes it) and a deletion that cannot be undone
+// (`irreversible: true` — handing a calendar over to the sync). Never solid
+// without `danger`: a booking confirm is never red, whatever its warn line says.
+// (Kept between confirmModal and its export: tests/suites/a11y.js runs that slice.)
+function _confirmTone(opts) {
+  if (!opts || !opts.danger) return 'primary';
+  const lateCancel = /(^|\s)late-cancel-note(\s|$)/.test(String(opts.warnClass == null ? '' : opts.warnClass));
+  return (lateCancel || opts.irreversible === true) ? 'danger-solid' : 'danger';
+}
+
+// Where focus goes back to when a dialog closes. Usually the element that
+// opened it — but My Bookings' "Add spot" sits in the card's More menu, and on
+// a phone that menu closes (display: none) the moment the picker or confirm
+// takes focus: focus() on a button in there is a no-op, and the member was
+// dropped on <body>, at the top of the page. Its visible stand-in is that
+// menu's own More button. (At desktop widths the menu is laid out inline, the
+// item is on screen, and it takes focus back itself, as before.) Used by
+// confirmModal above and by _syncOverlayStack; kept in this slice for a11y.js.
+function _visibleOpener(el) {
+  const menu = el && typeof el.closest === 'function' ? el.closest('.mb-more-menu') : null;
+  if (!menu || menu.offsetParent !== null) return el;
+  const btn = menu.parentElement ? menu.parentElement.querySelector('.mb-more-btn') : null;
+  return btn && btn.offsetParent !== null ? btn : el;
+}
+// ── pure:sheets:end ──
 window.confirmModal = confirmModal;
 
 // ── Sheets and panels: one focus stack, one key handler ──────────────────
@@ -6247,6 +6484,7 @@ function _syncOverlayStack() {
   if (opened) { _focusIntoOverlay(top.el); return; }
   // Restore only if focus fell: a closer that put it somewhere on purpose wins.
   if (!closed.length || !fell()) return;
+  opener = _visibleOpener(opener); // "Add spot" in a More menu that has closed → its More button
   if (opener && opener.isConnected && typeof opener.focus === 'function' && (!top || top.el.contains(opener))) {
     try { opener.focus({ preventScroll: true }); } catch (e) {}
     if (document.activeElement === opener) return;
@@ -6861,6 +7099,60 @@ function _pagerDayLabel(day, todayStr) {
   return { rel, short: rel || (weekday.slice(0, 3) + ' ' + p[2]), long, head: rel ? rel + ' · ' + p[2] + ' ' + month : long };
 }
 
+// The strip pill as the Crisp Colour boards draw it: a small word over the day
+// of the month. 'Today' is the only relative word — "Tomorrow" does not fit a
+// seventh of a phone's width, and the numeral under it already says which day
+// it is. (The pill's spoken name is _pagerSpoken's full date, as before.)
+function _pagerPillParts(day, todayStr) {
+  if (!_pagerIsDay(day)) return { word: String(day == null ? '' : day), num: '' };
+  const p = String(day).split('-').map(Number);
+  const weekday = _PAGER_WEEKDAYS[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()];
+  return { word: day === todayStr ? 'Today' : weekday.slice(0, 3), num: String(p[2]) };
+}
+
+// The days of the strip on which the member holds a SEAT → the earliest such
+// class of that day: { 'YYYY-MM-DD': { ct, name, time } }. It is what the
+// pill's small class-colour dot and the "You have …" half of its spoken name
+// are drawn from. Read from what is already in memory (bookings = _myBookings,
+// cache = _eventCache) — nothing is ever fetched for a dot. A waitlist place is
+// not yours yet, and a class that has started (o.started) is over: neither
+// marks a day. The day and the time are cut from the start_at DIGITS — the
+// gym's own wall clock — never read through Date.
+//   o.typeKey(typeName) → the data-ct key · o.started(startAt) → boolean
+function _pagerHeldDays(bookings, cache, days, o) {
+  o = o || {};
+  const out = {}, first = {};
+  const wanted = (days || []).filter(_pagerIsDay);
+  Object.keys(bookings || {}).forEach(id => {
+    const b = bookings[id];
+    if (!b || typeof b !== 'object' || b.waitlisted) return;
+    const evt = (cache && Object.prototype.hasOwnProperty.call(cache, id)) ? cache[id] : null;
+    const startAt = evt && evt.start_at ? String(evt.start_at) : '';
+    const day = startAt.slice(0, 10);
+    if (wanted.indexOf(day) === -1) return;
+    let over = false;
+    try { over = typeof o.started === 'function' && !!o.started(startAt); } catch (e) {}
+    if (over) return;
+    // Earliest by the TIME digits: start_at comes in the 'T' and the space form
+    // alike, and as whole strings 'T07:00' sorts after ' 18:30'.
+    const tod = startAt.slice(11, 19);
+    if (Object.prototype.hasOwnProperty.call(first, day) && !(tod < first[day])) return;
+    first[day] = tod;
+    const h = parseInt(startAt.slice(11, 13), 10), mm = startAt.slice(14, 16);
+    const name = String(evt._typeName || 'a class');
+    let ct = 'other';
+    try { if (typeof o.typeKey === 'function') ct = String(o.typeKey(evt._typeName) || 'other'); } catch (e) {}
+    out[day] = { ct, name, time: (isNaN(h) || !/^\d\d$/.test(mm)) ? '' : ((h % 12) || 12) + ':' + mm + (h >= 12 ? 'pm' : 'am') };
+  });
+  return out;
+}
+
+// "…, 14 classes. You have Strength 45 at 6:30pm" — the dot, said.
+function _pagerHeldSpoken(held) {
+  if (!held) return '';
+  return '. You have ' + held.name + (held.time ? ' at ' + held.time : '');
+}
+
 function _pagerCountText(n) {
   return n === 1 ? '1 class' : (n > 0 ? n + ' classes' : 'No classes');
 }
@@ -6993,10 +7285,6 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   const type = typeMap[evt.event_type_id];
 
   const dt = new Date(evt.start_at);
-  const hours = dt.getHours();
-  const mins = dt.getMinutes().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  const h12 = hours % 12 || 12;
 
   const locName = loc ? loc.name.replace('Psycle ', '') : '';
   const studioName = studio ? studio.name : '';
@@ -7033,16 +7321,30 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   const spotsHtml = _spotsHtml(evt, myBooking, _cardCountsFresh);
   const onlineMeta = evt.is_live_stream ? '<div class="cc-meta"><span class="badge highlight">Online</span></div>' : '';
 
-  return `<div class="class-card${myBooking ? (myBooking.waitlisted ? ' is-waitlisted' : ' is-booked') : ''}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
+  // THE CLASS CARD (Crisp Colour) — one anatomy, styled by css/crisp.css from
+  // `.class-card[data-ct]`, so any card built this way looks the same:
+  //   root      .class-card.ct-card + data-ct (classTypeKey: the class type is
+  //             the card's COLOUR) + .is-booked (glows) / .is-waitlisted (dashed)
+  //   .cc-time  the time leads, in the display face: .cc-time-h over the small
+  //             line .cc-dur = .cc-ampm · duration — _ccTimeHTML (pure:class-type),
+  //             the ONE builder every wearer of the card calls
+  //   .cc-info  .cc-head = .ct-tile pictogram + .cc-name · .cc-sub = .cc-who
+  //             (instructor + rank) and .cc-loc (the studio, plain text) ·
+  //             .cc-spots (availability) · .cc-meta (a label such as Online)
+  //   .cc-action ONE pill. Its class stays exactly book-btn[ booked| waitlist]
+  //             and its label plain text: the booking code rewrites both, and
+  //             the ✓ label contract is read off them.
+  // The "·" between instructor and studio is drawn by CSS inside .cc-loc's own
+  // no-wrap unit, so a line that wraps never ends — or starts — on a bare dot.
+  const ct = classTypeKey(type?.name);
+  const who = instrLink(instr?.full_name, instr?.id) + (window.tierBadgeHTML ? window.tierBadgeHTML(instr?.id) : '');
+
+  return `<div class="class-card ct-card${myBooking ? (myBooking.waitlisted ? ' is-waitlisted' : ' is-booked') : ''}" data-ct="${ct}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
     onclick="openClassDetail(${evt.id})" style="cursor:pointer">
-    <div class="cc-time">
-      <span class="cc-time-h">${h12}:${mins}<span class="cc-ampm">${ampm}</span></span>
-      <span class="cc-dur">${evt.duration} min</span>
-    </div>
-    <div class="cc-rule"></div>
+    ${_ccTimeHTML({ hours: dt.getHours(), mins: dt.getMinutes(), duration: evt.duration })}
     <div class="cc-info">
-      <span class="cc-name" role="button" tabindex="0">${escapeHTML(type?.name || 'Class')}</span>
-      <span class="cc-sub">${instrLink(instr?.full_name, instr?.id)}${window.tierBadgeHTML ? window.tierBadgeHTML(instr?.id) : ''}${locName ? ' · ' + escapeHTML(locName) : ''}</span>
+      <span class="cc-head"><span class="ct-tile" aria-hidden="true">${classPictogram(ct, 18)}</span><span class="cc-name" role="button" tabindex="0">${escapeHTML(type?.name || 'Class')}</span></span>
+      <span class="cc-sub">${who ? `<span class="cc-who">${who}</span>` : ''}${locName ? `<span class="cc-loc">${escapeHTML(locName)}</span>` : ''}</span>
       ${spotsHtml}
       ${onlineMeta}
     </div>
@@ -7441,6 +7743,55 @@ function _paintDayGroup(host, day, m) {
   });
 }
 
+// The strip's class-colour dots: a day on which the member holds a seat carries
+// ONE small dot in that class's colour (css/crisp.css .day-pill-dot) — the only
+// class colour in the strip, which otherwise stays neutral. Drawn from
+// _myBookings + _eventCache as they stand, never fetched for, and only once
+// /bookings has really been read: a list still loading says nothing about what
+// is held. The decisions are pure:day-pager's _pagerHeldDays.
+function _heldDaysFor(m) {
+  if (!m || !m.paged || _bookingsLoadState !== 'loaded') return {};
+  const now = Date.now();
+  try {
+    return _pagerHeldDays(_myBookings, _eventCache, m.days, {
+      typeKey: classTypeKey,
+      started: startAt => _classHasStarted(startAt, now, _gymClassStartMs),
+    });
+  } catch (e) { return {}; } // a nicety: never in the way of the strip
+}
+
+// One pill's dot, in place: added, re-coloured or taken off. Decorative — the
+// pill's aria-label says it ("You have Ride 45 at 9:30am"). It hangs off the
+// date numeral, not the pill's corner: a corner dot ran into the word above it
+// ("Today" fills the pill's width).
+function _paintDayDot(pill, held) {
+  let dot = pill.querySelector('.day-pill-dot');
+  if (!held) { if (dot) dot.remove(); return; }
+  if (!dot) {
+    dot = document.createElement('span');
+    dot.className = 'day-pill-dot ct-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    (pill.querySelector('.day-pill-num') || pill).appendChild(dot);
+  }
+  if (dot.getAttribute('data-ct') !== held.ct) dot.setAttribute('data-ct', held.ct);
+}
+
+// A booking made, cancelled or loaded changes which days are held without a
+// render(): bring the dots (and the names that say them) up to date in place.
+function _repaintDayDots() {
+  const strip = document.getElementById('dayStrip');
+  const m = _pagerModel;
+  if (!strip || !m || !m.paged) return;
+  const held = _heldDaysFor(m);
+  strip.querySelectorAll('.day-pill').forEach(pill => {
+    const d = pill.dataset.day;
+    pill.setAttribute('aria-label', _pagerSpoken(d, m.todayStr, m.counts[d] || 0, (m.states && m.states[d]) || null) + _pagerHeldSpoken(held[d]));
+    _paintDayDot(pill, held[d]);
+  });
+}
+['bookings:loaded', 'booking:complete', 'booking:cancelled', 'seat:cancelled', 'waitlist:claimed', 'waitlist:allocated', 'auth:changed']
+  .forEach(name => PsycleEvents.on(name, _repaintDayDots));
+
 // The strip: one tab per day of the range, each with its matching-class
 // count. Updated IN PLACE while the days are the same (a search streaming in,
 // a change of day) so focus and the row's scroll offset stay put; rebuilt
@@ -7457,9 +7808,12 @@ function _paintDayStrip(container, m) {
     strip.setAttribute('role', 'tablist');
     strip.setAttribute('aria-label', 'Days');
     strip.dataset.days = key;
-    strip.innerHTML = m.days.map(d =>
-      `<button type="button" role="tab" class="day-pill" id="dayTab-${d}" data-day="${d}" aria-controls="dayPager">` +
-      `<span class="day-pill-label">${escapeHTML(_pagerDayLabel(d, m.todayStr).short)}</span><span class="day-pill-count"></span></button>`).join('');
+    // Crisp Colour: a small word over the day of the month over the count.
+    strip.innerHTML = m.days.map(d => {
+      const parts = _pagerPillParts(d, m.todayStr);
+      return `<button type="button" role="tab" class="day-pill" id="dayTab-${d}" data-day="${d}" aria-controls="dayPager">` +
+        `<span class="day-pill-label">${escapeHTML(parts.word)}</span><span class="day-pill-num">${escapeHTML(parts.num)}</span><span class="day-pill-count"></span></button>`;
+    }).join('');
     strip.addEventListener('scroll', () => { _pagerStripLeft = strip.scrollLeft; }, { passive: true });
     strip.addEventListener('focusin', () => { _pagerStripFocused = true; });
     strip.addEventListener('focusout', e => {
@@ -7477,6 +7831,7 @@ function _paintDayStrip(container, m) {
     const summary = container.querySelector('.summary');
     container.insertBefore(strip, summary ? summary.nextSibling : container.firstChild);
   }
+  const held = _heldDaysFor(m);
   strip.querySelectorAll('.day-pill').forEach(pill => {
     const d = pill.dataset.day, n = m.counts[d] || 0, on = d === window._pagerDay;
     // A day that was never loaded, or is not open for booking yet, prints no
@@ -7487,11 +7842,12 @@ function _paintDayStrip(container, m) {
     pill.classList.toggle('is-empty', n === 0 && state !== 'unknown');
     pill.classList.remove('is-target');
     pill.setAttribute('aria-selected', String(on));
-    pill.setAttribute('aria-label', _pagerSpoken(d, m.todayStr, n, state));
+    pill.setAttribute('aria-label', _pagerSpoken(d, m.todayStr, n, state) + _pagerHeldSpoken(held[d]));
     pill.tabIndex = on ? 0 : -1; // one tab stop; the arrow keys move inside it
     const countEl = pill.querySelector('.day-pill-count');
     const count = state ? '' : String(n);
     if (countEl && countEl.textContent !== count) countEl.textContent = count;
+    _paintDayDot(pill, held[d]);
   });
   if (!built) return;
   // A rebuild: the row goes back to where the member left it — and only a
@@ -7812,7 +8168,10 @@ window._dayPagerSwipe = {
   // dir: 1 = next day (swiped left), -1 = previous, 0 = spring back.
   release(r) {
     document.querySelectorAll('#dayStrip .day-pill.is-target').forEach(p => p.classList.remove('is-target'));
-    if (r && r.dir && !r.cancelled && stepDiscoverDay(r.dir, 'swipe')) return;
+    // The day really changed (stepDiscoverDay refuses at an edge or while a
+    // search streams): one light tick under the thumb. 'tap' = a LIGHT impact in
+    // the iOS app (native-bridge.js), a 10ms vibrate where the web supports it.
+    if (r && r.dir && !r.cancelled && stepDiscoverDay(r.dir, 'swipe')) { if (typeof window.haptic === 'function') window.haptic('tap'); return; }
     const track = document.querySelector('#dayPager .day-track');
     if (!track || !track.style.transform) return;
     track.style.transition = `transform ${PAGER_SLIDE_MS}ms ease-out`;
@@ -8289,8 +8648,10 @@ function renderCategoryPills() {
     const n = counts ? (counts[cat.key] || 0) : null;
     const dim = (counts && n === 0 && !active) ? ' dimmed' : '';
     const badge = n != null ? `<span class="pill-count">${n}</span>` : '';
-    return `<button class="cat-pill${active ? ' active' : ''}${dim}" aria-pressed="${active}"
-      onclick="toggleCategory('${cat.key}')">${cat.label}${badge}</button>`;
+    // Crisp Colour: the one pill row that wears colour — each class type in its
+    // own (data-ct), led by its pictogram tile.
+    return `<button class="cat-pill${active ? ' active' : ''}${dim}" aria-pressed="${active}" data-ct="${cat.key.toLowerCase()}"
+      onclick="toggleCategory('${cat.key}')"><span class="ct-tile is-sm is-solid" aria-hidden="true">${classPictogram(cat.key, 15)}</span>${cat.label}${badge}</button>`;
   }).join(''));
 }
 
@@ -8614,23 +8975,31 @@ function _savedBookingsHTML(items, label, waiting) {
     byDay[day].push(it);
   });
   Object.keys(byDay).sort().forEach(day => {
-    const dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-    html += `<div class="mb-day-group"><div class="mb-day-header">${escapeHTML(dayLabel)}</div><div class="class-grid">`;
+    // The card carries its own day ("Thu 24"), as the live card does: noon on
+    // that date reads as the same weekday in any device zone.
+    const dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
+    html += `<div class="mb-day-group"><div class="class-grid">`;
     byDay[day].forEach(it => {
       // The class time is a UK wall-clock string: show its own digits.
       const hours = Number(it.start_at.slice(11, 13));
       const mins = it.start_at.slice(14, 16);
       const noun = slotLabel(it.type);
-      let seatHtml = it.slots.map(slot => `<span class="up-seat-chip">${escapeHTML(noun)} ${Number(slot)}</span>`).join('');
-      if (!seatHtml && it.spaces > 1) seatHtml = `<span class="up-seat-chip">${Number(it.spaces)} spaces</span>`;
-      html += `<div class="class-card ${it.waitlisted ? 'is-waitlisted' : 'is-booked'} my-booking-card is-saved-copy">
-        <div class="class-time">${hours % 12 || 12}:${escapeHTML(mins)}<span class="class-time-ampm">${hours >= 12 ? 'pm' : 'am'}</span></div>
-        <div class="class-info">
-          <div class="class-type">${escapeHTML(it.type)}</div>
-          <div class="class-instructor">${escapeHTML(it.instructor)}</div>
-          <div class="class-location">${escapeHTML(it.location)}${it.studio ? ' · ' + escapeHTML(it.studio) : ''}</div>
-          <div class="class-meta">${it.duration ? `<span class="badge">${Number(it.duration)}min</span>` : ''}${it.waitlisted ? '<span class="badge waitlist">Waitlisted</span>' : ''}</div>
-          ${seatHtml ? `<div class="up-seats" style="margin-top:8px">${seatHtml}</div>` : ''}
+      // Crisp Colour: tinted by class type, with its pictogram (typeof: this
+      // block is evaluated on its own by tests/suites/offline.js).
+      const ctKey = typeof classTypeKey === 'function' ? classTypeKey(it.type) : 'other';
+      const tile = typeof classPictogram === 'function' ? `<span class="ct-tile" aria-hidden="true">${classPictogram(ctKey, 18)}</span>` : '';
+      let seatHtml = it.slots.map(slot => `<span class="ct-badge is-seat up-seat-chip">${escapeHTML(noun)} ${Number(slot)}</span>`).join('');
+      if (!seatHtml && it.spaces > 1) seatHtml = `<span class="ct-badge is-seat up-seat-chip">${Number(it.spaces)} spaces</span>`;
+      const where = escapeHTML(it.location) + (it.studio ? ' · ' + escapeHTML(it.studio) : '');
+      // The time block and the title row are the shared card's own (_ccTimeHTML,
+      // .cc-head / .cc-name): a saved class reads exactly as it does live.
+      const when = typeof _ccTimeHTML === 'function' ? _ccTimeHTML({ hours, mins, duration: it.duration, dayHtml: escapeHTML(dayLabel), hook: 'mb-when' }) : '';
+      html += `<div class="class-card ct-card${it.waitlisted ? ' is-dashed is-waitlisted' : ' is-booked'} my-booking-card is-saved-copy" data-ct="${ctKey}">
+        ${when}
+        <div class="class-info mb-what">
+          <div class="cc-head mb-title">${tile}<span class="cc-name mb-name">${escapeHTML(it.type)}</span></div>
+          <div class="class-instructor cc-sub mb-meta">${it.instructor ? `<span class="cc-who">${escapeHTML(it.instructor)}</span>` : ''}${where ? `<span class="cc-loc class-location">${where}</span>` : ''}</div>
+          ${(seatHtml || it.waitlisted) ? `<div class="class-meta mb-badges">${seatHtml ? `<span class="up-seats">${seatHtml}</span>` : ''}${it.waitlisted ? '<span class="badge waitlist">Waitlisted</span>' : ''}</div>` : ''}
         </div>
       </div>`;
     });
@@ -8742,6 +9111,131 @@ function _classHasStarted(startAt, nowMs, startMsOf) {
 }
 // ── pure:bookings-started:end ──
 
+// ── pure:bookings-card:start ── (third region: what the Crisp Colour card shows)
+// ── pure:bookings-crisp:start ── (the same block under a name of its own: tests/suites/9d-bookings.js,
+//    3d-leftovers.js and render-perf.js run renderMyBookings without the rest of pure:bookings-card)
+// Function declarations only, nothing from the page: tests/suites/offline.js
+// evaluates everything between the snapshot key and renderMyBookings in a bare vm.
+
+// 'YYYY-MM-DD…' (a London date, straight off start_at) → "Thu 24". Read from the
+// digits, as UTC: the device zone can never move a class to the day before.
+function _mbShortDay(dayKey) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dayKey == null ? '' : dayKey));
+  if (!m) return '';
+  var d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (isNaN(d.getTime()) || d.getUTCDate() !== Number(m[3])) return ''; // 2026-02-31 is no day
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate();
+}
+
+// Which actions a held class shows, and which sit behind "More". The card has
+// room for the one that matters (cancel / leave / claim or check) and ONE quiet
+// companion; the rest are a tap away. The ORDER of `more` is the order on
+// screen. A menu of one is no menu: a lone overflow action goes on the card.
+//   f = { place, offerOpen, checkFirst, seats, canChange, hasMap }
+//   → { primary, secondary | null, inline: [...], more: [...] }
+function _mbActionPlan(f) {
+  f = f || {};
+  var lead = !!(f.offerOpen || f.checkFirst);
+  var plan = f.place
+    // A place has no seat to add or change, and "I'm going to…" is untrue for it.
+    ? { primary: lead ? (f.offerOpen ? 'claim' : 'check') : 'leave', secondary: lead ? 'leave' : 'check', more: ['similar'] }
+    : { primary: 'cancel', secondary: (f.canChange && Number(f.seats) > 0) ? 'change' : null, more: [] };
+  if (!f.place) {
+    if (!(Number(f.seats) >= 2)) plan.more.push('add');
+    plan.more.push('similar');
+  }
+  if (f.hasMap) plan.more.push('map');
+  if (!f.place) plan.more.push('share');
+  plan.inline = plan.more.length === 1 ? plan.more.splice(0, 1) : [];
+  return plan;
+}
+
+// The More button's name says what is behind it: "More for Ride 45: add spot,
+// find similar, map, share". Plain text — the caller escapes it.
+function _mbMoreName(typeName, keys) {
+  var words = { add: 'add spot', similar: 'find similar', map: 'map', share: 'share' };
+  var list = (keys || []).map(function (k) { return words[k]; }).filter(Boolean);
+  return 'More for ' + (typeName || 'this class') + (list.length ? ': ' + list.join(', ') : '');
+}
+
+// Arrow keys inside the open menu: the item to focus next, or null when the
+// key is not one of ours. Up / Left and Down / Right step and wrap.
+function _mbMoreKeyStep(key, index, count) {
+  if (!(count > 0)) return null;
+  if (key === 'Home') return 0;
+  if (key === 'End') return count - 1;
+  if (key === 'ArrowDown' || key === 'ArrowRight') return index < 0 ? 0 : (index + 1) % count;
+  if (key === 'ArrowUp' || key === 'ArrowLeft') return index < 0 ? count - 1 : (index - 1 + count) % count;
+  return null;
+}
+
+// What a billing period is called: Psycle bills by the month, some plans by the
+// week; anything else is just "period" rather than a guess.
+function _mbPeriodWord(startMs, endMs) {
+  var days = (Number(endMs) - Number(startMs)) / 86400000;
+  if (!(days > 0)) return 'period';
+  if (days >= 27.5 && days <= 31.5) return 'month';
+  if (days >= 6.5 && days <= 7.5) return 'week';
+  return 'period';
+}
+
+// "8 of 12 this month · Resets 12 Oct" — the plan-usage line over the cards.
+//   o = { made, max, startMs, endMs, resetLabel, next }  a subscription period
+//       (`next` = the period after this one; resetLabel is then its first day)
+//   o = { credits }                                     a credit pack
+//   → { num, rest, when, bar }   num is set in the display face;
+//     bar = null | { segments, filled } | { pct }
+function _mbUsageModel(o) {
+  o = o || {};
+  if (o.credits != null) {
+    var c = Math.max(0, Number(o.credits) || 0);
+    return { num: String(c), rest: (c === 1 ? 'credit' : 'credits') + ' left', when: '', bar: null };
+  }
+  var made = Math.max(0, Number(o.made) || 0);
+  var max = Math.max(0, Number(o.max) || 0);
+  var word = (o.next ? 'next ' : 'this ') + _mbPeriodWord(o.startMs, o.endMs);
+  var label = o.resetLabel ? String(o.resetLabel) : '';
+  if (!max) {
+    // No cap to count against. (_plural: app.js pure:copy — "1 class", "2 classes".)
+    var booked = made > 0 ? _plural(made, 'class', 'classes') + ' booked' : '';
+    return {
+      num: made > 0 ? booked.slice(0, booked.indexOf(' ')) : 'Unlimited',
+      rest: made > 0 ? booked.slice(booked.indexOf(' ') + 1) + ' ' + word : word,
+      when: label ? (o.next ? 'From ' : 'Renews ') + label : '',
+      bar: null,
+    };
+  }
+  var filled = Math.min(made, max);
+  return {
+    num: made + ' of ' + max,
+    rest: word,
+    when: label ? (o.next ? 'From ' : 'Resets ') + label : '',
+    // One segment per class while they stay readable; a plain fill beyond that.
+    bar: max <= 16 ? { segments: max, filled: filled } : { pct: Math.round((filled / max) * 100) },
+  };
+}
+
+// …and its markup. `esc` = escapeHTML (the labels are dates we formatted, but
+// they started as API text). The bar repeats the words beside it: aria-hidden.
+function _mbUsageHtml(model, esc) {
+  esc = esc || String;
+  var html = '<div class="mb-usage-text"><span class="mb-usage-count"><span class="mb-usage-num">' + esc(model.num) + '</span>' +
+    (model.rest ? ' ' + esc(model.rest) : '') + '</span>' +
+    (model.when ? '<span class="mb-usage-when">' + esc(model.when) + '</span>' : '') + '</div>';
+  var bar = model.bar;
+  if (bar && bar.segments) {
+    var cells = '';
+    for (var i = 0; i < bar.segments; i++) cells += '<i' + (i < bar.filled ? ' class="is-on"' : '') + '></i>';
+    html += '<div class="sub-progress mb-usage-bar is-segmented" aria-hidden="true">' + cells + '</div>';
+  } else if (bar) {
+    html += '<div class="sub-progress mb-usage-bar" aria-hidden="true"><div class="sub-progress-fill" style="width:' +
+      Math.max(0, Math.min(100, Number(bar.pct) || 0)) + '%"></div></div>';
+  }
+  return html;
+}
+// ── pure:bookings-crisp:end ──
+// ── pure:bookings-card:end ──
+
 function renderMyBookings() {
   const panel = document.getElementById('upcomingPanel');
   const list = document.getElementById('upcomingList');
@@ -8842,8 +9336,6 @@ function renderMyBookings() {
   // Membership / credits info bar + billing period
   var periodStart = null, periodEnd = null, nextPeriodStart = null;
   const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  // period_end from API is the START of the next period — display as last day of current period
-  const fmtEndDate = d => { var prev = new Date(d); prev.setDate(prev.getDate() - 1); return fmtDate(prev); };
   const userStats = currentUser?.stats || {};
   const creditsRemaining = Number(userStats.credits_remaining) || 0;
   const availableCredits = currentUser?.available_credits || [];
@@ -8858,45 +9350,24 @@ function renderMyBookings() {
     // (when there IS a split, the period section headers replace it)
     const willHaveSplit = periodEnd && items.some(item => new Date(item.evt.start_at) >= periodEnd);
     if (!willHaveSplit) {
-      const made = Number(_activeSubscription.bookings_made) || 0;
-      const max = _activeSubscription.max_bookings || 0;
-      const planName = _activeSubscription.name || 'Subscription';
-      const periodLabel = periodStart && periodEnd ? `${fmtDate(periodStart)} — ${fmtEndDate(periodEnd)}` : '';
-      if (max > 0) {
-        const pct = Math.round((made / max) * 100);
-        html += `<div class="sub-bar">
-          <div class="sub-bar-text">
-            <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
-            <span class="sub-bar-count">${made}/${max} classes${periodLabel ? ' · ' + periodLabel : ''}</span>
-          </div>
-          <div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>
-        </div>`;
-      } else {
-        html += `<div class="sub-bar">
-          <div class="sub-bar-text">
-            <span class="sub-bar-name">Membership: ${escapeHTML(planName)}</span>
-            <span class="sub-bar-count">${made > 0 ? _plural(made, 'class', 'classes') + ' booked' : 'Unlimited'}${periodLabel ? ' · ' + periodLabel : ''}</span>
-          </div>
-        </div>`;
-      }
+      // "8 of 12 this month · Resets 12 Oct" (_mbUsageModel, pure:bookings-crisp).
+      // period_end is the first day of the NEXT period: the day the count resets.
+      html += `<div class="sub-bar mb-usage">${_mbUsageHtml(_mbUsageModel({
+        made: _activeSubscription.bookings_made,
+        max: _activeSubscription.max_bookings,
+        startMs: periodStart ? periodStart.getTime() : NaN,
+        endMs: periodEnd ? periodEnd.getTime() : NaN,
+        resetLabel: periodEnd ? fmtDate(periodEnd) : '',
+      }), escapeHTML)}</div>`;
     }
   } else if (creditsRemaining > 0 || availableCredits.length > 0) {
     const totalCredits = creditsRemaining || availableCredits.reduce(function (sum, c) { return sum + (Number(c.remaining) || 0); }, 0);
-    html += `<div class="sub-bar">
-      <div class="sub-bar-text">
-        <span class="sub-bar-name">Credit Pack</span>
-        <span class="sub-bar-count">${totalCredits} credit${totalCredits !== 1 ? 's' : ''} remaining</span>
-      </div>
-    </div>`;
+    html += `<div class="sub-bar mb-usage">${_mbUsageHtml(_mbUsageModel({ credits: totalCredits }), escapeHTML)}</div>`;
   }
 
   // Past bookings toggle
   if (past.length > 0) {
-    html += `<div style="padding:0 4px 10px;text-align:right">
-      <button class="btn-ghost" onclick="togglePastBookings()" style="font-size:11px;padding:4px 10px;border:1px solid var(--border,#333);border-radius:5px;color:var(--text-dim,#888);background:none;cursor:pointer">
-        ${_showPastBookings ? 'Hide' : 'Show'} ${past.length} past class${past.length !== 1 ? 'es' : ''}
-      </button>
-    </div>`;
+    html += `<div class="mb-past-toggle"><button type="button" class="mb-past-btn" onclick="togglePastBookings()">${_showPastBookings ? 'Hide' : 'Show'} ${past.length} past class${past.length !== 1 ? 'es' : ''}</button></div>`;
   }
 
   // Bucket bookings by billing period
@@ -8906,6 +9377,9 @@ function renderMyBookings() {
 
   let _countdownShown = 0;
   const sortedDays = Object.keys(byDay).sort();
+  // The one card that glows (`upcoming` is in start order; a place is no seat).
+  const nextSeat = upcoming.find(({ booking }) => !booking.waitlisted);
+  const nextSeatId = nextSeat ? String(nextSeat.evtId) : null;
 
   if (periodEnd) {
     // Split items into current vs next billing period
@@ -8923,15 +9397,11 @@ function renderMyBookings() {
 
   // Render period sections with full sub-bar headers
   const hasPeriodSplit = periodEnd && nextPeriodItems.length > 0;
-  const planName = _activeSubscription?.name || 'Subscription';
   const periods = _activeSubscription?.upcoming_billing_periods || [];
+  // The fold mark of a period bar: one stroke, round ends, like the pictograms.
+  const periodChevron = '<span class="mb-period-chevron" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M6 9.5l6 6 6-6"/></svg></span>';
 
   if (hasPeriodSplit && _activeSubscription) {
-    const max = _activeSubscription.max_bookings || 0;
-    const made = Number(_activeSubscription.bookings_made || 0);
-    const pct = max > 0 ? Math.round((made / max) * 100) : 0;
-    const periodLabel = periodStart && periodEnd ? `${fmtDate(periodStart)} — ${fmtEndDate(periodEnd)}` : '';
-
     // Current period sub-bar (open)
     html += `<div class="mb-period-section">`;
     // A div that acts as a button: role + tabindex make it reachable (app.js's
@@ -8940,14 +9410,14 @@ function renderMyBookings() {
     // folded is folded again after a rebuild by _commitBookingsHtml, which sets
     // the class AND this attribute together.
     html += `<div class="mb-period-bar" role="button" tabindex="0" aria-expanded="true" onclick="this.setAttribute('aria-expanded', String(!this.parentElement.classList.toggle('collapsed')))">`;
-    html += `<div class="mb-period-bar-text">`;
-    html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
-    html += `<span class="sub-bar-count">${max > 0 ? made + '/' + max + ' classes' : (made > 0 ? _plural(made, 'class', 'classes') : 'Unlimited')}${periodLabel ? ' · ' + periodLabel : ''}</span>`;
-    html += `</div>`;
-    if (max > 0) {
-      html += `<div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(pct, 100)}%"></div></div>`;
-    }
-    html += `<span class="mb-period-chevron">▼</span>`;
+    html += `<div class="mb-period-bar-text mb-usage">${_mbUsageHtml(_mbUsageModel({
+      made: _activeSubscription.bookings_made,
+      max: _activeSubscription.max_bookings,
+      startMs: periodStart ? periodStart.getTime() : NaN,
+      endMs: periodEnd.getTime(),
+      resetLabel: fmtDate(periodEnd),
+    }), escapeHTML)}</div>`;
+    html += periodChevron;
     html += `</div>`;
     html += `<div class="mb-period-body">`;
   }
@@ -8960,7 +9430,8 @@ function renderMyBookings() {
     // `day` is a London date: a device ahead of London is already on the next
     // one while tonight's class is still to come — never dim a day with a live class.
     const isPast = date < now && day !== localDateStr(now) && dayItems.every(({ evt }) => started(evt));
-    const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    // Each card carries its own day ("Thu 24") over its time: no day headings.
+    const dayLabel = _mbShortDay(day);
 
     // Close current period section and open next period section
     if (hasPeriodSplit && !periodSeparatorShown && periodEnd && date >= periodEnd) {
@@ -8969,39 +9440,35 @@ function renderMyBookings() {
       // Close current period body + section
       html += `</div></div>`;
 
-      // Next period sub-bar (collapsible, starts open)
+      // Next period sub-bar (collapsible, starts open): "2 of 12 next month · From 12 Oct".
+      // Seats only — a waitlist place has not used a class yet.
       const nextPeriod = periods.length > 0 ? periods[0] : null;
-      const nextLabel = nextPeriod
-        ? `${fmtDate(parsePsycleDate(nextPeriod.start))} — ${fmtDate(parsePsycleDate(nextPeriod.end))}`
-        : '';
-      const nextMax = _activeSubscription?.max_bookings || 0;
+      const nextStart = nextPeriod ? parsePsycleDate(nextPeriod.start) : null;
+      const nextEnd = nextPeriod ? parsePsycleDate(nextPeriod.end) : null;
+      const nextBooked = nextPeriodItems.filter(item => !item.booking.waitlisted).length;
 
       html += `<div class="mb-period-section">`;
       html += `<div class="mb-period-bar mb-period-bar-next" role="button" tabindex="0" aria-expanded="true" onclick="this.setAttribute('aria-expanded', String(!this.parentElement.classList.toggle('collapsed')))">`;
-      html += `<div class="mb-period-bar-text">`;
-      const nextBooked = nextPeriodItems.filter(item => !item.booking.waitlisted).length;
-      html += `<span class="sub-bar-name">${escapeHTML(planName)}</span>`;
-      html += `<span class="sub-bar-count">${nextBooked}/${nextMax > 0 ? nextMax : '∞'} classes · ${nextLabel}</span>`;
-      html += `</div>`;
-      if (nextMax > 0) {
-        const nextPct = Math.round((nextBooked / nextMax) * 100);
-        html += `<div class="sub-progress"><div class="sub-progress-fill" style="width:${Math.min(nextPct, 100)}%"></div></div>`;
-      }
-      html += `<span class="mb-period-chevron">▼</span>`;
+      html += `<div class="mb-period-bar-text mb-usage">${_mbUsageHtml(_mbUsageModel({
+        made: nextBooked,
+        max: _activeSubscription?.max_bookings,
+        startMs: nextStart ? nextStart.getTime() : (periodEnd ? periodEnd.getTime() : NaN),
+        // Psycle gives a period's end either as its last day or as the next
+        // one's first: a day either way still reads as the same month / week.
+        endMs: nextEnd ? nextEnd.getTime() : NaN,
+        resetLabel: fmtDate(nextStart || periodEnd),
+        next: true,
+      }), escapeHTML)}</div>`;
+      html += periodChevron;
       html += `</div>`;
       html += `<div class="mb-period-body">`;
     }
 
     html += `<div class="mb-day-group${isPast ? ' mb-past' : ''}">`;
-    html += `<div class="mb-day-header">${dayLabel}</div>`;
     html += `<div class="class-grid">`;
 
     for (const { evt, booking, evtId } of dayItems) {
       const dt = new Date(evt.start_at);
-      const hours = dt.getHours();
-      const mins = dt.getMinutes().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'pm' : 'am';
-      const h12 = hours % 12 || 12;
       const typeName = evt._typeName || 'Class';
       const instrName = evt._instrName || '';
       const locName = evt._locName || '';
@@ -9023,7 +9490,18 @@ function renderMyBookings() {
       // "Free cancel until" line and whether Change spot is offered.
       const deadline = (!eventPast && !isPlace) ? _cancelDeadline(evt.start_at, now.getTime()) : null;
 
-      let badges = `<span class="badge">${evt.duration}min</span>`;
+      // Crisp Colour: the card is tinted by CLASS TYPE and leads with its
+      // pictogram (typeof: the suites run this function on its own, as below).
+      const ctKey = typeof classTypeKey === 'function' ? classTypeKey(typeName) : 'other';
+      const tileHtml = typeof classPictogram === 'function' ? `<span class="ct-tile" aria-hidden="true">${classPictogram(ctKey, 18)}</span>` : '';
+      // The time block is the shared card's (Discover prints the very same one),
+      // led here by the card's own day ("Thu 24").
+      const whenHtml = typeof _ccTimeHTML === 'function' ? _ccTimeHTML({ hours: dt.getHours(), mins: dt.getMinutes(), duration: evt.duration, dayHtml: dayLabel, hook: 'mb-when' }) : '';
+      // The glow marks what is yours, sparingly: the NEXT class you hold a seat in.
+      const isNext = String(evtId) === nextSeatId;
+
+      // (The duration sits under the time now, not among the badges.)
+      let badges = '';
       if (isPlace) badges += `<span class="badge waitlist">${offerOpen ? (spotFree ? 'Spot available' : 'Spot offered') : (phase === 'closed' ? 'Waitlist closed' : 'Waitlisted')}</span>`;
       if (booking.fromWaitlist && !isPlace) badges += `<span class="badge waitlist">From waitlist</span>`;
       if (evt.is_live_stream) badges += `<span class="badge highlight">Online</span>`;
@@ -9040,21 +9518,22 @@ function renderMyBookings() {
         }
       }
 
-      // Seat chips + cancel
+      // Seat chips + cancel. Yours, so they wear the class colour (.ct-badge.is-seat).
       let seatHtml = '';
       if (slots.length > 0) {
         const _slUp = slotLabelForEvent(evtId);
         const chips = slots.map(slot => {
-          if (eventPast) return `<span class="up-seat-chip" style="opacity:0.5">${_slUp} ${slot}</span>`;
+          if (eventPast) return `<span class="ct-badge is-seat is-past up-seat-chip">${_slUp} ${slot}</span>`;
           // The per-seat × only earns its place when there's another seat to
-          // keep; a single seat is cancelled with the full-width button below.
-          if (slots.length < 2) return `<span class="up-seat-chip">${_slUp} ${slot}</span>`;
-          return `<span class="up-seat-chip">${_slUp} ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel ${_slUp} ${slot}">&times;</button></span>`;
+          // keep; a single seat is cancelled with the Cancel button below.
+          if (slots.length < 2) return `<span class="ct-badge is-seat up-seat-chip">${_slUp} ${slot}</span>`;
+          return `<span class="ct-badge is-seat up-seat-chip">${_slUp} ${slot}<button onclick="event.stopPropagation();upcomingSeatCancel(${evtId}, ${slot}, this)" title="Cancel ${_slUp} ${slot}" aria-label="Cancel ${_slUp} ${slot}">&times;</button></span>`;
         }).join('');
-        seatHtml = `<div class="up-seats" style="margin-top:8px">${chips}</div>`;
+        // is-multi: each chip carries a × — the row keeps its tap targets apart (css/crisp.css).
+        seatHtml = `<span class="up-seats${(!eventPast && slots.length > 1) ? ' is-multi' : ''}">${chips}</span>`;
       } else if (!isPlace && (booking.bookingIds || []).length > 1) {
         // No-layout studio with more than one space held (each is a record).
-        seatHtml = `<div class="up-seats" style="margin-top:8px"><span class="up-seat-chip">${(booking.bookingIds || []).length} spaces</span></div>`;
+        seatHtml = `<span class="up-seats"><span class="ct-badge is-seat up-seat-chip">${(booking.bookingIds || []).length} spaces</span></span>`;
       }
 
       // Waitlist status line (place only, or a place held on top of a seat)
@@ -9110,62 +9589,70 @@ function renderMyBookings() {
       // Until the cutoff, say when cancelling stops being free (after it the
       // "Late-cancel window" badge above takes over).
       const deadlineHtml = (deadline && !deadline.insideWindow)
-        ? `<div class="mb-cancel-deadline">Free cancel until ${deadline.label}</div>`
+        ? `<div class="mb-cancel-deadline">Free cancel until <strong>${deadline.label}</strong></div>`
         : '';
 
-      // Action buttons (upcoming only)
-      let rebookBtn = '';
+      // The other actions (upcoming only). The card has room for the primary
+      // button and ONE quiet companion — Change spot, or the other waitlist
+      // action; Add spot, Find similar, Map and Share sit behind "More"
+      // (_mbActionPlan, pure:bookings-crisp). css/crisp.css lays the same
+      // buttons out inline at desktop widths.
+      let actionsHtml = '';
+      let moreHtml = '';
       if (!eventPast) {
-        const canChange = !!deadline && !deadline.insideWindow;
-
-        rebookBtn = `<div class="booking-actions">`;
-
-        if (isPlace) {
-          // A place has no seat to add/change. Offer the other waitlist action:
-          // check whether a spot can be claimed right now, or leave when an
-          // offer is showing / the offer window is open (Claim or Check is then
-          // the primary button).
-          rebookBtn += (offerOpen || checkFirst)
-            ? `<button class="booking-action-btn" onclick="event.stopPropagation();leaveWaitlist(${evtId}, this)" title="Give up your waitlist place">Leave waitlist</button>`
-            : `<button class="booking-action-btn" onclick="event.stopPropagation();claimWaitlistSpot(${evtId}, this)" title="Ask Psycle whether a spot is free to claim right now">Check for a spot</button>`;
-        } else {
-          // Add a spot — opens bike picker to book an additional slot
-          if (slots.length < 2) {
-            rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();bookClass(${evtId}, this, ${evt.studio_id})" title="Add another spot">+ Add spot</button>`;
-          }
-
-          // Change spot — only if >12h away and class not full
-          if (canChange && slots.length > 0) {
-            rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();changeSpot(${evtId})" title="Change to a different spot">Change spot</button>`;
-          }
+        const plan = _mbActionPlan({
+          place: isPlace, offerOpen, checkFirst, seats: slots.length,
+          // Change spot — only while cancelling is still free (>12h away)
+          canChange: !!deadline && !deadline.insideWindow,
+          hasMap: !!(evt._locAddress || evt._locFullName || evt._locName),
+        });
+        const actionBtn = {
+          // Add a spot — opens bike picker to book an additional slot. It keeps
+          // the menu open (data-more-keep): bookClass shows its "…" on THIS button.
+          add: `<button class="booking-action-btn" data-more-keep onclick="event.stopPropagation();bookClass(${evtId}, this, ${evt.studio_id})" title="Add another spot">Add spot</button>`,
+          change: `<button class="booking-action-btn" onclick="event.stopPropagation();changeSpot(${evtId})" title="Change to a different spot">Change spot</button>`,
+          // A place has no seat to add/change: its companion is the other
+          // waitlist action (Claim or Check is the primary button while an offer
+          // is showing / the offer window is open — Leave then sits here).
+          leave: `<button class="booking-action-btn" onclick="event.stopPropagation();leaveWaitlist(${evtId}, this)" title="Give up your waitlist place">Leave waitlist</button>`,
+          check: `<button class="booking-action-btn" onclick="event.stopPropagation();claimWaitlistSpot(${evtId}, this)" title="Ask Psycle whether a spot is free to claim right now">Check for a spot</button>`,
+          // find-similar-btn is the hook findSimilar() finds its card by.
+          similar: `<button class="booking-action-btn find-similar-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">Find similar</button>`,
+          map: `<button class="booking-action-btn" onclick="event.stopPropagation();openMapForBooking(${evtId})" title="Open the studio in Maps">Map</button>`,
+          share: `<button class="booking-action-btn" onclick="event.stopPropagation();shareClass(${evtId})" title="Invite a friend to this class">Share</button>`,
+        };
+        actionsHtml = `<div class="booking-actions mb-actions">${cancelBtn}${deadlineHtml}${plan.secondary ? actionBtn[plan.secondary] : ''}${plan.inline.map(k => actionBtn[k]).join('')}</div>`;
+        if (plan.more.length) {
+          // A disclosure, not an ARIA menu: the same buttons are laid out inline
+          // at desktop widths, where a role="menu" would be a lie. toggleBookingMore
+          // (below) moves focus in, closes on Escape / a tap outside, steps with
+          // the arrow keys. .booking-actions: a touch here never starts a swipe.
+          const moreName = escapeHTML(_mbMoreName(typeName, plan.more));
+          moreHtml = `<div class="booking-actions mb-more">
+            <button type="button" class="mb-more-btn" aria-expanded="false" aria-controls="mbMore-${evtId}" aria-label="${moreName}" onclick="event.stopPropagation();toggleBookingMore(this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="0.8"/><circle cx="12" cy="12" r="0.8"/><circle cx="19" cy="12" r="0.8"/></svg></button>
+            <div class="mb-more-menu" id="mbMore-${evtId}" role="group" aria-label="${moreName}">${plan.more.map(k => actionBtn[k]).join('')}</div>
+          </div>`;
         }
-
-        // find-similar-btn is the hook findSimilar() anchors its popup to.
-        rebookBtn += `<button class="booking-action-btn find-similar-btn" onclick="event.stopPropagation();findSimilar(${evtId})" title="Find similar classes">↻ Similar</button>`;
-        if (evt._locAddress || evt._locFullName || evt._locName) {
-          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();openMapForBooking(${evtId})" title="Open the studio in Maps">📍 Map</button>`;
-        }
-        // Seats only — "I'm going to…" is untrue for a waitlist place.
-        if (!isPlace) {
-          rebookBtn += `<button class="booking-action-btn" onclick="event.stopPropagation();shareClass(${evtId})" title="Invite a friend to this class">Share</button>`;
-        }
-        rebookBtn += `</div>`;
       }
 
-      html += `<div class="class-card ${isPlace ? 'is-waitlisted' : 'is-booked'} my-booking-card" data-id="${evtId}" data-studio-id="${evt.studio_id}"
+      const whereHtml = escapeHTML(locName) + (studioName ? ' · ' + escapeHTML(studioName) : '');
+      const instrHtml = instrLink(instrName, evt.instructor_id) + (window.tierBadgeHTML ? window.tierBadgeHTML(evt.instructor_id) : '');
+      const cardCls = (isPlace ? ' is-dashed is-waitlisted' : ' is-booked') + (isNext ? ' glow-mine-card' : '') +
+        ((deadline && deadline.insideWindow) ? ' is-late' : '');
+      // More comes LAST in the markup: on a phone the stylesheet pins its button
+      // to the card's corner; at desktop widths its buttons follow the action
+      // row — so what is seen and what Tab reaches stay in the same order.
+      html += `<div class="class-card ct-card${cardCls} my-booking-card" data-id="${evtId}" data-ct="${ctKey}" data-studio-id="${evt.studio_id}"
         onclick="openClassDetail(${evtId})" style="cursor:pointer">
-        <div class="class-time">${h12}:${mins}<span class="class-time-ampm">${ampm}</span></div>
-        <div class="class-info">
-          <div class="class-type">${escapeHTML(typeName)}</div>
-          <div class="class-instructor">${instrLink(instrName, evt.instructor_id)}${window.tierBadgeHTML ? window.tierBadgeHTML(evt.instructor_id) : ''}</div>
-          <div class="class-location">${escapeHTML(locName)}${studioName ? ' · ' + escapeHTML(studioName) : ''}</div>
-          <div class="class-meta">${badges}</div>
-          ${seatHtml}
-          ${placeHtml}
-          ${deadlineHtml}
-          ${cancelBtn}
-          ${rebookBtn}
+        ${whenHtml}
+        <div class="class-info mb-what">
+          <div class="cc-head mb-title">${tileHtml}<span class="cc-name mb-name" role="button" tabindex="0">${escapeHTML(typeName)}</span></div>
+          <div class="class-instructor cc-sub mb-meta">${instrHtml ? `<span class="cc-who">${instrHtml}</span>` : ''}${whereHtml ? `<span class="cc-loc class-location">${whereHtml}</span>` : ''}</div>
+          ${(seatHtml || badges) ? `<div class="class-meta mb-badges">${seatHtml}${badges}</div>` : ''}
         </div>
+        ${placeHtml ? `<div class="mb-status">${placeHtml}</div>` : ''}
+        ${actionsHtml}
+        ${moreHtml}
       </div>`;
     }
     html += `</div></div>`;
@@ -9345,6 +9832,7 @@ function _bookingsFlipDue(sinceMs, nowMs) {
 function _bookingsListBusy(list) {
   if (_dialogOpen()) return true;
   if (list.querySelector('.find-similar-popup')) return true;
+  if (list.querySelector('.mb-more-btn[aria-expanded="true"]')) return true; // an open More menu, likewise
   if (Array.from(list.querySelectorAll('.my-booking-card')).some(c => c.style.transform)) return true;
   return Array.from(list.querySelectorAll('button')).some(_mbInFlight);
 }
@@ -9386,6 +9874,109 @@ _armMinuteTick();
 if (typeof PsycleEvents !== 'undefined') {
   try { PsycleEvents.on('seat:cancelled', () => { try { refreshUpcomingPanel(); } catch {} }); } catch {}
 }
+
+// ── My Bookings: the card's "More" menu ──────────────────────────
+// Add spot · Find similar · Map · Share sit behind one button on a phone
+// (renderMyBookings builds both; css/crisp.css shows the same buttons inline at
+// desktop widths, where the More button is not displayed and none of this
+// runs). A disclosure: the button carries aria-expanded / aria-controls, and
+// the stylesheet shows the menu off that attribute — so opening one touches no
+// class and no label, and _commitBookingsHtml's "is every button as we left
+// it?" check still holds. Focus moves in on open; Escape hands it back; the
+// arrow keys step through the items; a tap outside, or focus leaving, closes.
+// ONE set of document listeners — the cards are rebuilt as HTML, so nothing can
+// be bound to them. While a menu is open the timed repaints stand aside
+// (_bookingsListBusy, _bookingsRepaintSafe).
+let _mbMoreOpen = null; // { btn, menu, card }
+
+function _mbMoreItems(menu) {
+  return Array.from(menu.querySelectorAll('button')).filter(b => !b.disabled);
+}
+
+function closeBookingMore(focusBack) {
+  const st = _mbMoreOpen;
+  _mbMoreOpen = null;
+  if (!st) return;
+  st.btn.setAttribute('aria-expanded', 'false');
+  if (st.card) st.card.removeAttribute('data-more-open');
+  // preventScroll: closing a menu must not move the list.
+  if (focusBack && st.btn.isConnected) { try { st.btn.focus({ preventScroll: true }); } catch (e) {} }
+}
+
+function toggleBookingMore(btn) {
+  const menu = btn ? document.getElementById(btn.getAttribute('aria-controls')) : null;
+  if (!menu) return;
+  const wasOpen = !!_mbMoreOpen && _mbMoreOpen.btn === btn;
+  closeBookingMore(false); // one at a time
+  if (wasOpen) return;
+  const card = btn.closest('.my-booking-card');
+  btn.setAttribute('aria-expanded', 'true');
+  // The open card rides over its neighbours: each card is a stacking context
+  // of its own (entrance animation), and the next one would paint over the menu.
+  if (card) card.setAttribute('data-more-open', '');
+  _mbMoreOpen = { btn, menu, card };
+  const first = _mbMoreItems(menu)[0];
+  if (first) { try { first.focus({ preventScroll: true }); } catch (e) {} }
+}
+window.toggleBookingMore = toggleBookingMore;
+window.closeBookingMore = closeBookingMore;
+
+// A rebuild can take the open menu's nodes away: that is a closed menu.
+function _mbMoreState() {
+  if (_mbMoreOpen && !_mbMoreOpen.btn.isConnected) _mbMoreOpen = null;
+  return _mbMoreOpen;
+}
+
+// Capture phase, like the Similar popup's own dismissal: ahead of every inline
+// onclick. Choosing an item closes the menu BEFORE the item's handler runs, so
+// focus is back on the More button by the time Find similar opens its popup.
+// "Add spot" keeps it open (data-more-keep): bookClass shows its "…" on that
+// button, and the picker or confirm it opens takes focus — which closes this.
+document.addEventListener('click', e => {
+  const st = _mbMoreState();
+  if (!st) return;
+  const t = e.target;
+  if (!t || typeof t.closest !== 'function') return;
+  if (st.btn.contains(t)) return; // its own toggle
+  if (st.menu.contains(t)) {
+    const item = t.closest('button');
+    if (item && !item.hasAttribute('data-more-keep')) closeBookingMore(true);
+    return;
+  }
+  closeBookingMore(false);
+  // The list under the menu is all tap targets: the tap that closes it does
+  // nothing else there. Another card's More button goes through in one tap.
+  if (t.closest('.my-booking-card') && !t.closest('.mb-more-btn')) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+
+document.addEventListener('keydown', e => {
+  const st = _mbMoreState();
+  if (!st) return;
+  // Focus is somewhere else (a dialog opened over the list): the key is theirs.
+  const active = document.activeElement;
+  if (active && active !== document.body && !st.menu.contains(active) && active !== st.btn) { closeBookingMore(false); return; }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeBookingMore(true);
+    return;
+  }
+  const items = _mbMoreItems(st.menu);
+  const next = _mbMoreKeyStep(e.key, items.indexOf(active), items.length);
+  if (next == null) return;
+  e.preventDefault();
+  try { items[next].focus({ preventScroll: true }); } catch (err) {}
+}, true);
+
+// Tabbing out of the menu, or a dialog taking focus, closes it.
+document.addEventListener('focusin', e => {
+  const st = _mbMoreState();
+  if (!st || st.menu.contains(e.target) || e.target === st.btn) return;
+  closeBookingMore(false);
+});
 
 // ── Open a booking's studio in the maps app ──────────────────────
 window.openMapForBooking = function (eventId) {
@@ -9924,30 +10515,63 @@ window.findSimilar = function(eventId) {
   const instrName = evt._instrName || 'this instructor';
   const typeName = evt._typeName || 'Class';
 
+  // Each option leads with a line mark (pure:sheets _uiIcon) — never an emoji.
+  // (typeof: the suites run this function on its own.)
+  const optIcon = name => '<span class="find-similar-icon" aria-hidden="true">' + (typeof _uiIcon === 'function' ? _uiIcon(name, 18) : '') + '</span>';
   const popup = document.createElement('div');
   popup.className = 'find-similar-popup';
   popup.innerHTML =
     '<div class="find-similar-title">Find similar</div>' +
     '<button class="find-similar-option" data-action="next-week">' +
-      '<span class="find-similar-icon">&#128197;</span>' +
+      optIcon('calendar') +
       '<span class="find-similar-label">Same class next week</span>' +
       '<span class="find-similar-desc">' + escapeHTML(typeName) + ' with ' + escapeHTML(instrName) + ', ' + dayName + ' ' + timeLabel + '</span>' +
     '</button>' +
     '<button class="find-similar-option" data-action="same-instructor">' +
-      '<span class="find-similar-icon">&#128100;</span>' +
+      optIcon('person') +
       '<span class="find-similar-label">Same instructor, any time</span>' +
       '<span class="find-similar-desc">All classes with ' + escapeHTML(instrName) + ' this week</span>' +
     '</button>' +
     '<button class="find-similar-option" data-action="same-time">' +
-      '<span class="find-similar-icon">&#128336;</span>' +
+      optIcon('clock') +
       '<span class="find-similar-label">Same time, any instructor</span>' +
       '<span class="find-similar-desc">' + dayName + 's at ' + timeLabel + '</span>' +
     '</button>';
 
-  // Position near the trigger button
-  triggerBtn.style.position = 'relative';
-  triggerBtn.parentElement.style.position = 'relative';
-  triggerBtn.parentElement.appendChild(popup);
+  // Position near the card's action row. The Similar button itself sits behind
+  // the card's "More" menu on a phone — closed again by the time this runs — so
+  // the popup hangs off the row that is always on screen (.mb-actions), not off
+  // the button's own parent. (No card found: the old anchor, as before.)
+  const card = typeof triggerBtn.closest === 'function' ? triggerBtn.closest('.my-booking-card') : null;
+  const anchor = (card && card.querySelector('.mb-actions')) || triggerBtn.parentElement;
+  anchor.style.position = 'relative';
+  anchor.appendChild(popup);
+
+  // A named group that TAKES the keyboard. Chosen from the card's More menu,
+  // the popup lands BEFORE the focused More button in the markup (.mb-more is
+  // last on the card): Tab went straight on to the next card with the popup
+  // still open, nothing was announced, and Escape did nothing. So focus moves
+  // to the first option, Escape closes the popup, and focus then goes back to
+  // the card's visible trigger — the More button on a phone, Similar itself
+  // where the actions are laid out inline. (typeof: the suites' fake nodes.)
+  if (typeof popup.setAttribute === 'function') {
+    popup.setAttribute('role', 'group');
+    popup.setAttribute('aria-label', 'Find similar');
+  }
+  const focusBack = function() {
+    const more = card ? card.querySelector('.mb-more-btn') : null;
+    const back = (more && more.offsetParent !== null) ? more : triggerBtn;
+    if (back && back.isConnected !== false && typeof back.focus === 'function') { try { back.focus({ preventScroll: true }); } catch (e) {} }
+  };
+  popup.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    popup.remove();
+    focusBack();
+  });
+  const firstOption = typeof popup.querySelector === 'function' ? popup.querySelector('.find-similar-option') : null;
+  if (firstOption && typeof firstOption.focus === 'function') { try { firstOption.focus(); } catch (e) {} }
 
   // The popup floats ABOVE the buttons (below, the next card — its own
   // stacking context — would paint over it), but the bookings list sits in
@@ -9978,6 +10602,10 @@ window.findSimilar = function(eventId) {
     popup.remove();
 
     if (action === 'next-week') {
+      // This one stays on My Bookings (a search, then the picker): the option
+      // that held focus is gone, so hand it to the card — it is also where the
+      // picker returns focus when it closes. (The other options leave for Discover.)
+      focusBack();
       // Existing rebookNextWeek logic
       rebookNextWeek(eventId);
     } else if (action === 'same-instructor') {
@@ -10402,12 +11030,18 @@ window.openClassDetail = function (eventId) {
   const mins = dt.getMinutes().toString().padStart(2, '0');
   const ampm = hours >= 12 ? 'pm' : 'am';
   const h12 = hours % 12 || 12;
-  const timeStr = h12 + ':' + mins + ampm;
 
   const typeName = evt._typeName || 'Class';
   const locName = evt._locName || '';
   const studioName = evt._studioName || '';
   const duration = evt.duration || '';
+
+  // Crisp Colour: the sheet wears its class type (data-ct → css/crisp.css), with
+  // that type's pictogram; rows lead with a line mark, never an emoji.
+  // (typeof: the suites run this function on its own, without these helpers.)
+  const ctKey = typeof classTypeKey === 'function' ? classTypeKey(typeName) : 'other';
+  const pictogram = (key, px) => (typeof classPictogram === 'function' ? classPictogram(key, px) : '');
+  const rowIcon = name => '<span class="cds-icon" aria-hidden="true">' + (typeof _uiIcon === 'function' ? _uiIcon(name, 19) : '') + '</span>';
 
   // Availability info. The count comes from _spotsLeft (the API sends
   // capacity + occupancy; the capacity_remaining this row waited for never
@@ -10440,8 +11074,11 @@ window.openClassDetail = function (eventId) {
       // the same time. A place is only a possible seat, so it gets the amber ink.
       const clash = _clashFor(eventId, null, { includePlaces: true });
       if (clash) {
-        clashHtml = '<div class="cds-detail-row"><span class="cds-icon">&#9888;&#65039;</span><span class="' +
-          (clash.kind === 'overlap' && !clash.place ? 'cds-avail-full' : 'cds-avail-waitlist') + '">' + escapeHTML(_clashLabel(clash)) + '</span></div>';
+        // The other class closes the row as its own small tile (its type's colour).
+        const otherKey = clash.typeName && typeof classTypeKey === 'function' ? classTypeKey(clash.typeName) : '';
+        clashHtml = '<div class="cds-detail-row cds-clash">' + rowIcon('clash') + '<span class="' +
+          (clash.kind === 'overlap' && !clash.place ? 'cds-avail-full' : 'cds-avail-waitlist') + '">' + escapeHTML(_clashLabel(clash)) + '</span>' +
+          (otherKey ? '<span class="ct-tile is-sm" data-ct="' + otherKey + '" aria-hidden="true">' + pictogram(otherKey, 15) + '</span>' : '') + '</div>';
       }
     } catch (e) {}
   }
@@ -10449,10 +11086,17 @@ window.openClassDetail = function (eventId) {
   // Booking state
   const myBooking = _myBookings[String(eventId)];
   const safeEventId = Number(eventId) || 0;
+  // ONE action, one full-width pill (css/crisp.css primitives; cds-book-btn and
+  // cds-view-instr stay as hooks). The glow goes to the action that books — or
+  // to the seat that is already yours — and to nothing else on the sheet.
+  const pillMain = ' pill-btn pill-primary is-block is-lg';
+  const pillPlace = ' pill-btn pill-ct-outline is-block is-lg';
+  const pillSecond = ' pill-btn pill-quiet is-block';
+  let canBook = false; // plain "Book": the only state the plan note belongs to
   let bookBtnHtml;
   if (myBooking && myBooking.waitlisted) {
     // A waitlist place: manage it directly (no Discover card needed in the DOM).
-    bookBtnHtml = '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();leaveWaitlist(' + safeEventId + ', null);">Waitlisted ✓</button>';
+    bookBtnHtml = '<button class="cds-book-btn booked is-place' + pillPlace + '" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();leaveWaitlist(' + safeEventId + ', null);">Waitlisted ✓</button>';
     // An offer showing (as the My Bookings card works it out): the member came
     // from Psycle's email, or tapped their "Spot available" card — and the only
     // action here was a ticked button that opens "Leave the waitlist?". Claim
@@ -10461,8 +11105,8 @@ window.openClassDetail = function (eventId) {
     const place = myBooking.waitlist || null;
     const offerOpen = !isPast && !!place && (!!(place.offer && place.offer.available) || _waitlistOfferPending(place));
     if (offerOpen) {
-      bookBtnHtml = '<button class="cds-book-btn" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailClaimAction(' + safeEventId + ');">Claim spot</button>' +
-        '<button class="cds-view-instr" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();leaveWaitlist(' + safeEventId + ', null);">Leave waitlist</button>';
+      bookBtnHtml = '<button class="cds-book-btn' + pillMain + ' glow-mine" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailClaimAction(' + safeEventId + ');">Claim spot</button>' +
+        '<button class="cds-view-instr' + pillSecond + '" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();leaveWaitlist(' + safeEventId + ', null);">Leave waitlist</button>';
     }
     if (!isPast) {
       availHtml = '<span class="cds-avail cds-avail-waitlist">' +
@@ -10474,16 +11118,50 @@ window.openClassDetail = function (eventId) {
     // A class that has run has nothing left to manage: no tick (that is the
     // live, tappable state), and the card's own word for it.
     bookBtnHtml = isPast
-      ? '<button class="cds-book-btn booked" disabled>' + escapeHTML(seats ? 'Attended · ' + seats : 'Attended') + '</button>'
-      : '<button class="cds-book-btn booked" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">' + escapeHTML(bookedLabel) + '</button>';
+      ? '<button class="cds-book-btn booked' + pillMain + '" disabled>' + escapeHTML(seats ? 'Attended · ' + seats : 'Attended') + '</button>'
+      : '<button class="cds-book-btn booked' + pillMain + ' glow-mine" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">' + escapeHTML(bookedLabel) + '</button>';
   } else if (evt.is_fully_booked && !evt.is_waitlistable) {
-    bookBtnHtml = '<button class="cds-book-btn" disabled>Full</button>';
+    bookBtnHtml = '<button class="cds-book-btn' + pillMain + '" disabled>Full</button>';
   } else if (evt.is_fully_booked && evt.is_waitlistable) {
     // Same routing as Book (card button if rendered, else a detached one) —
     // and the same per-class double-tap guard.
-    bookBtnHtml = '<button class="cds-book-btn waitlist" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Join Waitlist</button>';
+    bookBtnHtml = '<button class="cds-book-btn waitlist' + pillPlace + '" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Join Waitlist</button>';
   } else {
-    bookBtnHtml = '<button class="cds-book-btn" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Book</button>';
+    canBook = !isPast;
+    bookBtnHtml = '<button class="cds-book-btn' + pillMain + ' glow-mine" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Book</button>';
+  }
+
+  // When cancelling stops being free — _cancelDeadline, so the sheet, the card,
+  // the picker and the cancel dialog cannot disagree — for a seat held or one
+  // that can be booked (a waitlist place has nothing to late-cancel yet). Inside
+  // the window it IS the late-cancel message and wears that message's one class.
+  let policyHtml = '';
+  if (!isPast && !(myBooking && myBooking.waitlisted) && (myBooking || !evt.is_fully_booked) && typeof _cancelDeadline === 'function') {
+    const deadline = _cancelDeadline(evt.start_at);
+    if (deadline) {
+      policyHtml = '<div class="cds-detail-row">' + rowIcon('clock') + (deadline.insideWindow
+        ? '<span class="late-cancel-note">Inside the 12-hour late-cancel window</span>'
+        : '<span>Free cancel until <strong>' + escapeHTML(deadline.label) + '</strong></span>') + '</div>';
+    }
+  }
+
+  // Beside Book: what the booking uses and what is left — only what Psycle's own
+  // numbers can back (pure:sheets _sheetPlanNote). The period bounds are parsed
+  // the way My Bookings parses them for its split.
+  let noteHtml = '';
+  if (canBook && typeof _sheetPlanNote === 'function') {
+    const ms = d => (d && !isNaN(d.getTime()) ? d.getTime() : NaN);
+    const sub = _activeSubscription || null;
+    const note = _sheetPlanNote({
+      subscription: sub, classMs: dt.getTime(),
+      periodStartMs: sub ? ms(parsePsycleDate(sub.period_start)) : NaN,
+      periodEndMs: sub ? ms(parsePsycleDate(sub.period_end)) : NaN,
+      creditsRemaining: currentUser && currentUser.stats ? currentUser.stats.credits_remaining : NaN,
+    });
+    if (note) {
+      noteHtml = '<div class="cds-note"><span class="cds-note-main">' + escapeHTML(note.main) + '</span>' +
+        (note.sub ? '<span class="cds-note-sub">' + escapeHTML(note.sub) + '</span>' : '') + '</div>';
+    }
   }
 
   // Keywords tags
@@ -10497,7 +11175,7 @@ window.openClassDetail = function (eventId) {
   // Instructor link
   const safeInstrName = escapeForJsString(instrName);
   const viewInstrHtml = instrId
-    ? '<button class="cds-view-instr" onclick="document.getElementById(\'classDetailOverlay\').remove();window._features_openInstructorModal(\'' + safeInstrName + '\',\'' + escapeForJsString(instrId) + '\')">View instructor profile</button>'
+    ? '<button class="cds-view-instr' + pillSecond + '" onclick="document.getElementById(\'classDetailOverlay\').remove();window._features_openInstructorModal(\'' + safeInstrName + '\',\'' + escapeForJsString(instrId) + '\')">View instructor profile</button>'
     : '';
 
   // Build overlay
@@ -10507,30 +11185,46 @@ window.openClassDetail = function (eventId) {
   overlay.style.display = 'flex';
   overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
 
+  // Crisp Colour anatomy (the ClassSheet board). A block in the class's colour:
+  // the TIME leads in the display face, the date and length under it, the
+  // pictogram tile beside it; then the class name in its own deep ink, then
+  // who and where (the separator rides with the place, so a wrap never leaves
+  // a "·" hanging). Below, on the surface: one grouped list — free-cancel,
+  // availability, clash — the bio, and ONE action with what it uses beside it.
+  const whereText = [locName, studioName].filter(Boolean).join(', ');
+  const rowsHtml = policyHtml +
+    (availHtml ? '<div class="cds-detail-row">' + rowIcon('spots') + availHtml + '</div>' : '') +
+    clashHtml;
+
   // The sheet has no title element of its own; its name is what it is about.
   overlay.innerHTML =
-    '<div class="class-detail-sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="' +
+    '<div class="class-detail-sheet" data-ct="' + ctKey + '" role="dialog" aria-modal="true" tabindex="-1" aria-label="' +
       escapeHTML(instrName ? typeName + ' with ' + instrName : typeName) + '">' +
-      '<div class="cds-handle"></div>' +
-      '<button class="modal-close cds-close" onclick="document.getElementById(\'classDetailOverlay\').remove()" aria-label="Close">&times;</button>' +
-      '<div class="cds-header">' +
-        (photo ? '<img class="cds-photo" src="' + escapeHTML(photo) + '" alt="' + escapeHTML(instrName) + '">' : '<div class="cds-photo-placeholder"></div>') +
-        '<div class="cds-header-info">' +
-          '<div class="cds-instr-name">' + escapeHTML(instrName) + ' ' + tierBadge + '</div>' +
-          '<div class="cds-type">' + escapeHTML(typeName) + '<span class="cds-duration-badge">' + escapeHTML(String(duration)) + ' min</span></div>' +
+      '<div class="cds-hero ct-card">' +
+        '<div class="cds-handle"></div>' +
+        '<button class="modal-close cds-close" onclick="document.getElementById(\'classDetailOverlay\').remove()" aria-label="Close">&times;</button>' +
+        '<div class="cds-when">' +
+          '<div class="cds-when-text">' +
+            '<span class="cds-time t-time is-sheet">' + h12 + ':' + mins + '<span class="cds-ampm">' + ampm + '</span></span>' +
+            '<span class="cds-date">' + escapeHTML(dayStr) + (duration ? ' &middot; ' + escapeHTML(String(duration)) + ' min' : '') + '</span>' +
+          '</div>' +
+          '<span class="ct-tile cds-tile" aria-hidden="true">' + pictogram(ctKey, 38) + '</span>' +
         '</div>' +
+        '<h2 class="cds-type">' + escapeHTML(typeName) + '</h2>' +
+        ((instrName || whereText) ? '<div class="cds-who">' +
+          (photo ? '<img class="cds-photo" src="' + escapeHTML(photo) + '" alt="' + escapeHTML(instrName) + '">' : '') +
+          (instrName ? '<span class="cds-instr-name">' + escapeHTML(instrName) + ' ' + tierBadge + '</span>' : '') +
+          (whereText ? '<span class="cds-where">' + (instrName ? '&middot; ' : '') + escapeHTML(whereText) + '</span>' : '') +
+        '</div>' : '') +
       '</div>' +
-      '<div class="cds-details">' +
-        '<div class="cds-detail-row"><span class="cds-icon">&#128197;</span><span>' + escapeHTML(dayStr) + ' at ' + escapeHTML(timeStr) + '</span></div>' +
-        '<div class="cds-detail-row"><span class="cds-icon">&#128205;</span><span>' + escapeHTML(locName) + (studioName ? ' &middot; ' + escapeHTML(studioName) : '') + '</span></div>' +
-        (availHtml ? '<div class="cds-detail-row"><span class="cds-icon">&#128101;</span>' + availHtml + '</div>' : '') +
-        clashHtml +
-      '</div>' +
-      (bioExcerpt ? '<div class="cds-bio">' + escapeHTML(bioExcerpt) + '</div>' : '') +
-      keywordsHtml +
-      '<div class="cds-actions">' +
-        bookBtnHtml +
-        viewInstrHtml +
+      '<div class="cds-body">' +
+        (rowsHtml ? '<div class="cds-details">' + rowsHtml + '</div>' : '') +
+        (bioExcerpt ? '<div class="cds-bio">' + escapeHTML(bioExcerpt) + '</div>' : '') +
+        keywordsHtml +
+        '<div class="cds-actions">' +
+          '<div class="cds-cta">' + bookBtnHtml + noteHtml + '</div>' +
+          viewInstrHtml +
+        '</div>' +
       '</div>' +
     '</div>';
 
@@ -11614,7 +12308,9 @@ function _welcomeDecision(s) {
   return 'show';
 }
 
-// The four pages: a title and ONE sentence each. Widgets and reminders exist
+// The four pages: a title and ONE sentence each — except the first, whose line
+// is the Crisp Colour welcome board's headline (two short sentences, set
+// large). Widgets and reminders exist
 // in the iOS app only, so the web build says nothing about them — and only a
 // touch screen is told to swipe: the day pager's swipe is touch-only (its own
 // hint is gated on a coarse pointer too), and with a mouse the days are
@@ -11622,7 +12318,7 @@ function _welcomeDecision(s) {
 // the first page is required wording, not decoration.
 function _welcomePages(native, touch) {
   return [
-    { id: 'welcome', title: 'Psync', body: 'The quick way to find and book your Psycle classes.',
+    { id: 'welcome', title: 'Psync', body: 'Find a class. Book a spot.',
       note: 'An independent companion for Psycle London members, not affiliated with or endorsed by Psycle.' },
     { id: 'find', title: 'Find your class', body: touch ? 'Choose your dates, then swipe between days.' : 'Choose your dates, then step through the days.' },
     { id: 'book', title: 'Book in two taps', body: 'Your usual spot is ready to confirm, and you are warned about clashes and the late-cancel window.' },
@@ -11781,52 +12477,64 @@ function _onboardRender(quiet) {
   if (!quiet) announce(`${page.title}, ${_onboardIdx + 1} of ${_onboardPages.length}`);
 }
 
-// Miniatures of the app's own components (css/styles.css .onboard-mini-*, the
-// same tokens as the real ones). Static text only; aria-hidden decoration.
-function _onboardMiniCard(cls, time, ampm, name, sub, extra, action) {
-  return `<div class="onboard-mini-card${cls ? ' ' + cls : ''}">` +
-    `<div class="onboard-mini-time">${time}<span>${ampm}</span></div>` +
-    '<div class="onboard-mini-rule"></div>' +
-    `<div class="onboard-mini-info"><div class="onboard-mini-name">${name}</div><div class="onboard-mini-sub">${sub}</div>${extra}</div>` +
+// Miniatures of the app's own components, built from the Crisp Colour
+// primitives themselves (css/crisp.css: .ct-card + data-ct, .ct-tile with the
+// class pictogram, .t-time, .ct-badge, the glow) and sized by .onboard-mini-*.
+// Static text only; aria-hidden decoration. `ct` is a class-type key.
+function _onboardPic(ct, size) {
+  // (typeof: tests run this block on its own, without the pictograms.)
+  return typeof classPictogram === 'function' ? classPictogram(ct, size) : '';
+}
+function _onboardMiniCard(cls, ct, time, ampm, name, sub, extra, action) {
+  return `<div class="onboard-mini-card ct-card${cls ? ' ' + cls : ''}" data-ct="${ct}">` +
+    `<div class="onboard-mini-time t-time is-compact">${time}<span>${ampm}</span></div>` +
+    `<div class="onboard-mini-info"><div class="onboard-mini-name"><span class="ct-tile is-sm">${_onboardPic(ct, 15)}</span>${name}</div><div class="onboard-mini-sub">${sub}</div>${extra}</div>` +
     action +
   '</div>';
 }
 
 function _onboardArt(id) {
   let inner = '';
-  if (id === 'find') {
+  if (id === 'welcome') {
+    // The welcome board: what colour means here — one tile per class type, in
+    // its own colour with its pictogram — and that the time comes first.
+    const tile = (ct, name) => `<div class="onboard-tile ct-card" data-ct="${ct}"><span class="ct-tile is-xl">${_onboardPic(ct, 28)}</span><span class="onboard-tile-name">${name}</span></div>`;
+    inner = tile('ride', 'Ride') + tile('strength', 'Strength') + tile('pilates', 'Reformer') + tile('yoga', 'Yoga') + tile('barre', 'Barre') +
+      '<div class="onboard-tile is-time"><span class="onboard-tile-day">Thursday</span><span class="onboard-tile-time t-time">6:30<span>pm</span></span></div>';
+  } else if (id === 'find') {
     const now = new Date();
     const days = _welcomeDayLabels(now.getFullYear(), now.getMonth() + 1, now.getDate(), 5);
     const book = '<span class="onboard-mini-pill">Book</span>';
     inner =
       '<div class="onboard-mini-strip">' + days.map((d, i) =>
-        `<span class="onboard-mini-day${i === 1 ? ' is-on' : ''}">${escapeHTML(d)}</span>`).join('') + '</div>' +
+        `<span class="onboard-mini-day${i === 1 ? ' is-on glow-selected' : ''}">${escapeHTML(d)}</span>`).join('') + '</div>' +
       // Two days side by side, the next one peeking in: what a swipe brings.
       '<div class="onboard-mini-lane">' +
         '<div class="onboard-mini-col">' +
-          _onboardMiniCard('', '7:00', 'am', 'Ride 45', 'Oxford Circus', '', book) +
-          _onboardMiniCard('', '6:30', 'pm', 'Strength 50', 'Shoreditch', '', book) +
+          _onboardMiniCard('', 'ride', '7:00', 'am', 'Ride 45', 'Oxford Circus', '', book) +
+          _onboardMiniCard('', 'strength', '6:30', 'pm', 'Strength 50', 'Shoreditch', '', book) +
         '</div>' +
         '<div class="onboard-mini-col">' +
-          _onboardMiniCard('', '6:45', 'am', 'Ride 45', 'Clapham', '', book) +
-          _onboardMiniCard('', '12:15', 'pm', 'Reformer 50', 'Oxford Circus', '', book) +
+          _onboardMiniCard('', 'yoga', '6:45', 'am', 'Yoga Flow', 'Clapham', '', book) +
+          _onboardMiniCard('', 'pilates', '12:15', 'pm', 'Reformer 50', 'Oxford Circus', '', book) +
         '</div>' +
       '</div>';
   } else if (id === 'book') {
     const taken = [2, 3, 7, 10, 11, 14, 16];
     let seats = '';
     for (let n = 1; n <= 18; n++) {
-      seats += `<span class="onboard-mini-seat${n === 9 ? ' is-on' : taken.indexOf(n) !== -1 ? ' is-taken' : ''}">${n}</span>`;
+      seats += `<span class="onboard-mini-seat${n === 9 ? ' is-on glow-mine' : taken.indexOf(n) !== -1 ? ' is-taken' : ''}">${n}</span>`;
     }
-    inner = `<div class="onboard-mini-map">${seats}</div>` +
+    // The seat map wears the class it is for: your seat is its colour, with the glow.
+    inner = `<div class="onboard-mini-map" data-ct="ride">${seats}</div>` +
       '<div class="onboard-mini-caution">Clashes with your 7:00am Ride 45</div>';
   } else if (id === 'keep') {
     // My Bookings cards: a seat (chip + free-cancel line) and a waitlist place.
     inner =
-      _onboardMiniCard('is-held', '7:00', 'am', 'Ride 45', 'Oxford Circus · Studio 1',
-        '<span class="onboard-mini-chip">Bike 9</span><div class="onboard-mini-deadline">Free cancel until Mon 7:00pm</div>', '') +
-      _onboardMiniCard('is-waitlisted', '6:30', 'pm', 'Strength 50', 'Shoreditch',
-        '<span class="onboard-mini-badge">Waitlisted</span>', '');
+      _onboardMiniCard('is-held glow-mine-card', 'ride', '7:00', 'am', 'Ride 45', 'Oxford Circus · Studio 1',
+        '<span class="onboard-mini-chip ct-badge is-seat">Bike 9</span><div class="onboard-mini-deadline">Free cancel until Mon 7:00pm</div>', '') +
+      _onboardMiniCard('is-waitlisted is-dashed', 'strength', '6:30', 'pm', 'Strength 50', 'Shoreditch',
+        '<span class="onboard-mini-badge ct-badge is-dashed">Waitlisted</span>', '');
   }
   return inner ? `<div class="onboard-art onboard-art-${id}" aria-hidden="true">${inner}</div>` : '';
 }
@@ -11834,9 +12542,16 @@ function _onboardArt(id) {
 function _onboardPageHTML(page, i) {
   return `<section class="onboard-page" aria-hidden="${i !== 0}"><div class="onboard-page-inner">` +
     (page.id === 'welcome'
-      ? `<h2 class="onboard-wordmark">${escapeHTML(page.title)}</h2>`
+      // The wordmark with the five-bar mark (the class colours, shortest to
+      // tallest), the class-type tiles, then the line as the page's headline.
+      ? '<div class="onboard-brand"><span class="onboard-mark" aria-hidden="true">' +
+          ['yoga', 'ride', 'pilates', 'barre', 'strength'].map(ct => `<i data-ct="${ct}"></i>`).join('') +
+        `</span><h2 class="onboard-wordmark">${escapeHTML(page.title)}</h2></div>` + _onboardArt(page.id)
       : _onboardArt(page.id) + `<h2 class="onboard-title">${escapeHTML(page.title)}</h2>`) +
-    `<p class="onboard-body">${escapeHTML(page.body)}</p>` +
+    // (The headline: one sentence to a line, as drawn — never "Book a / spot.")
+    (page.id === 'welcome'
+      ? '<p class="onboard-body onboard-headline">' + String(page.body).split('. ').map((line, i, all) => `<span>${escapeHTML(i < all.length - 1 ? line + '.' : line)}</span>`).join(' ') + '</p>'
+      : `<p class="onboard-body">${escapeHTML(page.body)}</p>`) +
     (page.note ? `<p class="onboard-note">${escapeHTML(page.note)}</p>` : '') +
   '</div></section>';
 }
@@ -12276,10 +12991,17 @@ function renderRebookHint() {
   const h12 = pred.hour % 12 || 12;
   const timeStr = h12 + ':' + String(pred.minute).padStart(2, '0') + ampm;
 
+  // Its class type, as a pictogram tile in the class colour. pred.label is
+  // "Type · Instructor": only the type decides the colour. (typeof + innerHTML,
+  // not setAttribute: tests/suites/predict.js runs this against a bare element.)
+  const ctKey = typeof classTypeKey === 'function' ? classTypeKey(pred.typeName || String(pred.label || '').split(' · ')[0]) : 'other';
+  const tile = typeof classPictogram === 'function'
+    ? '<span class="ct-tile is-lg" data-ct="' + ctKey + '" aria-hidden="true">' + classPictogram(ctKey, 20) + '</span>' : '';
+
   const el = document.createElement('div');
   el.id = 'rebookHint';
   el.className = 'rebook-hint';
-  el.innerHTML =
+  el.innerHTML = tile +
     '<div class="rebook-hint-text">' +
       '<span class="rebook-hint-eyebrow">Book again?</span>' +
       '<span class="rebook-hint-main">' + escapeHTML(pred.label) + '</span>' +
@@ -12340,7 +13062,7 @@ if (typeof PsycleEvents !== 'undefined') {
       btn.className = 'find-similar-option find-similar-predicted';
       btn.dataset.action = 'predicted';
       btn.innerHTML =
-        '<span class="find-similar-icon">&#10024;</span>' +
+        '<span class="find-similar-icon" aria-hidden="true">' + (typeof _uiIcon === 'function' ? _uiIcon('again', 18) : '') + '</span>' +
         '<span class="find-similar-label">Book again: ' + escapeHTML(pred.label) + '</span>' +
         '<span class="find-similar-desc">You usually go ' + escapeHTML(dayName) + 's at ' + escapeHTML(timeStr) + '</span>';
       btn.addEventListener('click', function (e) {

@@ -190,8 +190,8 @@ header .theme-toggle {
   background: var(--accent, #1f6f5c); color: var(--accent-ink, #fff);
 }
 .controls-count[hidden] { display: none; }
-.controls-chevron { flex: none; display: block; color: var(--ink-2, #5c5e63); transform: rotate(180deg); transition: transform var(--transition-base); }
-.controls.filters-collapsed .controls-chevron { transform: none; }
+/* (No chevron on the bar: Discover carries none. Its leading sliders mark and
+   its lit open state are drawn in css/crisp.css.) */
 
 /* An active filter: tap to remove it. Quieter than the panel's accent pills —
    there can be several, right above the results. A long studio name gives way
@@ -231,7 +231,6 @@ header .theme-toggle {
 .controls-toggle:focus-visible, .filter-chip:focus-visible, .controls-clear:focus-visible {
   outline: 2px solid var(--accent, #1f6f5c); outline-offset: 2px;
 }
-@media (prefers-reduced-motion: reduce) { .controls-chevron { transition: none; } }
 @media (max-width: 1023px) {
   .controls.filters-collapsed > .controls-body { display: none; }
   /* "Clear" lives in the Filters bar on these widths: the header's own
@@ -437,7 +436,6 @@ header .theme-toggle {
 }
 .cc-ampm { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); margin-left: 2px; }
 .cc-dur { font: 500 11px/1 var(--font-body); color: var(--ink-3, #9a9c9f); }
-.cc-rule { width: 1px; flex: none; background: var(--line, #e7e5df); }
 
 /* 100px basis, not 0: it is the width below which the card wraps its action
    (see .cc-action). 100px still fits the second half of a class name on one

@@ -206,6 +206,9 @@ declare global {
   // Modals / detail sheets (app.js, features.js, settings.js, diagnostic.js)
   function openClassDetail(...args: any[]): any;
   function openMapForBooking(...args: any[]): any;
+  // My Bookings: the card's "More" menu (app.js)
+  function toggleBookingMore(btn: any): void;
+  function closeBookingMore(focusBack?: boolean): void;
   function changeSpot(...args: any[]): any;
   function setChangeSpotTarget(...args: any[]): any;
   function openSettings(...args: any[]): any;
@@ -227,6 +230,7 @@ declare global {
   function renderInstrDropdown(...args: any[]): any;
   function renderReminderRow(...args: any[]): any;
   function renderThemePicker(...args: any[]): any;
+  function renderClassColours(...args: any[]): any;
   function renderDiscoverPresets(...args: any[]): any;
   function renderTravelNotice(...args: any[]): any;
   function renderExplore(...args: any[]): any;
@@ -272,6 +276,9 @@ declare global {
   function setAppTheme(...args: any[]): any;
   function getAppTheme(...args: any[]): any;
   function toggleTheme(...args: any[]): any;
+  // Class-type colours (theme.js, section A2). classPictogram / classTypeKey
+  // are top-level functions in app.js — already global, not redeclared.
+  var PsycleClassColours: any;
 
   // Notifications (features.js)
   function requestNotificationPermission(...args: any[]): any;

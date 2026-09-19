@@ -255,7 +255,8 @@ module.exports = async function (t) {
       ctx.window = ctx;
       t.vm.runInContext("var _bookingsLoadState = 'loaded', _waitlistsUnavailable = false, _showPastBookings = " + (showPast ? 'true' : 'false') + ';\n' +
         grab(appSrc, 'function localDateStr(') + '\n' + grab(appSrc, 'function parsePsycleDate(') + '\n' +
-        pureRegion(appSrc, 'gym-time') + '\n' + pureRegion(appSrc, 'bookings-started') + '\n' + rmb, ctx, { filename: 'js/app.js[renderMyBookings]' });
+        // pure:bookings-crisp: the card's own decisions (day label, which actions sit behind "More").
+        pureRegion(appSrc, 'gym-time') + '\n' + pureRegion(appSrc, 'bookings-started') + '\n' + pureRegion(appSrc, 'bookings-crisp') + '\n' + rmb, ctx, { filename: 'js/app.js[renderMyBookings]' });
       ctx.renderMyBookings();
       return { count: el('upcomingCount').textContent, html: el('upcomingList').innerHTML };
     };
