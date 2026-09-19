@@ -778,6 +778,11 @@ read the App Group).
 
 Small, known, and still true at `a9d4a9b`. None affects a booking. The visual ones come from the last browser round.
 
+- **The usual-week review sheet on an SE-size phone (375 × 667).** With three classes and a waitlist row ticked the
+  pinned header, the class list and the long waitlist sentence compete for one short screen: the list scrolls in a
+  small window and part of the money paragraph sits under the buttons until the sheet is scrolled. Nothing is
+  blocked and nothing is hidden for good; on a 390 × 844 phone it is comfortable. Seen in the last browser round of
+  `98665f6`.
 - **Bike picker on a narrow phone.** A seat map wider than the sheet scrolls sideways, but nothing hints that it
   does (no partial seat, fade or scrollbar), so a whole column can sit out of view. Seen with a synthetic wide
   layout at 390px; worth checking against a real wide studio.

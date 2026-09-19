@@ -100,6 +100,17 @@ build's **What to Test** notes so testers know channel 3 exists.
   `curl -s https://api.github.com/repos/muscaglar/psycle-booking/commits/<sha>/check-runs`
   and look for the `Xcode Cloud` app's "Archive - iOS" run (`conclusion`:
   `success`, or `action_required` = failed; `output.text` lists the errors).
+- **No Xcode Cloud check at all is a third outcome, and it is not a failure of the
+  code.** Normally the `Xcode Cloud` check appears on a pushed commit within a few
+  minutes. On 19 September 2026 commit `98665f6` never got one — no status, no
+  check run, nothing four hours later — while every GitHub check on it passed and
+  the commit before it had archived normally. A `cancelled` conclusion is different
+  and harmless: a newer push superseded that build. When a commit has NO Xcode Cloud
+  check: open App Store Connect → Xcode Cloud → the workflow. Either the month's
+  compute hours are used up (every push to `main` archives — a day of many small
+  pushes spends them quickly; batch commits into one push when that matters), or
+  the push was never picked up, in which case "Start Build" on `main` there, or
+  the next push, builds the latest commit. Nothing in the repository needs changing.
 - **Scene life cycle is mandatory from the iOS 27 SDK.** A UIKit app built
   with Xcode 27 that has no `UIApplicationSceneManifest` is killed at launch
   ("UIScene life cycle is required for apps built with this SDK") — it
