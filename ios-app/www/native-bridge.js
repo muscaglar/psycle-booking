@@ -1358,6 +1358,83 @@
   }
   // ── pure:ios-polish:end ──
 
+  // ── pure:native-snapshot:start ── (DOM-free; tests/suites/11-native-snapshot.js evaluates this block)
+  // The Crisp Colour fields of a snapshot class entry: the class TYPE (`ct`) and
+  // the member's CURRENT colours for it, as hex, for the light and the dark
+  // appearance — so the widgets and the Live Activity wear the palette and the
+  // intensity chosen in Membership → Appearance → Class colours. Every field is
+  // OPTIONAL on the Swift side (PsycleShared/PsycleClassType.swift): a snapshot
+  // without them decodes as before and is drawn in the app's default colours.
+  // Keep the block free of Capacitor, DOM and app globals — the two things it
+  // needs from the app are handed in.
+
+  // The card ground at intensity "off": the app's own neutral surface (Cloud /
+  // Graphite, css/theme.css) — the widget's card goes neutral as a class card
+  // does, and only the small marks keep the colour.
+  var SNAPSHOT_NEUTRAL_TINT = { light: '#FCFDFE', dark: '#1B2130' };
+
+  // '#2d5fd6' → '#2D5FD6'; anything that is not six hex digits → null. Swift
+  // fails safe on a bad value too, but a bad value is never written.
+  function _snapHex(value) {
+    var m = /^#([0-9a-f]{6})$/i.exec(String(value == null ? '' : value).trim());
+    return m ? '#' + m[1].toUpperCase() : null;
+  }
+
+  // "RIDE: 45" → 'ride', through the app's OWN classTypeKey (js/app.js) — the
+  // same answer data-ct gets. No copy of the category rules lives here: without
+  // the app's function there is no `ct`, and Swift works the type out from the
+  // class name (PsycleClassType.from(typeName:), which a test holds to
+  // CATEGORY_MAP).
+  function _snapClassTypeKey(typeName, keyFn) {
+    if (typeof keyFn !== 'function') return null;
+    try {
+      var key = String(keyFn(typeName) || '').toLowerCase();
+      return /^[a-z]{1,24}$/.test(key) ? key : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // The colour fields for one class type, read from the app's colour engine
+  // (`engine` = window.PsycleClassColours: get() → { intensity, map }, PALETTE,
+  // DEFAULTS). {} when the engine is missing, or anything it says is not a
+  // colour — all or nothing, so the widget never mixes the member's colours
+  // with the defaults.
+  //   ctTint  the card ground at the member's intensity: the full tint at
+  //           "bold", the pale one at "soft", the NEUTRAL surface at "off"
+  //   ctWash  the full tint — the pictogram tile's fill at "soft"
+  //   ctBase  the class colour (seat chip; the tile at "off" / "bold")
+  //   ctDeep  the hue ink that reads on the tint
+  function _snapClassColourFields(key, engine) {
+    try {
+      if (!key || !engine || typeof engine.get !== 'function' || !engine.PALETTE) return {};
+      var own = function (obj, k) { return !!obj && Object.prototype.hasOwnProperty.call(obj, k); };
+      var state = engine.get() || {};
+      var intensity = ['off', 'soft', 'bold'].indexOf(state.intensity) !== -1 ? state.intensity : 'soft';
+      var name = own(state.map, key) ? state.map[key] : (own(engine.DEFAULTS, key) ? engine.DEFAULTS[key] : null);
+      if (typeof name !== 'string' || !own(engine.PALETTE, name)) return {};
+      var swatch = engine.PALETTE[name] || {};
+      var out = { ctIntensity: intensity };
+      var sides = [['light', ''], ['dark', 'Dark']];
+      for (var i = 0; i < sides.length; i++) {
+        var side = swatch[sides[i][0]] || {};
+        var suffix = sides[i][1];
+        var tint = intensity === 'off' ? SNAPSHOT_NEUTRAL_TINT[sides[i][0]]
+          : intensity === 'bold' ? side.tintBold : side.tintSoft;
+        var fields = { ctBase: _snapHex(side.base), ctTint: _snapHex(tint), ctDeep: _snapHex(side.deep), ctWash: _snapHex(side.tintBold) };
+        var names = Object.keys(fields);
+        for (var n = 0; n < names.length; n++) {
+          if (!fields[names[n]]) return {};
+          out[names[n] + suffix] = fields[names[n]];
+        }
+      }
+      return out;
+    } catch (e) {
+      return {};
+    }
+  }
+  // ── pure:native-snapshot:end ──
+
   // app.js's saved copy of My Bookings, by event id ({} when there is none).
   // Read-only here, and only ever consulted for an id the live _myBookings
   // holds — it never decides WHAT is held, only when/what that class is.
@@ -1382,7 +1459,7 @@
       if (!evt || !evt.start_at) return null;
       var booking = (_myBookings || {})[String(eventId)];
       var slots = (booking && Array.isArray(booking.slots)) ? booking.slots.slice() : [];
-      return {
+      var snap = {
         eventId: String(eventId),
         // The API emits 'YYYY-MM-DD HH:MM:SS'; PsycleDateParser on the Swift
         // side needs the ISO 'T' form — normalize BEFORE persisting or the
@@ -1394,6 +1471,19 @@
         locName: evt._locName || evt._locFullName || '',
         slots: slots,
       };
+      // Crisp Colour (optional on the Swift side): the class type and the
+      // member's colours for it. Looked up at write time, so the widget wears
+      // what Membership → Class colours says NOW. A failure here costs the
+      // colours, never the class.
+      try {
+        var ct = _snapClassTypeKey(snap.typeName, typeof classTypeKey === 'function' ? classTypeKey : null);
+        if (ct) {
+          snap.ct = ct;
+          var colours = _snapClassColourFields(ct, window.PsycleClassColours);
+          Object.keys(colours).forEach(function (k) { snap[k] = colours[k]; });
+        }
+      } catch (e2) {}
+      return snap;
     } catch (e) {
       return null;
     }
@@ -1413,6 +1503,18 @@
   var _snapServerConfirmed = false;
   // True only while the clearToken wrapper (a deliberate sign-out) runs its pass.
   var _signOutPass = false;
+  // The class colours the last WRITTEN snapshot carries (see the
+  // 'classcolours:changed' listener below), and that listener's debounce.
+  var _snapColourSig = null;
+  var _colourSnapTimer = null;
+  function _classColourSig() {
+    try {
+      var engine = window.PsycleClassColours;
+      return engine && typeof engine.get === 'function' ? JSON.stringify(engine.get()) : '';
+    } catch (e) {
+      return '';
+    }
+  }
 
   function updateWidgetSnapshot() {
     try {
@@ -1496,11 +1598,19 @@
           // Same space→T normalization as startAt above. u.evt, not the cache:
           // a saved-copy class has no cache entry to read.
           byDay[dayKey] = { day: dayKey, count: 0, firstStart: String(u.evt.start_at).replace(' ', 'T') };
+          // …and the type + colours of that first class (optional on the Swift
+          // side), so a day can wear the colour of the class that opens it.
+          var first = _snapshotEventFor(u.id, u.evt) || {};
+          Object.keys(first).forEach(function (k) {
+            if (k === 'ct' || /^ct[A-Z]/.test(k)) byDay[dayKey][k] = first[k];
+          });
         }
         byDay[dayKey].count++;
       }
       var week = Object.keys(byDay).sort().map(function (k) { return byDay[k]; });
       _writeSnapshotKey(WIDGET_WEEK_KEY, JSON.stringify(week));
+      // All three keys are written: these are the class colours they carry.
+      _snapColourSig = _classColourSig();
 
       // Hint the native side to reload widget timelines, if a reload plugin
       // is wired up. No-op otherwise. (See NATIVE_FEATURES.md.)
@@ -1787,6 +1897,20 @@
       PsycleEvents.on('booking:cancelled', updateWidgetSnapshot);
       // Seat-level changes alter slot lists shown on the widget too.
       PsycleEvents.on('seat:cancelled', updateWidgetSnapshot);
+      // The snapshot carries the member's class colours, so a change in
+      // Membership → Class colours rewrites it (and with it the widgets and a
+      // Live Activity that is up). The event also fires on a light ↔ dark
+      // switch, which changes nothing the snapshot holds — both appearances
+      // are always written — so that is skipped. Arrow keys in a swatch row
+      // choose as they move, one event per swatch: one rewrite once they stop.
+      PsycleEvents.on('classcolours:changed', function () {
+        clearTimeout(_colourSnapTimer);
+        _colourSnapTimer = setTimeout(function () {
+          _colourSnapTimer = null;
+          if (_classColourSig() === _snapColourSig) return;
+          updateWidgetSnapshot();
+        }, 250);
+      });
     } catch (e) {}
   }
 

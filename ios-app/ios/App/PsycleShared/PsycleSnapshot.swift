@@ -10,9 +10,13 @@
 //  "Target Membership" → tick all of them.
 //
 //  ── WHERE THE DATA COMES FROM ────────────────────────────────────────────
-//  native-bridge.js writes two JSON strings into the shared App Group
-//  defaults: `widget_next_class` and `widget_week`. See NATIVE_FEATURES.md
-//  for how Capacitor Preferences maps onto UserDefaults(suiteName:).
+//  native-bridge.js writes three JSON strings into the shared App Group
+//  defaults: `widget_next_class`, `widget_upcoming` and `widget_week`. See
+//  NATIVE_FEATURES.md for how Capacitor Preferences maps onto
+//  UserDefaults(suiteName:). Since the Crisp Colour look every entry may also
+//  carry the class type and the member's colours (`ct`, `ctBase`, …): ALL
+//  optional, read by PsycleClassStyle (PsycleClassType.swift) — a snapshot
+//  written by a build without them decodes exactly as it always did.
 //
 //  NOTE: This is drop-in source. It compiles only once it is a member of a
 //  real Swift target created in Xcode (you cannot create that target from
@@ -44,6 +48,68 @@ public struct PsycleNextClass: Codable, Equatable {
     public let studioName: String
     public let locName: String
     public let slots: [Int]
+    /// The class type and the member's colours for it — the snapshot's OPTIONAL
+    /// `ct` / `ctBase` / `ctTint` / `ctDeep` (+ `…Dark`, `ctWash`, `ctIntensity`)
+    /// fields. All empty for a snapshot written by a build that predates them;
+    /// `classType` / `palette` then answer from the class name and the app's
+    /// default colours, so such a snapshot still decodes and still draws.
+    public let style: PsycleClassStyle
+
+    public init(eventId: String,
+                startAt: String,
+                instrName: String,
+                typeName: String,
+                studioName: String,
+                locName: String,
+                slots: [Int],
+                style: PsycleClassStyle = PsycleClassStyle()) {
+        self.eventId = eventId
+        self.startAt = startAt
+        self.instrName = instrName
+        self.typeName = typeName
+        self.studioName = studioName
+        self.locName = locName
+        self.slots = slots
+        self.style = style
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case eventId, startAt, instrName, typeName, studioName, locName, slots
+    }
+
+    /// The seven original fields decode exactly as the synthesized decoder
+    /// did. The colour fields sit FLAT beside them in the JSON and are read by
+    /// PsycleClassStyle, which never throws over a missing or odd value — new
+    /// fields must not be able to blank the widget.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        eventId = try values.decode(String.self, forKey: .eventId)
+        startAt = try values.decode(String.self, forKey: .startAt)
+        instrName = try values.decode(String.self, forKey: .instrName)
+        typeName = try values.decode(String.self, forKey: .typeName)
+        studioName = try values.decode(String.self, forKey: .studioName)
+        locName = try values.decode(String.self, forKey: .locName)
+        slots = try values.decode([Int].self, forKey: .slots)
+        style = (try? PsycleClassStyle(from: decoder)) ?? PsycleClassStyle()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(eventId, forKey: .eventId)
+        try values.encode(startAt, forKey: .startAt)
+        try values.encode(instrName, forKey: .instrName)
+        try values.encode(typeName, forKey: .typeName)
+        try values.encode(studioName, forKey: .studioName)
+        try values.encode(locName, forKey: .locName)
+        try values.encode(slots, forKey: .slots)
+        try style.encode(to: encoder)
+    }
+
+    /// Ride / Strength / … — for the pictogram.
+    public var classType: PsycleClassType { style.classType(typeName: typeName) }
+
+    /// The colours to draw this class in, light and dark.
+    public var palette: PsycleClassPalette { style.palette(typeName: typeName) }
 
     /// Parsed start date, or nil if the ISO string can't be parsed.
     public var startDate: Date? {
@@ -65,13 +131,43 @@ public struct PsycleWeekDay: Codable, Equatable {
     public let day: String        // local "YYYY-MM-DD"
     public let count: Int
     public let firstStart: String // ISO-8601 string
+    /// Type + colours of the day's FIRST class (the one `firstStart` is) — the
+    /// same optional `ct…` fields a class entry carries; empty for a snapshot
+    /// written before they existed.
+    public let style: PsycleClassStyle
 
-    public var date: Date? {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = .current
-        return f.date(from: day)
+    public init(day: String, count: Int, firstStart: String, style: PsycleClassStyle = PsycleClassStyle()) {
+        self.day = day
+        self.count = count
+        self.firstStart = firstStart
+        self.style = style
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case day, count, firstStart
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        day = try values.decode(String.self, forKey: .day)
+        count = try values.decode(Int.self, forKey: .count)
+        firstStart = try values.decode(String.self, forKey: .firstStart)
+        style = (try? PsycleClassStyle(from: decoder)) ?? PsycleClassStyle()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(day, forKey: .day)
+        try values.encode(count, forKey: .count)
+        try values.encode(firstStart, forKey: .firstStart)
+        try style.encode(to: encoder)
+    }
+
+    // Fixed locale + Gregorian calendar, like every other snapshot date: on
+    // the user's own locale "2026" is year 2026 of THEIR calendar.
+    private static let dayFormat = PsycleFixedFormat.formatter("yyyy-MM-dd")
+
+    public var date: Date? { PsycleWeekDay.dayFormat.date(from: day) }
 }
 
 /// Class-type → slot label, mirroring native-bridge.js `_nativeSlotLabel`.
@@ -89,6 +185,18 @@ public enum PsycleSlotLabel {
 
 /// Tolerant ISO-8601 parsing (handles fractional seconds + plain forms).
 public enum PsycleDateParser {
+    // The bridge writes a ZONE-LESS wall time ("2026-09-24T18:30:00"), so in
+    // practice every class is read by `wallTime` — the two ISO-8601 attempts
+    // only catch a value that carries a zone. It must therefore be a
+    // PsycleFixedFormat formatter: on the user's own locale this exact parse
+    // returned nil on a 12-hour phone in a 24-hour region and a year in the
+    // wrong era under a Buddhist / Islamic device calendar — every widget
+    // empty. Still the DEVICE's zone, as before.
+    private static let wallTime = PsycleFixedFormat.formatter("yyyy-MM-dd'T'HH:mm:ss")
+    // Last resort: the API's raw space-separated form, in case an
+    // un-normalized value ever reaches the snapshot.
+    private static let rawWallTime = PsycleFixedFormat.formatter("yyyy-MM-dd HH:mm:ss")
+
     public static func parse(_ iso: String) -> Date? {
         let f1 = ISO8601DateFormatter()
         f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -96,17 +204,48 @@ public enum PsycleDateParser {
         let f2 = ISO8601DateFormatter()
         f2.formatOptions = [.withInternetDateTime]
         if let d = f2.date(from: iso) { return d }
-        // Fallback: "yyyy-MM-dd'T'HH:mm:ss" without zone -> assume current TZ.
-        let f3 = DateFormatter()
-        f3.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        f3.timeZone = .current
-        if let d = f3.date(from: iso) { return d }
-        // Last resort: the API's raw space-separated form, in case an
-        // un-normalized value ever reaches the snapshot.
-        let f4 = DateFormatter()
-        f4.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        f4.timeZone = .current
-        return f4.date(from: iso)
+        if let d = wallTime.date(from: iso) { return d }
+        return rawWallTime.date(from: iso)
+    }
+}
+
+/// WHEN each class is the widget's current one: the dates of the widget's
+/// self-advancing timeline, worked out apart from WidgetKit so that
+/// ios-app/native-checks/run.sh can run the real arithmetic on a Mac.
+public enum PsycleTimelinePlan {
+    public struct Step: Equatable {
+        /// When this entry becomes the current one.
+        public let date: Date
+        /// Index into the `starts` handed in; nil = the empty state.
+        public let index: Int?
+    }
+
+    /// `starts`: the upcoming classes' start times, ascending, all after `now`.
+    ///
+    /// Each class gets an entry from the moment it is next, and — new — the
+    /// SAME class again dated exactly at its start. The countdown line compares
+    /// the class's start with its ENTRY's date (fixed when the timeline is
+    /// built) and Text(.relative) shows a distance in either direction, so
+    /// without that second entry the card read "in 5 sec", "in 40 sec" …
+    /// counting UP for the minute after the class began. With it the line says
+    /// "Now" for that minute. The next class still takes over at start + 60s,
+    /// and the dates stay strictly increasing: two same-time classes (possible —
+    /// simultaneous slots at two studios) would otherwise emit duplicate entry
+    /// dates and one would shadow the other.
+    public static func steps(starts: [Date], now: Date) -> [Step] {
+        var steps: [Step] = []
+        var entryDate = now
+        for (index, start) in starts.enumerated() {
+            steps.append(Step(date: entryDate, index: index))
+            if start > entryDate {
+                steps.append(Step(date: start, index: index))
+            }
+            entryDate = max(start.addingTimeInterval(60), entryDate.addingTimeInterval(1))
+        }
+        // After the last known class starts: the empty state instead of a
+        // stale "Now" forever.
+        steps.append(Step(date: entryDate, index: nil))
+        return steps
     }
 }
 

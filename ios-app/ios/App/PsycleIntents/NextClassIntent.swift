@@ -46,17 +46,15 @@ struct NextClassIntent: AppIntent {
     }
 
     /// Build a natural-language summary, e.g.
-    /// "Your next class is Ride with Sam on Monday at 6:30 PM at Shoreditch, Bike 12."
+    /// "Your next class is Ride with Sam on Monday at 18:30 at Shoreditch, Bike 12."
     static func spokenSummary(for next: PsycleNextClass) -> String {
         var s = "Your next class is \(next.typeName)"
         if !next.instrName.isEmpty { s += " with \(next.instrName)" }
 
         if let date = next.startDate {
-            let df = DateFormatter()
-            df.locale = .current
-            // "Monday at 6:30 PM"
-            df.dateFormat = "EEEE 'at' h:mm a"
-            s += " on \(df.string(from: date))"
+            // "Monday at 18:30" — the 24-hour clock the app and the widgets
+            // print, whatever the device's 12/24 setting (PsycleClock).
+            s += " on \(PsycleClock.spoken(date))"
 
             // Add a friendly "in N hours/minutes" when it's today/soon.
             let secs = date.timeIntervalSinceNow

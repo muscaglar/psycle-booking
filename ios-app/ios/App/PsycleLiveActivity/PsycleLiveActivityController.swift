@@ -84,11 +84,15 @@ public final class PsycleLiveActivityController {
             return false
         }
 
-        let state = PsycleClassActivityAttributes.ContentState(
+        var state = PsycleClassActivityAttributes.ContentState(
             startAt: start,
             status: "Starting soon",
             slotSummary: next.slotSummary
         )
+        // The class type + the member's colours, as the snapshot has them now
+        // — in the STATE, like the seats, so a colour change reaches a card
+        // that is already up through the same-event update() below.
+        state.style = next.style
 
         if let activity = current, activity.attributes.eventId == next.eventId {
             // Same class — push the (possibly moved) start time and the seats

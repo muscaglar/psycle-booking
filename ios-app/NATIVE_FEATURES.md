@@ -68,6 +68,98 @@
 > snapshot `startAt` parses — the space→T normalization in
 > `_snapshotEventFor` is load-bearing for the countdown/Live Activity).
 
+> **Crisp Colour widgets (2026-09-19) — COMPILED, NOT YET SEEN ON A DEVICE.**
+> The Home Screen widgets (small, medium), the two Lock Screen accessories, the
+> Live Activity (Lock Screen card + all three Dynamic Island presentations) and
+> the Siri answer wear the app's look: the TIME leads in a heavy condensed
+> system face, in **24-hour digits**; the class type's **pictogram** sits in a
+> rounded tile; then the class name, "Instructor · Studio", the seat as a chip
+> in the class colour, the countdown. The card ground is the class tint at the
+> member's intensity (neutral at "off"), light and dark.
+>
+> - **Snapshot.** Every class entry (`widget_next_class`, each `widget_upcoming`
+>   item) and every `widget_week` bucket (for the class that opens the day) may
+>   now carry `ct` (ride · strength · yoga · hiit · pilates · lagree · barre ·
+>   other — the app's own `classTypeKey`) and the member's CURRENT colours for
+>   that type as `#RRGGBB`: `ctBase` `ctTint` `ctDeep` `ctWash` + the same four
+>   with a `Dark` suffix, and `ctIntensity` (off · soft · bold). `ctTint` is the
+>   card ground at that intensity — at "off" the app's neutral surface. Written
+>   by `pure:native-snapshot` in native-bridge.js from `PsycleClassColours`;
+>   rewritten (250ms debounce) on `classcolours:changed` when the choices really
+>   changed. **All optional in Swift**: a snapshot without them decodes as
+>   before; the type is then read off the class name
+>   (`PsycleClassType.from(typeName:)`) and drawn in the app's DEFAULT colours.
+>   Colour fields are all-or-nothing per appearance and can never fail a decode.
+>   The time handling is untouched — still device-local; only the format moved.
+> - **Files.** `PsycleShared/PsycleClassType.swift` (Foundation only; BOTH
+>   targets: class type, fallback palette, hex → colour that fails safe,
+>   `PsycleClassStyle`, `PsycleClock` — the ONE place a time is formatted — and
+>   `PsycleFixedFormat`, the one formatter factory behind BOTH directions: fixed
+>   pattern, fixed POSIX locale, Gregorian calendar, the device's zone.
+>   `PsycleClock` prints with it and `PsycleDateParser` / `PsycleWeekDay`
+>   (`PsycleSnapshot.swift`) READ the snapshot's zone-less wall times with it. A
+>   formatter left on the user's locale is rewritten by the phone's 12/24-hour
+>   switch — it printed "6:30 pm" and, worse, PARSED `…T18:30:00` to nil on a UK
+>   phone with 24-Hour Time off (every widget empty) — and reads "2026" as year
+>   2026 of a Buddhist / Islamic device calendar (the class lands in 1483 /
+>   2587)). Widget extension only: `PsycleWidget/PsyclePictogram.swift`
+>   (the eight marks as a `Shape`, the web's 24-grid numbers),
+>   `PsycleWidgetStyle.swift` (surface + inks per rendering mode, tile, chip,
+>   faces) and `PsycleWidgetLayouts.swift` (the layouts, as plain-value views).
+>   `wire_native_targets.rb` knows all four.
+> - **Rendering modes.** `.fullColor` → the class tint and the app's inks.
+>   `.fullColor` with the background taken away (StandBy;
+>   `showsWidgetContainerBackground`) → the system's inks; tile and chip keep
+>   their own fill + ink. `.accented` / `.vibrant` (tinted Home Screen, Lock
+>   Screen) → the system keeps only opacity, so fills go faint and marks / labels
+>   stay full strength — never a filled tile under a stroked mark (a blob).
+> - **A class name is never cut mid-word** (`PsycleClassHead`): one line; else two
+>   BALANCED one-line halves (`PsycleClassName.balancedHalves`, "REFORMER
+>   PILATES:" / "SCULPT 50" — only taken when both really fit, because neither
+>   `ViewThatFits` can see a wrapping Text being truncated); else free wrapping
+>   on up to three lines. A card without the height for that (the small family
+>   on a 4.7-inch phone, larger text) prints the name's head — "REFORMER
+>   PILATES", the inline accessory's rule — after giving up the countdown and
+>   stepping the time down; VoiceOver always gets the whole name. The seat chip
+>   is never what a row squeezes: "12 this week" gives way on the medium card.
+> - **The countdown** reads "in 2 hr, 5 min" and "Now" from the class's start:
+>   `PsycleTimelinePlan` (PsycleSnapshot.swift) dates one timeline entry exactly
+>   at each start, because `Text(.relative)` counts in both directions and the
+>   line compares the start with its ENTRY's date — without that entry it read
+>   "in 40 sec", climbing, for the minute after the class began.
+> - **The Live Activity card paints its own ground** (`psycleActivityGround`) in
+>   the same render pass that picks the inks; `activityBackgroundTint` stays only
+>   as the hint underneath. The platter's tint is known to lag a light ↔ dark
+>   switch while a card is up, and the inks follow `colorScheme` at once — left
+>   to the tint alone that is pale ink on a pale ground until the next flip.
+> - **Live Activity compatibility.** `ContentState` gained ONE optional field,
+>   `style`; the static attributes and the initializer are unchanged. A card
+>   started by the previous build decodes (`style == nil`) and draws from
+>   `attributes.typeName` + the default colours. Seats still read
+>   `state.slotSummary ?? attributes.slotSummary`.
+> - **The inline accessory cannot draw a Shape** (that family takes Text and an
+>   Image, nothing else). Its pictogram is the same Shape handed over as a small
+>   template image (`PsycleGlyph`, `ImageRenderer`) — not an SF Symbol stand-in;
+>   if it cannot be rendered the line goes out as text alone.
+> - **Checks that run on a Mac** (`ios-app/native-checks/`, no simulator):
+>   `sh ios-app/native-checks/run.sh` runs the SHIPPED model files — the previous
+>   build's snapshot and Live Activity payloads decode, nonsense colour fields
+>   never fail a class, `18:30` prints AND the snapshot's `…T18:30:00` is read
+>   back as that instant in four runs (as the Mac is set · a UK phone with
+>   24-Hour Time off · ar_SA · th_TH — each run prints what a careless formatter
+>   does there, so you can see the hazard really was reproduced; the 12-hour
+>   override only takes as a plist boolean, `-AppleICUForce12HourTime '<true/>'`),
+>   the timeline dates an entry at each class's start, every pictogram sits in
+>   its grid, the inks hold WCAG on every default tint.
+>   `sh ios-app/native-checks/render.sh <dir>` draws the real layouts to PNGs
+>   (every class type, intensity, phone size, light / dark, recoloured) — a
+>   drawing of the SwiftUI views, not WidgetKit. Both go through the Swift
+>   interpreter: a Mac with binary authorization kills a locally built binary.
+>   tests/suites/11-native-snapshot.js holds the Swift copies (fallback palette,
+>   class-type words, pictogram numbers, chrome colours) to the web originals.
+> - **On a phone (nothing below has been seen yet):** see "Device checklist —
+>   Crisp Colour widgets" at the end of this file.
+
 This guide wires up four native iOS features whose **data layer is already
 done in JavaScript** (`ios-app/www/native-bridge.js`) and whose **Swift UI is
 already written** (drop-in files under `ios-app/ios/App/`). What remains can
@@ -94,12 +186,19 @@ The features:
 `native-bridge.js` recomputes a compact snapshot from the app's live state
 (`_myBookings` + `_eventCache`) on every `bookings:loaded` / `booking:complete`
 / `booking:cancelled` / `seat:cancelled` event, on `visibilitychange`
-(foreground), and ~4s after launch. It writes two keys:
+(foreground), ~4s after launch, and (debounced) when the member changes their
+class colours. It writes three keys:
 
 | Key | Shape | Notes |
 |-----|-------|-------|
-| `widget_next_class` | `{eventId, startAt, instrName, typeName, studioName, locName, slots}` **or** the literal `null` | `startAt` is an ISO-8601 string; `slots` is `[Int]` |
-| `widget_week` | `[{day, count, firstStart}]` | `day` = local `"YYYY-MM-DD"`; `firstStart` ISO string; one entry per booked day in the next 7 days |
+| `widget_next_class` | `{eventId, startAt, instrName, typeName, studioName, locName, slots}` + the optional colour fields **or** the literal `null` | `startAt` is an ISO-8601 string; `slots` is `[Int]` |
+| `widget_upcoming` | `[` the same shape `]`, soonest first, up to 5 | what the widget timeline and the Live Activity really read (stale-tolerant) |
+| `widget_week` | `[{day, count, firstStart}]` + the optional colour fields of the day's first class | `day` = local `"YYYY-MM-DD"`; `firstStart` ISO string; one entry per booked day in the next 7 days |
+
+Optional colour fields (since 2026-09-19; absent in older snapshots, and whenever
+the web layer's `classTypeKey` / `PsycleClassColours` are not there): `ct`,
+`ctIntensity`, `ctBase`, `ctTint`, `ctDeep`, `ctWash`, `ctBaseDark`, `ctTintDark`,
+`ctDeepDark`, `ctWashDark` — see the "Crisp Colour widgets" status block above.
 
 These are written to **Capacitor Preferences** (which on iOS is
 `UserDefaults(suiteName:)`) and **mirrored** into the App Group suite under the
@@ -347,6 +446,69 @@ code — pick one path.
 - **Stale widget** → the app nudges `WidgetCenter.reloadAllTimelines()` only if
   a reload plugin is present; otherwise the timeline refreshes on its own
   policy (~30 min, or just after the current class starts).
+
+---
+
+## Device checklist — Crisp Colour widgets (2026-09-19)
+
+An unsigned simulator build cannot run a widget or a Live Activity, so none of
+this has been SEEN on a phone. `native-checks/render.sh` shows the layouts; it
+is not WidgetKit. On a signed build, with at least one class booked:
+
+1. **Home Screen, small + medium** — the tinted card, the time in 24-hour digits
+   ("18:30"), the day beside / above it, tile + class name, "Instructor ·
+   Studio", the seat chip in the class colour, the countdown. Nothing clipped or
+   ending in "…" on YOUR phone size (a small phone drops the countdown first,
+   never the place or the seat). A long class name ("REFORMER PILATES: SCULPT
+   50") is WHOLE: two or three lines, with a smaller time on the small widget —
+   or, only where even that cannot fit (small widget, 4.7-inch phone or larger
+   text), its head "REFORMER PILATES". With two seats on a 4.7-inch phone the
+   medium card drops "12 this week" rather than squeeze "Beds 12 & 14".
+2. **Settings → General → Date & Time → 24-Hour Time OFF**, then look again:
+   the widgets must still SHOW your class (this setting used to make the
+   snapshot's times unreadable — every widget "No upcoming class", no Live
+   Activity, Siri "no classes") and every time must still read "18:30"
+   (widgets, Lock Screen, Live Activity, and ask Siri "what's my next class").
+   The Mac checks now reproduce this setting and pass; the phone is the proof.
+   If you ever use a non-Gregorian calendar (Settings → General → Language &
+   Region → Calendar → Buddhist), the same must hold.
+3. **Dark appearance** — the card goes to the dark tint, copy stays readable.
+4. **Membership → Appearance → Class colours**: change Ride's colour, then
+   switch Off / Soft / Bold. Within a second or two of returning to the Home
+   Screen the widget follows (Off = neutral card, colour only in the tile and
+   the chip). Do it while a Live Activity is up: the card changes too.
+5. **Tinted Home Screen** (iOS 18: long-press → Edit → Customise → Tinted) and
+   **StandBy** (charging, on its side; also its red night mode): the pictogram
+   is still a mark inside a faint tile and the seat chip still has a readable
+   label — nothing has turned into a solid blob; text is light on the dark
+   ground.
+6. **Lock Screen rectangle** — pictogram + class, "Thu 18:30 · Bike 12", the
+   place; no line cut off (long names lose the pictogram before they lose
+   letters). **Lock Screen inline** (above the clock): "18:30 · RIDE: 45" with
+   the small pictogram before it — if the pictogram is missing or is a filled
+   square, say so: that family only takes an image, and this is the one place
+   the mark is handed over as one.
+7. **Live Activity** (open the app within 90 minutes of a class): Lock Screen
+   card — start time, the live countdown under it, tile, class, "Instructor ·
+   Studio", seat chip, on the class tint. Dynamic Island: compact (tile left,
+   countdown right), minimal (tile), expanded (tile, class, 18:30 + countdown,
+   instructor · studio, seat chip). Add or cancel a seat while it is up: the
+   chip follows. At class start it reads "In class", then goes.
+8. **Live Activity, light ↔ dark while it is up** — with the card on the Lock
+   Screen, toggle Dark / Light from Control Centre twice. The text must stay
+   readable after EACH flip (ground and ink change together). Pale text on a
+   pale card — or dark on dark — until the next flip is the failure this step
+   is for: the card now paints its own ground instead of trusting the
+   platter's tint, which lags an appearance change.
+9. **At class start** (Home Screen small / medium): the line under the time
+   counts down — "in 2 min", "in 40 sec" — and at 18:30 turns to "Now". It must
+   never read "in 5 sec", "in 40 sec" … counting UP. A minute later the widget
+   moves on to your next class.
+10. **Upgrade path** — with a Live Activity from the PREVIOUS build on screen,
+    install this build over it and open the app: the old card must still be
+    there and drawn (default colours), not vanish.
+11. **Tap** any widget: My Bookings, then that class's sheet (unchanged).
+12. **Widget gallery** — the placeholder ("Ride", Shoreditch, Bike 12) draws.
 
 ---
 

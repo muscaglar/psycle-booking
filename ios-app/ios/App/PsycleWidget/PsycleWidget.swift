@@ -8,15 +8,22 @@
 //     Name it e.g. "PsycleWidgetExtension".
 //  2. DELETE the auto-generated <Name>.swift / bundle file Xcode creates, or
 //     keep only ONE @main entry point — this file declares @main.
-//  3. Add THIS file and PsycleShared/PsycleSnapshot.swift to the new widget
-//     target's membership.
+//  3. Add THIS file, PsyclePictogram.swift, PsycleWidgetStyle.swift,
+//     PsycleWidgetLayouts.swift and PsycleShared/*.swift to the new widget
+//     target's membership (wire_native_targets.rb does all of it).
 //  4. Add the App Group capability (group.com.psyclefinder.app) to the
 //     widget target (Signing & Capabilities ▸ + App Groups).
 //  See NATIVE_FEATURES.md for the full ordered checklist.
 //
+//  This file is the plumbing: the timeline, which layout a family gets, the
+//  deep link. What the widget LOOKS like is PsycleWidgetLayouts.swift (the
+//  layouts), PsycleWidgetStyle.swift (colours per rendering mode, tile, chip,
+//  the time face) and PsyclePictogram.swift (the class-type marks).
+//
 //  Requires iOS 14+ for WidgetKit; the countdown text style is iOS 15+. The
-//  Lock Screen accessories and ViewThatFits are iOS 16 — inside the
-//  extension target's 16.1 floor, so they need no availability checks.
+//  Lock Screen accessories, ViewThatFits, the condensed font width and
+//  widgetRenderingMode are iOS 16 — inside the extension target's 16.1 floor,
+//  so they need no availability checks.
 //
 
 import WidgetKit
@@ -43,7 +50,7 @@ struct PsycleProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PsycleEntry>) -> Void) {
-        // MULTI-ENTRY timeline: one entry per upcoming class, each becoming
+        // MULTI-ENTRY timeline: every upcoming class in turn, each becoming
         // current a minute after the previous class starts — so the widget
         // rolls to the next class BY ITSELF, with no process running. (The
         // snapshot data itself still only changes when the app runs; the app
@@ -56,18 +63,13 @@ struct PsycleProvider: TimelineProvider {
             .filter { $0.1 > now }
             .sorted { $0.1 < $1.1 }
 
-        var entries: [PsycleEntry] = []
-        var entryDate = now
-        for (klass, start) in upcoming {
-            entries.append(PsycleEntry(date: entryDate, nextClass: klass, weekCount: week))
-            // Strictly increasing dates: two same-time classes (possible —
-            // e.g. simultaneous slots at two studios) would otherwise emit
-            // duplicate entry dates and one would shadow the other.
-            entryDate = max(start.addingTimeInterval(60), entryDate.addingTimeInterval(1))
+        // The dates are PsycleTimelinePlan's (PsycleSnapshot.swift): strictly
+        // increasing, each class once more AT its start — the entry that turns
+        // the countdown into "Now" instead of letting it count up — and the
+        // empty state once the last known class has started.
+        let entries = PsycleTimelinePlan.steps(starts: upcoming.map { $0.1 }, now: now).map { step in
+            PsycleEntry(date: step.date, nextClass: step.index.map { upcoming[$0].0 }, weekCount: week)
         }
-        // After the last known class starts: show the empty state instead of
-        // a stale "Now" forever.
-        entries.append(PsycleEntry(date: entryDate, nextClass: nil, weekCount: week))
 
         // Periodic refresh keeps the data honest even without app nudges.
         completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(30 * 60))))
@@ -86,19 +88,26 @@ struct PsycleProvider: TimelineProvider {
 
 struct PsycleWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.displayScale) private var displayScale
     var entry: PsycleEntry
 
     var body: some View {
         Group {
             switch family {
             case .systemMedium:
-                mediumView
+                homeScreen { surface in
+                    PsycleMediumLayout(facts: facts, now: entry.date, weekCount: entry.weekCount, surface: surface)
+                }
             case .accessoryRectangular:
                 rectangularView
             case .accessoryInline:
                 inlineView
             default:
-                smallView
+                homeScreen { surface in
+                    PsycleSmallLayout(facts: facts, now: entry.date, surface: surface)
+                }
             }
         }
         .widgetURL(deepLink)
@@ -119,56 +128,41 @@ struct PsycleWidgetEntryView: View {
         return link.url
     }
 
-    // MARK: Small
+    private var facts: PsycleClassFacts? { entry.nextClass.map(PsycleClassFacts.init) }
 
-    private var smallView: some View {
-        // Tallest layout first. The instructor is the row to lose when the
-        // widget is short (small phones): the day, time and place are what
-        // the countdown alone could never tell you.
-        ViewThatFits(in: .vertical) {
-            smallStack(showInstructor: true)
-            smallStack(showInstructor: false)
+    // MARK: Home Screen
+
+    /// A Home Screen family on its class-tinted ground. The surface — ground,
+    /// inks, tile, chip — is settled here, once, from the class's colours, the
+    /// appearance and how the system is drawing the widget: full colour, full
+    /// colour with the background taken away (StandBy), or recoloured
+    /// (accented / vibrant), where a fill under a mark would be one blob.
+    private func homeScreen<Content: View>(@ViewBuilder _ layout: @escaping (PsycleSurface) -> Content) -> some View {
+        PsycleBackgroundProbe { showsBackground in
+            let surface = self.surface(showsBackground: showsBackground)
+            layout(surface).psycleCard(surface.card)
         }
-        .widgetLegacyPadding()
-        .widgetContainerBackground()
     }
 
-    private func smallStack(showInstructor: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            smallHeader(slot: entry.nextClass?.slotSummary)
-            Spacer(minLength: 0)
-            if let next = entry.nextClass {
-                Text(next.typeName)
-                    .font(.headline)
-                    .lineLimit(1)
-                if showInstructor && !next.instrName.isEmpty {
-                    Text(next.instrName)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                whenWhere(next)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                countdown(for: next)
-            } else {
-                Text("No upcoming class")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
+    private func surface(showsBackground: Bool) -> PsycleSurface {
+        let dark = colorScheme == .dark
+        let flat = renderingMode != .fullColor
+        guard let next = entry.nextClass else {
+            return PsycleSurface.neutral(dark: dark, flat: flat, showsBackground: showsBackground)
         }
+        return PsycleSurface.resolve(palette: next.palette, dark: dark, flat: flat, showsBackground: showsBackground)
     }
 
     // MARK: Lock Screen
 
     // No padding on either accessory: the system insets them itself and
     // there is no height to give away. The layouts live in
-    // PsycleRectangularAccessory / PsycleInlineAccessory below.
+    // PsycleWidgetLayouts.swift (PsycleRectangularAccessory / PsycleInlineAccessory).
     private var rectangularView: some View {
         Group {
             if let next = entry.nextClass {
-                PsycleRectangularAccessory(title: next.typeName,
+                PsycleRectangularAccessory(type: next.classType,
+                                           title: next.typeName,
                                            when: next.startDate,
                                            seat: next.slotSummary,
                                            place: next.locName.isEmpty ? next.studioName : next.locName)
@@ -182,242 +176,23 @@ struct PsycleWidgetEntryView: View {
         .accessoryContainerBackground()
     }
 
+    // @MainActor spelled out: PsycleGlyph draws with ImageRenderer. (`body` is
+    // main-actor everywhere; a helper property only is from the iOS 18 SDK on.)
+    @MainActor
     private var inlineView: some View {
         Group {
             if let next = entry.nextClass {
-                PsycleInlineAccessory(title: next.typeName, when: next.startDate, now: entry.date)
+                PsycleInlineAccessory(title: next.typeName,
+                                      when: next.startDate,
+                                      now: entry.date,
+                                      glyph: PsycleGlyph.template(next.classType, size: 15, scale: displayScale))
             } else {
                 Text("No upcoming class")
             }
         }
         .accessoryContainerBackground()
     }
-
-    // MARK: Medium
-
-    private var mediumView: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                header
-                Spacer(minLength: 0)
-                if let next = entry.nextClass {
-                    Text(next.typeName)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text(secondaryLine(next))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                } else {
-                    Text("No upcoming class")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-            }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 6) {
-                if let next = entry.nextClass {
-                    countdown(for: next)
-                    if let start = next.startDate {
-                        Text(start, format: .dateTime.weekday().hour().minute())
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                if entry.weekCount > 0 {
-                    Text("\(entry.weekCount) this week")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding()
-        .widgetContainerBackground()
-    }
-
-    // MARK: Pieces
-
-    private var accentDot: some View {
-        Circle()
-            .fill(Color.psycleAccent)
-            .frame(width: 7, height: 7)
-    }
-
-    private var header: some View {
-        HStack(spacing: 4) {
-            accentDot
-            Text("NEXT CLASS")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.secondary)
-                .tracking(0.5)
-        }
-    }
-
-    /// The small widget has no row to spare for the bike, so it rides in the
-    /// header opposite the label. When the two don't fit side by side
-    /// ("Bikes 12 & 14" on a narrow phone) the label goes, not the bike — a
-    /// clipped bike number is worse than a missing "NEXT CLASS".
-    @ViewBuilder
-    private func smallHeader(slot: String?) -> some View {
-        if let slot = slot {
-            let bike = Text(slot)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 4) {
-                    header
-                    Spacer(minLength: 6)
-                    bike
-                }
-                HStack(spacing: 4) {
-                    accentDot
-                    Spacer(minLength: 6)
-                    bike
-                }
-            }
-        } else {
-            header
-        }
-    }
-
-    /// "Thu 07:00 · Bank" on one line. Same device-local formatting as the
-    /// medium widget's time, so the two families can never disagree.
-    private func whenWhere(_ next: PsycleNextClass) -> Text {
-        let place = next.locName.isEmpty ? next.studioName : next.locName
-        guard let start = next.startDate else { return Text(place) }
-        if place.isEmpty {
-            return Text(start, format: .dateTime.weekday().hour().minute())
-        }
-        return Text("\(start, format: .dateTime.weekday().hour().minute()) · \(place)")
-    }
-
-    @ViewBuilder
-    private func countdown(for next: PsycleNextClass) -> some View {
-        if let start = next.startDate {
-            if start > entry.date {
-                // Live ticking relative time, e.g. "in 2 hr".
-                Text(start, style: .relative)
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundColor(.psycleAccent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            } else {
-                Text("Now")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundColor(.psycleAccent)
-            }
-        }
-    }
-
-    private func secondaryLine(_ next: PsycleNextClass) -> String {
-        var parts: [String] = []
-        if !next.instrName.isEmpty { parts.append(next.instrName) }
-        let place = next.locName.isEmpty ? next.studioName : next.locName
-        if !place.isEmpty { parts.append(place) }
-        if let slot = next.slotSummary { parts.append(slot) }
-        return parts.joined(separator: " · ")
-    }
 }
-
-// MARK: - Lock Screen layouts
-
-// ── accessory-views:start ── (SwiftUI + WidgetKit only: no entry, no snapshot types)
-
-/// One line of text at the largest of three sizes that shows ALL of it.
-/// ViewThatFits takes the first option whose full, unwrapped width fits; the
-/// last one is the floor and may tighten and shrink a little before it
-/// finally truncates. A Lock Screen line should step down a size rather than
-/// end in "…".
-struct PsycleFittedLine: View {
-    let text: Text
-    let large: Font
-    let medium: Font
-    let small: Font
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            text.font(large).lineLimit(1)
-            text.font(medium).lineLimit(1)
-            text.font(small).lineLimit(1).minimumScaleFactor(0.75).allowsTightening(true)
-        }
-    }
-}
-
-/// Lock Screen rectangle, three lines: the class / when + seat / where.
-/// The seat rides with the time so the location has a line to itself — the
-/// old "Oxford Circus · Bike 12" line was the one that got cut off. Times use
-/// the same device-local formatting as the other families.
-struct PsycleRectangularAccessory: View {
-    let title: String
-    let when: Date?
-    let seat: String?
-    let place: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            PsycleFittedLine(text: Text(title),
-                             large: .headline,
-                             medium: .subheadline.weight(.semibold),
-                             small: .caption.weight(.semibold))
-                .widgetAccentable()
-            if let whenLine = whenLine {
-                PsycleFittedLine(text: whenLine, large: .subheadline, medium: .footnote, small: .caption2)
-            }
-            if !place.isEmpty {
-                PsycleFittedLine(text: Text(place), large: .caption, medium: .caption2, small: .caption2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var whenLine: Text? {
-        let seatText = (seat ?? "").isEmpty ? nil : seat
-        switch (when, seatText) {
-        case let (when?, seat?):
-            return Text("\(when, format: .dateTime.weekday().hour().minute()) · \(seat)")
-        case let (when?, nil):
-            return Text(when, format: .dateTime.weekday().hour().minute())
-        case let (nil, seat?):
-            return Text(seat)
-        default:
-            return nil
-        }
-    }
-}
-
-/// The single line above the clock. The system sets its font, so the only
-/// lever is length: the time leads, the weekday is dropped for a class today,
-/// and a long class name keeps just the part before its colon
-/// ("REFORMER PILATES: SCULPT 50" → "REFORMER PILATES").
-struct PsycleInlineAccessory: View {
-    let title: String
-    let when: Date?
-    let now: Date
-
-    var body: some View {
-        if let when = when {
-            if Calendar.current.isDate(when, inSameDayAs: now) {
-                Text("\(when, format: .dateTime.hour().minute()) · \(Self.shortTitle(title))")
-            } else {
-                Text("\(when, format: .dateTime.weekday().hour().minute()) · \(Self.shortTitle(title))")
-            }
-        } else {
-            Text(Self.shortTitle(title))
-        }
-    }
-
-    static func shortTitle(_ title: String, limit: Int = 18) -> String {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count > limit, let colon = trimmed.firstIndex(of: ":") else { return trimmed }
-        let head = trimmed[..<colon].trimmingCharacters(in: .whitespaces)
-        return head.isEmpty ? trimmed : head
-    }
-}
-
-// ── accessory-views:end ──
 
 // MARK: - Widget
 
@@ -448,11 +223,6 @@ struct PsycleWidgetBundle: WidgetBundle {
 
 // MARK: - Helpers
 
-extension Color {
-    /// The app accent (#e94560).
-    static let psycleAccent = Color(red: 233 / 255, green: 69 / 255, blue: 96 / 255)
-}
-
 extension PsycleNextClass {
     /// Sample data for the widget gallery / placeholder.
     static let preview = PsycleNextClass(
@@ -467,39 +237,17 @@ extension PsycleNextClass {
 }
 
 extension View {
-    /// containerBackground is required on iOS 17 for Home Screen widgets and
-    /// unavailable earlier — branch so the same code builds for iOS 14–16.
-    @ViewBuilder
-    func widgetContainerBackground() -> some View {
-        if #available(iOS 17.0, *) {
-            self.containerBackground(.fill.tertiary, for: .widget)
-        } else {
-            self
-        }
-    }
-
     /// Lock Screen accessories draw straight onto the wallpaper. iOS 17 still
     /// demands the API (a widget without it renders the "please adopt
     /// containerBackground" placeholder), so adopt it with nothing inside — a
-    /// filled panel would box the text in.
+    /// filled panel would box the text in. (The Home Screen families' ground is
+    /// `psycleCard` in PsycleWidgetStyle.swift.)
     @ViewBuilder
     func accessoryContainerBackground() -> some View {
         if #available(iOS 17.0, *) {
             self.containerBackground(for: .widget) { Color.clear }
         } else {
             self
-        }
-    }
-
-    /// iOS 17 insets widget content itself (content margins). Our own padding
-    /// on top of that doubles the inset and starves the small layout of the
-    /// height its extra row needs — so pad only where the system doesn't.
-    @ViewBuilder
-    func widgetLegacyPadding() -> some View {
-        if #available(iOS 17.0, *) {
-            self
-        } else {
-            self.padding()
         }
     }
 }

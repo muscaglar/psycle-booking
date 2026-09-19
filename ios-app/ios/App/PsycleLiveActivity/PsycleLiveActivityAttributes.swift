@@ -13,7 +13,19 @@
 //
 
 import Foundation
+#if os(iOS)
 import ActivityKit
+#else
+// ActivityKit's types are unavailable on a Mac (the module imports; the
+// protocol is marked unavailable — so this is os(iOS), not canImport).
+// ios-app/native-checks/run.sh compiles THIS file there to prove that a payload
+// written by the previous build still decodes, so it needs the protocol's shape
+// and nothing else. Never part of an iOS build (same idea as the stand-in in
+// PsycleLiveActivityController.swift).
+public protocol ActivityAttributes: Codable {
+    associatedtype ContentState: Codable, Hashable
+}
+#endif
 
 @available(iOS 16.1, *)
 public struct PsycleClassActivityAttributes: ActivityAttributes {
@@ -31,6 +43,14 @@ public struct PsycleClassActivityAttributes: ActivityAttributes {
         /// decodes (synthesized Codable uses decodeIfPresent) — the view then
         /// falls back to attributes.slotSummary.
         public var slotSummary: String?
+        /// The class type and the member's colours for it, as the snapshot has
+        /// them NOW (they can change while the card is up: Membership → Class
+        /// colours). Optional for the same reason as the seats: a card started
+        /// by the previous build has no such key and must still decode — the
+        /// view then works the type out from attributes.typeName and draws it
+        /// in the app's default colours. Set after init, so the initializer
+        /// (and every call site) stays as it was.
+        public var style: PsycleClassStyle?
 
         public init(startAt: Date, status: String, slotSummary: String? = nil) {
             self.startAt = startAt

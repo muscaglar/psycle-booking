@@ -19,6 +19,11 @@
 //  (Update the @main bundle in PsycleWidget.swift accordingly — left as a
 //  manual step so the two files stay independent.)
 //
+//  The Crisp Colour look: the class type's pictogram in its tile, the start
+//  time in 24-hour digits, the class colour as the accent. The card itself is
+//  PsycleActivityCard (PsycleWidget/PsycleWidgetLayouts.swift); this file
+//  adapts the ActivityKit context to it and lays out the Dynamic Island.
+//
 //  Requires iOS 16.1+.
 //
 
@@ -32,116 +37,136 @@ struct PsycleLiveActivityWidget: Widget {
         ActivityConfiguration(for: PsycleClassActivityAttributes.self) { context in
             // Lock screen / banner presentation.
             LockScreenLiveActivityView(context: context)
-                .padding()
-                .activityBackgroundTint(Color.black.opacity(0.55))
-                .activitySystemActionForegroundColor(Color.white)
         } dynamicIsland: { context in
-            DynamicIsland {
+            // The island is always black: the dark side of the class colours,
+            // a solid tile (base fill, white mark), the system's light inks.
+            let look = classLook(context)
+            let surface = PsycleSurface.resolve(palette: look.palette, dark: true, flat: false,
+                                                showsBackground: false, solidTile: true)
+            let hue = Color(look.palette.dark.deep)
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.attributes.typeName, systemImage: "figure.indoor.cycle")
-                        .font(.caption).lineLimit(1)
+                    PsycleTypeTile(type: look.type, size: 40, surface: surface)
+                        .padding(.leading, 2)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    Text(context.attributes.typeName)
+                        .font(PsycleFace.text(.headline, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if classStarted(context) {
-                        Text("In class")
-                            .font(.system(.body, design: .rounded).weight(.semibold))
-                    } else {
-                        Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
-                            .font(.system(.body, design: .rounded).weight(.semibold))
-                            .monospacedDigit()
-                            .frame(maxWidth: 64)
-                            .multilineTextAlignment(.trailing)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(PsycleClock.time(context.state.startAt))
+                            .font(PsycleFace.time(26))
+                            .lineLimit(1)
+                        if classStarted(context) {
+                            Text("In class")
+                                .font(PsycleFace.label(14))
+                                .foregroundColor(hue)
+                        } else {
+                            Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
+                                .font(PsycleFace.label(14))
+                                .monospacedDigit()
+                                .foregroundColor(hue)
+                                .frame(maxWidth: 64)
+                                .multilineTextAlignment(.trailing)
+                        }
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(subtitle(context))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(subtitle(context))
+                            .font(PsycleFace.text(.footnote))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        // State first: seats can change while the card is up.
+                        if let seat = context.state.slotSummary ?? context.attributes.slotSummary {
+                            // A long "Instructor · Studio" gives way, never the seat.
+                            PsycleSeatChip(text: seat, surface: surface, compact: true)
+                                .layoutPriority(1)
+                        }
+                    }
                 }
             } compactLeading: {
-                Image(systemName: "figure.indoor.cycle")
+                PsycleTypeTile(type: look.type, size: 22, surface: surface)
             } compactTrailing: {
                 if classStarted(context) {
                     Text("Now")
+                        .font(PsycleFace.label(15))
+                        .foregroundColor(hue)
                 } else {
                     Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
+                        .font(PsycleFace.label(15))
                         .monospacedDigit()
+                        .foregroundColor(hue)
                         .frame(maxWidth: 44)
                 }
             } minimal: {
-                Image(systemName: "figure.indoor.cycle")
+                PsycleTypeTile(type: look.type, size: 22, surface: surface)
             }
-            .keylineTint(Color.psycleAccent)
+            .keylineTint(Color(look.palette.dark.base))
         }
     }
 
-    // Takes the context, not just the attributes: the seats come from the
-    // state (current) before the attributes (as they were at start).
+    /// "Instructor · Studio". (The seat is drawn beside it, as a chip.)
     private func subtitle(_ context: ActivityContext<PsycleClassActivityAttributes>) -> String {
         let a = context.attributes
-        var parts: [String] = []
-        if !a.instrName.isEmpty { parts.append(a.instrName) }
-        if !a.locName.isEmpty { parts.append(a.locName) }
-        if let slot = context.state.slotSummary ?? a.slotSummary { parts.append(slot) }
-        return parts.joined(separator: " · ")
+        return [a.instrName, a.locName].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 
 @available(iOS 16.1, *)
 private struct LockScreenLiveActivityView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.widgetRenderingMode) private var renderingMode
     let context: ActivityContext<PsycleClassActivityAttributes>
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(context.attributes.typeName)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                Text(context.state.status)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 2) {
-                if classStarted(context) {
-                    Text("In class")
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundColor(.psycleAccent)
-                    Text("enjoy the ride")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                } else {
-                    Text(timerInterval: countdownRange(to: context.state.startAt), countsDown: true)
-                        .font(.system(.title2, design: .rounded).weight(.bold))
-                        .monospacedDigit()
-                        .foregroundColor(.psycleAccent)
-                        .frame(maxWidth: 90)
-                    Text("until class")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                }
-            }
+        let look = classLook(context)
+        // StandBy takes the card's background away; a recoloured rendering
+        // (accented / vibrant) throws the colours away. PsycleSurface settles
+        // the inks for each, as it does for the widgets.
+        PsycleBackgroundProbe { showsBackground in
+            let surface = PsycleSurface.resolve(palette: look.palette,
+                                                dark: colorScheme == .dark,
+                                                flat: renderingMode != .fullColor,
+                                                showsBackground: showsBackground)
+            PsycleActivityCard(facts: PsycleClassFacts(type: look.type,
+                                                       title: context.attributes.typeName,
+                                                       instructor: context.attributes.instrName,
+                                                       place: context.attributes.locName,
+                                                       // State first: seats can change while the card is up (see ContentState).
+                                                       seat: context.state.slotSummary ?? context.attributes.slotSummary,
+                                                       start: context.state.startAt),
+                               started: classStarted(context),
+                               countdown: countdownRange(to: context.state.startAt),
+                               surface: surface)
+                // The ground is painted here, with the inks (psycleActivityGround
+                // says why); the tint stays only as the hint underneath it.
+                .psycleActivityGround(surface.card)
+                .activityBackgroundTint(surface.card)
+                .activitySystemActionForegroundColor(surface.ink)
         }
-    }
-
-    private var subtitle: String {
-        var parts: [String] = []
-        if !context.attributes.instrName.isEmpty { parts.append(context.attributes.instrName) }
-        if !context.attributes.locName.isEmpty { parts.append(context.attributes.locName) }
-        // State first: seats can change while the card is up (see ContentState).
-        if let slot = context.state.slotSummary ?? context.attributes.slotSummary { parts.append(slot) }
-        return parts.joined(separator: " · ")
     }
 }
 
 // Type alias so the view signatures stay readable across iOS versions.
 @available(iOS 16.1, *)
 private typealias ActivityContext<T: ActivityAttributes> = ActivityViewContext<T>
+
+/// The class type and its colours. From the state when it carries them (the
+/// member's own, as of the last snapshot); a card started by a build from
+/// before they existed has none — the type is then read off the class name
+/// and drawn in the app's default colours.
+@available(iOS 16.1, *)
+private func classLook(_ context: ActivityContext<PsycleClassActivityAttributes>) -> (type: PsycleClassType, palette: PsycleClassPalette) {
+    let style = context.state.style ?? PsycleClassStyle()
+    let typeName = context.attributes.typeName
+    return (style.classType(typeName: typeName), style.palette(typeName: typeName))
+}
 
 /// Has the class started? staleDate = classStart makes the system re-render
 /// the card at T0 with isStale = true — no process needed. The Date()

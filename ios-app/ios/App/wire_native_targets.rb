@@ -52,7 +52,13 @@ intents_g = ensure_group(project, 'PsycleIntents')
 ext_g     = ensure_group(project, 'PsycleWidgetExtension')
 
 snapshot_ref   = ensure_file(shared_g,  'PsycleSnapshot.swift')
+# Class type, class colours, the 24-hour clock (Foundation only) — BOTH targets.
+class_type_ref = ensure_file(shared_g,  'PsycleClassType.swift')
 widget_ref     = ensure_file(widget_g,  'PsycleWidget.swift')
+# The Crisp Colour look — widget extension only.
+layouts_ref    = ensure_file(widget_g,  'PsycleWidgetLayouts.swift')
+style_ref      = ensure_file(widget_g,  'PsycleWidgetStyle.swift')
+pictogram_ref  = ensure_file(widget_g,  'PsyclePictogram.swift')
 la_attr_ref    = ensure_file(live_g,    'PsycleLiveActivityAttributes.swift')
 la_view_ref    = ensure_file(live_g,    'PsycleLiveActivityView.swift')
 la_ctrl_ref    = ensure_file(live_g,    'PsycleLiveActivityController.swift')
@@ -74,7 +80,7 @@ app_ent_ref = app_group.files.find { |f| f.path == 'App.entitlements' } ||
 
 # ── 3. App target: new sources + entitlements ──────────────────────────────
 app_new_sources = [snapshot_ref, la_attr_ref, la_ctrl_ref, intent_ref,
-                   shortcuts_ref, appgroup_plugin_ref, main_vc_ref]
+                   shortcuts_ref, appgroup_plugin_ref, main_vc_ref, class_type_ref]
 existing = app_target.source_build_phase.files_references
 app_new_sources.each do |ref|
   next if existing.include?(ref)
@@ -112,7 +118,8 @@ ext.build_configurations.each do |config|
   s['LD_RUNPATH_SEARCH_PATHS']   = ['$(inherited)', '@executable_path/Frameworks', '@executable_path/../../Frameworks']
 end
 
-ext_sources = [widget_ref, la_view_ref, la_attr_ref, snapshot_ref]
+ext_sources = [widget_ref, la_view_ref, la_attr_ref, snapshot_ref,
+               class_type_ref, pictogram_ref, style_ref, layouts_ref]
 ext_existing = ext.source_build_phase.files_references
 ext_sources.each do |ref|
   next if ext_existing.include?(ref)

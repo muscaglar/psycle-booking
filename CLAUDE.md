@@ -161,6 +161,36 @@ device yet** (checklist in IMPROVEMENTS-2026-09.md):
   class's sheet; with no id, My Bookings alone.
 - **Live Activity seat updates**: seats live in `ContentState.slotSummary` (dynamic), with `attributes.slotSummary`
   as the fallback so a card started by an older build still renders.
+- **Crisp Colour widgets (2026-09-19)**: every family, the Live Activity (Lock Screen card + compact / minimal /
+  expanded Dynamic Island) and the Siri answer wear the app's look — the TIME leads in a heavy condensed system face in
+  **24-hour digits**, the class type's pictogram sits in a rounded tile, then class name, "Instructor · Studio", the
+  seat chip in the class colour, the countdown; the card ground is the class tint at the member's intensity. The
+  snapshot's class entries (and each week bucket, for the class that opens the day) carry OPTIONAL `ct` +
+  `ctBase / ctTint / ctDeep / ctWash` (+ `…Dark`) + `ctIntensity`, written by `pure:native-snapshot` in native-bridge.js
+  from the app's own `classTypeKey` and `PsycleClassColours` (at "off" `ctTint` is the neutral surface) and rewritten,
+  debounced, on `classcolours:changed` when the choices really changed. Swift side: `PsycleShared/PsycleClassType.swift`
+  (Foundation only, both targets — class type, the DEFAULTS fallback palette, a hex parser that fails safe,
+  `PsycleClassStyle`, and **`PsycleClock`, the ONE place a time is formatted**: fixed `HH:mm` under the fixed POSIX
+  locale, so the phone's 12/24-hour switch cannot rewrite it; still the DEVICE's zone. Its formatter comes from
+  **`PsycleFixedFormat`, which the snapshot parser READS with too** (`PsycleDateParser` / `PsycleWeekDay` in
+  PsycleSnapshot.swift): on the user's own locale `…T18:30:00` parsed to nil on a UK phone with 24-Hour Time off —
+  every widget empty — and to the year 1483 / 2587 under a Buddhist / Islamic device calendar. No other
+  `DateFormatter` is built anywhere in the widget / Live Activity / intent code) and, widget extension only,
+  `PsycleWidget/PsyclePictogram.swift` (the eight marks as a `Shape`, the web's 24-grid numbers),
+  `PsycleWidgetStyle.swift` (`PsycleSurface`: inks per rendering mode — full colour; full colour with the background
+  taken away, i.e. StandBy; accented / vibrant, where fills go faint so a tile under a mark is never a blob) and
+  `PsycleWidgetLayouts.swift` (plain-value views; a class name is never cut mid-word — one line, else two balanced
+  one-line halves, else up to three wrapped lines, else the name's head on a card too short for that; the seat chip is
+  never what a row squeezes). The countdown says "Now" from the class's start because `PsycleTimelinePlan` dates a
+  timeline entry exactly there (`Text(.relative)` counts both ways); the Live Activity card paints its OWN ground
+  (`psycleActivityGround`) so ink and ground cannot come from two appearances. A snapshot or a Live Activity payload from the previous build still
+  decodes (every new field optional and read under `try?`; `ContentState` gained only `style`) and draws from the class
+  name + the default colours. The Swift COPIES of web values — fallback palette, class-type words, pictogram numbers,
+  chrome colours — are held to the originals by tests/suites/11-native-snapshot.js; change both together.
+  `sh ios-app/native-checks/run.sh` runs the shipped model Swift on a Mac (old payloads decode; `18:30` is printed AND
+  read back under the 12-hour override, ar_SA and th_TH; the timeline plan; pictograms in their grid; WCAG on every
+  default tint) and `render.sh <dir>` draws the real layouts to PNGs —
+  both through the Swift interpreter, because a Mac with binary authorization kills a locally built binary.
 Any Swift edit must be re-proved with the App-scheme simulator build before it ships (main → TestFlight).
 
 ## Tab Structure (4 tabs)
@@ -583,7 +613,8 @@ Emits `data:owner-changed {from,to}` before `profile:updated`. A storage error c
 | Change when the next-class pill hides | js/settings.js (`pure:pill-scroll` — the scroll; `pure:pill-rest` + `_pillRestCheck` — at rest on a Book button) + css/crisp.css (9d §8 `.is-tucked`) |
 | Add iOS-specific feature              | ios-app/www/native-bridge.js (+ Swift under ios-app/ios/App) |
 | Upgrade Capacitor (6 → 8)             | ios-app/UPGRADE-CAPACITOR-8.md — follow it in order; it names every file that changes |
-| Change widget / Live Activity         | ios-app/ios/App/PsycleWidget, PsycleLiveActivity, PsycleShared (re-prove with a simulator build) |
+| Change widget / Live Activity         | ios-app/ios/App/PsycleWidget (`PsycleWidgetLayouts.swift` = the layouts, `PsycleWidgetStyle.swift` = inks per rendering mode / tile / chip, `PsyclePictogram.swift`), PsycleLiveActivity, PsycleShared (`PsycleClassType.swift`: class type, fallback palette, `PsycleClock`) — look at it with `sh ios-app/native-checks/render.sh <dir>`, then re-prove with a simulator build |
+| Change what the widget snapshot carries | ios-app/www/native-bridge.js (`pure:native-snapshot`, `_snapshotEventFor`, `updateWidgetSnapshot`) + `PsycleClassStyle` / `PsycleNextClass` in PsycleShared (new fields OPTIONAL) + tests/suites/11-native-snapshot.js |
 | Change bike picker preferences        | js/settings.js (integration section) + css/settings.css (the prefs grid) / css/crisp.css (the picker's fav / avoid marks) |
 | Change post-booking confirmation      | js/app.js (`showBookingConfirmation`) + css/crisp.css (`crisp:9c-sheets` §5) |
 | Change "Find similar" rebook          | js/app.js (`findSimilar`, `_focusSearch`) |
