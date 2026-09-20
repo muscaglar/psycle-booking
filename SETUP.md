@@ -250,7 +250,8 @@ psycle-booking/
 │   ├── ios/              # Xcode project (COMMITTED — restore with git checkout, never re-create)
 │   └── appstore-assets/  # Screenshots + icons
 ├── README.md             # Overview, run, test, the live-API rule
-├── CLAUDE.md             # Full architecture docs
+├── AGENTS.md             # Entry to the architecture docs: hard rules, commands, reading guide
+├── agents/               # The architecture docs themselves, one file per topic (CLAUDE.md is a pointer to AGENTS.md)
 ├── SETUP.md              # This file
 └── ios-app/APP_STORE_LISTING.md
 ```

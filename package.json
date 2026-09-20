@@ -10,7 +10,9 @@
     "test": "node tests/unit.js",
     "drift": "node ios-app/build.js --check",
     "typecheck": "tsc -p jsconfig.json --noEmit",
-    "ci": "npm run check && npm run test && npm run drift"
+    "ci": "npm run check && npm run test && npm run drift",
+    "agents:index": "node agents/tools/build-index.mjs",
+    "agents:check": "node agents/tools/build-index.mjs --check"
   },
   "keywords": ["psycle", "fitness", "booking", "pwa"],
   "license": "MIT",

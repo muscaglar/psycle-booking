@@ -448,7 +448,7 @@ reminder fires (it fired at 11:59 and said "opens at 12:00" until September
   tap itself (never a later poll) asks the open sheet to list the newly opened
   dates first
   (`window._usualWeekSheetNewest()`; refused during a run, over the seat map
-  and over a run's results) (CLAUDE.md → Monday reminder (iOS)).
+  and over a run's results) (agents/architecture/monday-release.md → Monday reminder (iOS)).
 - **On / off** — `psycle_weekly_reminder` `'on'` | `'off'` (unset = off;
   mirrored to Preferences). `window._nativeReminder.enable()` is the ONLY place
   the iOS permission prompt can come from, and only ever after a deliberate

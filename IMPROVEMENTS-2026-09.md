@@ -8,8 +8,9 @@
 > [Deliberately NOT changed](#deliberately-not-changed--owner-decisions) are decisions, not omissions.
 > What shipped after that range is recorded as follow-ups at the end of the [Summary](#summary).
 
-This file is the audit trail for the programme. CLAUDE.md describes the resulting architecture; this file records
-what moved, why a few things did not, and what still has to be looked at on a real device.
+This file is the audit trail for the programme. The architecture guide — CLAUDE.md throughout the programme, now
+AGENTS.md and the agents/ folder (the same text, split by topic) — describes the resulting architecture; this file
+records what moved, why a few things did not, and what still has to be looked at on a real device.
 
 ## Summary
 
@@ -666,8 +667,9 @@ These were looked at and left alone on purpose. Please do not "fix" them in pass
 
 - **Device-local time remains in a few places.** The widget / Live Activity snapshot (`updateWidgetSnapshot` and
   the Swift `PsycleSnapshot` parser), the T-90 class reminders (`_scheduleClassReminders`) and the web ICS / Google
-  Calendar export (js/calendar.js) still read `start_at` in the device's zone — an owner decision: moving them is an
-  open follow-up that has not been green-lit, because it touches Swift and changes what a member abroad sees. The
+  Calendar export (js/calendar.js) still read `start_at` in the device's zone — an owner decision, and a CLOSED one:
+  moving them was offered, with what a member abroad would see, and declined ("If you're not in London, I'd argue it
+  makes no sense to be using this app" — agents/decisions.md, section 4). Do not offer it again. The
   same device-zone parse also remains in Discover's started-class filter and facet counts (js/app.js `render`,
   `_buildFacetClasses`, `_anyStartedBetween`), the instructor profile's upcoming list (js/features.js) and one
   offline-queue replay re-check (the fresh `/events/{id}` read in js/reliability.js; the queue's own "has it

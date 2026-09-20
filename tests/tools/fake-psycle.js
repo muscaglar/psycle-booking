@@ -2,7 +2,8 @@
  * Evaluate it on a blank same-origin page BEFORE the app's HTML is written into the document, so window.fetch is the
  * fake server from the app's first line:  (0, eval)(await fetch('/tests/tools/fake-psycle.js').then(r => r.text()));
  * then  await __H.boot({})  writes the REAL psycle-finder.html into the page. Every request to psycle.codexfit.com is
- * answered here (a 7-day timetable, 3 studios, 5 class types, one empty day; bookings and waitlists kept in memory):
+ * answered here (a 7-day timetable, 3 studios, 5 class types, one empty day; bookings kept in memory — waitlists are
+ * NOT: PUT /waitlists answers success and stores nothing, GET /waitlists is always empty; wrap __H.serve to hold one):
  * nothing can reach the live API. __H.writes records every write, __H.leaked anything that tried to leave,
  * __H.liveHits() what the browser's own resource log says. __H.swipe(x0,y0,x1,y1) sends a real touch sequence,
  * __H.discover() reports the day pager, __H.until(fn, ms) / __H.sleep(ms) wait. */

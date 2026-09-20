@@ -675,8 +675,10 @@ One commit, so rollback is one revert.
 
 Docs that name the old versions, for the same commit:
 
-- `CLAUDE.md` — line 3 and *iOS App* ("Capacitor 6 wrapper", "CLI pinned to 6"); *Build & CI* (patcher
-  "currently: … 6.7.2 … and … `@capacitor/ios` 6.2.1" → the calendar patch on 8.6.0 only); *Scene life cycle*
+- The architecture guide (once `CLAUDE.md`, now split by topic) — `AGENTS.md`: the opening line ("Capacitor 6 iOS
+  wrapper"). `agents/architecture/testing-and-ci.md`: *Build & CI* (patcher "currently: … 6.7.2 … and …
+  `@capacitor/ios` 6.2.1" → the calendar patch on 8.6.0 only). `agents/architecture/ios.md`: *iOS App* ("Capacitor 6
+  wrapper", "CLI pinned to 6"); *Scene life cycle*
   (`SceneDelegate` now calls `SceneDelegateProxy`; drop the `presentVC` sentence); *Calendar contract* ("must
   match … **v6** (`notes`, `alertOffsetInMinutes`, … `createEvent` → `{result: "<id>"}`)" → v8: `description`,
   `alerts` negative = before, `listEventsInRange({from, to})`, `createEvent` → `{id}`).

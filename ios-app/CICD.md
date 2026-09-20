@@ -97,20 +97,51 @@ build's **What to Test** notes so testers know channel 3 exists.
   ("Latest Release") Xcode and can fail on things the older one only warns
   about. After pushing to `main`, read the Xcode Cloud check on the commit —
   it is on the commit's checks list on github.com, or without signing in:
-  `curl -s https://api.github.com/repos/muscaglar/psycle-booking/commits/<sha>/check-runs`
-  and look for the `Xcode Cloud` app's "Archive - iOS" run (`conclusion`:
-  `success`, or `action_required` = failed; `output.text` lists the errors).
+  `curl -s https://api.github.com/repos/muscaglar/psycle-booking/commits/<sha>/check-runs | jq '.check_runs[] | select(.app.name=="Xcode Cloud") | {name,status,conclusion}'`
+  (an empty result = no check; the unauthenticated GitHub API allows 60
+  requests an hour per address — `gh api repos/muscaglar/psycle-booking/commits/<sha>/check-runs`
+  when signed in). Look for the "Archive - iOS" run (`conclusion`: `success`,
+  or `action_required` = failed; `output.text` lists the errors). A red
+  archive is usually the deployment-target floor, `ci_post_clone.sh` (its
+  executable bit, or a Node install step), `npm ci` unable to reach the public
+  registry, or `npm run patch:check`. The scene life cycle (below) is NOT one
+  of them: that build archives green and crashes on the phone.
 - **No Xcode Cloud check at all is a third outcome, and it is not a failure of the
   code.** Normally the `Xcode Cloud` check appears on a pushed commit within a few
   minutes. On 19 September 2026 commit `98665f6` never got one — no status, no
   check run, nothing four hours later — while every GitHub check on it passed and
-  the commit before it had archived normally. A `cancelled` conclusion is different
-  and harmless: a newer push superseded that build. When a commit has NO Xcode Cloud
+  the commit before it had archived normally. The check normally appears long
+  before the ~20–30 min archive finishes, so no check 15 minutes after the push
+  is already this outcome: do not wait for the build time to elapse. A
+  `cancelled` conclusion is different and harmless: a newer push superseded
+  that build — read the Xcode Cloud check on the NEWER commit, whose archive
+  includes this one. (`cancelled` with NO newer push on `main` means it was
+  cancelled by hand in App Store Connect: ask the owner; "Start Build" on
+  `main` rebuilds it.) When a commit has NO Xcode Cloud
   check: open App Store Connect → Xcode Cloud → the workflow. Either the month's
   compute hours are used up (every push to `main` archives — a day of many small
   pushes spends them quickly; batch commits into one push when that matters), or
   the push was never picked up, in which case "Start Build" on `main` there, or
   the next push, builds the latest commit. Nothing in the repository needs changing.
+  - **This step is the owner's.** No App Store Connect keys exist in the
+    repository or in GitHub, by design, so an agent cannot see compute usage or
+    press "Start Build": hand the owner the sha, the check-runs output showing no
+    `Xcode Cloud` run, and the two possible causes.
+  - **Do not push an empty or trivial commit to re-trigger a missed build.** A
+    push to `main` also publishes the web app and, if it is picked up, spends
+    another archive. If hours remain, the owner presses "Start Build"; if they
+    are spent, nothing builds until the monthly reset or more hours are bought.
+  - **The web app deploys from `main` independently**, so with GitHub green and
+    no Xcode Cloud build the web change is already live; only TestFlight is on
+    the previous build.
+  - If "Start Build" is unavailable or the workflow is missing: Apple's GitHub
+    App lost access to the repository, the workflow was disabled, or its start
+    condition is no longer Branch Changes on `main` → re-walk "One-time Xcode
+    Cloud setup" steps 2–3.
+  - Not written down yet (the owner's to confirm): where App Store Connect shows
+    the month's usage and its reset date; whether the check run is created when
+    a build is QUEUED or when it STARTS; whether the workflow's auto-cancel
+    option is on.
 - **Scene life cycle is mandatory from the iOS 27 SDK.** A UIKit app built
   with Xcode 27 that has no `UIApplicationSceneManifest` is killed at launch
   ("UIScene life cycle is required for apps built with this SDK") — it
@@ -135,8 +166,10 @@ build's **What to Test** notes so testers know channel 3 exists.
   build. When a future Xcode raises the floor again, change that constant and
   the four `IPHONEOS_DEPLOYMENT_TARGET` settings in the project together.
 - `ci_post_clone.sh` must stay executable (`chmod +x`); git preserves the bit.
-- Free tier: 25 Xcode Cloud compute hours/month — a build is ~15–25 min, so
-  dozens of TestFlight pushes/month fit comfortably.
+- Free tier: 25 Xcode Cloud compute hours/month — the budget is worked out
+  under "Release flow" above (a build is ~20–30 min, so roughly 50 pushes to
+  `main` a month). A day of many small pushes can spend a large share of it:
+  batch commits into one push.
 - External testers (beyond your own devices) need a one-off Beta App Review:
   add a demo Psycle account's credentials in the TestFlight review notes,
   since the app requires a login.

@@ -883,10 +883,6 @@
     }
   }
 
-  /**
-   * Probe the API for past bookings using common codexfit patterns.
-   * Tries multiple approaches and uses whatever returns data.
-   */
   window._explore_openSettingsForInstructor = function (name) {
     // The rankings moved to the Membership tab; the Settings sheet this used to
     // open has no tier list, so the chip filled a hidden input behind an
@@ -917,6 +913,10 @@
   // this is not a top-up — a different account on this device, or a history
   // that was wiped — and that many requests stay the member's own Re-sync tap.
   var TOPUP_MAX_NEW = 60;
+  /**
+   * Probe the API for past bookings using common codexfit patterns.
+   * Tries multiple approaches and uses whatever returns data.
+   */
   window._explore_syncHistory = async function (opts) {
     var silent = !!(opts && opts.silent);
     if (_syncing) {

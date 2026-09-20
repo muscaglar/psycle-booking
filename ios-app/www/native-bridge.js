@@ -21,8 +21,9 @@
   // wrong instant, tagged with the wrong zone. The calendar path (and the
   // weekly Monday-12:00 reminder) resolve class times through the gym's zone
   // explicitly, and calendar events are stamped Europe/London.
-  // (Known follow-up: the widget/Live Activity snapshot, T-90 class reminders
-  // and the web ICS/Google export still parse start_at device-locally.)
+  // (The widget/Live Activity snapshot, the T-90 class reminders and the web
+  // ICS/Google export still parse start_at device-locally — by the owner's
+  // decision, CLOSED: agents/decisions.md section 4. Not a follow-up to pick up.)
   //
   // Pure helpers, deliberately BEFORE the Capacitor guard: they need nothing
   // native, and tests/unit.js evaluates this file without Capacitor to

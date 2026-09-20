@@ -219,10 +219,20 @@ await window.securityReady; await window._secureTokenStore.set('faketoken-123456
 ```
 
 `window.fetch` is the fake server from the app's first line: a 7-day timetable (3 studios, 5 class types, one empty
-day), bookings and waitlists kept in memory. `__H.writes` records every write, `__H.leaked` anything that tried to
+day, ONE full class), bookings kept in memory — one record per seat, the FIRST id answered per POST, and
+`DELETE /bookings/{id}` removes exactly one record. Waitlists are NOT kept: `GET /waitlists` always answers
+`data: []` and `PUT /waitlists/{id}` answers `{success: true, waitlist: {id: 555}}` without remembering it, so a
+joined place vanishes at the next `fetchMyBookings()`. To hold a place, reassign `__H.serve` before `__H.boot`
+(`window.fetch` looks it up on every request) and answer `GET /waitlists` from your own list, in the entry shape of
+step 5 below; make another full class with `__H.events[i].is_fully_booked = true`. Not implemented at all (a 404,
+listed in `__H.unknown` — assert it stays empty): `DELETE /bookings?event_id=`, `DELETE /waitlists/…`,
+`GET` / `POST /waitlist/…`. `__H.writes` records every write, `__H.leaked` anything that tried to
 leave, `__H.liveHits()` what the browser's own resource log saw; `__H.swipe(x0, y0, x1, y1)` sends a real touch
 sequence and `__H.discover()` reports the day pager. `boot()` can answer "app did not load" when the app is up —
-look for `#results` yourself. A fresh profile starts behind the first-run welcome: seed `psycle_onboarded_v1='1'`
+look for `#results` yourself; in that case it returned before installing the toast / announce recorders, so
+`__H.toasts` and `__H.announces` stay empty (read `#toast`, `#srStatus` / `#srAlert` instead). One `boot()` per page
+load. Clearing storage clears it for that ORIGIN, and the fake `/profile` is customer 1 — an account switch to the
+app: use an origin nobody signs in on (`127.0.0.1:8080`, not a `localhost:8080` you use for real). A fresh profile starts behind the first-run welcome: seed `psycle_onboarded_v1='1'`
 (and `psycle_history_prompt_dismissed='1'`) unless the welcome is what you are checking. The same server drives
 `tests/tools/appstore-capture.html` and `node tests/tools/appstore-shots.mjs`, which rebuild the App Store
 screenshots over Chrome's DevTools protocol (true device metrics, no dependencies).
@@ -246,7 +256,8 @@ token or a `#bookings` / `#stats` / `#membership` hash also keeps it away).
 Use an origin you never sign in on for real — a private window, a separate browser profile, or a different port.
 localStorage belongs to the origin, and a stubbed session writes to it: the fake token replaces a real one, and a
 stub `/profile` with a different customer id is an **account switch** as far as the app is concerned (the previous
-member's rankings and preferences are stashed and their history is cleared — see "Data owner" in CLAUDE.md).
+member's rankings and preferences are stashed and their history is cleared — see "Data owner" in
+agents/architecture/session-and-accounts.md).
 
 ### 2. After a rebuild, get rid of the old service worker
 

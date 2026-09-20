@@ -1,0 +1,6 @@
+# PWA shell — the service worker's strategy and the update banner
+Read this when you touch sw.js or the update script in psycle-finder.html. Skip it otherwise (the iOS app has no service worker). `SHELL` and `CACHE` are generated — see [testing-and-ci.md](testing-and-ci.md).
+
+**PWA shell**: sw.js is network-first for same-origin navigations with a 3-second fallback to the cached page (`NAV_TIMEOUT_MS`), cache-first for static assets, and never touches API requests. After a deploy, an inline head script in psycle-finder.html reloads the page when that is safe (hidden or just opened; no dialog, booking, typing or history sync in flight) and otherwise shows the `#updateBanner` bar ("A new version of Psync is ready." + Reload + a dismiss ×); it is guarded against reload loops (`psycle_sw_reload_at`). The iOS app has no service worker.
+
+**What "safe" means, exactly** (the inline script's `busy()`; "typing" above is looser than the code): `_dialogOpen()` || a disabled `#syncHistoryBtn` / `#syncPromptBtn` || `document.activeElement` is an INPUT, TEXTAREA or SELECT || a `.book-btn` / `.booking-action-btn` that is busy (`data-busy="1"` or the label "…"). A draft whose focus sits on a panel or a button is protected only if its overlay is counted by `_dialogOpen()` (agents/playbooks.md P5).

@@ -140,7 +140,7 @@ module.exports = async function (t) {
     const bad = (raw) => { const x = topUpWorld({ skipped: raw }); return x.ctx._topUpTooBig().count; };
     eq([bad('{not json'), bad('"61"'), bad(JSON.stringify({ at: iso(NOW), count: '<img src=x>' })), bad(JSON.stringify({ at: 'soon', count: 61 })), bad(JSON.stringify({ at: iso(NOW), count: -4 })), bad(JSON.stringify({ at: iso(NOW), count: 61.9 }))],
       [0, 0, 0, 0, 0, 61], 'a note that is not {at: a date, count: a positive number} offers nothing; the count is always a whole number');
-    const banner = exploreSrc.slice(exploreSrc.indexOf('  function renderSyncBanner('), exploreSrc.indexOf('  /**\n   * Probe the API'));
+    const banner = exploreSrc.slice(exploreSrc.indexOf('  function renderSyncBanner('), exploreSrc.indexOf('  window._explore_openSettingsForInstructor = function'));
     ok(/var missing = _topUpTooBig\(\)\.count;/.test(banner) && /\(missing \? '<br><span>' \+ missing \+ ' past classes are not in it yet — tap Re-sync to import them\.<\/span>' : ''\)/.test(banner),
       'the synced banner says how many are missing, next to its existing Re-sync button (no new control, no API text in the line)');
   }

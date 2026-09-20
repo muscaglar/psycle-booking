@@ -506,7 +506,11 @@ module.exports = function (t) {
     ok(/<div class="brand-mark" aria-hidden="true"><svg [^>]*>[\s\S]*?class="bm-top"[\s\S]*?class="bm-bot"[\s\S]*?<\/svg><\/div>/.test(body) && !/<div class="brand-mark"[^>]*>[\s\S]{0,1400}?data-ct=/.test(body.slice(body.indexOf('brand-mark') - 20, body.indexOf('<h1>'))), 'the header mark is the two engraved halves, decorative (aria-hidden), with no data-ct in it');
     ok(!/data-ct-intensity\]\) \.brand-mark/.test(noComments(crispCss)) && /\n\.bm-top \{ fill: var\(--text-heading\); \}\n\.bm-bot \{ fill: var\(--text-ghost\); \}/.test(noComments(crispCss)),
       'css/crisp.css paints it from the theme\'s two inks — right from the first paint, so the old "hold it unpainted until the class colours arrive" rule is gone');
-    ok(!/so at first paint/.test(t.readSource('CLAUDE.md')), 'CLAUDE.md no longer claims apply() runs at first paint');
+    // The guide's "Class-type colours" paragraph moved, verbatim, from CLAUDE.md to agents/architecture/ — read it where it lives now
+    // (and make sure that IS the paragraph: a file without it would pass the negative check for nothing).
+    const ctGuide = t.readSource('agents/architecture/class-type-colours.md');
+    ok(/\*\*Class-type colours \(Crisp Colour\)\*\*/.test(ctGuide) && /NOT at first paint/.test(ctGuide) && !/so at first paint/.test(ctGuide),
+      'the guide (agents/architecture/class-type-colours.md, once CLAUDE.md) no longer claims apply() runs at first paint');
   }
 
   // ── Pictograms ───────────────────────────────────────────────────────────

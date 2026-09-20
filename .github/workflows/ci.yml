@@ -83,6 +83,13 @@ jobs:
         run: npm run typecheck
         continue-on-error: true
 
+      # Advisory only: agents/index/ is a generated map of the code for readers
+      # arriving cold (see AGENTS.md). A drifted map is still useful, so a stale
+      # one must never block a merge — it only shows up here as a warning.
+      - name: Agents index freshness (advisory)
+        run: npm run agents:check
+        continue-on-error: true
+
   # Unsigned compile of the full native project (pods + Swift + pbxproj) so
   # iOS breakage surfaces on main, not at archive time. No certificates are
   # involved (simulator destination + CODE_SIGNING_ALLOWED=NO). macOS runners

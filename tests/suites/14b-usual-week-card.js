@@ -346,7 +346,7 @@ module.exports = function (t) {
     // Depth 0: not inside a media block — a folded card is folded at every width.
     const before = css.slice(0, css.indexOf(fold));
     eq((before.match(/\{/g) || []).length - (before.match(/\}/g) || []).length, 0, '…at every width (the rule sits in no @media block)');
-    // The trap CLAUDE.md names: a rule that gives a collapsible part a `display` outranks its fold. None may exist, in any sheet.
+    // The trap agents/architecture/design-system.md names (The Crisp Colour layer): a rule that gives a collapsible part a `display` outranks its fold. None may exist, in any sheet.
     const offenders = [];
     ['css/styles.css', 'css/theme.css', 'css/features.css', 'css/tabs.css', 'css/settings.css', 'css/explore.css', 'css/redesign.css', 'css/discover-layout-fix.css', 'css/crisp.css'].forEach((f) => {
       noComments(t.readSource(f)).replace(/@media[^{]*\{/g, '').replace(/([^{}]+)\{([^{}]*)\}/g, (m, sel, body) => {

@@ -1,0 +1,6 @@
+# History and Notify me — the stored class history and the spot-alert watchlist
+Read this when you touch `psycle_class_history`, the history sync or its background writers, or the notify bell (js/features.js, js/explore.js). Skip it otherwise.
+
+**Notify me**: the bell adds a class to `psycle_notify_watchlist`. There is no server or background fetch behind it — watched classes are only checked while the app is open and signed in (`pure:notify` in features.js): at most 5 `GET /events/{id}` per pass, passes at least 2 minutes apart, least-recently-checked first. Only Psycle SAYING `is_fully_booked === false` (plus a bookable slot for a seat studio) counts as open — a missing field never does. A hit opens a "Spot opened — View class" dialog and updates the list.
+
+**History**: `psycle_class_history` holds up to 2000 entries (`PSYCLE_HISTORY_MAX`) for every writer. Beyond the explicit sync, features.js reconciles each loaded `/bookings` list into history and explore.js runs a quiet weekly top-up (at most 60 unknown classes fetched silently; more than that waits a week and the Stats banner offers Re-sync). Both background writers run only for the history's owner (`psycle_class_history_owner`, `_historyIsMine`) and an unverified session touches nothing; a class is only marked cancelled when there is no seat and it is more than 2 hours away.

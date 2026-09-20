@@ -4,7 +4,6 @@
 
 Multi-agent review (124 agents: 5 subsystem mappers, 7 bug hunters + critic, 2-lens adversarial verification per finding).
 Stats: 60 raw findings → 49 unique → **52 confirmed** (incl. critic round), 3 disputed, 0 rejected.
-Full per-agent traces: ~/.claude/projects/-Users-mustafa-code-projects-psycle-booking/eb38db08-0e53-4762-944b-38866b7773cc/subagents/workflows/wf_ac1be732-7b4/journal.jsonl
 
 Severity counts: critical: 4, high: 15, medium: 21, low: 12
 

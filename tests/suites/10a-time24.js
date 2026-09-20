@@ -191,7 +191,7 @@ module.exports = function (t) {
     Object.keys(sites).forEach((name) => ok(sites[name][0] !== '' && sites[name][1].test(sites[name][0]), name + ' prints through _clock24'));
     ok(/<div class="instructor-class-time">\$\{_clock24\(dt\.getHours\(\), dt\.getMinutes\(\)\)\}<\/div>/.test(t.readSource('js/features.js')) && /timeStr = d \? _clock24\(d\.getHours\(\), d\.getMinutes\(\)\) : ''/.test(t.readSource('js/features.js')),
       'the instructor profile\'s rows and the history list (js/features.js) do too');
-    // The digits each site reads are the ones it read before (CLAUDE.md → Gym time says which are the
+    // The digits each site reads are the ones it read before (agents/architecture/time.md → Gym time says which are the
     // class's own wall clock): this wave changed how a time is WRITTEN, not where it comes from.
     ok(/_ccTimeHTML\(\{ hours: dt\.getHours\(\), mins: dt\.getMinutes\(\), duration: evt\.duration \}\)/.test(fn(appSrc, 'function eventCard(', '}')), 'the card still hands _ccTimeHTML the reading it always did');
   }

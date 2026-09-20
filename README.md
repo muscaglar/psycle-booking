@@ -83,8 +83,11 @@ through it.
 
 ## Repository layout
 
-[CLAUDE.md](CLAUDE.md) is the architecture guide: the file tree, script load order, design tokens and themes, the
-patterns that keep bookings safe, every storage key, the API endpoints in use, and a "where to edit" table.
+[AGENTS.md](AGENTS.md) is the entry to the architecture guide — the hard rules, the commands, and a reading guide
+into the [agents/](agents/) folder: the file tree, script load order and a "where to edit" table
+([agents/repo-map.md](agents/repo-map.md)); design tokens and themes, the patterns that keep bookings safe, every
+storage key and the API endpoints in use ([agents/architecture/](agents/architecture/README.md), one file per topic).
+CLAUDE.md is a pointer to it.
 
 Audit trail: [IMPROVEMENTS-2026-09.md](IMPROVEMENTS-2026-09.md) — the September 2026 improvement programme,
 including the checklist of things that still need checking on a real phone.
