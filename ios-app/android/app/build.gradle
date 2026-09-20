@@ -1,5 +1,43 @@
 apply plugin: 'com.android.application'
 
+// ── Release signing, with no secret in this repository ────────────────────────
+// The four values come from the environment, or from android/keystore.properties (git-ignored;
+// the same four names, lower-case keys below). The environment wins. The keystore file itself
+// lives outside the repository, or under a git-ignored name (*.jks, *.keystore).
+//
+//   PSYNC_KEYSTORE_FILE        storeFile       path to the keystore (relative paths: from android/)
+//   PSYNC_KEYSTORE_PASSWORD    storePassword
+//   PSYNC_KEY_ALIAS            keyAlias
+//   PSYNC_KEY_PASSWORD         keyPassword
+//
+// With all four present, release builds are signed with that key. With any missing, NO release
+// signing config is set: assembleDebug is untouched (it always uses Android's debug key), and
+// assembleRelease / bundleRelease still succeed and produce an UNSIGNED artefact, which cannot
+// be installed or uploaded by mistake. A release is never signed with the debug key.
+def psyncSigningEnv = [
+    storeFile    : 'PSYNC_KEYSTORE_FILE',
+    storePassword: 'PSYNC_KEYSTORE_PASSWORD',
+    keyAlias     : 'PSYNC_KEY_ALIAS',
+    keyPassword  : 'PSYNC_KEY_PASSWORD'
+]
+def psyncSigning = [:]
+def psyncSigningFile = rootProject.file('keystore.properties')
+if (psyncSigningFile.exists()) {
+    def psyncSigningProps = new Properties()
+    psyncSigningFile.withInputStream { stream -> psyncSigningProps.load(stream) }
+    psyncSigningEnv.keySet().each { key ->
+        if (psyncSigningProps.getProperty(key)) {
+            psyncSigning[key] = psyncSigningProps.getProperty(key)
+        }
+    }
+}
+psyncSigningEnv.each { key, variable ->
+    if (System.getenv(variable)) {
+        psyncSigning[key] = System.getenv(variable)
+    }
+}
+def psyncCanSign = psyncSigningEnv.keySet().every { key -> psyncSigning[key] }
+
 android {
     namespace "com.psyclefinder.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,6 +45,8 @@ android {
         applicationId "com.psyclefinder.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // versionCode: a whole number that must go UP with every upload to Play; it is never shown.
+        // versionName: what a member sees. Both are set by hand here, before a release build.
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -16,10 +56,24 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Declared before buildTypes, which names it. Only when all four values are present: see the top.
+    signingConfigs {
+        if (psyncCanSign) {
+            release {
+                storeFile rootProject.file(psyncSigning.storeFile)
+                storePassword psyncSigning.storePassword
+                keyAlias psyncSigning.keyAlias
+                keyPassword psyncSigning.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (psyncCanSign) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

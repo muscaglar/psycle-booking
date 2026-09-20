@@ -1,13 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+      Backup is OFF, three ways, because what the app stores is a sign-in: allowBackup for
+      Android 11 and below, fullBackupContent for anything that reads the rules instead, and
+      dataExtractionRules for Android 12+, where allowBackup alone no longer stops a
+      device-to-device transfer. Both rule files exclude every domain (res/xml/).
+
+      usesCleartextTraffic is false: the app is served from https://localhost inside the web
+      view (capacitor.config.json, server.androidScheme) and talks to one HTTPS API. A live-reload
+      run (cap run -l) serves plain http and would need this lifted locally; never commit that.
+
+      No component here is exported except the launcher activity, and there is no custom URL
+      scheme: the iPhone app's psync:// link exists for its widgets, which Android does not have.
+
+      The activity is portrait only, as the iPhone app is (Info.plist) and as the web manifest
+      asks (manifest.json, "portrait-primary"): the page has no landscape layout, and its sheets
+      and spend dialogs have never been seen 360px high. configChanges still lists orientation,
+      as the Capacitor template wrote it; with the lock it has nothing to do.
+    -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="false"
+        tools:targetApi="31">
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -15,7 +38,9 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true">
+            android:screenOrientation="portrait"
+            android:exported="true"
+            tools:ignore="LockedOrientationActivity,DiscouragedApi">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -38,4 +63,14 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Calendar sync (@ebarooni/capacitor-calendar): its own manifest declares nothing, so both
+         are declared here. They are runtime permissions: Android asks the member when the bridge
+         first asks the plugin, as iOS does. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!-- Declared by the plugins themselves, and merged in at build time, so NOT repeated here:
+         VIBRATE (@capacitor/haptics); POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED and WAKE_LOCK
+         (@capacitor/local-notifications). -->
 </manifest>

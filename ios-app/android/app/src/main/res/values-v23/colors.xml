@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 23 has windowLightStatusBar (values-v23/styles.xml), so the status bar can be the pale
+     ground with dark glyphs. In night mode values-night/colors.xml still wins. -->
+<resources>
+    <color name="psync_status_bar">#E6E9EE</color>
+</resources>

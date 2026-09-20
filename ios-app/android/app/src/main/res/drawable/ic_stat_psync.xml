@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The notification small icon: capacitor.config.json names it (plugins.LocalNotifications
+  "smallIcon": "ic_stat_psync"). Android keeps only the alpha of a small icon: white in the
+  status bar, tinted with "iconColor" in the shade.
+
+  The two half-discs are the mark's own path data (assets/psync-logo.svg), without the grooves:
+  at 24 pixels they were noise, and the silhouette alone reads at every density. The lower half
+  is 60% alpha, the mark's lighter tone, and still well clear of any alpha cut-off.
+
+  The group scales the 1024 x 1024 drawing so the mark is 20dp wide, centred, with Material's
+  2dp of padding: (512, 512) lands on (12, 12), since 12 = 512 x 0.02825 - 2.464.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:scaleX="0.02825"
+        android:scaleY="0.02825"
+        android:translateX="-2.464"
+        android:translateY="-2.464">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M201.2 476A40 40 0 0 1 161.7 429.6A290 290 0 0 1 734.3 429.6A40 40 0 0 1 694.8 476L534.5 476A16 16 0 0 1 518.8 462.9A72 72 0 0 0 377.2 462.9A16 16 0 0 1 361.5 476Z" />
+        <path
+            android:fillColor="#99FFFFFF"
+            android:pathData="M822.8 548A40 40 0 0 1 862.3 594.4A290 290 0 0 1 289.7 594.4A40 40 0 0 1 329.2 548L489.5 548A16 16 0 0 1 505.2 561.1A72 72 0 0 0 646.8 561.1A16 16 0 0 1 662.5 548Z" />
+    </group>
+</vector>

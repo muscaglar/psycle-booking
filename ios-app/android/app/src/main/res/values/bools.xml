@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark glyphs on the system bars: true on Cloud's pale ground, false in values-night/.
+         Read by values-v23/styles.xml and values-v27/styles.xml. -->
+    <bool name="psync_light_system_bars">true</bool>
+</resources>

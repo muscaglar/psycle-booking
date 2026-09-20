@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  android:fullBackupContent (Android 6 to 11). Nothing the app stores may leave the device. The
+  Preferences mirror (shared preferences) holds the sign-in token's ciphertext
+  (psycle_bearer_token_enc) and, beside it, the backup of the key that opens it
+  (psycle_sec_key_backup): an accepted trade-off on one phone, a credential if the pair is
+  copied off it. The web view's own storage holds the same, and at worst a plain-text token
+  (agents/architecture/storage-keys.md).
+  AndroidManifest.xml already sets android:allowBackup="false"; this file says the same thing to
+  anything that reads the rules instead. Every domain is excluded whole, and nothing is included.
+  Android 12+ reads data_extraction_rules.xml instead.
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

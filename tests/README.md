@@ -131,11 +131,12 @@ Rules for a pure block:
 
 Blocks exist today in `js/app.js` (core, gym-time, copy, event-details, a11y, session, data-owner, init-gate,
 filters, filter-summary, window, clash, book-fresh, booking, bookings-card, discover, day-pager, stored-data,
-tier-filter, offline, bookings-started, render-perf, template, predict, welcome), `js/reliability.js` (retry-auth,
+tier-filter, offline, bookings-started, render-perf, template, predict, welcome, android-back), `js/reliability.js` (retry-auth,
 offline-queue), `js/settings.js` (calendar-sync, settings-export, import-validate, build-id), `js/tabs.js`
 (cost-forecast, reminder-row, year-review, share, stats-pages), `js/features.js` (history, history-chunks, notify),
 `js/explore.js` (history-topup), `js/performance.js` (static-cache), `js/calendar.js` (ics-share),
-`js/interactions.js` (swipe-cancel, swipe-nav) and `ios-app/www/native-bridge.js` (widget-link, ios-polish).
+`js/interactions.js` (swipe-cancel, swipe-nav) and `ios-app/www/native-bridge.js` (widget-link, ios-polish,
+android-bridge). The list is a sample, not a register: `agents/index/pure-blocks.md` is generated and complete.
 
 #### Suites that slice shipped source by anchor lines
 

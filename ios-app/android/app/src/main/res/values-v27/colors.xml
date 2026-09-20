@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 27 has windowLightNavigationBar (values-v27/styles.xml), so the navigation bar can be the
+     pale ground with dark buttons. psync_status_bar is repeated because this folder outranks
+     values-v23/ from API 27 up. In night mode values-night/colors.xml still wins. -->
+<resources>
+    <color name="psync_status_bar">#E6E9EE</color>
+    <color name="psync_navigation_bar">#E6E9EE</color>
+</resources>

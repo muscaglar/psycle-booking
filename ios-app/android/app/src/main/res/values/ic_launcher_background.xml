@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The app icon's ground, as in assets/psync-logo.svg. Never night-qualified: see
+         drawable/ic_launcher_foreground.xml. -->
+    <color name="ic_launcher_background">#FCFDFE</color>
 </resources>

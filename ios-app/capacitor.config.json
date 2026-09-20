@@ -8,11 +8,19 @@
   "plugins": {
     "Preferences": {
       "group": "PsycleFinderSettings"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_psync",
+      "iconColor": "#1B2130"
     }
   },
   "ios": {
     "contentInset": "never",
     "allowsLinkPreview": false,
     "preferredContentMode": "mobile"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#E6E9EE"
   }
 }

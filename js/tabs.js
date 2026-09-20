@@ -3490,7 +3490,7 @@
   window.renderThemePicker = renderThemePicker;
   window.renderReminderRow = renderReminderRow;
 
-  // ── Weekly reminder row (iOS app only — needs the native bridge) ──
+  // ── Weekly reminder row (the native apps only — needs the native bridge) ──
 
   // Last known answer to "may Psync send notifications?" for the class
   // switch. null = not resolved yet this session (first paint goes by the
@@ -3503,14 +3503,32 @@
   // while nothing is armed invites no tap. So it is on only when it really
   // is, and the detail line says what a tap will do. (Detail strings are
   // literals — they go into innerHTML unescaped.)
-  function _classReminderSwitch(prefOn, granted) {
+  // `plain` (optional): the Android app — it has no Live Activity, so the line
+  // promises no live countdown. Left out, the iPhone app's line, as before.
+  function _classReminderSwitch(prefOn, granted, plain) {
     var blocked = !!prefOn && granted === false;
-    return {
+    var row = {
       on: !!prefOn && !blocked,
       detail: blocked ? 'Tap to allow notifications' : '90 minutes before each class — opens the live countdown',
     };
+    if (plain && !blocked) row.detail = '90 minutes before each class';
+    return row;
   }
   // ── pure:reminder-row:end
+
+  // These rows exist in both native apps. Two things are said differently in
+  // the Android one: no live countdown (above), and the Settings app a refused
+  // permission is put right in is Android's. The toasts below are written as
+  // the iPhone app's sentence and re-worded here, so the iPhone app's copy
+  // stays the literal it always was.
+  function _reminderAndroid() {
+    try {
+      return !!(window.Capacitor && typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() === 'android');
+    } catch (e) { return false; }
+  }
+  function _osSettingsWords(text) {
+    return _reminderAndroid() ? String(text).replace('iOS Settings', 'Android Settings') : text;
+  }
 
   function renderReminderRow() {
     var row = document.getElementById('reminderRow');
@@ -3549,7 +3567,7 @@
         '<span class="app-row-switch' + (on ? ' on' : '') + '" aria-hidden="true"></span>' +
       '</button>';
     if (window._nativeClassReminders) {
-      var cls = _classReminderSwitch(window._nativeClassReminders.isOn(), _classReminderGranted);
+      var cls = _classReminderSwitch(window._nativeClassReminders.isOn(), _classReminderGranted, _reminderAndroid());
       html +=
         '<button class="app-row" role="switch" aria-checked="' + !!cls.on + '" onclick="window._toggleClassReminders()">' +
           '<span class="app-row-text"><span class="app-row-label">Class reminders</span>' +
@@ -3574,7 +3592,7 @@
       if (!hasPerm || _classReminderGranted === false) {
         var granted = await window._nativeClassReminders.enable();
         _classReminderGranted = !!granted; // known now — don't repaint from the stale answer
-        toast(granted ? 'Class reminders on — 90 minutes before each class' : 'Enable notifications for Psync in iOS Settings first', granted ? 'success' : 'error');
+        toast(granted ? 'Class reminders on — 90 minutes before each class' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), granted ? 'success' : 'error');
       } else {
         await window._nativeClassReminders.disable();
         toast('Class reminders off', 'info');
@@ -3582,7 +3600,7 @@
     } else {
       var ok = await window._nativeClassReminders.enable();
       if (ok) _classReminderGranted = true; // enable() only succeeds once permission is granted
-      toast(ok ? 'Class reminders on — 90 minutes before each class' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
+      toast(ok ? 'Class reminders on — 90 minutes before each class' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), ok ? 'success' : 'error');
     }
     renderReminderRow();
   };
@@ -3594,7 +3612,7 @@
       toast('Weekly reminder off', 'info');
     } else {
       var ok = await window._nativeReminder.enable();
-      toast(ok ? 'Reminder set — Mondays at 12:00' : 'Enable notifications for Psync in iOS Settings first', ok ? 'success' : 'error');
+      toast(ok ? 'Reminder set — Mondays at 12:00' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), ok ? 'success' : 'error');
     }
     renderReminderRow();
   };
@@ -3962,6 +3980,24 @@
   // The one thing members post outside the app, so it wears the theme they
   // are looking at and the app's own name — not a pink "P S Y C L E" on black.
 
+  // The ANDROID app's web view has no Web Share API and no download manager:
+  // navigator.share is missing, and the <a download> click both functions fall
+  // back to does nothing there — under a toast that said "Image saved". An
+  // image needs a file on disk, which needs a plugin the app does not carry, so
+  // there the card's own line goes out as TEXT through the native share sheet
+  // (the bridge's nativeShare), and the toast says what happened. Resolves true
+  // when it took the share over; false everywhere else, where nothing changes.
+  async function _shareAsTextOnAndroid(title, text) {
+    var android = false;
+    try {
+      android = !!(window.Capacitor && typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() === 'android');
+    } catch (e) {}
+    if (!android || typeof window.nativeShare !== 'function') return false;
+    var shared = await window.nativeShare(title, text, null);
+    toast(shared ? 'Shared' : 'Share cancelled', shared ? 'success' : 'info');
+    return true;
+  }
+
   // ── pure:share:start ── (DOM-free; tests/suites/copy.js evaluates this block)
   // Cloud, whole. Canvas silently IGNORES an invalid fillStyle (it keeps the
   // previous colour), so a token that cannot be read is never mixed with ones
@@ -4155,6 +4191,7 @@
           if (shareErr.name === 'AbortError') return;
         }
       }
+      if (await _shareAsTextOnAndroid('My ' + year + ' on Psycle', _plural(s.total, 'class', 'classes') + ' · ' + _plural(s.uniqueInstrs, 'instructor'))) return;
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
@@ -4403,6 +4440,8 @@
           // Fall through to download
         }
       }
+
+      if (await _shareAsTextOnAndroid('My Psycle Stats', _plural(totalClasses, 'class', 'classes') + ' · ' + _plural(uniqueInstrs, 'instructor') + (topInstr ? ' · Top: ' + topInstr[0] : ''))) return;
 
       // Fallback: download
       var url = URL.createObjectURL(blob);

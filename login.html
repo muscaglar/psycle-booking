@@ -432,5 +432,16 @@ async function doLogin() {
   }
 }
 </script>
+<!-- The Android app asks the page what its Back button does (MainActivity calls
+     window._psycleAndroidBack; js/app.js answers for the app itself). Here it is
+     this page's own "Back to Psync" link. The iPhone app and the web never call
+     it. (An attribute on the tag, on purpose: the first attribute-less script
+     must stay the sign-in logic above.) -->
+<script data-android-back>
+window._psycleAndroidBack = function () {
+  location.href = (typeof APP_URL === 'string' && APP_URL) || './psycle-finder.html';
+  return true;
+};
+</script>
 </body>
 </html>

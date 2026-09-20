@@ -1,5 +1,5 @@
 # ios-app/ — read before editing here
-The Capacitor 6 iOS wrapper: the build that flattens the web app into www/, the plugin patcher, the hand-written bridge, the Xcode project. The repo-wide rules are in the root [AGENTS.md](../AGENTS.md) — this file adds only what is local.
+The Capacitor 6 wrapper for BOTH native apps (the folder name is historical): the build that flattens the web app into www/, the plugin patcher, the hand-written bridge, the Xcode project in ios/ and the Android project in android/. The repo-wide rules are in the root [AGENTS.md](../AGENTS.md) — this file adds only what is local.
 
 ## Rules that bite here
 The rule → why → its guard. Suites are in tests/suites/; F… and G… are entries in agents/learnings.md.
@@ -11,20 +11,24 @@ The rule → why → its guard. Suites are in tests/suites/; F… and G… are e
 6. **The bridge has its OWN gym-time resolver** (`_gymWallToUtcMs`, `_classStartMs`; the web's is `pure:gym-time` in js/app.js) → change both. Guard: bookings-card.js. NOT everywhere: `updateWidgetSnapshot` and `_scheduleClassRemindersInner` parse `start_at` device-locally by the owner's CLOSED decision (agents/decisions.md section 4) → do not route them through `_classStartMs`; no suite would stop you.
 7. **Calendar: one sync-time writer, `syncAllBookingsToCalendar`** (skips when signed out; an EMPTY bookings map deletes only when `_calServerConfirmedEmpty`; unmarked events only with `_calIsOwned`). The only other deleter is `psycleSetCalendarConfig`'s old-target sweep (`_calSweepVictimIds`, judged by the OLD target's ack; no session or bookings check). Guard: calendar-safety.js.
 8. **Bridge code needs no phone**: `boot(opts)` in ios-bridge.js; in a browser, a fake `window.Capacitor` first, then the bridge as the LAST script (playbooks P8 step 7).
+9. **ONE bridge, two platforms**: the iPhone and the Android app load this same www/native-bridge.js. Reach a plugin by EXISTENCE (`Capacitor.Plugins.X && …`); branch on `IS_ANDROID` only for what Android ALONE has; `'ios'` or a bridge that cannot say its platform takes the iPhone path, unchanged to the byte → 18-android.js (`IPHONE_LAUNCH_DIGEST`; boot the other platform with `harness(t).boot({ platform: 'android' })`). [agents/architecture/android.md](../agents/architecture/android.md).
+10. **`npm run sync` stays iOS-only** (Xcode Cloud runs it) and package.json / package-lock.json do not change for Android's sake: no new package, no new plugin (a plugin is an iOS pod). The Android scripts are `sync:android`, `open:android`, `android:debug` → 19-android-project.js.
 
 ## What is in here
 | Path | Holds | Symbols · depth |
 |---|---|---|
 | build.js · patch-plugins.js | rules 1–3; `PATCHES` = calendar `timeZone` (@ebarooni/capacitor-calendar 6.7.2) + scene-aware `presentVC` window (@capacitor/ios 6.2.1) | not indexed · agents/architecture/testing-and-ci.md |
-| package.json · package-lock.json | the scripts; the lockfile must resolve from registry.npmjs.org (Xcode Cloud runs `npm ci`) | — |
-| capacitor.config.json | `appId`, `webDir`, the Preferences `group` — a key prefix, NOT an App Group | — |
+| package.json · package-lock.json | the scripts; the lockfile must resolve from registry.npmjs.org (Xcode Cloud and the Android CI job run `npm ci`) | — |
+| capacitor.config.json | ONE file for both apps: `appId`, `webDir`, the Preferences `group` — a key prefix on iOS (NOT an App Group), the SharedPreferences file on Android; `plugins.LocalNotifications` (Android's small icon and tint) and the `android` block are read by Android only | — |
 | www/ | the GENERATED flat web app + native-bridge.js (never read it whole) | agents/index/symbols/native-bridge.js.md |
 | ios/ | the committed Xcode project, Swift, the Podfile | [ios/App/AGENTS.md](ios/App/AGENTS.md) · agents/index/swift.md |
+| android/ | the committed Gradle project: one activity, the manifest, resources; never compiled locally | [android/AGENTS.md](android/AGENTS.md) · not indexed |
 | native-checks/ | run.sh (old payloads decode, times) · render.sh (layouts → PNGs); a Mac, no simulator | playbooks P7 step 2 |
 | appstore-assets/ | GENERATED: screenshots (tests/tools/appstore-shots.mjs), icon sizes (assets/render-icons.sh) | playbooks P9 |
 | CICD.md | release flow, Xcode Cloud set-up, reading the check | ≈ 2,850 tokens |
 | NATIVE_FEATURES.md | status block, data contract, device checklist; the rest is the original design guide | ≈ 8,650: by heading |
 | UPGRADE-CAPACITOR-8.md | the 6 → 8 runbook | ≈ 12,650: by step |
+| ANDROID.md · PLAY_STORE_LISTING.md | the owner's guide to the Android app (install, release, its on-device checklist) · Play Store copy and the data-safety answers | ≈ 6,400 · 2,850 |
 | PRECOMMIT.md · APP_STORE_LISTING.md | the optional drift pre-commit hook · store copy | small |
 
 ## After you edit
@@ -35,10 +39,11 @@ npm run ci                           # syntax check + tests + drift
 npm run agents:index                 # lines added or removed in native-bridge.js or Swift
 (cd ios-app && npm run patch:check)  # only after `npm ci` or a plugin change: needs ios-app/node_modules
 ```
-Swift or the asset catalogue: also the checks in [ios/App/AGENTS.md](ios/App/AGENTS.md).
+Swift or the asset catalogue: also the checks in [ios/App/AGENTS.md](ios/App/AGENTS.md). Anything under android/: [android/AGENTS.md](android/AGENTS.md) — CI compiles it, you cannot.
 
 ## Read next
 - [agents/architecture/ios.md](../agents/architecture/ios.md) — the bridge, calendar, reminders, the snapshot time contract.
+- [agents/architecture/android.md](../agents/architecture/android.md) — what the Android app does differently, and what proves it.
 - [agents/architecture/testing-and-ci.md](../agents/architecture/testing-and-ci.md) — build.js, the patcher, CI.
 - [agents/playbooks.md](../agents/playbooks.md) — P3 (a storage key), P7 (Swift), P8 step 7, P10 (ship).
 - [agents/learnings.md](../agents/learnings.md) — sections F and G.

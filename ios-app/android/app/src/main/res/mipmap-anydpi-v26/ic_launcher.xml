@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 8+: a solid ground, the mark as a vector, and the Android 13 themed-icon layer.
+     Older launchers read the PNGs in mipmap-*dpi/ (assets/render-icons.sh draws them). -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>
 </adaptive-icon>

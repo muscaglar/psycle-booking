@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 27+: dark navigation-bar buttons too. This folder outranks values-v23/ from API 27
+         up, so the status-bar flag is repeated here. -->
+    <style name="AppTheme.SystemBars" parent="AppTheme.Ground">
+        <item name="android:windowLightStatusBar">@bool/psync_light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/psync_light_system_bars</item>
+    </style>
+</resources>

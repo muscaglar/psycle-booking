@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 23+: dark status-bar glyphs on the pale ground (false at night). A style in a
+         qualified folder REPLACES the one in values/, so this repeats nothing but the parent. -->
+    <style name="AppTheme.SystemBars" parent="AppTheme.Ground">
+        <item name="android:windowLightStatusBar">@bool/psync_light_system_bars</item>
+    </style>
+</resources>

@@ -100,6 +100,8 @@ declare global {
 
   /** iOS only (security.js creates it, native-bridge resolves it): the Preferences → localStorage restore has settled. */
   var _psycleNativeRestoreReady: Promise<void> | undefined;
+  /** Android app only (app.js; login.html has its own): what ONE press of Back did — true = the page dealt with it, false = nothing to close, the activity goes to the background. */
+  var _psycleAndroidBack: (() => boolean) | undefined;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Shared mutable state (exposed on window via property accessors in state.js)

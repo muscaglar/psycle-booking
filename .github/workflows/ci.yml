@@ -137,3 +137,162 @@ jobs:
           xcodebuild -quiet -workspace App.xcworkspace -scheme App \
             -destination 'generic/platform=iOS Simulator' \
             build CODE_SIGNING_ALLOWED=NO
+
+  # Debug compile of the Android project (ios-app/android/ — the folder name
+  # ios-app/ is historical; both platforms wrap the same ios-app/www/). No
+  # keystore and no secret is involved: a debug APK is signed with the debug
+  # key Gradle makes on the runner. Same trigger pattern as the iOS job, plus
+  # android/** branches, where the Android work is done.
+  #
+  # `npm run sync:android` = build.js + `cap sync android`. It regenerates what
+  # ios-app/android/.gitignore keeps out of the repository (the copied web
+  # assets, capacitor.config.json, the Cordova shim project), so Gradle cannot
+  # run without it. `npm run sync` stays iOS-only: it is what Xcode Cloud runs.
+  android-build:
+    name: Android build check (debug APK)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/android/')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Read-only token: the job reads the repository and uploads artifacts.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # no token left in .git/config for install-time scripts to read
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ios-app/package-lock.json
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # postinstall runs patch-plugins.js here too. It edits Swift sources in
+      # node_modules only, which Gradle never compiles.
+      - name: Install JS dependencies (lockfile)
+        working-directory: ios-app
+        run: npm ci
+
+      - name: Build web assets + sync the Android project
+        working-directory: ios-app
+        run: npm run sync:android
+
+      - name: Compile (debug APK)
+        working-directory: ios-app/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: psync-debug-apk
+          path: ios-app/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # Advisory: Android lint on the app module (the plugins' own modules are
+      # not ours to fix). A finding never blocks a merge; the report is kept.
+      - name: Android lint (advisory)
+        working-directory: ios-app/android
+        continue-on-error: true
+        run: ./gradlew :app:lintDebug --no-daemon
+
+      - name: Upload the lint report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-report
+          path: ios-app/android/app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ADVISORY: installs the APK the job above built on an emulator, opens the
+  # app, takes a screenshot, sends ONE hardware back key and takes another.
+  # It proves the app starts and that back does not end it (MainActivity asks
+  # window._psycleAndroidBack, then moveTaskToBack — never finish()). The
+  # pictures and the log are the result: a person reads them.
+  #
+  # It never taps, swipes or types, so it can book nothing. At launch the app
+  # reads Psycle's public timetable (read-only GETs, as the web app does for
+  # any visitor); nobody is signed in and nothing is written.
+  #
+  # The repository is not checked out here: the runner holds the APK only.
+  # Each line of `script:` runs as its own `sh -c`, so no line depends on a
+  # shell variable, a `cd` or a multi-line construct from another.
+  # Evidence is gathered first; the two lines that can fail the step come last.
+  android-smoke:
+    name: Android emulator smoke (advisory)
+    needs: android-build
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/android/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Never fails the workflow: a slow or flaky emulator is not a broken app.
+    continue-on-error: true
+    permissions: {}
+
+    steps:
+      - name: Download the debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: psync-debug-apk
+          path: apk
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Hardware acceleration for the emulator on a hosted Linux runner.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Make the output folder
+        run: mkdir -p android-smoke
+
+      - name: Launch on an emulator, one back key
+        id: emulator
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0 (third-party: pinned to a commit, not a moving tag)
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r apk/app-debug.apk
+            adb logcat -c
+            adb shell am start -W -n com.psyclefinder.app/.MainActivity
+            sleep 25
+            adb exec-out screencap -p > android-smoke/launch.png
+            adb shell input keyevent 4
+            sleep 5
+            adb exec-out screencap -p > android-smoke/after-back.png
+            adb logcat -d -s 'Capacitor:*' 'chromium:*' 'AndroidRuntime:E' > android-smoke/logcat.txt
+            adb shell pidof com.psyclefinder.app
+            ! grep -q 'FATAL EXCEPTION' android-smoke/logcat.txt
+
+      - name: Upload the screenshots and the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke
+          path: android-smoke/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Say so when the smoke did not pass
+        if: steps.emulator.outcome == 'failure'
+        run: echo "::warning title=Android emulator smoke::The advisory emulator smoke did not pass - read the android-smoke artifact (launch.png, after-back.png, logcat.txt)."

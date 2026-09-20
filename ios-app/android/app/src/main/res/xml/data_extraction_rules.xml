@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  android:dataExtractionRules (Android 12+). Two routes are closed here, and the second is the
+  reason this file exists: from Android 12, android:allowBackup="false" no longer stops a
+  device-to-device transfer, only these rules do.
+    cloud-backup      Google's backup of app data
+    device-transfer   the cable / Wi-Fi copy when a member sets up a new phone
+  What must never travel: the Preferences mirror in shared preferences, where the sign-in
+  token's ciphertext and the backup of its key sit side by side, and the web view's own storage,
+  which holds the same (backup_rules.xml says more). Every domain is excluded whole. On a new
+  phone the member signs in again, as after a reinstall.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>

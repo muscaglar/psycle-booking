@@ -774,7 +774,7 @@
 
 
   // ═══════════════════════════════════════════════════════════════════
-  // Calendar Sync UI (iOS only)
+  // Calendar Sync UI (the native apps only: iPhone and Android)
   // ═══════════════════════════════════════════════════════════════════
 
   // ── pure:calendar-sync:start
@@ -782,7 +782,7 @@
     var panel = document.getElementById('calendarSyncPanel');
     if (!panel) return;
     if (typeof window.psycleListCalendars !== 'function') {
-      panel.textContent = 'Calendar sync is only available in the iOS app.';
+      panel.textContent = 'Calendar sync is only available in the Psync app.';
       return;
     }
     var cfg = window.psycleGetCalendarConfig();
@@ -1974,8 +1974,7 @@
     }
     var online = false;
     try { online = !!navigator.onLine; } catch (e) {}
-    var inIosApp = false;
-    try { inIosApp = !!window.Capacitor; } catch (e) {}
+    var platform = diagPlatform();
     var tokenPresent = diagHasToken();
     var errorCount = (diag && typeof diag.errorLogCount === 'number') ? diag.errorLogCount : 0;
     var actionCount = (diag && typeof diag.actionLogCount === 'number') ? diag.actionLogCount : 0;
@@ -1989,7 +1988,8 @@
 
     return kv('App version', appVersion || 'unknown') +
       kv('Online', online ? 'Yes' : 'No', online ? 'diag-ok' : 'diag-bad') +
-      kv('iOS app', inIosApp ? 'Yes' : 'No') +
+      // Which app: the iPhone app's row reads as it always did.
+      (platform === 'android' ? kv('Android app', 'Yes') : platform === 'web' ? kv('Native app', 'No') : kv('iOS app', 'Yes')) +
       kv('Auth token present', tokenPresent ? 'Yes' : 'No', tokenPresent ? 'diag-ok' : 'diag-bad') +
       kv('Stored errors', String(errorCount)) +
       kv('Stored actions', String(actionCount));
@@ -2001,6 +2001,20 @@
   // opens (and again after "Clear logs") and the tap embeds what has landed.
   var _diagReportText = null;
   var _diagReportSeq = 0;
+
+  // Where this is running: 'ios' | 'android' (the two native apps, in
+  // Capacitor's words) or 'web'. A bridge too old to say reads as the iPhone
+  // app, which was the only native app there was. (Kept in this stretch of the
+  // file: tests/suites/owner-tools.js runs it, with diagBuildCopyBlob, on its
+  // own; diagEnvironmentHTML above reaches it as any hoisted function.)
+  function diagPlatform() {
+    try {
+      if (!window.Capacitor) return 'web';
+      if (typeof window.Capacitor.getPlatform !== 'function') return 'ios';
+      var p = String(window.Capacitor.getPlatform());
+      return (p === 'android' || p === 'web') ? p : 'ios';
+    } catch (e) { return 'web'; }
+  }
 
   function diagPrefetchReport() {
     // Only the newest fetch may land: one started before "Clear logs" still
@@ -2030,7 +2044,10 @@
       environment: {
         appVersion: (diag && diag.appVersion) ? diag.appVersion : (window.APP_VERSION || null),
         online: (function () { try { return !!navigator.onLine; } catch (e) { return null; } })(),
-        iosApp: (function () { try { return !!window.Capacitor; } catch (e) { return false; } })(),
+        // `iosApp` keeps its name and its meaning for the iPhone app; the
+        // Android app answers false there and says which it is in `platform`.
+        iosApp: diagPlatform() === 'ios',
+        platform: diagPlatform(),
         tokenPresent: diagHasToken(),
         userAgent: (function () { try { return navigator.userAgent; } catch (e) { return null; } })(),
       },

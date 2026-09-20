@@ -1,19 +1,19 @@
 # Playbooks — step-by-step checklists
 Purpose: the exact files, functions, commands and suites for the changes this repository sees most, so you do not have to rediscover them.
 
-- **Read this when** your task matches a heading below: read P0 and that one playbook — never the whole file (≈ 10,300 tokens).
+- **Read this when** your task matches a heading below: read P0 and that one playbook — never the whole file (≈ 11,650 tokens).
 - **Skip this when** you are only reading code, or the change is documentation only.
 - **Not restated here**: the traps behind these steps are in `agents/learnings.md` (cited as A1, D3 …); how a subsystem works is in `agents/architecture/<topic>.md`; line numbers are in `agents/index/` (start at `agents/index/README.md`).
 - Paths are repo-relative. A bare `name.js` under "Suites" is a file in `tests/suites/`. Commands run from the repo root unless they start with `cd`.
 
 | Playbook | | ≈ tokens |
 |---|---|---|
-| P0 | Every change: the loop | 600 |
+| P0 | Every change: the loop | 700 |
 | P1 | Add or change a Discover filter | 700 |
 | P2 | Change a booking, cancel or waitlist flow safely | 750 |
 | P3 | Add a localStorage key | 800 |
 | P4 | Add a theme · add or change a class-colour swatch | 550 |
-| P5 | Add an overlay or dialog | 1,150 |
+| P5 | Add an overlay or dialog | 1,250 |
 | P6 | Change the class card | 600 |
 | P7 | Change Swift, the widget, the Live Activity or the asset catalogue | 1,550 |
 | P8 | Verify a change in a real browser on the fake server | 1,550 |
@@ -22,6 +22,7 @@ Purpose: the exact files, functions, commands and suites for the changes this re
 | P11 | Find out how Psycle behaves — safely | 350 |
 | P12 | Triage a member report about a cancel | 300 |
 | P13 | Add a Membership → Appearance (or Settings) control | 350 |
+| P14 | Change the Android native project — and prove it | 950 |
 
 **The rule over all of them:** `https://psycle.codexfit.com` is a real booking system. No test, script or browser check sends it a POST, PUT or DELETE — ever.
 
@@ -40,9 +41,9 @@ npm run ci                            # = check + test + drift, as CI runs them
 1. Before editing a function, find who tests it: `grep -l "<name>" tests/suites/*.js`. If a suite slices it by anchor, keep its opener at column 0 and its indentation (B1). tests/unit.js reads no arguments: there is no single-suite filter — it always runs everything; grep the log for your suite's section title.
    "the index is stale" for one of `bookClass`, `submitBooking`, `_bookingHorizon`, `renderMyBookings`, `_profileFrom`, `planWeeklyTemplate`, `_spotSuggestion` (js/app.js), `PsycleClassColours` (js/theme.js), `_pillCoversBook` (js/settings.js) or `syncAllBookingsToCalendar` (the bridge — BELOW `SYNC_KEYS`, so every new mirrored key moves it) means only that a line moved: run `npm run agents:index`. Nothing is wrong.
 2. New DOM-free logic goes in a `// ── pure:<name>:start … :end` block, named in a suite through `t.loadPure` (B2). One file per feature area in `tests/suites/`; nothing to register.
-3. Behaviour or layout changed → P8. Swift or assets → P7.
+3. Behaviour or layout changed → P8. Swift or assets → P7. Anything under ios-app/android/ → P14.
 4. Stage the generated files with the source: `ios-app/www/**` and both `sw.js` copies.
-5. Move the documentation with the code: the matching `agents/architecture/` file, and the AGENTS.md of the folder (js/, css/, tests/, ios-app/, ios-app/ios/App/) when a rule local to it changed; then `npm run agents:index` (it rewrites `agents/index/`; `npm run agents:check` must exit 0 — nothing else runs it). A file added to or removed from `agents/` also changes the list that names it — `AGENTS.md`'s reading guide, and `agents/README.md` for a top-level file — and each list carries a size per file (bytes ÷ 4) that 16-agents-docs.js holds to within 25%: after a large edit to an agents/ doc, update its size. `AGENTS.md` ≤ 160 lines; `CLAUDE.md` stays a ≤ 8-line pointer.
+5. Move the documentation with the code: the matching `agents/architecture/` file, and the AGENTS.md of the folder (js/, css/, tests/, ios-app/, ios-app/ios/App/, ios-app/android/) when a rule local to it changed; then `npm run agents:index` (it rewrites `agents/index/`; `npm run agents:check` must exit 0 — nothing else runs it). A file added to or removed from `agents/` also changes the list that names it — `AGENTS.md`'s reading guide, and `agents/README.md` for a top-level file — and each list carries a size per file (bytes ÷ 4) that 16-agents-docs.js holds to within 25%: after a large edit to an agents/ doc, update its size. `AGENTS.md` ≤ 160 lines; `CLAUDE.md` stays a ≤ 8-line pointer.
 6. Commit on a branch. `main` ships (P10). A stretch of work ends with a dated entry at the top of the session log in `agents/HANDOVER.md`.
 
 ## P1. Add or change a Discover filter
@@ -116,7 +117,7 @@ sessionStorage keys need only the read-defensively rule and a row in the same do
 1. Need a yes / no? Use `confirmModal(opts)` and stop here. `danger: true` is a calm outline; the filled red is `_confirmTone`'s call (a late cancel, `irreversible: true`).
 2. Markup: `role="dialog" aria-modal="true"`, a label, and a focusable panel (`tabindex="-1"`). PREFER built on open and removed on close, appended DIRECTLY to `<body>`: the MutationObserver in js/app.js watches body's direct children, plus the `style` attribute of a hard-coded `['tokenDialog', 'bikeModal']` list. Only `_overlayIsOpen` understands a STATIC overlay toggled by `display`; `_dialogOpen()`, `_ownKeysOverlayUp()` and the bridge's `_askBlocked()` test for the id being IN THE PAGE, so a static overlay listed there by id reads as permanently open. A static one instead joins that style-observer list (a11y.js pins it: `eq(w.doc.observed, …)`) and gets a `style.display` test beside the bike picker's in `_dialogOpen()` and `_askBlocked()` — never an entry in `ASK_BLOCKING_IDS`.
 3. **A plain overlay** → one `[id, closer]` row in `_OVERLAYS` (js/app.js). You get focus in, Tab containment, one Escape for the top layer through its REAL closer, and focus back to the opener (`_visibleOpener` if the opener may be hidden).
-4. **An overlay with its own keys** (it swipes, it spends, it must sit above the stack) → name its id in `_ownKeysOverlayUp()`, write its own Escape / Tab handling, and — if background dialogs must wait for it — in `_dialogOpen()`.
+4. **An overlay with its own keys** (it swipes, it spends, it must sit above the stack) → name its id in `_ownKeysOverlayUp()`, write its own Escape / Tab handling, and — if background dialogs must wait for it — in `_dialogOpen()`. **Android's Back does not find it by itself** (an `_OVERLAYS` row is covered: Back sends the Escape the stack already serves): add it to `_androidBackFacts` and `_androidBackDialog` (js/app.js) with its SAFE closer — Cancel, Skip, never "yes" — and to 18-android.js, or Back sends the app to the background with it still open (G10). If it waits on the member over a button its flow keeps busy, it also joins `_androidBackAsksMember`; a flow that writes to Psycle with neither `data-busy` nor "…" on a button is named in `_androidBackBusy`.
    **An overlay that holds unsaved input** goes in `_dialogOpen()` as well as `_OVERLAYS` (`#bikeModal` is the precedent): otherwise "Spot opened", the waitlist "You're in" and the offline-booking ask open over it, and the service-worker auto-reload can fire. Inside `_dialogOpen()` use `document.getElementById` only and never mention `onboardOverlay` (a11y.js and waitlist-polish.js run the sliced function against a fake document). Give its `_OVERLAYS` row a REAL closer that guards the draft — as the `syncPromptOverlay` row guards a running sync — and route × and the backdrop through it.
 5. iOS: add a BUILT overlay's id to `ASK_BLOCKING_IDS` (ios-app/www/native-bridge.js) so the two reminder asks never open over it (a static one: step 2); rebuild.
 6. A dialog that opens BY ITSELF (an announcement, an offer) waits while `_dialogOpen()` is true or `#onboardOverlay` is in the page, retries on a timer bounded by the clock, never opens into a hidden app, and treats being displaced (`onReplaced`) as "not answered" (E4, E5).
@@ -244,3 +245,17 @@ Whole-app load check without any of this: open `http://127.0.0.1:8080/tests/smok
 3. **State** lives in an engine object in js/theme.js shaped like `PsycleClassColours` (`get / set / apply / clean`): `set` saves through `_psycleSafeSetItem` and still applies when the save fails; `apply` emits `<name>:changed` only when the outcome changed — emit from `apply`, not only from `set`, or a value the iOS restore or an import brings back never repaints an open control. The control keeps no copy and repaints on that event. B7 is what engine code in js/theme.js must survive.
 4. The js/tabs.js text between `// ── Class colours (Membership` and `// ── Weekly reminder row` may not contain the word `localStorage` (9e-stats-membership.js).
 5. A new `window.*` global → types/globals.d.ts (and tests/smoke.html's list if it is critical). The stored key → P3. Look: css/crisp.css `crisp:9e-stats-membership`; never a `.cc-` name (D6). A control that changes the class card → P6 step 5.
+
+## P14. Change the Android native project — and prove it
+
+Sources: ios-app/android/ — `MainActivity.java`, `AndroidManifest.xml`, `res/`, `app/build.gradle`, `variables.gradle`. What DIFFERS by platform is mostly not there: it is an `IS_ANDROID` branch of ios-app/www/native-bridge.js, or a `getPlatform() === 'android'` test in js/ (step 4).
+
+1. **Read first**: ios-app/android/AGENTS.md (the rules), `agents/architecture/android.md` (the mechanism). The standing limits (`agents/decisions.md` section 8): no new Capacitor plugin, no new npm package, no Swift edit, `npm run sync` untouched — the iPhone build must not change.
+2. **Write it by reading** (G9): nobody compiles this locally. Well-formed XML; resource FILE names `[a-z0-9_]` only; every `@type/name` and style parent present; androidx classes and platform APIs that exist at the versions in variables.gradle and from minSdk 22 (anything newer → a qualified folder, as values-v23/ and values-v27/); never edit capacitor.settings.gradle or app/capacitor.build.gradle (`cap sync android` writes them). Keep the change small: a red compile costs a push and a wait.
+3. `npm run ci` — 19-android-project.js reads the project (the manifest, MainActivity's Back contract, signing material, every XML, every reference, the names the bridge and the project share). When what you changed CAN be read — a permission, a resource the bridge names, a Gradle value — add the assertion there. Never loosen one to get past it.
+4. **The bridge or web half**: 18-android.js boots the real bridge as Android through ios-bridge.js's exported harness — `harness(t).boot({ platform: 'android' })` — and holds the iPhone path to `IPHONE_LAUNCH_DIGEST`. That digest moves ONLY when the iPhone path was changed on purpose (the failing check prints the new one). Then `cd ios-app && npm run build`, `npm run drift`, `npm run agents:index`. In a browser: P8 step 7 with a fake `window.Capacitor` whose `getPlatform` answers `'android'`.
+5. **Prove the compile**: push to an `android/**` branch (never `main` unasked — hard rule 6) and read the `android-build` job: `npm ci` → `npm run sync:android` → `./gradlew assembleDebug` → the artifact `psync-debug-apk`; `:app:lintDebug` is advisory (artifact `android-lint-report`). The advisory `android-smoke` job then installs that APK on an emulator, launches it, sends ONE Back key and uploads `android-smoke` (launch.png, after-back.png, logcat.txt): a person reads those; it never taps. Reading a commit's checks without signing in: the `curl … /check-runs` form in ios-app/CICD.md → "Notes / gotchas", selecting by the job's name. With a toolchain (JDK 17, Android SDK Platform 35): `cd ios-app && npm ci && npm run android:debug`.
+6. **A red compile**: read the FIRST error of the Gradle log (aapt2 and the manifest merger stop at the first one), fix that one thing, push again. `--stacktrace` is already on.
+7. **Say what it is** (G7, G9): "read, not built" until the job is green; then "compiled, not seen on a device". Whatever only a phone can show gets a tick-box in ios-app/ANDROID.md → "On-device checklist". Move the docs with the code: `agents/architecture/android.md`, ios-app/android/AGENTS.md, ios-app/ANDROID.md.
+8. **Icons**: the launcher PNGs for Android 7 and below are GENERATED — `sh assets/render-icons.sh android` (needs `rsvg-convert` only). The four vector drawables (launcher foreground, monochrome, splash mark, notification icon) are hand-written and repeat the mark's path data: change one, change all four; no suite holds them together.
+9. **A release is the owner's**: the keystore, `bundleRelease`, Play Console — ios-app/ANDROID.md → "Release". No key, password or keystore.properties is ever committed; a Play submission is blocked on the target API level until the Capacitor upgrade (`agents/backlog.md`).

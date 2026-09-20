@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Graphite, the dark ground: css/theme.css [data-theme="graphite"]. Read values/colors.xml
+     first. A night qualifier outranks an API level, so these win on every Android version. -->
+<resources>
+    <color name="psync_ground">#12161F</color>
+
+    <!-- The mark's dark appearance: the inks of assets/psync-logo-dark.svg. -->
+    <color name="psync_mark_upper">#FCFDFE</color>
+    <color name="psync_mark_lower">#AAB3C1</color>
+
+    <color name="psync_status_bar">#12161F</color>
+    <color name="psync_navigation_bar">#12161F</color>
+</resources>

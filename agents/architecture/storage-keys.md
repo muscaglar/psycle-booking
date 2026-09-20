@@ -10,7 +10,7 @@ in IndexedDB (`psycle_sec`), not localStorage.
 |-----|-----|----------|
 | psycle_bearer_token | ✓ | Auth token in PLAIN text — written by login.html (the app migrates it to the encrypted key and removes it) and as a last-resort fallback when encryption fails |
 | psycle_bearer_token_enc | ✓ | Auth token, format-marked: `aes:` (AES-GCM) or `xor:` (obfuscated only — crypto unavailable) |
-| psycle_sec_key_backup | ✓ | AES key backup, written in the iOS app only — so an IndexedDB purge can't orphan the mirrored ciphertext |
+| psycle_sec_key_backup | ✓ | AES key backup, written in the native apps only (iPhone and Android: `isNativePlatform()`) — so an IndexedDB purge can't orphan the mirrored ciphertext. On Android both sit in SharedPreferences, which is why the app's data is excluded from backup and device transfer ([android.md](android.md)) |
 | psycle_data_owner | ✓ | Customer id the stored per-account data belongs to (absent = legacy install → adopted by the next verified profile, unless `psycle_class_history_owner` names a different member → switch from them) |
 | psycle_account_stash | ✓ | `{ownerId:{savedAt,pending,keys:{key:rawValue}}}` — the last two OTHER members' small hand-entered keys, restored when they sign back in on this device |
 | psycle_class_history | ✓ | Booking history (synced from API, reconciled from /bookings, topped up weekly; max 2000) |

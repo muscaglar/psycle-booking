@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════
    Native Bridge — Capacitor integration layer
 
-   Loaded ONLY in the iOS app (not on the web). Enhances the web app
+   Loaded ONLY in the native apps — the iPhone app and the Android app
+   ship this same www/ folder — never on the web. Enhances the web app
    with native capabilities:
    - Persistent storage via Capacitor Preferences (survives purges)
    - Native haptics
@@ -148,6 +149,22 @@
 
   console.log('[native] Capacitor detected — initializing native bridge');
 
+  // ── Platform ───────────────────────────────────────────────────
+  // Both native apps run this file. Every plugin below is reached by EXISTENCE
+  // (Capacitor.Plugins.X && …), so the ones only the iPhone app registers —
+  // AppGroupPreferences, WidgetCenter, PsycleLiveActivity, PsycleDeepLink: the
+  // widgets, the Live Activity and Siri — are simply skipped on Android, with
+  // nothing logged. IS_ANDROID guards only what Android ALONE has: a status-bar
+  // colour, notification channels and a small icon, and a calendar store that
+  // keeps a deleted event's row for a while. Anything but 'android' — 'ios',
+  // or a bridge that cannot say — takes the path the iPhone app always took:
+  // not one call more, not one field more (tests/suites/18-android.js).
+  var PLATFORM = 'unknown';
+  try {
+    if (typeof Capacitor.getPlatform === 'function') PLATFORM = String(Capacitor.getPlatform());
+  } catch (e) {}
+  var IS_ANDROID = PLATFORM === 'android';
+
   var Preferences = Capacitor.Plugins.Preferences;
   var Haptics = Capacitor.Plugins.Haptics;
   var Share = Capacitor.Plugins.Share;
@@ -195,7 +212,8 @@
 
   // ── Persistent Storage ─────────────────────────────────────────
   // Mirror all psycle_ localStorage keys to Capacitor Preferences
-  // so data survives iOS storage purges.
+  // so data survives iOS storage purges — and, on Android, the web view's
+  // storage being cleared under it (Preferences is SharedPreferences there).
 
   var SYNC_KEYS = [
     'psycle_bearer_token', 'psycle_bearer_token_enc',
@@ -348,6 +366,36 @@
   // ios-app/patch-plugins.js) for EventKit access. Events are stamped with
   // the gym's Europe/London zone, never the device's current zone.
   // Production-hardened: dedicated calendar, reminders, proper error handling.
+  //
+  // ANDROID — the same plugin (6.7.2), its Kotlin side read call by call
+  // (android/src/main/java/dev/barooni/capacitor/calendar/). Every call this
+  // file makes exists there under the same name, with the same parameter names:
+  //   checkAllPermissions / requestAllPermissions
+  //       handed straight to Capacitor's own checkPermissions /
+  //       requestPermissions, which answer the plugin's aliases — readCalendar,
+  //       writeCalendar, readWriteCalendar, the same three names as iOS — most
+  //       likely BARE, with no `result` wrapper (iOS wraps them).
+  //       `check.result || check` reads either. The plugin's manifest declares
+  //       NO permission: the app's manifest must carry READ_CALENDAR and
+  //       WRITE_CALENDAR, or the request answers 'denied' without ever asking.
+  //   listCalendars → { result: [{ id, title, color }] } — no isImmutable, so a
+  //       read-only calendar (Holidays, Birthdays) is listed too; a create in
+  //       one fails, is logged, and nothing else happens.
+  //   listEventsInRange({ startDate, endDate }) → { result: [...] }; each event
+  //       has id and calendarId as STRINGS, startDate / endDate as ms NUMBERS,
+  //       and its notes under `description` — NOT `notes`. _markerEventId reads
+  //       both keys, which is what keeps the reconcile's ownership marker
+  //       (`psycle-event-id:`) readable there. It reads the Events table, so a
+  //       row deleted a moment ago can still be listed: see _listNativeEvents.
+  //   createEvent → { result: "<id>" }. title, location, notes, startDate,
+  //       endDate, isAllDay, calendarId and alertOffsetInMinutes (an array of
+  //       minutes BEFORE) are all honoured; `timeZone` is not read — the plugin
+  //       stamps TimeZone.getDefault(). Left alone: startDate is an absolute
+  //       instant, so the class sits at the right moment wherever the phone is;
+  //       only the zone a calendar app prints beside it is the device's.
+  //   deleteEventsById({ ids }) → { result: { deleted: [...], failed: [...] } }.
+  //       There is no deleteEvent: the per-id fallback below is never reached
+  //       unless deleteEventsById itself rejects, and then it removes nothing.
 
   var Calendar = Capacitor.Plugins.CapacitorCalendar;
   var CAL_EVENT_MAP_KEY = 'psycle_native_cal_events'; // { eventId: nativeCalEventId }
@@ -503,7 +551,9 @@
 
   // ── v6-plugin-correct primitives ─────────────────────────────────
 
-  /** Extract the Psycle event id from a native event's notes, or null. */
+  /** Extract the Psycle event id from a native event's notes, or null.
+   *  iOS hands the notes back as `notes`; Android as `description` (the
+   *  CalendarContract column) — both are read, on either platform. */
   function _markerEventId(ev) {
     var notes = (ev && (ev.notes || ev.description)) || '';
     var m = /psycle-event-id:(\d+)/.exec(notes);
@@ -537,6 +587,7 @@
     try {
       var res = await Calendar.deleteEventsById({ ids: ids });
       var out = (res && res.result) || {};
+      if (IS_ANDROID) _androidRememberDeleted(out.deleted);
       return (out.deleted && out.deleted.length) || ids.length;
     } catch (e) {
       // Older/newer plugin versions: fall back to per-id deleteEvent.
@@ -548,12 +599,38 @@
     }
   }
 
+  // ANDROID ONLY. An event deleted from a calendar that syncs (Google) need not
+  // be removed at once: its row can stay in the Events table, flagged deleted
+  // (CalendarContract's DELETED column: "a deleted row should be ignored"),
+  // until the account's next sync — and the plugin's listEventsInRange reads
+  // that table without looking at the flag. Read back as live, a row this app
+  // has just deleted would match the class a member re-books a moment later
+  // (same title, same start, our marker): the reconcile would "keep" it, create
+  // nothing, and the calendar would show no class until a later launch. (Read
+  // off the plugin's source and Android's contract, not seen on a phone.) So
+  // the ids Android CONFIRMED deleted are remembered for this launch and left
+  // out of every listing. Only ever ids the plugin reported under `deleted`
+  // (rows that are gone, or flagged so); Android never hands an event id out
+  // twice, so leaving one out can hide nothing live. iOS (EventKit) removes an
+  // event outright, and none of this runs there.
+  var _androidDeletedEventIds = {};
+  function _androidRememberDeleted(ids) {
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      if (id !== null && id !== undefined && id !== '') _androidDeletedEventIds[String(id)] = true;
+    });
+  }
+
   /** Normalized listEventsInRange (ms timestamps in, array out). */
   async function _listNativeEvents(startMs, endMs) {
     if (!Calendar) return [];
     var q = await Calendar.listEventsInRange({ startDate: startMs, endDate: endMs });
     var events = (q && q.result) || q || [];
-    return Array.isArray(events) ? events : [];
+    if (!Array.isArray(events)) return [];
+    if (!IS_ANDROID) return events;
+    return events.filter(function (ev) {
+      var nid = ev && (ev.id || ev.eventId);
+      return !(nid && _androidDeletedEventIds[String(nid)]);
+    });
   }
 
   function calendarSyncEnabled() {
@@ -946,6 +1023,66 @@
   // "opens at 12:00"; the owner asked for the moment itself).
 
   var LocalNotifications = Capacitor.Plugins.LocalNotifications;
+
+  // ── Android: notification channels, the small icon and its tint ──
+  // Android 8+ files every notification under a CHANNEL, which is what the
+  // member sees (and can silence) in the system's settings for Psync: one for
+  // the class reminders, one for the Monday "new dates" reminder. Created once
+  // per launch — creating a channel that exists changes nothing the member has
+  // set — and every schedule() waits for that, so a reminder can never be filed
+  // under a channel that is not there. Importance 4 (a banner, with the phone's
+  // default sound: no `sound` is named). Before Android 8 there are no
+  // channels: the plugin answers "unavailable", which is swallowed, and
+  // `channelId` is ignored there.
+  // EXACT ALARMS ARE NOT ASKED FOR. With no SCHEDULE_EXACT_ALARM permission
+  // the plugin arms an inexact alarm (setAndAllowWhileIdle), so a reminder may
+  // arrive a few minutes late. That is fine for "new dates are open" and for
+  // "starts in 90 minutes", and it spares the member a special-access screen.
+  // `allowWhileIdle` stays on every schedule: it is what lets the alarm fire
+  // while the phone dozes.
+  // None of this runs on iOS: no channel is created, and a scheduled
+  // notification carries no channelId, smallIcon or iconColor.
+  var ANDROID_CHANNEL_CLASSES = 'class-reminders';
+  var ANDROID_CHANNEL_NEW_DATES = 'new-dates';
+  var ANDROID_NOTIF_ICON = 'ic_stat_psync'; // res/drawable in the Android project: white on transparent. Missing → the plugin falls back to its own default.
+  // The mark's ink. Keep it equal to the plugin-wide default, where capacitor.config.json
+  // names one (plugins.LocalNotifications.iconColor): this one wins, per notification.
+  // A literal on purpose: a colour the plugin cannot parse REJECTS the whole schedule().
+  var ANDROID_NOTIF_TINT = '#1B2130';
+  var _androidChannels = null; // the one creation pass of this launch
+
+  function _ensureAndroidChannels() {
+    if (!IS_ANDROID) return Promise.resolve();
+    if (_androidChannels) return _androidChannels;
+    if (!LocalNotifications || typeof LocalNotifications.createChannel !== 'function') {
+      _androidChannels = Promise.resolve();
+      return _androidChannels;
+    }
+    var make = function (id, name, description) {
+      try {
+        return Promise.resolve(LocalNotifications.createChannel({
+          id: id, name: name, description: description, importance: 4, visibility: 1, vibration: true,
+        })).catch(function () {});
+      } catch (e) { return Promise.resolve(); }
+    };
+    _androidChannels = Promise.all([
+      make(ANDROID_CHANNEL_CLASSES, 'Class reminders', '90 minutes before each class you hold'),
+      make(ANDROID_CHANNEL_NEW_DATES, 'New dates', 'Mondays at 12:00, when Psycle opens new dates'),
+    ]).then(function () {}, function () {});
+    return _androidChannels;
+  }
+  if (IS_ANDROID) _ensureAndroidChannels();
+
+  // The Android-only fields of one notification. On iOS the object comes back
+  // exactly as it went in.
+  function _forAndroid(notification, channelId) {
+    if (!IS_ANDROID) return notification;
+    notification.channelId = channelId;
+    notification.smallIcon = ANDROID_NOTIF_ICON;
+    notification.iconColor = ANDROID_NOTIF_TINT;
+    return notification;
+  }
+
   // Eight rolling one-shot notifications (the next 8 Mondays). Absolute `at:`
   // times are used instead of an hour-of-day repeat: the old hour-offset
   // math broke whenever the device's calendar DATE differed from London's
@@ -1067,15 +1204,16 @@
       // clear a moment apart) the later one writes what is true now.
       var hasWeek = _usualWeekSaved();
       var copy = _weeklyReminderCopy(hasWeek);
+      if (IS_ANDROID) await _ensureAndroidChannels();
       await LocalNotifications.schedule({
         notifications: mondays.map(function (at, i) {
-          return {
+          return _forAndroid({
             id: REMINDER_IDS[i],
             title: copy.title,
             body: copy.body,
             schedule: { at: at, allowWhileIdle: true },
             sound: 'default',
-          };
+          }, ANDROID_CHANNEL_NEW_DATES);
         }),
       });
       _weeklyArmedWithWeek = hasWeek;
@@ -1258,23 +1396,47 @@
 
   // Route a tapped notification / action button. SNOOZE re-schedules a one-off
   // reminder natively; everything else is routed inside the web app.
+  //
+  // ANDROID: THIS EVENT CAN BE FORGED. The plugin builds it from the extras of
+  // whatever intent starts the launcher activity — which is exported, as a
+  // launcher must be — and never asks where the intent came from, so any app on
+  // the phone can hand this function a payload of its own making. (On iOS only
+  // the system delivers a notification response.) So there, and only there:
+  //   • SNOOZE is ignored. It would re-post the payload's OWN title and body an
+  //     hour later as a Psync notification, and could fill the plugin's alarm
+  //     table. No reminder the bridge arms carries the action type, so a real
+  //     notification never sends it — and the action type is not registered.
+  //   • an eventId that is not all digits opens nothing: My Bookings, as a
+  //     widget link with a bad id does (_parseWidgetLink).
+  // What a forged tap can still do is what a real one does: change the tab, open
+  // the sheet of a class the member HOLDS, or open the usual-week review, which
+  // books nothing by itself. The notification's id is not checked: the ids are
+  // few and guessable, so it would stop nobody, and the class map is pruned as
+  // classes pass, so it could drop a real tap.
   function handleNotificationAction(notification) {
     try {
       var actionId = notification.actionId;
       var data = (notification.notification && notification.notification.extra) || {};
       var eventId = data.eventId;
+      if (IS_ANDROID) {
+        if (actionId === 'SNOOZE') return;
+        if (eventId !== null && eventId !== undefined && eventId !== '' && !/^\d+$/.test(String(eventId))) {
+          if (typeof window.switchTab === 'function') window.switchTab('bookings');
+          return;
+        }
+      }
       if (actionId === 'SNOOZE') {
         // Re-fire in 1 hour without involving the web layer.
         try {
           LocalNotifications.schedule({
-            notifications: [{
+            notifications: [_forAndroid({
               id: Math.floor(Math.random() * 100000) + 1,
               title: notification.notification.title || 'Psycle reminder',
               body: notification.notification.body || '',
               schedule: { at: new Date(Date.now() + 60 * 60 * 1000) },
               actionTypeId: 'PSYCLE_CLASS',
               extra: data,
-            }],
+            }, eventId ? ANDROID_CHANNEL_CLASSES : ANDROID_CHANNEL_NEW_DATES)],
           }).catch(function () {});
         } catch (e) {}
         return;
@@ -1289,7 +1451,8 @@
   }
 
   if (LocalNotifications) {
-    registerNotificationActions();
+    // Not on Android: see handleNotificationAction (nothing armed there uses it).
+    if (!IS_ANDROID) registerNotificationActions();
     try {
       LocalNotifications.addListener('localNotificationActionPerformed', handleNotificationAction);
     } catch (e) {}
@@ -1751,6 +1914,13 @@
   var CLASS_REMINDER_PREF = 'psycle_class_reminders'; // 'off' disables; default ON
   var CLASS_REMINDER_MAP = 'psycle_class_reminder_map'; // {eventId: {id, startAt}}
 
+  // How the reminder's body ends. "The live countdown" is the iPhone's Live
+  // Activity, which the tap starts; the Android app has none, so there the body
+  // is the instructor and the studio and promises nothing more.
+  function _classReminderTail() {
+    return IS_ANDROID ? '' : ' — open Psync for the live countdown.';
+  }
+
   function _classRemindersEnabled() {
     return localStorage.getItem(CLASS_REMINDER_PREF) !== 'off';
   }
@@ -1822,17 +1992,18 @@
         if (!isFinite(fireAt) || fireAt <= Date.now()) return;
         var id = _reminderIdFor(evtId, map);
         map[evtId] = { id: id, startAt: c.startAt };
-        toSchedule.push({
+        toSchedule.push(_forAndroid({
           id: id,
           title: (c.typeName || 'Class') + ' starts in 90 minutes',
           body: [c.instrName, c.locName || c.studioName].filter(Boolean).join(' · ') +
-            ' — open Psync for the live countdown.',
+            _classReminderTail(),
           schedule: { at: new Date(fireAt), allowWhileIdle: true },
           sound: 'default',
           extra: { eventId: evtId },
-        });
+        }, ANDROID_CHANNEL_CLASSES));
       });
       if (toSchedule.length) {
+        if (IS_ANDROID) await _ensureAndroidChannels();
         try { await LocalNotifications.schedule({ notifications: toSchedule }); } catch (e) {}
       }
       _saveReminderMap(map);
@@ -1939,7 +2110,9 @@
       var displaced = false;
       var yes = await window.confirmModal({
         title: 'Remind you 90 min before class?',
-        body: 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.',
+        // (Android has no Live Activity: nothing about a countdown there.)
+        body: IS_ANDROID ? 'Psync can send a notification 90 minutes before each class you book.'
+          : 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.',
         confirmText: 'Remind me',
         cancelText: 'Not now',
         onReplaced: function () { displaced = true; },
@@ -2034,7 +2207,7 @@
       if (yes) {
         var armed = await window._nativeReminder.enable(); // the iOS prompt, when it is still owed
         if (typeof window.toast === 'function') {
-          window.toast(armed ? 'Reminder set — Mondays at 12:00' : 'Enable notifications for Psync in iOS Settings first', armed ? 'success' : 'error');
+          window.toast(armed ? 'Reminder set — Mondays at 12:00' : 'Enable notifications for Psync in ' + (IS_ANDROID ? 'Android' : 'iOS') + ' Settings first', armed ? 'success' : 'error');
         }
       }
       if (typeof window.pushAction === 'function') {
@@ -2145,6 +2318,28 @@
   // ── Status Bar ─────────────────────────────────────────────────
   // Set status bar style based on theme
 
+  // ── pure:android-bridge:start ── (DOM-free; tests/suites/18-android.js evaluates this block)
+  // The ground of the theme in force, for the Android status bar: the `bg` of
+  // its APP_THEMES entry (js/theme.js) — the registry the glyph style is read
+  // from, and the colour the web build gives <meta name="theme-color">. No such
+  // theme, or none set yet (following the system): the first theme on that
+  // base, which is what js/theme.js falls back to (Cloud / Graphite). Anything
+  // that is not #rrggbb → null, and the bar is left as it is: the plugin
+  // rejects a colour it cannot parse.
+  function _themeGround(registry, themeId, base) {
+    var list = Array.isArray(registry) ? registry : [];
+    var hit = null, i;
+    for (i = 0; i < list.length && !hit; i++) {
+      if (list[i] && themeId && list[i].id === themeId) hit = list[i];
+    }
+    for (i = 0; i < list.length && !hit; i++) {
+      if (list[i] && list[i].base === base) hit = list[i];
+    }
+    var bg = hit && hit.bg;
+    return (typeof bg === 'string' && /^#[0-9a-f]{6}$/i.test(bg)) ? bg : null;
+  }
+  // ── pure:android-bridge:end ──
+
   function updateStatusBar() {
     var StatusBar = window.Capacitor && Capacitor.Plugins.StatusBar;
     if (!StatusBar) return; // @capacitor/status-bar not installed/synced yet
@@ -2159,6 +2354,16 @@
       var reg = window.APP_THEMES || [];
       for (var i = 0; i < reg.length; i++) {
         if (reg[i].id === themeId) { base = reg[i].base || 'dark'; break; }
+      }
+    }
+    // Android only: there the status bar is a band of its own colour ABOVE the
+    // web view (on iOS the page is drawn under it), so it wears the theme's
+    // ground — at launch and on every theme change, like the glyphs below.
+    // setBackgroundColor does nothing on iOS and is never called there.
+    if (IS_ANDROID && typeof StatusBar.setBackgroundColor === 'function') {
+      var ground = _themeGround(window.APP_THEMES, themeId, base);
+      if (ground) {
+        try { StatusBar.setBackgroundColor({ color: ground }).catch(function () {}); } catch (e) {}
       }
     }
     // The plugin's Style enum names the BACKGROUND it is meant for, not the
@@ -2212,12 +2417,19 @@
 
   /**
    * getDiagnosticReport — comprehensive diagnostics string for developer use.
-   * Includes: device model, iOS version, app version, action log, error log,
-   * localStorage summary.
+   * Includes: the platform, device model, OS version, app version, action log,
+   * error log, localStorage summary.
    */
   window.getDiagnosticReport = async function () {
     var sections = [];
-    sections.push('=== Psycle iOS Diagnostic Report ===');
+    // Which app this is, asked here rather than read off the bridge's own
+    // PLATFORM: tests/suites/owner-tools.js runs this function on its own.
+    var platform = 'unknown';
+    try {
+      if (typeof Capacitor.getPlatform === 'function') platform = String(Capacitor.getPlatform());
+    } catch (e) {}
+    sections.push('=== Psycle ' + (platform === 'android' ? 'Android' : 'iOS') + ' Diagnostic Report ===');
+    sections.push('Platform: ' + platform);
     sections.push('Generated: ' + new Date().toISOString());
     // Which build, on what: neither the Device nor the App plugin below is
     // installed, so without these two lines a tester's report named no build,

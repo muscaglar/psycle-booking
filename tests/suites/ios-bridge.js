@@ -8,8 +8,13 @@
 // advances by hand, a fake localStorage and the few DOM lookups the bridge
 // makes. Nothing native, no network. If the bridge starts touching a new global
 // at load, boot() throws and the suite reports a crash — add the stub here.
+//
+// The harness (the fake Capacitor, its clock and boot()) is also exported as
+// `module.exports.harness`, for a suite that boots the same bridge as ANOTHER
+// platform: tests/suites/18-android.js. Everything it added is opt-in — with no
+// new option the fake is what it always was (no Capacitor.getPlatform at all).
 
-module.exports = async function (t) {
+function harness(t) {
   const BRIDGE_SRC = t.readSource('ios-app/www/native-bridge.js');
 
   // Drain every pending microtask (setImmediate runs after the queue is empty),
@@ -73,14 +78,16 @@ module.exports = async function (t) {
   }
 
   // The real registry's id → base pairs when they can be read out of theme.js,
-  // so a new light theme is covered without touching this file.
+  // so a new light theme is covered without touching this file. (`bg`, the
+  // theme's ground, rides along when the entry has one: the Android status bar
+  // wears it — 18-android.js.)
   function themeRegistry() {
     const found = [];
-    const re = /\{\s*id:\s*'([\w-]+)'[^}]*?base:\s*'(light|dark)'/g;
+    const re = /\{\s*id:\s*'([\w-]+)'[^}]*?base:\s*'(light|dark)'(?:[^}]*?bg:\s*'(#[0-9a-fA-F]{6})')?/g;
     let m;
     try {
       const src = t.readSource('js/theme.js');
-      while ((m = re.exec(src))) found.push({ id: m[1], base: m[2] });
+      while ((m = re.exec(src))) found.push(m[3] ? { id: m[1], base: m[2], bg: m[3] } : { id: m[1], base: m[2] });
     } catch (e) { /* fall through to the literal registry */ }
     const usable = found.some((x) => x.base === 'light') && found.some((x) => x.base === 'dark');
     return usable ? found : [
@@ -98,6 +105,15 @@ module.exports = async function (t) {
    *   deny    true → the iOS prompt is answered "Don't Allow"
    *   removeDelivered  true | 'reject' → the plugin has removeDeliveredNotifications
    *   theme   data-theme at launch;  systemLight  prefers-color-scheme: light
+   *   platform  'ios' | 'android' → Capacitor.getPlatform() answers it (left out:
+   *             no getPlatform at all, the fake every older section boots)
+   *   plugins   {Name: impl}, or (rec) => that: more plugins (a fake calendar,
+   *             the iOS-only ones); rec(name, arg) writes to calls.plugin
+   *   channelsFail  true → createChannel rejects (Android before 8 has none)
+   *   userAgent navigator.userAgent
+   * calls.plugin is the ORDERED log of every call on the built-in fakes —
+   * ['Plugin.method', argument] — and calls.warns / calls.errors what the
+   * bridge said on console.warn / console.error.
    */
   function boot(opts) {
     opts = opts || {};
@@ -107,7 +123,9 @@ module.exports = async function (t) {
     Object.keys(opts.local || {}).forEach((k) => ls.setItem(k, opts.local[k]));
     const native = Object.assign({}, opts.native || {});
 
-    const calls = { prefGet: [], prefSet: [], setStyle: [], scheduled: [], cancelled: [], removedDelivered: [], requested: 0, switchTab: [], opened: [], toasts: [], modals: [], rowRenders: 0, restoreResolved: 0 };
+    const calls = { prefGet: [], prefSet: [], setStyle: [], scheduled: [], cancelled: [], removedDelivered: [], requested: 0, switchTab: [], opened: [], toasts: [], modals: [], rowRenders: 0, restoreResolved: 0,
+      setBackgroundColor: [], channels: [], plugin: [], warns: [], errors: [] };
+    const rec = (name, arg) => { calls.plugin.push(arg === undefined ? [name] : [name, arg]); };
     const state = { perm: opts.perm || 'prompt' };
     // ids = elements that exist; styles = inline style per id (#bikeModal is
     // permanent markup the app shows/hides through style.display).
@@ -117,44 +135,63 @@ module.exports = async function (t) {
     const plugins = {
       Preferences: {
         get(o) {
+          rec('Preferences.get', o.key);
           calls.prefGet.push(o.key);
           if (opts.prefGet) return opts.prefGet(o.key);
           return Promise.resolve({ value: Object.prototype.hasOwnProperty.call(native, o.key) ? native[o.key] : null });
         },
-        set(o) { calls.prefSet.push(o.key); native[o.key] = o.value; return Promise.resolve(); },
-        remove(o) { delete native[o.key]; return Promise.resolve(); },
+        set(o) { rec('Preferences.set', o.key); calls.prefSet.push(o.key); native[o.key] = o.value; return Promise.resolve(); },
+        remove(o) { rec('Preferences.remove', o.key); delete native[o.key]; return Promise.resolve(); },
       },
-      StatusBar: { setStyle(o) { calls.setStyle.push(o.style); return Promise.resolve(); } },
+      // setBackgroundColor and createChannel are on the iOS proxies too (the
+      // native side answers "unimplemented"), so they are always here: a test
+      // can then SEE that only the Android app calls them.
+      StatusBar: {
+        setStyle(o) { rec('StatusBar.setStyle', o); calls.setStyle.push(o.style); return Promise.resolve(); },
+        setBackgroundColor(o) { rec('StatusBar.setBackgroundColor', o); calls.setBackgroundColor.push(o.color); return Promise.resolve(); },
+      },
       LocalNotifications: {
-        checkPermissions() { return Promise.resolve({ display: state.perm }); },
+        checkPermissions() { rec('LocalNotifications.checkPermissions'); return Promise.resolve({ display: state.perm }); },
+        createChannel(o) {
+          rec('LocalNotifications.createChannel', o);
+          calls.channels.push(o);
+          return opts.channelsFail ? Promise.reject(new Error('unavailable')) : Promise.resolve();
+        },
         requestPermissions() {
+          rec('LocalNotifications.requestPermissions');
           calls.requested++;
           state.perm = opts.deny ? 'denied' : 'granted';
           return Promise.resolve({ display: state.perm });
         },
-        registerActionTypes() { return Promise.resolve(); },
-        addListener(name, fn) { listeners[name] = fn; },
-        schedule(o) { calls.scheduled.push(o); return Promise.resolve(); },
-        cancel(o) { calls.cancelled.push(o); return Promise.resolve(); },
+        registerActionTypes(o) { rec('LocalNotifications.registerActionTypes', o); return Promise.resolve(); },
+        addListener(name, fn) { rec('LocalNotifications.addListener', name); listeners[name] = fn; },
+        schedule(o) { rec('LocalNotifications.schedule', o); calls.scheduled.push(o); return Promise.resolve(); },
+        cancel(o) { rec('LocalNotifications.cancel', o); calls.cancelled.push(o); return Promise.resolve(); },
       },
     };
     // Optional in the bridge's eyes (it feature-tests the method), so only
     // the cases that ask for it get one.
     if (opts.removeDelivered) {
       plugins.LocalNotifications.removeDeliveredNotifications = (o) => {
+        rec('LocalNotifications.removeDeliveredNotifications', o);
         calls.removedDelivered.push(o);
         return opts.removeDelivered === 'reject' ? Promise.reject(new Error('nope')) : Promise.resolve();
       };
     }
+    // A function is handed the recorder, so its fakes land in calls.plugin too.
+    const extra = (typeof opts.plugins === 'function' ? opts.plugins(rec) : opts.plugins) || {};
+    Object.keys(extra).forEach((name) => { plugins[name] = extra[name]; });
+    const capacitor = { Plugins: plugins, isNativePlatform: () => true };
+    if (opts.platform) capacitor.getPlatform = () => opts.platform;
 
     const ctx = {
-      console: { log() {}, warn() {}, error() {} },
+      console: { log() {}, warn(...a) { calls.warns.push(a.map(String).join(' ')); }, error(...a) { calls.errors.push(a.map(String).join(' ')); } },
       localStorage: ls,
-      navigator: { onLine: true },
+      navigator: opts.userAgent ? { onLine: true, userAgent: opts.userAgent } : { onLine: true },
       setTimeout: clock.setTimeout,
       clearTimeout: clock.clearTimeout,
       __now: clock.now,
-      Capacitor: { Plugins: plugins, isNativePlatform: () => true },
+      Capacitor: capacitor,
       PsycleEvents: events,
       _eventCache: {},
       _myBookings: {},
@@ -191,11 +228,19 @@ module.exports = async function (t) {
     return {
       ctx, clock, events, ls, native, calls, state, dom,
       setTheme(id) { dom.theme = id; dom.observers.forEach((cb) => cb()); },
-      tap(extra, actionId) {
-        listeners.localNotificationActionPerformed({ actionId: actionId || 'tap', notification: { title: 'T', body: 'B', extra: extra } });
+      // `over`: other fields of the notification — a forged one brings its own title and body (18-android.js).
+      tap(extra, actionId, over) {
+        listeners.localNotificationActionPerformed({ actionId: actionId || 'tap', notification: Object.assign({ title: 'T', body: 'B', extra: extra }, over || {}) });
       },
+      rec,
     };
   }
+
+  return { boot, flush, themeRegistry, makeClock, makeEvents };
+}
+
+module.exports = async function (t) {
+  const { boot, flush, themeRegistry } = harness(t);
 
   // ════════════════════════════════════════════════════════════════════
   t.section('iOS bridge: status bar style follows the theme base');
@@ -717,3 +762,5 @@ module.exports = async function (t) {
     t.ok(/isNativePlatform\(\)\) \{\s*_shareSettingsExport\(json, fileName\);\s*return;/.test(settingsSrc), 'exportSettings takes the share route (and skips the dead blob download) on the native platform');
   }
 };
+
+module.exports.harness = harness;

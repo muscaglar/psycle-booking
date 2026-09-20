@@ -19,3 +19,20 @@ ios-app/ios/App/Pods/
 
 # Scratch folder of tests/tools/appstore-shots.mjs (raw captures + compose pages)
 tests/tools/.appstore-work/
+
+# Android. Build output, the copied web assets and the generated config files are
+# covered by ios-app/android/.gitignore (the Capacitor template's). What that file
+# leaves open is listed here: release signing material (a keystore and the
+# properties file that holds its passwords are per-machine and are never
+# committed — tests/suites/19-android-project.js holds that), the SDK path, and
+# Android Studio's project folder. A current keytool writes a PKCS12 store
+# whatever the file is called, so *.p12 and *.pfx are refused everywhere too —
+# not only inside ios-app/android/: PSYNC_KEYSTORE_FILE takes a relative path,
+# and one folder up is a natural place to keep a keystore.
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+local.properties
+ios-app/android/.idea/

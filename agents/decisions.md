@@ -128,6 +128,20 @@ From IMPROVEMENTS-2026-09.md → "Deliberately NOT changed — owner decisions".
 | The Capacitor 6 → 8 upgrade is documented and has NOT been run. The lockfile must keep resolving from registry.npmjs.org (check `npm config get registry` before you regenerate it); then verify on a device. | Xcode Cloud runs `npm ci` against the lockfile. | ios-app/UPGRADE-CAPACITOR-8.md |
 | Tell the owner plainly what was verified and what was not. Put decisions that are theirs to them as short questions with a recommendation. | The owner's stated preference. | — |
 
+## 8. Platforms: the Android app
+
+Decided on 2026-09-20: of the levels put to them, the owner chose level 2.
+
+| Decision | Why | Held by |
+|---|---|---|
+| There is an Android app at "level 2": everything the iPhone app does EXCEPT the widgets, the Live Activity and Siri — calendar sync, the Monday 12:00 and class reminders, the share sheet, storage that survives a purge, haptics, the in-app browser — packaged with Capacitor around the same ios-app/www/. | "Go ahead with level 2 please." | ios-app/android/; `IS_ANDROID` (ios-app/www/native-bridge.js); 18-android.js, 19-android-project.js; architecture/android.md |
+| **The iPhone app must not change for Android's sake**: no new npm package, no new Capacitor plugin (a plugin is an iOS pod), no Swift edit, and `npm run sync` stays iOS-only. | Xcode Cloud runs `npm ci`, then `npm run sync`, on every push to `main`, and that build goes to testers (section 7). | 19-android-project.js (the scripts, the lockfile, ci_post_clone.sh); 18-android.js (`IPHONE_LAUNCH_DIGEST`: the iPhone path's plugin calls, unchanged to the byte) |
+| Level 3 — an Android home-screen widget — was NOT requested. Do not start it; it is a row of backlog.md. | The owner asked for level 2, no more. | — |
+| Android is released by hand, by the owner: nothing about it is wired to a store, no signing key lives in the repository or in GitHub, and CI builds a debug APK only. | The repository is public; a Play submission is blocked on the target API level anyway (backlog.md). | ios-app/android/app/build.gradle (the four `PSYNC_…` values); both .gitignore files; 19-android-project.js |
+| Hardware / gesture Back asks the page first and otherwise sends the app to the background, alive; it never finishes the activity, never confirms, never spends. | Settled in the brief for the work, on the owner's behalf ("nothing needed from me I hope"): without the @capacitor/app plugin — which would be a new iOS pod — Capacitor closes the app on Back, under whatever sheet is open. Section 2 decides the rest: Back is always the safe answer. | `MainActivity`; `window._psycleAndroidBack`, `pure:android-back` (js/app.js); 18-android.js, 19-android-project.js |
+| Back presses a confirm's cancel button WHATEVER it says, as Escape and a tap outside the dialog do. On three dialogs that is more than "leave it": "Book anyway" carries on to the picker or to the confirm that does spend, "Carry on" opens the usual-week review, "Discard" drops a queued offline booking. None books. On the welcome Back is the welcome's own Back, and its Skip only from the first page. | Made in review, on the owner's behalf: the three dialogs belong to spend paths the Android work must not edit, and a Back that did nothing on them would be a dead button. An edge swipe IS Android's Back and the welcome is turned by swiping, so Skip — which is for good — must not be one stray thumb away. | architecture/android.md → Back; ios-app/ANDROID.md → "How Back works"; 18-android.js (it fails when a fourth such label appears) |
+| The Android app is portrait only. | Made in review, on the owner's behalf, as parity: the iPhone app (Info.plist) and manifest.json already are, the page has no landscape layout, and its sheets and spend dialogs have never been seen 360px high. | AndroidManifest.xml (`android:screenOrientation`); 19-android-project.js |
+
 ## Open questions the owner has not answered
 
 Listed by IMPROVEMENTS-2026-09.md ("Follow-up: your usual week" → "Decisions the owner may want to overrule"):
@@ -141,6 +155,18 @@ choices made on the owner's behalf and not yet confirmed. Ask before changing on
 - A second seat is the free one closest to the first, which can be the seat in front rather than the one beside.
 - The review's button counts a no-map studio's spaces as "seats".
 - "Not now" to the reminder offer leaves the reminder unset rather than writing `'off'`.
+
+Chosen on the owner's behalf in the Android work (section 8), and theirs to overrule:
+- Reminders on Android use inexact alarms: the app does not ask for the "Alarms & reminders" special access, so a
+  reminder may arrive a few minutes late.
+- The app's data is excluded from Google backup and from a phone-to-phone transfer: on a new phone the member signs
+  in again, and what lives only on the phone (rankings, favourites, spot preferences) travels by Settings → export
+  and import, not by backup.
+- A stats or year card is shared as text on Android (an image needs a plugin the app does not carry).
+- The Android launch screen shows the mark without the wordmark.
+- The Android app is portrait only, as the iPhone app is.
+- Back presses a confirm's cancel button whatever it says ("Book anyway", "Carry on" and "Discard" included — none
+  of them books), and on the first-run welcome it is the welcome's own Back: Skip only from the first page.
 
 Never asked, so not decided — ask before building:
 - Card density / a compact-cards preference (standing preference: restraint; space on My Bookings matters).

@@ -2,7 +2,7 @@
 
 A fast, independent companion app for Psycle London members: find classes across every studio, book and cancel,
 manage waitlist places, and keep an eye on your plan and your habits. It is a vanilla-JS progressive web app
-(no framework, no bundler, no build step for the web) with a Capacitor 6 wrapper for iOS.
+(no framework, no bundler, no build step for the web) with a Capacitor 6 wrapper for iOS and Android.
 
 **What it is not.** Psync is not affiliated with, or endorsed by, Psycle. It has no server of its own: it signs in
 with your own Psycle account and talks to the same customer API that Psycle's own booking pages use. Your token
@@ -98,6 +98,18 @@ The Capacitor wrapper lives in `ios-app/`, and the Xcode project is committed. S
 (`cd ios-app && npm ci && npm run sync && npm run open`). The widget, Live Activity and Siri targets, and how
 their data reaches them, are described in [ios-app/NATIVE_FEATURES.md](ios-app/NATIVE_FEATURES.md); the
 TestFlight pipeline is in [ios-app/CICD.md](ios-app/CICD.md).
+
+## Android app
+
+The same wrapper also holds an Android project, `ios-app/android/` (the folder name `ios-app/` is historical): the
+same web layer and the same native bridge as the iPhone app, and everything it does except the widgets, the Live
+Activity and Siri — calendar sync, class and Monday 12:00 reminders, the share sheet, storage that survives a cleared
+web view, haptics, the in-app browser, and a hardware Back that closes what is on top and never the app. Nothing was
+added to the iPhone build for it. It was written without an Android toolchain, so GitHub Actions is its compiler:
+every push to `main` or an `android/…` branch builds a debug APK (the `psync-debug-apk` artifact) that can be
+sideloaded with nothing installed. It has not yet been seen on a phone, and a Google Play release waits for the
+Capacitor upgrade. Installing it, building it, releasing it and the on-device checklist:
+[ios-app/ANDROID.md](ios-app/ANDROID.md); store copy: [ios-app/PLAY_STORE_LISTING.md](ios-app/PLAY_STORE_LISTING.md).
 
 ## Licence
 

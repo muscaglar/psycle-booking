@@ -789,11 +789,17 @@ function _announceAllocations(eventIds, diffToPersist) {
       const clashLine = ids.map(id => _clashLabel(_clashFor(id))).find(Boolean);
       if (clashLine) warn = clashLine + '. ' + warn;
     } catch (e) {}
+    // Where else the seat shows up. The Android app has no widgets, so there it
+    // is the calendar alone; everywhere else the sentence is what it always was.
+    // (typeof: the suites run this function on its own.)
+    const alsoIn = (typeof _onboardPlatform === 'function' && _onboardPlatform() === 'android')
+      ? '(and your calendar if you sync)'
+      : '(and your calendar/widget if you sync)';
     let replaced = false;
     _announceShowing = true;
     confirmModal({
       title: "You're in — Psycle gave you a spot",
-      body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings (and your calendar/widget if you sync).`,
+      body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings ${alsoIn}.`,
       warn,
       confirmText: 'View my bookings',
       cancelText: 'OK',
@@ -1846,6 +1852,11 @@ function openLoginPopup() {
 function showTokenDialog() {
   document.getElementById('tokenInput').value = '';
   document.getElementById('saveTokenBtn').disabled = true;
+  // The line under "Connect Psycle account" names the iPhone in the markup
+  // (psycle-finder.html), and stays so for the iPhone app and the web. Only the
+  // Android app rewords it, as its other copy is: at run time, by platform.
+  const worksOn = document.getElementById('tokenWorksOn');
+  if (worksOn && typeof _onboardPlatform === 'function' && _onboardPlatform() === 'android') worksOn.textContent = 'Works on your phone and on desktop.';
   document.getElementById('tokenDialog').style.display = 'flex';
 }
 
@@ -13166,15 +13177,19 @@ function _welcomeDecision(s) {
 // hint is gated on a coarse pointer too), and with a mouse the days are
 // stepped through with the strip, the arrow keys or a swipe. The note on
 // the first page is required wording, not decoration.
-function _welcomePages(native, touch) {
+// `platform` (optional — Capacitor's 'ios' | 'android' | 'web'): the Android
+// app has reminders and calendar sync but no widgets, and is not an iPhone, so
+// its last page says what it has. Left out, a native build reads as the iPhone
+// app, as it always did.
+function _welcomePages(native, touch, platform) {
   return [
     { id: 'welcome', title: 'Psync', body: 'Find a class. Book a spot.',
       note: 'An independent companion for Psycle London members, not affiliated with or endorsed by Psycle.' },
     { id: 'find', title: 'Find your class', body: touch ? 'Choose your dates, then swipe between days.' : 'Choose your dates, then step through the days.' },
     { id: 'book', title: 'Book in two taps', body: 'Your usual spot is ready to confirm, and you are warned about clashes and the late-cancel window.' },
-    { id: 'keep', title: 'Keep up', body: native
-      ? 'Everything you hold in one place, with widgets and reminders on iPhone.'
-      : 'Everything you hold in one place.' },
+    { id: 'keep', title: 'Keep up', body: !native ? 'Everything you hold in one place.'
+      : platform === 'android' ? 'Everything you hold in one place, with reminders and calendar sync.'
+      : 'Everything you hold in one place, with widgets and reminders on iPhone.' },
   ];
 }
 
@@ -13229,6 +13244,11 @@ let _onboardLaunchSettled = false; // this launch's "should it show?" has its an
 
 function _onboardNative() {
   try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch { return false; }
+}
+
+// Which native app, in Capacitor's words ('ios' | 'android'); '' when it cannot say.
+function _onboardPlatform() {
+  try { return (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') ? String(window.Capacitor.getPlatform()) : ''; } catch { return ''; }
 }
 
 // `only`: the overlay a fade-out was started on. If the welcome was reopened
@@ -13472,9 +13492,9 @@ function startOnboarding(opts) {
   opts = opts || {};
   _onboardCleanup();
   _onboardIdx = 0;
-  let touch = _onboardNative(); // the iOS app is a touch screen whatever matchMedia makes of it
+  let touch = _onboardNative(); // a native app (iPhone or Android) is a touch screen whatever matchMedia makes of it
   try { touch = touch || !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch {}
-  _onboardPages = _welcomePages(_onboardNative(), touch);
+  _onboardPages = _welcomePages(_onboardNative(), touch, _onboardPlatform());
   const active = document.activeElement;
   _onboardOpener = active && active !== document.body ? active : null;
 
@@ -13967,6 +13987,279 @@ if (typeof PsycleEvents !== 'undefined') {
   }, 1200);
 });
 
+// ════════════════════════════════════════════════════════════════
+// Android: the hardware / gesture Back
+// ════════════════════════════════════════════════════════════════
+// The Android app has no @capacitor/app plugin, and without one Capacitor ends
+// the activity on Back. Its MainActivity asks this page instead —
+//   window._psycleAndroidBack ? window._psycleAndroidBack() : false
+// — and on false sends the app to the background (alive, never finished), so
+// the answer has to be a plain boolean, at once. Nothing else calls this: the
+// iPhone app and the web build never do.
+//
+// Back is the SAFE answer, always: it presses a confirm's cancel button, turns
+// the welcome back a page (and skips it only from its first), closes a sheet.
+// It never confirms, books, cancels a booking, joins or claims.
+// And it closes nothing by itself: each layer goes through the closer it
+// already has — its own Cancel / Skip button, the Escape that THE document
+// keydown handler and the sheets' own handlers serve, its toggle — one layer a
+// press, the top one.
+
+// ── pure:android-back:start ── (DOM-free; tests/suites/18-android.js evaluates this block)
+// What ONE Back press does, given what is on screen. Top layer first:
+//   'close-dialog'      a dialog with its own keys — the first-run welcome,
+//                       confirmModal, the usual-week sheet: its safe answer
+//   'close-overlay'     the top of the shared overlay stack (_OVERLAYS), or the
+//                       Booked sheet: that overlay's own closer
+//   'close-popup'       My Bookings' "Find similar"
+//   'close-menu'        a booking card's More menu
+//   'close-datepicker'  Discover's Pick-a-date calendar
+//   'collapse-filters'  Discover's Filters panel (below 1024px)
+//   'go-discover'       any other tab → Discover
+//   'none'              nothing to close: the app goes to the background
+// The calendar and the Filters panel live on Discover: left open under another
+// tab they are out of sight, and Back goes to Discover first.
+function _androidBackDecision(s) {
+  s = s || {};
+  if (s.welcomeUp || s.dialogOpen) return 'close-dialog';
+  if (s.overlayTopId) return 'close-overlay';
+  if (s.similarPopupOpen) return 'close-popup';
+  if (s.moreMenuOpen) return 'close-menu';
+  const onDiscover = !s.tab || s.tab === 'discover';
+  if (!onDiscover) return 'go-discover';
+  if (s.datePickerOpen) return 'close-datepicker';
+  if (s.filtersExpanded) return 'collapse-filters';
+  return 'none';
+}
+
+// Which of the dialogs with their own keys a 'close-dialog' answers — the top
+// one only, by their z-index (the welcome 9000, confirmModal 1000, the
+// usual-week sheet 998; agents/architecture/design-system.md → Overlays).
+function _androidBackDialog(s) {
+  s = s || {};
+  if (s.welcomeUp) return 'welcome';
+  if (s.confirmUp) return 'confirm';
+  if (s.usualWeekUp) return 'usual-week';
+  return '';
+}
+
+// Which control of the welcome a Back press is. From its second page on, the
+// welcome's OWN Back: one page back, nothing written. Its Skip only from the
+// first page — Skip writes "welcome seen" for good, the welcome is turned by
+// horizontal swipes, and a swipe that starts at the screen's edge IS Android's
+// Back gesture: one stray thumb must not cost a newcomer the pages they have
+// not seen.
+function _androidBackWelcomeControl(pageIdx) {
+  return Number(pageIdx) > 0 ? 'back' : 'skip';
+}
+
+// A dialog that waits on the MEMBER — the welcome, a confirm — is answered
+// whatever is marked busy under it. bookClass keeps data-busy (and often "…")
+// on its button for as long as its OWN confirm is up ("Book this class?",
+// "Book this spot?", "Join the waitlist?"), and claimWaitlistSpot leaves "…"
+// on Claim under "Claim this spot?": that mark is a double-tap guard, not a
+// request in flight. Read as one, it made Back dead on exactly the dialogs that
+// spend, for a minute.
+function _androidBackAsksMember(s) {
+  s = s || {};
+  return !!(s.welcomeUp || s.confirmUp);
+}
+
+// A request is in flight, and this is still the same stretch of waiting: Back
+// is swallowed, so the member is there when the result lands. `sinceMs` = how
+// long Back has been swallowed for already. Bounded by the clock: a button left
+// reading "…" by a fault must never turn Back off for good.
+var ANDROID_BACK_WAIT_MAX_MS = 60000;
+function _androidBackWaits(busy, sinceMs) {
+  return !!busy && !(Number(sinceMs) > ANDROID_BACK_WAIT_MAX_MS);
+}
+// ── pure:android-back:end ──
+
+// An overlay that is fading out is already answered (confirmModal, the
+// usual-week sheet and the welcome mark themselves _psycleClosing).
+function _androidBackLive(id) {
+  const el = document.getElementById(id);
+  return el && !el._psycleClosing ? el : null;
+}
+
+// A booking, a waitlist join / leave / claim or a cancel waiting on Psycle:
+// data-busy, or a button reading "…" (_busyLabel — what every such flow writes
+// on the button it holds; _discoverBusy and _weekOpenedReviewBlocked read Book
+// buttons the same way). Or the usual-week run: its sheet shows "Stop after
+// this class" for exactly as long as it runs.
+// Or the seat picker in the middle of a write, which marks neither: a spot swap
+// (executeSpotSwap — its own DELETE, then its own POST, the picker open under
+// "Swapping..." all the while; _swapInFlight is its flag, further up this file)
+// and one seat's cancel (cancelBikeSlot: "Cancelling…" in the picker's hint).
+// Back used to close the picker between the two requests of a swap — the old
+// seat gone, the context wiped, and the answer landing on a picker that was no
+// longer there.
+function _androidBackBusy() {
+  if (document.querySelector('[data-busy="1"]')) return true;
+  if (Array.from(document.querySelectorAll('button')).some(b => b.textContent === '…')) return true;
+  if (typeof _swapInFlight !== 'undefined' && _swapInFlight) return true;
+  const hint = document.getElementById('modalHint');
+  if (hint && hint.textContent === 'Cancelling…' && _overlayIsOpen(document.getElementById('bikeModal'))) return true;
+  return !!document.querySelector('#usualWeekSheet [data-uw-stop]');
+}
+
+function _androidBackFacts() {
+  // The welcome as a COVER (is-holding: the launch restore is still in flight)
+  // teaches nothing and has no keys yet — Skip there would write "welcome seen"
+  // for a newcomer who never saw it. It is not a layer Back closes.
+  const welcome = _androidBackLive('onboardOverlay');
+  const welcomeUp = !!welcome && !welcome.classList.contains('is-holding');
+  const confirmUp = !!_androidBackLive('psycleConfirmOverlay');
+  const usualWeekUp = !!_androidBackLive('usualWeekSheet');
+  // The Booked sheet sits above every overlay in the stack and has no key
+  // handler of its own; otherwise the stack's top, as Escape would find it.
+  let overlayTopId = document.getElementById('bookingConfirmation') ? 'bookingConfirmation' : '';
+  if (!overlayTopId) {
+    const open = _OVERLAYS.map(([id]) => id).filter(id => _overlayIsOpen(document.getElementById(id)));
+    const stacked = _overlayStack.map(o => o.el.id).filter(id => open.indexOf(id) !== -1);
+    overlayTopId = stacked.length ? stacked[stacked.length - 1] : (open[0] || '');
+  }
+  const panel = document.querySelector('.tab-panel.active');
+  const picker = document.getElementById('datePicker');
+  const bar = document.getElementById('controlsToggle');
+  return {
+    welcomeUp, confirmUp, usualWeekUp,
+    // The welcome's page, 0-based (_onboardIdx, further up this file).
+    welcomePage: welcomeUp && typeof _onboardIdx === 'number' ? _onboardIdx : 0,
+    dialogOpen: confirmUp || usualWeekUp,
+    overlayTopId,
+    similarPopupOpen: !!document.querySelector('.find-similar-popup'),
+    moreMenuOpen: !!_mbMoreState(),
+    datePickerOpen: !!picker && picker.style.display !== 'none' && picker.offsetParent !== null,
+    // At 1024px and up the stylesheet keeps the panel open and hides the bar:
+    // there is nothing to collapse, whatever _filtersCollapsed says.
+    filtersExpanded: !_filtersCollapsed && !!bar && bar.offsetParent !== null,
+    tab: panel && panel.id ? String(panel.id).replace(/^tab-/, '') : '',
+  };
+}
+
+// A real Escape keydown: on `document` it is served by whichever handler owns
+// the key right now — THE keydown handler (the top of the overlay stack, through
+// that overlay's real closer) or the usual-week sheet's own — exactly as a
+// keyboard's Escape is.
+function _androidBackEscape(target) {
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+}
+
+// Keyboard, switch-access and TalkBack focus. Three of the closers below hide
+// the element that holds it (the calendar, the Filters panel, a tab's panel)
+// and, unlike every other layer's closer, hand it nowhere: it fell out to
+// <body>, the top of the page. Read BEFORE the closer runs; given to the
+// control a tap or that layer's own Escape would have left it on.
+function _androidBackFocusWithin(el) {
+  const at = document.activeElement;
+  return !!(el && at && typeof el.contains === 'function' && el.contains(at));
+}
+function _androidBackFocus(el) {
+  if (el && typeof el.focus === 'function') { try { el.focus({ preventScroll: true }); } catch (e) {} }
+}
+
+let _androidBackWaitingSince = 0;
+let _androidBackWatch = null;
+
+// One stretch of waiting ends when the WAITING ends — not at the next idle
+// press, which may never come: the booking lands, the member taps Done, and two
+// minutes later a cancel in flight was measured from the first booking's press,
+// found "stuck", and Back acted in the middle of it. So a swallowed press
+// starts a once-a-second look that ends the stretch as soon as nothing is busy,
+// and stops by itself at the bound (a stuck button must not be polled for good).
+function _androidBackWatchWaiting() {
+  if (_androidBackWatch || typeof setInterval !== 'function') return;
+  _androidBackWatch = setInterval(function () {
+    let busy = false;
+    try { busy = _androidBackBusy(); } catch (e) {}
+    if (busy && _androidBackWaits(true, Date.now() - _androidBackWaitingSince)) return;
+    clearInterval(_androidBackWatch);
+    _androidBackWatch = null;
+    if (!busy) _androidBackWaitingSince = 0;
+  }, 1000);
+}
+
+window._psycleAndroidBack = function () {
+  try {
+    const facts = _androidBackFacts();
+    // A dialog that waits on the member is answered first; only with none up
+    // does a request in flight swallow the press.
+    if (!_androidBackAsksMember(facts)) {
+      const busy = _androidBackBusy();
+      if (!busy) _androidBackWaitingSince = 0;
+      else if (!_androidBackWaitingSince) _androidBackWaitingSince = Date.now();
+      if (_androidBackWaits(busy, busy ? Date.now() - _androidBackWaitingSince : 0)) {
+        _androidBackWatchWaiting();
+        return true;
+      }
+    }
+
+    const what = _androidBackDecision(facts);
+    if (what === 'none') return false;
+    // Bug-report trail, like a tab switch: a fixed word, never free text.
+    if (typeof window.pushAction === 'function') { try { window.pushAction('android:back ' + what); } catch (e) {} }
+
+    if (what === 'close-dialog') {
+      const which = _androidBackDialog(facts);
+      if (which === 'welcome') {
+        // Its own Back, or from the first page its Skip — the button itself, so
+        // the welcome's own click rules apply.
+        const control = _androidBackWelcomeControl(facts.welcomePage) === 'back'
+          ? document.querySelector('#onboardOverlay [data-onboard="back"]')
+          : document.querySelector('#onboardOverlay [data-onboard="skip"]');
+        if (control) control.click();
+      } else if (which === 'confirm') {
+        // confirmModal's own cancel button: the answer is never "yes". What
+        // "no" means is the dialog's own business, as it is for Escape and a
+        // tap outside it — and on three dialogs it is not "leave it all as it
+        // was": "Session expiring" → "Book anyway" carries on to the seat
+        // picker or to the confirm that does spend (which the next Back
+        // answers "no"), its usual-week twin → "Carry on" opens the review
+        // sheet, and "Offline booking" → "Discard" drops the queued booking.
+        // None of them books (agents/architecture/android.md → Back).
+        const cancel = document.querySelector('#psycleConfirmOverlay .confirm-btn-cancel');
+        if (cancel) cancel.click();
+      } else {
+        // The usual-week sheet's own close — which refuses while a run or a
+        // "Change spot" is going, and then Back has simply done nothing.
+        _androidBackEscape(document);
+      }
+    } else if (what === 'close-overlay') {
+      if (facts.overlayTopId === 'bookingConfirmation') dismissBookingConfirmation(); // its Done
+      else _androidBackEscape(document);
+    } else if (what === 'close-popup') {
+      const popup = document.querySelector('.find-similar-popup');
+      if (popup) _androidBackEscape(popup); // its own keydown: removed, and focus handed back
+    } else if (what === 'close-menu') {
+      closeBookingMore(true);
+    } else if (what === 'close-datepicker') {
+      // As the calendar's own Escape and pickCalDate do: the arrow or the day
+      // that holds focus is about to be hidden.
+      const at = document.activeElement;
+      const hand = !at || at === document.body || _androidBackFocusWithin(document.getElementById('datePicker'));
+      toggleDatePicker(); // its close branch
+      if (hand) _androidBackFocus(document.getElementById('pickDateBtn'));
+    } else if (what === 'collapse-filters') {
+      // A tap on the bar leaves focus on the bar.
+      const hand = _androidBackFocusWithin(document.getElementById('controlsBody'));
+      toggleFilters();
+      if (hand) _androidBackFocus(document.getElementById('controlsToggle'));
+    } else if (what === 'go-discover') {
+      if (typeof window.switchTab !== 'function') return false;
+      // A tap on the Discover tab leaves focus on that tab.
+      const hand = _androidBackFocusWithin(document.querySelector('.tab-panel.active'));
+      window.switchTab('discover');
+      if (hand) _androidBackFocus(document.querySelector('.tab-btn[data-tab="discover"]'));
+    }
+    return true;
+  } catch (e) {
+    // Cannot tell what is up: let Android do its part (the app goes to the
+    // background, nothing is closed and nothing is answered).
+    return false;
+  }
+};
+
 // ── PWA Service Worker ───────────────────────────────────────────
 // What happens once a NEW worker has taken over (reload, or a "new version"
 // bar) lives in psycle-finder.html's inline head script, so it works even when
@@ -13975,7 +14268,19 @@ if (typeof PsycleEvents !== 'undefined') {
 // the app comes back to the foreground, at most hourly. In the iOS app
 // native-bridge swaps navigator.serviceWorker for a register-only stub whose
 // promise resolves with nothing, hence the `reg` checks.
-if ('serviceWorker' in navigator) {
+// The ANDROID app registers nothing: its files are in the app bundle, and its
+// web view — unlike the iPhone's — does have service workers. Either the
+// worker's own fetch of sw.js is not served from the bundle (a registration
+// that fails at every launch), or — where the Capacitor in use does resolve a
+// worker's requests — a worker takes hold: a second cache that serves the OLD
+// files after a store update, which the bridge's unregister sweep only undoes
+// one launch late. Neither is wanted, so it is not attempted.
+function _swSkippedHere() {
+  try {
+    return !!(window.Capacitor && typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() === 'android');
+  } catch { return false; }
+}
+if ('serviceWorker' in navigator && !_swSkippedHere()) {
   navigator.serviceWorker.register('sw.js').then(reg => {
     if (!reg || typeof reg.update !== 'function') return;
     let checkedAt = Date.now();

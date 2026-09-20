@@ -32,7 +32,8 @@ Digit-led suites are `<wave>[<lane>]-<topic>.js` (`1f-…`, `10a-…`, `17-…`)
 | Retry, optimistic UI, offline queue (js/reliability.js) | `retry-signout.js` (`pure:retry-auth`) · `offline-queue.js` (`pure:offline-queue`) · `reliability.js` (evaluates the whole module; loads only app.js's `pure:booking`) |
 | Waitlist · usual week | `waitlist-polish.js` · `weekly-template.js`, `14a-usual-week-sheet.js` |
 | Discover · London time | `window.js`, `8b-day-pager.js` · `bookings-card.js`, `10a-time24.js` |
-| Session · iOS bridge | `session.js` · `ios-bridge.js` |
+| Session · iOS bridge | `session.js` · `ios-bridge.js` (it also EXPORTS its fake shell: `require('./ios-bridge.js').harness(t)` → `boot`, `flush`, …) |
+| The Android app | `18-android.js` (Back's decision and actor — and the shipped `bookClass` it sits over — Android copy, the bridge booted as `'android'`, a forged notification tap, and the iPhone path held to a digest of its plugin calls) · `19-android-project.js` (reads ios-app/android/: the manifest and both backup rule files, MainActivity, signing material, every res/ XML and reference, the CI jobs — it cannot compile anything) |
 | These docs | `15-agents-index.js` is only ADVISORY about index drift · `16-agents-docs.js` holds the reading guide and agents/README.md's lists to the files on disk, each folder guide's shape, and the handover's session log (first section, newest first, 1–10 entries, 160 lines) |
 | Any other module | `grep -n "js/<file>" agents/index/tests.md`: the suites that load, slice or anchor it |
 

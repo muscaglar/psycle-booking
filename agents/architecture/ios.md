@@ -1,5 +1,5 @@
 # iOS — the native targets (widget, Live Activity, Siri) and the Capacitor app (scene life cycle, calendar contract, reminders)
-Read this when you touch ios-app/www/native-bridge.js, any Swift, the Xcode project, the calendar sync or notifications. Skip it for web-only work. Related: [monday-release.md](monday-release.md) (the Monday reminder), [time.md](time.md) (what is London-resolved and what is still device-local).
+Read this when you touch ios-app/www/native-bridge.js, any Swift, the Xcode project, the calendar sync or notifications. Skip it for web-only work. The Android app loads the SAME bridge: everything here that is not Swift, a widget, the Live Activity or Siri applies to it too, and what it does differently is [android.md](android.md). Related: [monday-release.md](monday-release.md) (the Monday reminder), [time.md](time.md) (what is London-resolved and what is still device-local).
 
 ## Native iOS (WIRED — widget / Live Activity / Siri live in real targets)
 Home Screen widget + Lock Screen Live Activity build in the `PsycleWidgetExtension`

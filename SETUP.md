@@ -130,6 +130,13 @@ Xcode). That is the command to run — and commit the result of — after any ch
 | `No version is set for command node` | Set node version via asdf/nvm (see above) |
 | `patch-plugins` fails loudly after a dependency bump | The calendar plugin changed upstream; the patch is pinned to 6.7.2 on purpose — see ios-app/patch-plugins.js |
 
+## Android App (Capacitor)
+
+The same wrapper holds the Android project (`ios-app/android/`). It needs Android Studio, a JDK 17 and Node — or
+nothing at all, if you take the debug APK that GitHub Actions builds. Everything is in
+[ios-app/ANDROID.md](ios-app/ANDROID.md): `cd ios-app && npm ci && npm run sync:android && npm run open:android`.
+`npm run sync` (above) stays iOS-only.
+
 ## App Icon & Assets in Xcode
 
 ### App Icon

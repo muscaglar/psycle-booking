@@ -424,6 +424,93 @@ pill. tests/suites/17-leftovers.js holds each fix and was seen to fail without i
 
 Assertions: 7,991 → 8,046.
 
+### Follow-up: an Android app
+
+The owner asked for an Android app at "level 2" — everything the iPhone app does except the widgets, the Live
+Activity and Siri: calendar sync, the class and Monday 12:00 reminders, the share sheet, storage that survives a
+purge, haptics, the in-app browser — in their words, "Go ahead with level 2 please." One condition shaped all of it:
+**the iPhone app must not change.** Xcode Cloud runs `npm ci` and `npm run sync` on every push to `main`, so no npm
+package was added, no Capacitor plugin (a plugin is an iOS pod), no Swift was touched, and `npm run sync` still syncs
+iOS alone.
+
+So the Android app is a second native shell, `ios-app/android/`, around the SAME `ios-app/www/` and the same
+`native-bridge.js` (the folder name `ios-app/` is historical). The Capacitor project was generated and compiled once
+on a GitHub runner, because generating it needs a JDK and the Android SDK; everything after that was written without
+either, by reading. What it took:
+
+- **Back.** Without Capacitor's App plugin — not installed, for the reason above — Android's Back finishes the
+  activity: one stray swipe would close the app under an open sheet. `MainActivity` now asks the page
+  (`window._psycleAndroidBack`) and, when the page has nothing to close, sends the app to the background, alive; it
+  never finishes. The page closes ONE layer a press, the top one, through the closer that layer already has — a
+  confirm gets its cancel button, the welcome its own Back (its Skip only from the first page: an edge swipe IS
+  Android's Back, and the welcome is turned by swiping), a sheet the Escape its own handler serves — then leaves a
+  tab for Discover. Back never confirms, books, cancels, joins or claims. A confirm is answered at once, whatever
+  is marked busy under it (`bookClass` keeps its button busy under its own confirm); otherwise, while a request is
+  in flight — a spot swap between its two requests included — it does nothing (for a minute at most), so the
+  member is there when the answer lands.
+- **One bridge, two platforms.** The bridge already reached every plugin by existence, so the four that only the
+  iPhone app registers (the App Group writer, the widget reloader, the Live Activity, the widget deep link) are
+  simply absent on Android and skipped without a word. `IS_ANDROID` guards only what Android alone has: two
+  notification channels ("Class reminders", "New dates") with the mark as their small icon; a notification tap that
+  any other app can forge there (the plugin believes the intent's extras), so "Snooze" is ignored and an id that is
+  not a number opens nothing; the status bar's colour,
+  which on Android is a band of its own and now wears the theme's ground; and two facts read off the calendar
+  plugin's Kotlin — an event's notes come back as `description`, and a synced calendar can still list a row it has
+  just deleted, which would make a re-booked class match its own deleted event. Anything but `'android'` takes the
+  path the iPhone app always took: tests/suites/18-android.js holds the iPhone's plugin calls for one launch to a
+  digest taken at the commit before this work.
+- **Inexact reminders, on purpose.** The app does not ask for Android's "Alarms & reminders" special access, so a
+  reminder may arrive a few minutes late. That is fine for "starts in 90 minutes" and "new dates are open", and it
+  spares the member a settings screen.
+- **What a web view on Android cannot do.** It has no Web Share API and no download manager: the stats and year
+  cards used to fall through to a download that did nothing, under a toast that said "Image saved". They go out as
+  text through the native share sheet there, with a truthful toast; settings and ICS export already had a text
+  route. It does have service workers, which the iPhone's does not — so there app.js registers none: the files are
+  in the bundle, and a worker would serve old ones after a store update.
+- **Copy that named the iPhone.** The welcome's last page ("with reminders and calendar sync"), the reminder rows
+  (no "live countdown": there is no Live Activity), "Android Settings" where a permission was refused, "Works on
+  your phone and on desktop" under "Connect Psycle account", "your calendar" (not "calendar/widget") when a
+  waitlist place becomes a seat, and a diagnostics row and bug report that say which app they came from. Each is
+  chosen at run time, by platform: the iPhone app's strings — and the markup it loads — are the literals they
+  always were. One line changed for the WEB only, where it was shown and was wrong: "Calendar sync is only
+  available in the Psync app" (it said "the iOS app").
+- **The native project.** Backups off three ways — what the app stores is a sign-in, and from Android 12
+  `allowBackup` alone no longer stops a phone-to-phone transfer; cleartext traffic off; calendar permissions
+  declared (the plugin's own manifest declares none, and a request then answers "denied" without asking); the
+  launch window, status bar and navigation bar in the web app's own grounds, Cloud by day and Graphite by night, so
+  launch and first paint are one colour — and read again when the system flips light / dark under a live activity,
+  which Back never finishes; portrait only, as the iPhone app is; the mark as vector drawables — adaptive icon, the Android 13 themed layer,
+  the launch mark, the notification icon — with PNGs only for Android 7 and below (`assets/render-icons.sh
+  android`); release signing read from the environment or a git-ignored `keystore.properties`, and left UNSIGNED,
+  never debug-signed, when a value is missing. No keystore exists or may: the repository is public (`*.jks`,
+  `*.keystore`, `*.p12`, `*.pfx` and `keystore.properties` are refused at the root and in the project).
+- **CI is the compiler.** `android-build` builds a debug APK on every push to `main` or an `android/…` branch and
+  uploads it as `psync-debug-apk`, which is also the fastest way to try the app with nothing installed. An advisory
+  `android-smoke` job installs it on an emulator, launches it, sends one Back key and keeps two screenshots and a
+  log for a person to read; it never taps, so it can book nothing. The temporary workflow that generated the project
+  is gone. tests/suites/19-android-project.js holds what can be READ without a compiler: the manifest (both backup
+  rule files domain by domain, one exported component, no URL scheme, the portrait lock), the Back contract in
+  `MainActivity`, that no signing material is or can be tracked, that `npm run sync` and the lockfile are
+  as they were, and — with a small strict XML reader that is first proved able to fail — that every resource file
+  parses, is named as aapt demands and refers only to things that exist.
+
+**What is proved, and what is not.** The web layer and the bridge were driven in desktop Chromium on the fake
+Psycle server with a fake Capacitor answering `'android'`: Back through every layer, a booking (one request, on the
+fake server), nothing sent towards the live API. That is all. **Nothing Android has been compiled with these
+changes, installed or run**: not Gradle, not aapt2, not the manifest merger; not Back's round trip through
+`evaluateJavascript`; not a notification, a calendar event, a status bar or a launch screen. The iPhone app was not
+rebuilt either — its path is proved by recorded plugin calls. The list of what only a phone can show is
+[ios-app/ANDROID.md → "On-device checklist"](ios-app/ANDROID.md#on-device-checklist); it is separate from the iPhone
+list at the end of this file, and none of it is ticked.
+
+**Not a store release.** Capacitor 6 builds for Android API 34, and Google Play accepts new apps only at a newer
+level, so a Play submission waits for the Capacitor upgrade (`ios-app/UPGRADE-CAPACITOR-8.md`, which has no Android
+steps yet). Sideloading the debug APK needs neither. The owner's guide — installing, building, the keystore, Play
+Console, the data-safety answers — is `ios-app/ANDROID.md`; the store copy is `ios-app/PLAY_STORE_LISTING.md`. An
+Android widget ("level 3") was not asked for and was not started.
+
+Assertions: 8,061 → 8,307.
+
 ## How it was done
 
 A multi-pass review: discovery, independent verification of each finding, implementation in small patches,
@@ -745,6 +832,9 @@ These were looked at and left alone on purpose. Please do not "fix" them in pass
 None of this could be run on a phone. Each line needs a signed build on a real iPhone (the widget and Live
 Activity lines cannot be exercised in an unsigned build at all: without entitlements the widget process cannot
 read the App Group).
+
+This list is the iPhone's. The Android app has its own, in the same shape and just as unticked:
+[ios-app/ANDROID.md → "On-device checklist"](ios-app/ANDROID.md#on-device-checklist).
 
 **Appearance**
 - [ ] Status bar glyph colour is right in the light theme (dark glyphs on Cloud) and in a dark theme (light glyphs

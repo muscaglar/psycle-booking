@@ -104,6 +104,10 @@
   // makes the mirrored ciphertext permanently undecryptable and the user is
   // silently signed out. On the web nothing is backed up: key stays in
   // IndexedDB only, so at-rest encryption is unchanged there.
+  // "Native" is Capacitor's isNativePlatform(): true in the iPhone app AND the
+  // Android app, which run the same bridge — so Android takes this path too
+  // (there the mirror is SharedPreferences, and what it outlives is the web
+  // view's storage being cleared). Nothing here asks which of the two it is.
   var KEY_BACKUP_KEY = 'psycle_sec_key_backup';
   var _isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
@@ -214,7 +218,8 @@
   // fails, free what the app can rebuild by itself — the timetable first, the
   // reference lists only if that was not enough — and try again. Returns
   // false, never throws. localStorage.setItem is looked up at call time, not
-  // cached: on iOS native-bridge replaces it to mirror keys into Preferences.
+  // cached: in the native apps native-bridge replaces it to mirror keys into
+  // Preferences.
   function _freeAppCaches(deep) {
     try {
       localStorage.removeItem('psycle_window_cache');
@@ -320,8 +325,9 @@
     ]);
   }
 
-  // Native app: native-bridge restores mirrored keys (token ciphertext, AES
-  // key backup) from Capacitor Preferences into localStorage asynchronously.
+  // Native app (iPhone or Android — _isNativeApp, above): native-bridge
+  // restores mirrored keys (token ciphertext, AES key backup) from Capacitor
+  // Preferences into localStorage asynchronously.
   // Wait for that restore before reading localStorage, or a post-purge launch
   // reads an empty store and signs the user out even though the token was
   // restored milliseconds later. Promise handshake (security.js loads first

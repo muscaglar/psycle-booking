@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The native window wears the web app's ground, so launch, system bars and first paint are one
+  colour. These are the values of css/theme.css, and they change with it:
+    Cloud (light, here)               [data-theme="cloud"]     bg #e6e9ee
+    Graphite (dark, values-night/)    [data-theme="graphite"]  bg #12161f
+  The web app follows the system scheme until the member chooses a theme (themeBoot in
+  psycle-finder.html), and so do these: a member whose chosen theme is the other base sees the
+  system's ground until the page paints, exactly as the iPhone launch screen behaves.
+-->
+<resources>
+    <color name="psync_ground">#E6E9EE</color>
+
+    <!-- The mark on the launch screen (drawable/splash_mark.xml): the inks of assets/psync-mark.svg. -->
+    <color name="psync_mark_upper">#1B2130</color>
+    <color name="psync_mark_lower">#566073</color>
+
+    <!-- System bars. Dark glyphs on a pale bar need windowLightStatusBar (API 23) and
+         windowLightNavigationBar (API 27). Below those levels the glyphs are always white, so the
+         bar is the ink; values-v23/ and values-v27/ turn each bar to the ground where its flag
+         exists, and values-night/ (which outranks an API level) keeps both on Graphite. -->
+    <color name="psync_status_bar">#1B2130</color>
+    <color name="psync_navigation_bar">#1B2130</color>
+
+    <!-- AppTheme (values/styles.xml) names these three; the Capacitor library ships its own
+         defaults under the same names, and the app's copy wins. The ink, not a template blue. -->
+    <color name="colorPrimary">#1B2130</color>
+    <color name="colorPrimaryDark">#1B2130</color>
+    <color name="colorAccent">#1B2130</color>
+</resources>
