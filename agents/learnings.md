@@ -208,7 +208,7 @@ Purpose: the mistakes this repository has already paid for, most expensive first
 
 **H6. `env(safe-area-inset-*)` is 0 in a desktop browser.** To check an inset rule, re-inject the stylesheets IN ORDER as `<style>` elements with the inset replaced by a fixed length, disable the `<link>`s, and measure.
 
-**H7. The HTTP cache can serve a stale stylesheet after an edit.** Re-fetch with `{cache: 'reload'}` or add a query string to the `<link>`.
+**H7. The HTTP cache can serve a stale stylesheet OR MODULE after an edit.** Unregistering the service worker and clearing Cache Storage does not touch the browser's own HTTP cache, and a plain static server invites heuristic caching: a page has run a js/app.js from before a fix while `fetch('/js/app.js')` showed the new source. Re-fetch every file the shell names with `{cache: 'reload'}` before booting (playbooks P8 step 3 does), then assert a symbol of your change on the RUNNING function (`String(window.fn).includes('…')`), not on the fetched text.
 
 ## I. Assumptions about Psycle
 

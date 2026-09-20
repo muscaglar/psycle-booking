@@ -369,13 +369,6 @@
   --glow-sel-drop: rgba(221,227,236,0.22);
 }
 
-/* Graphite: recolor the hardcoded-pink booked button to the theme accent */
-[data-theme="graphite"] .book-btn.booked {
-  background: var(--booked-bg);
-  color: var(--accent);
-  border-color: var(--booked-border);
-}
-
 /* ── Override styles.css with var() ───────────────────────────── */
 
 /* Solid html background + no vertical rubber-band: over-scroll was
@@ -608,11 +601,6 @@ select:focus, input:focus { border-color: var(--accent); }
 /* Booking buttons */
 .book-btn { background: var(--accent); }
 .book-btn:hover:not(:disabled) { background: var(--accent-hover); }
-.book-btn.booked {
-  background: #1a1020;
-  color: #e94560;
-  border-color: #3a1a2a;
-}
 
 /* Toast */
 .toast {

@@ -893,7 +893,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   color: var(--accent-ink, #fff);
   border: none;
   padding: 7px var(--space-5);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: var(--text-base);
   font-weight: var(--weight-bold);
   letter-spacing: 0.08em;
@@ -904,7 +904,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 
 .book-btn:hover:not(:disabled) { background: var(--accent-hover, #c73650); }
 .book-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.book-btn.booked { background: #1a1020; color: #e94560; border: 1px solid #3a1a2a; }
+.book-btn.booked { background: var(--booked-bg); color: var(--accent); border: 1px solid var(--booked-border); }
 .book-btn.waitlist { background: var(--badge-waitlist-bg, #2a2a00); color: var(--badge-waitlist-text, #c8a800); border: 1px solid var(--badge-waitlist-border, #3a3a10); }
 
 .toast {
@@ -1974,7 +1974,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   left: 0;
   right: 0;
   max-height: 85vh;
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-4xl) var(--radius-4xl) 0 0;
   background: var(--bg-panel, #111113);
   border: 1px solid var(--border, #1e1e24);
   border-bottom: none;
@@ -2019,14 +2019,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   /* The circle exists before the bytes do — and is all that is left when the
      photo cannot load (js/app.js swaps the <img> for a div of this class). */
   background: var(--border, #222);
-}
-
-.cds-photo-placeholder {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--border, #222);
-  flex-shrink: 0;
 }
 
 .cds-header-info {

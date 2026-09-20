@@ -184,6 +184,9 @@ tests/tools/fake-psycle.js answers every request to the API host inside the page
    localStorage.setItem('psycle_onboarded_v1', '1');              // else the full-screen welcome is up
    localStorage.setItem('psycle_history_prompt_dismissed', '1');  // else the sync prompt blocks taps and swipes
    localStorage.setItem('psycle_hint_dayswipe', '1');
+   // the browser's own HTTP cache survives all of the above: re-fetch the shell's files, or you may drive YESTERDAY's module
+   const shell = await fetch('/psycle-finder.html', { cache: 'reload' }).then(r => r.text());
+   await Promise.all([...shell.matchAll(/(?:src|href)="((?:js|css|fonts)\/[^"]+)"/g)].map(m => fetch('/' + m[1], { cache: 'reload' })));
    (0, eval)(await fetch('/tests/tools/fake-psycle.js', { cache: 'reload' }).then(r => r.text()));
    const H = window.__H; await H.boot({});                        // writes the REAL psycle-finder.html into this page; opts: { search: '?theme=graphite', hash: '#bookings' }
    await window.securityReady; await window._secureTokenStore.set('faketoken-123456789'); await window.checkAuth();

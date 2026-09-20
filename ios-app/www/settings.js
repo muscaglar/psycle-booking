@@ -159,6 +159,10 @@
     });
 
     if (!next) {
+      // `.hidden` fades the pill out with its words still on it; once it is
+      // hidden the last class leaves the page too — on the pass AFTER the one
+      // that hid it (the 30 s tick at the latest), so nothing is seen to empty.
+      if (_pillEl.classList.contains('hidden')) _pillEl.textContent = '';
       _pillEl.classList.add('hidden');
       _pillA11y(null);
       return;

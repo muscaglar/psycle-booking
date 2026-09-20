@@ -375,6 +375,54 @@ booking week opens".
 
 Assertions: 7,436 → 7,953.
 
+### Follow-up: the small leftovers
+
+The list at the end of this file was read again against the code, line by line. Most of it had already gone with
+the new look and was only still written down: the calendar emoji in "Add to Calendar", the usual-week card's
+one-line "Fri 12:30pm", the "·" left at the end of a wrapped instructor line, the class sheet's empty disc for an
+instructor with no photo (it draws none now — a photo that cannot LOAD still leaves one: see the list), Terminal's
+dim seat numbers and dim "Full", Graphite's accent-outlined "Cancel booking" (My Bookings styles that button by
+where it sits, for every theme alike). What was still true and small was closed:
+
+- **Inline date picker.** Stepping a month rebuilt the arrow that was pressed and keyboard focus fell out of the
+  calendar. `calStep` now hands focus to the new arrow of the same direction — only when focus was in the calendar,
+  so a tap (Safari never focuses a tapped button) gains no ring. Picking a day closed the calendar over the cell
+  that was pressed and dropped focus the same way: `pickCalDate` now hands it to the calendar's button, as Escape
+  always did, under the same guard. Escape is unchanged.
+- **Seat picker.** A map wider than the sheet said nothing about scrolling sideways, and a whole column could sit
+  out of view. `.bike-map-wrap` shades the edge that has seats beyond it (backgrounds only: a fixed shade under a
+  cover that rides the end of the content); a map that fits looks as it did.
+- **Offline-booking dialog after a relaunch** said "(Spot 3)". A queued booking with seats now carries its seat word
+  (`slotWord`, stamped while the event cache still knows the class type), and the dialog says "Bench 3". The word
+  is for the dialog alone: the replay still builds its request body field by field.
+- **Hidden elements kept stale text.** The next-class pill is emptied on the pass after the one that hid it (it
+  still fades out with its words on it); the "N changes waiting to sync" line is emptied when it is hidden.
+- **The calendar button clipped a picked date.** Once a day is picked the round button carries words ("Sat 26
+  Sept"), and the new look had pinned it to a circle: it read "at 26 Sep". Its width is a minimum now — the same
+  circle around the calendar mark, a pill around a date; on the narrowest phone the row of ranges still fits beside
+  it (Terminal and Handheld wrap the ranges to two rows, as before). Found by the browser round of this pass.
+- **"Same class next week" flashed a bar across the desktop layout.** On an exact match `rebookNextWeek` parks a
+  carrier `.book-btn` on the page while `bookClass` runs — it must be IN the page: `_weekOpenedReviewBlocked` and the
+  service-worker update script know a booking mid-flight by a busy `.book-btn` they can find. Parked at the end of
+  the document it was painted by the base rule: hidden under the tab bar on a phone, a full-width bar on the desktop
+  layout for as long as the class detail took to load, and a stray "Book" in the tab order. It is still in the page
+  and still found by both guards, but no longer drawn, spoken or tabbed to.
+- **Values that bypassed the tokens.** `.book-btn.booked` reads `--booked-bg` / `--accent` / `--booked-border` in
+  css/styles.css; css/theme.css's copy of the old literals went, and with it the Graphite rule that only undid
+  them. `.book-btn`'s radius and the class sheet's top corners are tokens. css/crisp.css styles every card and
+  sheet button, so nothing changes on a drawn card or sheet. (One `.book-btn` sits outside both — the carrier
+  "Same class next week" parks on the page: see the list.)
+
+Left alone, and listed at the end of this file: the usual-week review sheet on the smallest phone, which is a
+deliberate trade-off; the plain disc a photo that cannot load leaves behind, also deliberate; and the carrier
+button "Same class next week" parks on the page while it books, which two guards read where it is.
+The month-step keys and the seat map were driven in desktop Chrome on the fake Psycle server
+(tests/tools/fake-psycle.js); the day-pick hand-back was added after that round and is held by
+tests/suites/17-leftovers.js, which runs the real `pickCalDate` — it has not been driven in a browser. Nothing was
+sent to the live API.
+
+Assertions: 7,991 → 8,036.
+
 ## How it was done
 
 A multi-pass review: discovery, independent verification of each finding, implementation in small patches,
@@ -678,7 +726,8 @@ These were looked at and left alone on purpose. Please do not "fix" them in pass
 - **Linen's accent as text, and Terminal / Synthwave accent-ink contrast.** Linen's terracotta accent used as text
   on the page background is about 3.7:1. Terminal and Synthwave define no `--accent-ink`, so labels on their accent
   fill are white at about 3.3:1 and 3.5:1. Readable, below AA for small text, and part of those themes' look.
-  (Linen and Synthwave were retired afterwards — see the last follow-up under Summary; the Terminal part stands.)
+  (Linen and Synthwave were retired afterwards — see *Follow-up: the owner's notes on the new look* under Summary;
+  the Terminal part stands.)
 - **The `file://` CORS-proxy development path** in js/app.js (`IS_FILE` / `PROXY`, with its red warning banner) was
   kept as it is. (Note that the page's content security policy lists only the app's own origin and
   `psycle.codexfit.com` under `connect-src`.)
@@ -708,6 +757,8 @@ read the App Group).
       drawn over a Book button, and it does not blink while days are paged or a filter is tapped.
 - [ ] Terminal and Handheld: the date row's two rows fit with nothing clipped; the Time row's wrapped second line
       looks intended.
+- [ ] Seat picker at a studio wider than the sheet: the edge with seats beyond it is shaded, the shade follows a
+      sideways scroll and is gone at each end; a studio that fits shows none.
 
 **The new mark**
 - [ ] The Home Screen icon is the two engraved halves; with the Home Screen set to Dark or Tinted icons
@@ -778,38 +829,23 @@ read the App Group).
 
 ## Known small leftovers
 
-Small, known, and still true at `a9d4a9b`. None affects a booking. The visual ones come from the last browser round.
+Small, known, and re-checked against the build that follows `bdd5ef5`: what had gone by then, or was closed in it,
+is no longer listed (see *Follow-up: the small leftovers* under Summary). None affects a booking.
 
 - **The usual-week review sheet on an SE-size phone (375 × 667).** With three classes and a waitlist row ticked the
   pinned header, the class list and the long waitlist sentence compete for one short screen: the list scrolls in a
   small window and part of the money paragraph sits under the buttons until the sheet is scrolled. Nothing is
-  blocked and nothing is hidden for good; on a 390 × 844 phone it is comfortable. Seen in the last browser round of
-  `98665f6`.
-- **Bike picker on a narrow phone.** A seat map wider than the sheet scrolls sideways, but nothing hints that it
-  does (no partial seat, fade or scrollbar), so a whole column can sit out of view. Seen with a synthetic wide
-  layout at 390px; worth checking against a real wide studio.
-- **A few hard-coded values still bypass the tokens.** The base booked-button style (`.book-btn.booked`:
-  `#1a1020` / `#e94560`) is what "Cancel booking" and "Leave waitlist" wear in Terminal, Synthwave, Handheld and
-  Blueprint — readable, but off-palette in Handheld. The base `.book-btn` radius (5px) and the class sheet's top
-  corners (16px) are fixed too, so they stay rounded in Handheld, where every radius token is zero.
-- **Graphite's "Cancel booking" / "Leave waitlist"** use the sage accent outline (a deliberate rule in
-  css/theme.css), so the destructive action does not look destructive there; the other themes tint it red or pink.
-- **My Bookings export row:** the calendar emoji in "Add to Calendar" sits tight against the label.
-- **Handheld, usual-week card at 375px:** a wider time ("Fri 12:30pm") pushes that row's label slightly out of line
-  with the rows above.
-- **Discover cards:** when the instructor line wraps, the "·" separator is left at the end of the first line.
-- **Class sheet with no instructor photo** shows an empty disc rather than initials (cards and lists do have the
-  initials fallback).
-- **Terminal is the lowest-contrast theme.** Numbers on available seats and the disabled "Full" button are legible
-  but dim; Synthwave's booked-seat label is similar. (Separate from the accent-ink decision above.)
-- **Inline date picker and the keyboard.** Stepping to the next or previous month re-renders the grid (`calStep`),
-  so keyboard focus drops out of the calendar and has to be tabbed back in. Escape still closes it and returns
-  focus to the calendar button.
-- **Hidden elements keep stale text.** When the last booking is cancelled while still signed in, the hidden
-  next-class pill keeps its old text (it is `aria-hidden`, out of the tab order and invisible); only a sign-out or
-  account change empties it. Likewise the "N changes waiting to sync" line is hidden, not emptied, once the queue
-  is empty. Neither is visible or announced.
-- **Offline-booking dialog after a relaunch** says "(Spot 3)" where the rest of the app would say "Bench 3" or
-  "Bike 3": the event cache that knows the class type is gone by then, and the label falls back to "Spot".
+  blocked and nothing is hidden for good; on a 390 × 844 phone it is comfortable. It is the price of a deliberate
+  rule — only the class list gives, then the dialog scrolls under buttons that stay in reach — and the strip those
+  buttons ride on is the one the class sheet and the seat picker wear, so a cue on it is a look to choose for all
+  three. Seen in the last browser round of `98665f6`.
+- **The seat map's scroll shades have not been seen on an iPhone.** A seat map wider than the sheet now shades the
+  edge that has seats beyond it. That was looked at in desktop Chrome at 375px, in all five themes, with a synthetic
+  40-seat layout; the iOS web view and a real wide studio have not been. Where an engine treats
+  `background-attachment: local` as `scroll`, the covers simply hide the shades and the map looks as it did.
+- **A photo that cannot load (offline, a dead URL) leaves a plain disc, not initials** — in the class sheet
+  (`.cds-photo`) and the instructor profile (`.instructor-photo`). Deliberate: js/app.js's capture-phase `error`
+  listener swaps the `<img>` for a div of the same class so no broken-image glyph shows, and the name is printed
+  beside it. With no photo URL at all neither draws a disc.
 - **No-layout bookings have still not been exercised against the live API** (by design — nothing was). Watch the
   error log for `POST /bookings` on a first booking at a studio without a seat map.

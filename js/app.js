@@ -3022,9 +3022,10 @@ let _calMonth = null; // { y, m }
 // knows nothing about it, and should not — this is the calendar's own keydown,
 // wired the first time it opens (so it runs AFTER that handler, which has
 // already claimed the key for any sheet that is up). Only when the key is the
-// calendar's to take: focus in it, on its button, or nowhere (stepping a month
-// rebuilds the arrow that was pressed, and Safari never focuses a clicked
-// button) — Escape in the instructor search box is not ours.
+// calendar's to take: focus in it, on its button, or nowhere (Safari never
+// focuses a clicked button, and stepping a month rebuilds the arrow — calStep
+// hands focus on only when it was in the calendar) — Escape in the instructor
+// search box is not ours.
 let _datePickerKeysWired = false;
 function _wireDatePickerKeys(el, btn) {
   if (_datePickerKeysWired) return;
@@ -3064,18 +3065,31 @@ function calStep(dir) {
   if (!_calMonth) return;
   let { y, m } = _calMonth; m += dir;
   if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+  // renderCalendar rewrites the whole disclosure, the pressed arrow included:
+  // keyboard focus fell out to <body> and had to be tabbed back in. It goes to
+  // the new arrow of the same direction — only when focus WAS in the calendar
+  // (Safari never focuses a clicked button: a tap there gains no ring).
+  const el = document.getElementById('datePicker');
+  const had = !!el && el.contains(document.activeElement);
   _calMonth = { y, m }; renderCalendar();
+  if (had) { const nav = el.querySelectorAll('.cal-nav')[dir < 0 ? 0 : 1]; if (nav) nav.focus(); }
 }
 function pickCalDate(ds) {
   document.getElementById('startDate').value = ds;
   document.getElementById('daysAhead').value = 1;
   _dateQuickMode = null;
-  const el = document.getElementById('datePicker'); if (el) el.style.display = 'none';
+  // Closing hides the day cell that was pressed: keyboard focus fell out to
+  // <body>. As Escape does, it goes back to the calendar's button — and as in
+  // calStep only when focus WAS in the calendar, read before it is hidden.
+  const el = document.getElementById('datePicker');
+  const had = !!el && el.contains(document.activeElement);
+  if (el) el.style.display = 'none';
   if (typeof onDateInputChange === 'function') onDateInputChange();
   else if (typeof triggerAutoSearch === 'function') triggerAutoSearch();
   // Last: onDateInputChange un-lights every pill, the calendar button included.
   // The chosen day is printed on that button — it was shown nowhere before.
   _syncDatePills();
+  if (had) { const btn = document.getElementById('pickDateBtn'); if (btn && typeof btn.focus === 'function') btn.focus(); }
 }
 // Days (YYYY-MM-DD) that have classes in the cached window — drives the dots.
 function _classDays() {
@@ -10450,10 +10464,20 @@ async function rebookNextWeek(eventId) {
     (data.relations?.studios || []).forEach(s => { _studioMap[s.id] = s; });
     _eventCache[String(exact.id)] = _eventCacheEntry(exact, data.relations, _eventCache[String(exact.id)]);
 
-    // Found exact match — go straight to booking
+    // Found exact match — go straight to booking. The carrier stays IN the page
+    // while it books: _weekOpenedReviewBlocked and the SW-update busy() check
+    // (psycle-finder.html) know a booking mid-flight by its busy .book-btn, and
+    // a detached button slips past both.
+    // In the page, but never on screen: parked at the end of <body> it drew a
+    // full-width bar on the desktop layout while the class detail loaded, and
+    // was a stray "Book" in the tab order. The two guards read it by class,
+    // busy flag and text — never by whether it is visible.
     const btn = document.createElement('button');
     btn.className = 'book-btn';
     btn.textContent = 'Book';
+    btn.style.display = 'none';
+    btn.setAttribute('aria-hidden', 'true');
+    btn.tabIndex = -1;
     document.body.appendChild(btn);
     await bookClass(exact.id, btn, exact.studio_id);
     btn.remove();
@@ -11583,8 +11607,8 @@ window.openClassDetail = function (eventId) {
 // URL — left the browser's broken-image glyph, alt text spilling out of the
 // circle. For the sheet above and the instructor modal (features.js) alike:
 // `error` does not bubble, hence capture. The <img> becomes a div of the same
-// class — the same circle, filled by the background both rules carry, like the
-// sheet's own no-photo placeholder. The name is printed right beside it.
+// class — the same circle, filled by the background both rules carry. The name
+// is printed right beside it. (With no photo at all the sheet draws no circle.)
 document.addEventListener('error', function (e) {
   const img = e.target;
   if (!img || img.tagName !== 'IMG' || !img.classList || !img.isConnected) return;

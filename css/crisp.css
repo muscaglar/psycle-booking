@@ -672,13 +672,19 @@ header .theme-toggle:focus-visible { outline: var(--focus-ring); outline-offset:
   white-space: nowrap;
   transition: background var(--transition-base), color var(--transition-base);
 }
+/* A circle while it holds the calendar mark, a pill once it carries a picked
+   date ("Sat 26 Sept" — `_syncDatePills` swaps the mark for the words). So the
+   width is a MINIMUM: the mark and the two paddings come to less than
+   --space-12, so the mark still sits in the same circle, and the words get the
+   room they need; a fixed width clipped the date to "at 26 Sep". */
 .date-quick-btn.date-pick {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--space-12);
+  flex: none;
+  min-width: var(--space-12);
   height: var(--space-12);
-  padding: 0;
+  padding: 0 var(--space-5);
   border-radius: var(--radius-full);
   background: var(--surface);
   color: var(--ink);
@@ -1852,12 +1858,24 @@ html[data-ct-intensity="bold"] #bikeModal[data-ct] {
 .bike-legend .seat-key.is-prefer, .bike-legend .seat-key.is-avoid { width: var(--space-3); height: var(--space-3); background: var(--seat-mark); box-shadow: none; }
 .bike-legend .seat-key.is-avoid { width: var(--space-5); height: var(--space-1); background: var(--text); }
 
+/* A studio wider than the sheet scrolls sideways in here (the seats keep a
+   tappable size — js/app.js showBikePicker), and nothing said so: a whole
+   column could sit out of view. Scroll shades, in backgrounds alone: a shade of
+   the hairline colour is fixed to each side edge (`scroll`), and a cover of the
+   map's own ground rides each END of the content (`local`) — so an edge is
+   shaded only while seats lie beyond it, and a map that fits shows none. The
+   covers are wider than the shades they hide. */
 .bike-map-wrap {
   margin-bottom: var(--space-5);
   padding: var(--space-5);
   border: 0;
   border-radius: var(--radius-5xl);
-  background: var(--ground);
+  background:
+    linear-gradient(var(--ground), var(--ground)) left center / var(--space-9) 100% no-repeat local,
+    linear-gradient(var(--ground), var(--ground)) right center / var(--space-9) 100% no-repeat local,
+    linear-gradient(to right, var(--line), transparent) left center / var(--space-5) 100% no-repeat scroll,
+    linear-gradient(to left, var(--line), transparent) right center / var(--space-5) 100% no-repeat scroll,
+    var(--ground);
 }
 #bikeSvg { overflow: visible; }
 #bikeSvg .bike-slot { --seat-fill: var(--seat-free-fill); --seat-line: var(--seat-free-line); --seat-ink: var(--seat-free-ink); }

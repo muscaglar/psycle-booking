@@ -194,6 +194,7 @@ module.exports = async function (t) {
     eq([w.queue(), w.log.fetches], [[], 1], 'the queue is empty and /bookings is re-read once');
     ok(w.log.toasts.some(x => x.msg === '1 queued cancel sent'), 'the member is told');
     eq(w.els.offlineQueueStatus.style.display, 'none', 'the status line goes away');
+    eq(w.els.offlineQueueStatus.textContent, '', '…hidden AND emptied: "1 change waiting" is no longer in the page once nothing waits');
     await w.loaded({});
     eq(w.sent(/^DELETE/).length, 2, 'the /bookings answer that follows sends nothing again');
   }
@@ -316,6 +317,41 @@ module.exports = async function (t) {
     eq(w.log.confirms.length, 1, 'a legacy COUNT booking is asked about, never auto-sent');
     ok(/You tried to book Ride 45/.test(w.log.confirms[0].body), '…named from the event cache when the item carries no label');
     eq(w.sent(/^POST/), ['POST /bookings {"event_id":77,"slots":1}'], 'only after "Book it"');
+  }
+
+  t.section('Offline queue: the "Offline booking" dialog names the seat as the rest of the app does, after a relaunch too');
+  {
+    // Queued at a Strength class: the event cache still knows the class type.
+    const first = world({ api: api({}) });
+    first.ctx.slotLabelForEvent = () => 'Bench';
+    first.ctx.navigator.onLine = false;
+    await first.ctx.window.submitBooking(77, [3], first.btn());
+    await first.ctx.window.submitBooking(77, [], first.btn(), { spaces: 1 });
+    first.ctx.window.queueOfflineCancel(77, ['A']);
+    const left = first.queue();
+    eq(left.map(it => it.slotWord), ['Bench', undefined, undefined], 'a booking with seats carries its seat word; a COUNT booking and a cancel (no seat to name) carry none');
+    // The app is closed and opened again: the cache that knew the type is gone, and slotLabelForEvent says "Spot".
+    const w = world({ stored: [left[0]], api: api({ 'GET /events/77': FUTURE, 'POST /bookings': { status: 201, body: { data: { id: 'N' } } } }) });
+    w.ctx.slotLabelForEvent = () => 'Spot';
+    w.ctx._eventCache = {};
+    await w.loaded({});
+    ok(/\(Bench 3\) while offline/.test(w.log.confirms[0].body) && !/Spot 3/.test(w.log.confirms[0].body), 'the dialog says "(Bench 3)" — it said "(Spot 3)"');
+    eq(w.sent(/^POST/), ['POST /bookings {"event_id":77,"slots":[3]}'], '"Book it" sends exactly what it always sent: the word is for the dialog, never for Psycle');
+  }
+  {
+    const w = world({ stored: [oldBooking()], api: api({ 'GET /events/77': FUTURE }) });
+    w.state.answer = false;
+    w.ctx.slotLabelForEvent = () => 'Spot';
+    await w.loaded({});
+    ok(/\(Spot 7\) while offline/.test(w.log.confirms[0].body), 'an item queued before the word was stamped still falls back to the cache\'s answer');
+  }
+  {
+    // No event in the cache when it is queued: "Spot" is a fallback, not a fact — it is not stored.
+    const w = world({ api: api({}) });
+    w.ctx._eventCache = {};
+    w.ctx.navigator.onLine = false;
+    await w.ctx.window.submitBooking(78, [4], w.btn());
+    eq([w.queue().length, 'slotWord' in w.queue()[0]], [1, false], 'a class the cache cannot name is queued without a word (the dialog asks the cache again)');
   }
 
   t.section('Offline queue: a booking made offline in this session');

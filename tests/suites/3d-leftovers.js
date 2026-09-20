@@ -292,7 +292,7 @@ module.exports = async function (t) {
       const fixed = Date.parse(nowIso);
       const FakeDate = class extends Date { constructor(...a) { if (a.length) super(...a); else super(fixed); } static now() { return fixed; } };
       const els = { tabBadge: { textContent: '?' }, statsBar: { style: {}, innerHTML: '' } };
-      const pill = { innerHTML: '', hidden: false, classList: { add() { pill.hidden = true; }, remove() { pill.hidden = false; } } };
+      const pill = { innerHTML: '', hidden: false, classList: { add() { pill.hidden = true; }, remove() { pill.hidden = false; }, contains: (c) => c === 'hidden' && pill.hidden } };
       const ctx = t.vm.createContext({
         Date: FakeDate, console, Intl, Object, Math, isNaN,
         document: { getElementById: (id) => els[id] || null },

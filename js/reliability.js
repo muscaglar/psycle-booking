@@ -433,12 +433,16 @@
   // Every item says who queued it (it never runs under another account), has
   // an id of its own (session membership, approvals, removals) and carries the
   // class time + a label — after a relaunch the event cache that could name the
-  // class, or say whether it has started, is gone.
+  // class, or say whether it has started, is gone. So is the one that knows
+  // what its seats are called: a booking with seats carries that word too
+  // (`slotWord` — "Bench", "Bike"), for the "Offline booking" dialog to print.
+  // Display only: the replay builds its request body field by field.
   function _stampQueueItem(item) {
     item.qid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     item.owner = _queueOwnerId();
     var evt = (typeof _eventCache !== 'undefined' && _eventCache) ? _eventCache[String(item.eventId)] : null;
     if (evt && evt.start_at) item.startAt = evt.start_at;
+    try { if (evt && item.slots && item.slots.length && typeof slotLabelForEvent === 'function') item.slotWord = slotLabelForEvent(item.eventId); } catch (e) {}
     var label = '';
     try { if (typeof _waitlistClassLine === 'function') label = _waitlistClassLine(item.eventId); } catch (e) {}
     if (label) item.label = label;
@@ -960,7 +964,9 @@
     try { if (!label && typeof _waitlistClassLine === 'function') label = _waitlistClassLine(item.eventId); } catch (e) {}
     if (!label) label = _queueFallbackLabel(startAt);
     var seat = '';
-    try { if (item.slots && item.slots.length) seat = formatSlots(slotLabelForEvent(item.eventId), item.slots); } catch (e) {}
+    // The word stamped when it was queued first: after a relaunch the cache
+    // cannot name the class type, and slotLabelForEvent falls back to "Spot".
+    try { if (item.slots && item.slots.length) seat = formatSlots(item.slotWord || slotLabelForEvent(item.eventId), item.slots); } catch (e) {}
     // A seat already held at that time — advisory, as in bookClass.
     var clashLine = '';
     try { if (typeof _clashFor === 'function') clashLine = _clashLabel(_clashFor(item.eventId, evt)); } catch (e) {}
@@ -1054,7 +1060,8 @@
     var count = getBearerToken() ? getOfflineQueue().filter(function (it) {
       return it && (it.owner == null || owner == null || String(it.owner) === owner);
     }).length : 0;
-    if (!count) { if (el) el.style.display = 'none'; return; }
+    // Hidden AND emptied: a count that no longer holds is not left in the page.
+    if (!count) { if (el) { el.style.display = 'none'; el.textContent = ''; } return; }
     if (!el) {
       el = document.createElement('div');
       el.id = 'offlineQueueStatus';

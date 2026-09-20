@@ -7,8 +7,10 @@ Read this when you touch js/reliability.js's queue, cancel error wording, or wha
 `_offlineQueueDecision` is that a queued item must never spend credits by surprise, and a cancel the member asked
 for is never lost while the booking may still stand. Verdicts: `send` | `ask` | `drop` | `keep`.
 - Every item is owner-stamped (`_stampQueueItem`: `qid`, `owner`, class `startAt` + a `label`, because after a
-  relaunch the event cache that could name the class is gone). Another member's item never runs and is purged at
-  their successor's sign-in; with no verified owner yet, everything is kept.
+  relaunch the event cache that could name the class is gone; a booking with seats also carries `slotWord` — "Bench",
+  "Bike" — so the "Offline booking" dialog still says "Bench 3" then, not "Spot 3". Display only: the replay builds
+  its body field by field). Another member's item never runs and is purged at their successor's sign-in; with no
+  verified owner yet, everything is kept.
 - *Cancels replay while held*: on `online`, on return to the foreground and after the first `/bookings` load
   (`bookings:loaded` arms the drain). One queued in this page session is sent as is; one found after a relaunch is
   sent only while `_queueCancelStillHeld` finds one of its record ids in the loaded list, otherwise dropped.
@@ -26,7 +28,8 @@ for is never lost while the booking may still stand. Verdicts: `send` | `ask` | 
   item with a "couldn't confirm" toast when it cannot tell.
 - Emptied on DELIBERATE sign-out only (the `clearToken` wrapper); session expiry keeps it — the same member signs
   back in and a cancel they believe went through must still be there to send. Cleared on an account switch.
-- My Bookings shows "N change(s) waiting to sync with Psycle" (`#offlineQueueStatus`, `queue:changed`).
+- My Bookings shows "N change(s) waiting to sync with Psycle" (`#offlineQueueStatus`, `queue:changed`); with nothing
+  waiting the line is hidden AND emptied (`_renderQueueStatus`).
 
 **Saved copy vs saved class details** — two different stores, neither ever fed back as server truth:
 - *Saved copy of My Bookings* (`psycle_bookings_snapshot`, `pure:offline`): display fields of each held class,
