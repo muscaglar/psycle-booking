@@ -12,7 +12,7 @@ send it a write (POST / PUT / DELETE). Everything is verified against a stubbed 
 
 1. **Stub before you click.** Drive a browser only against tests/tools/fake-psycle.js (a fake Psycle server for a page) or tests/smoke.html (it answers every fetch itself). If you are not certain a flow is stubbed, do not click through it.
 2. **A spend is never silent, and a `POST /bookings` is never re-sent.** Nothing is booked, claimed or joined unless the member saw it and confirmed it. A timeout, 5xx or 409 proves nothing: the attempt is settled by re-reading `/bookings` (`_settleUnverifiedBooking` → `_bookingOutcome`), and a button reads ✓ + `.booked` only when `/bookings` shows the seat. Read agents/architecture/booking.md before touching a path that books, cancels, joins or claims.
-3. **Script load order matters.** psycle-finder.html loads the 15 js/ modules as `defer` scripts in a fixed order, and later modules monkey-patch earlier ones (`apiFetch`, `submitBooking`, `eventCard`, `showBikePicker`); every `submitBooking` wrapper forwards all four arguments. The four cancel functions (`confirmUnbook`, `upcomingCancel`, `cancelBikeSlot`, `upcomingSeatCancel`) are each wrapped twice — js/features.js `patchCancelFunctions` (marks history cancelled only when NO seat is left) and, in the iOS app, ios-app/www/native-bridge.js (arms the calendar reconcile); neither sends a request. Wrappers forward arguments, NOT return values (agents/learnings.md B6; who wraps what: agents/index/globals.md). tests/suites/shell.js guards the order (agents/repo-map.md).
+3. **Script load order matters.** psycle-finder.html loads the 15 js/ modules as `defer` scripts in a fixed order, and later modules monkey-patch earlier ones (`apiFetch`, `submitBooking`, `eventCard`, `showBikePicker`); every `submitBooking` wrapper forwards all four arguments. The four cancel functions (`confirmUnbook`, `upcomingCancel`, `cancelBikeSlot`, `upcomingSeatCancel`) are each wrapped twice — js/features.js `patchCancelFunctions` (marks history cancelled only when NO seat is left) and, in the iOS app, ios-app/www/native-bridge.js (arms the calendar reconcile); neither sends a request. A wrapper forwards every argument and returns the original's result, but never rely on what `submitBooking` or a cancel returns: two wrappers return nothing (agents/learnings.md B6; who wraps what: agents/index/globals.md). tests/suites/shell.js guards the order (agents/repo-map.md).
 4. **Generated files are never hand-edited:** everything in ios-app/www/ EXCEPT native-bridge.js (hand-maintained, and it lives only there), and the `SHELL` list and `CACHE` stamp in both sw.js copies. After editing root js/, css/, fonts/, `*.html`, manifest.json, sw.js OR ios-app/www/native-bridge.js (its bytes are in the `CACHE` hash), run `cd ios-app && npm run build` and commit the result — `npm run drift` fails otherwise.
 5. **A Swift or asset-catalogue edit is proved with the App-scheme simulator build before it ships** (`xcodebuild … -scheme App -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`, as .github/workflows/ci.yml runs it; the runnable form, in a scratch copy: agents/playbooks.md P7 step 3): every push to main is archived and uploaded to TestFlight (ios-app/CICD.md).
 6. **Never push to `main` unasked.** Every push there — a web-only one included — is archived to TestFlight, spends Xcode Cloud compute hours and publishes the web app. Work on a branch, keep `main` fast-forwardable, never force-push (agents/decisions.md section 7, ios-app/CICD.md).
@@ -44,6 +44,8 @@ git grep -n "<name>"           # not grep -r: untracked folders at the root (a t
 | sw.js · manifest.json | Service worker (`SHELL` / `CACHE` generated) · PWA manifest |
 | agents/ | These docs: read on demand, never all at once |
 
+js/, css/, tests/, ios-app/ and ios-app/ios/App/ each carry their own AGENTS.md: the rules local to that folder. Read it when you first open a file there (some assistants load it for you, through the folder's CLAUDE.md pointer).
+
 The six biggest files — never read one whole; find the symbol in agents/index/ and open a small window:
 | File | Holds |
 |---|---|
@@ -59,15 +61,17 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 
 | If your task or question is… | Read | ≈ tokens |
 |---|---|---|
-| a first visit: what is in agents/, and in what order | agents/README.md | 1,500 |
+| a first visit: what is in agents/, and in what order | agents/README.md | 1,950 |
 | "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md | 5,250 |
-| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 8,700 |
-| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 10,300 |
+| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 3,200 |
+| "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 2,400 |
+| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 8,950 |
+| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 10,550 |
 | what a word means (seat / space / place, record / entry, held / unverified): grep it there, or read §4 (≈ 1,250); a field shape → §1; a state machine → §3; the invariants → §5 — never the whole file | agents/ontology.md | 8,700 |
-| where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 4,950 |
+| where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 5,000 |
 | after a push to `main`: the Xcode Cloud check is missing, cancelled or failed; a TestFlight build did not arrive (checklist: playbooks P10; lesson: learnings G5) | ios-app/CICD.md → "Notes / gotchas" | 2,850 |
 | a line number: function, pure block, event, storage key, global, API call, CSS section, DOM id, suite, Swift type | agents/index/README.md, then grep agents/index/ | 1,850 (the folder: 70,500 — grep it, never read it whole) |
-| rebuilding the index (`npm run agents:index`), or re-proving that the split lost nothing | agents/tools/build-index.mjs · agents/tools/check-split.mjs | run them, do not read them (25,500 · 1,750) |
+| rebuilding the index (`npm run agents:index`), or re-proving that the split lost nothing | agents/tools/build-index.mjs · agents/tools/check-split.mjs | run them, do not read them (25,500 · 2,200) |
 | an old "CLAUDE.md → section" reference | agents/architecture/README.md | 800 |
 | any js/ module for the first time (state, events, wrappers) | core-patterns.md | 800 |
 | what a whole tab shows, before changing part of it | tab-structure.md | 1,450 |
@@ -102,6 +106,7 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 - Line numbers live only in agents/index/, which is generated: `npm run agents:index`. Everywhere else name the symbol and the file.
 - An older comment that says `CLAUDE.md → <section>` or `CLAUDE.md "<section>"` means agents/architecture/: the titles are unchanged, so `grep -rn "<section>" agents/`. Swift and bridge comments say it too — "see CLAUDE.md → Gym time" is agents/architecture/time.md.
 - A new, renamed or deleted file under agents/ changes the reading guide above (a top-level file is also in the table of agents/README.md). Correct a file's ≈ tokens when it grows or shrinks by a quarter; tests/suites/16-agents-docs.js holds both lists to the disk.
+- A folder guide changes with its folder: at most 80 lines, and its CLAUDE.md pointer at most 3 lines with one line exactly `@AGENTS.md` (16-agents-docs.js holds both); local rules only — nothing guards that, it depends on you.
 - CLAUDE.md stays a pointer to this file (an assistant loads it whole at every session start). Keep this file within 160 lines; depth belongs under agents/.
 - `node agents/tools/check-split.mjs` proves the split lost nothing at the commit that made it; later it lists what has been edited since, which is expected.
 - This repository is public: nothing machine-specific, personal or employer-specific in docs, code or commit messages.

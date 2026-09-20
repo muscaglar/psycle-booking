@@ -61,8 +61,10 @@ psycle-booking/
 │
 ├── README.md · SETUP.md · CLAUDE.md   # Overview · iOS toolchain · this architecture guide
 ├── AGENTS.md               # (added at the split) The entry for an agent or developer arriving cold; CLAUDE.md is a pointer to it
+│                           #   js/, css/, tests/, ios-app/ and ios-app/ios/App/ each hold a folder guide: an AGENTS.md (local rules) + a CLAUDE.md pointer
 ├── agents/                 # (added at the split) On-demand docs, never shipped: README.md (what is here), decisions.md, learnings.md,
-│                           #   playbooks.md, ontology.md, repo-map.md (this file), architecture/ (one file per mechanism),
+│                           #   playbooks.md, ontology.md, repo-map.md (this file), HANDOVER.md (where things stand: session log first),
+│                           #   backlog.md (candidate work), architecture/ (one file per mechanism),
 │                           #   index/ (GENERATED line-numbered map of the code), tools/ (build-index.mjs, check-split.mjs)
 ├── IMPROVEMENTS-2026-09.md # September 2026 improvement programme (audit trail + on-device checklist)
 │

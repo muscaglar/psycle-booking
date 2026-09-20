@@ -11,19 +11,32 @@ Every top-level file and folder, once. ≈ tokens = bytes ÷ 4, rounded: what th
 
 | File | The question it answers | ≈ tokens |
 |---|---|---|
-| [../AGENTS.md](../AGENTS.md) | What is this repository, what must I never do, which commands prove a change, where next? Start here: its reading guide routes you by task. | 3,150 |
-| README.md | This file: what is in the folder, the order to read it in, how to keep it true. | 1,500 |
+| [../AGENTS.md](../AGENTS.md) | What is this repository, what must I never do, which commands prove a change, where next? Start here: its reading guide routes you by task. | 3,350 |
+| README.md | This file: what is in the folder, the order to read it in, how to keep it true. | 1,950 |
 | [decisions.md](decisions.md) | What has the owner already decided, and why? What is CLOSED and must not be re-offered? | 5,250 |
-| [learnings.md](learnings.md) | What went wrong before, and which trap is my change about to step into? Its first 20 lines, then one section. | 8,700 |
-| [playbooks.md](playbooks.md) | How do I carry out a common task safely, step by step? P0 and the one playbook; its contents table gives each one's size. | 10,300 |
+| [HANDOVER.md](HANDOVER.md) | Where do things stand? The session log (newest first), how to check what `main` holds, what is and is not proved, what is the owner's, your first hour. | 3,200 |
+| [backlog.md](backlog.md) | What could be done next? Candidate work with a size and a risk — propose from it, never start from it. | 2,400 |
+| [learnings.md](learnings.md) | What went wrong before, and which trap is my change about to step into? Its first 20 lines, then one section. | 8,950 |
+| [playbooks.md](playbooks.md) | How do I carry out a common task safely, step by step? P0 and the one playbook; its contents table gives each one's size. | 10,550 |
 | [ontology.md](ontology.md) | What does this word mean here? The domain and code vocabulary, the state machines, the invariants. Grep it, or read one section (sizes in its opening lines). | 8,700 |
-| [repo-map.md](repo-map.md) | Where does X live? The file tree, the script load order, and "I want to… → edit this file". | 4,950 |
+| [repo-map.md](repo-map.md) | Where does X live? The file tree, the script load order, and "I want to… → edit this file". | 5,000 |
 | [architecture/](architecture/) | How does this mechanism work? One file per area — read only the one your task touches. | 46,000 in all |
 | [index/](index/) | On which line is this symbol, marker or suite? GENERATED, and the only place line numbers are written. Grep it; never read it whole. | 70,500 in all |
 | [tools/](tools/) | What builds the index, and what proves the split lost nothing? Two dependency-free scripts: run them, do not read them. | below |
 
 CLAUDE.md at the repository root is a four-line pointer to AGENTS.md. What it used to hold was moved, verbatim, into
 architecture/ and repo-map.md.
+
+Five folders carry a guide of their own: the rules local to that folder, at most 80 lines, with a CLAUDE.md pointer
+of at most 3 lines beside it. Read one when you first open a file in its folder.
+
+| Folder guide | Local rules for | ≈ tokens |
+|---|---|---|
+| [../js/AGENTS.md](../js/AGENTS.md) | the 15 modules: wrappers and the `apiFetch` replacement, spend paths, sliced functions, `pure:` blocks, the one global scope, gym time | 1,950 |
+| [../css/AGENTS.md](../css/AGENTS.md) | the 9 stylesheets: link order, crisp.css tokens only, the light-base tie, safe-area insets, `[data-ct]`, the one card | 1,800 |
+| [../tests/AGENTS.md](../tests/AGENTS.md) | the runner, the suites, the smoke page, the fake Psycle server | 1,750 |
+| [../ios-app/AGENTS.md](../ios-app/AGENTS.md) | the build into www/, the plugin patcher, the bridge: `SYNC_KEYS`, gym time, the calendar deleters | 1,350 |
+| [../ios-app/ios/App/AGENTS.md](../ios-app/ios/App/AGENTS.md) | the Xcode project and the Swift: the simulator build, target membership, `Codable` fields, dates, widget layouts | 2,250 |
 
 ### architecture/ and index/
 
@@ -39,19 +52,21 @@ One fact, one home — their files are not listed a second time here:
 | File | What it does | ≈ tokens |
 |---|---|---|
 | build-index.mjs | Writes index/ from the code: `npm run agents:index`. `npm run agents:check` exits 1 and names the files a rebuild would change. | 25,500 |
-| check-split.mjs | Proves that every line of the former CLAUDE.md is in exactly one file here: `node agents/tools/check-split.mjs`. | 1,750 |
+| check-split.mjs | Proves that every line of the former CLAUDE.md is in exactly one file here: `node agents/tools/check-split.mjs`. A line edited since the split is listed, not failed. | 2,200 |
 
 ## The first five minutes
 
 1. [../AGENTS.md](../AGENTS.md) — the rules and the commands.
 2. [decisions.md](decisions.md) — what not to reopen.
-3. [learnings.md](learnings.md) — its first 20 lines (the header and the eleven-point "Cheapest useful read" list),
+3. [HANDOVER.md](HANDOVER.md) — the newest session-log entry, then "Verified / not verified".
+4. [learnings.md](learnings.md) — its first 20 lines (the header and the eleven-point "Cheapest useful read" list),
    then the section for your area.
-4. The ONE file in [architecture/](architecture/) for your task.
-5. [index/](index/) for the line number, then open the code there.
+5. The folder guide — the AGENTS.md of the folder you will edit in (the table above).
+6. The ONE file in [architecture/](architecture/) for your task.
+7. [index/](index/) for the line number, then open the code there.
 
-Stop as soon as you can act. [repo-map.md](repo-map.md), [ontology.md](ontology.md) and
-[playbooks.md](playbooks.md) are look-ups, not reading.
+Stop as soon as you can act. [repo-map.md](repo-map.md), [ontology.md](ontology.md),
+[playbooks.md](playbooks.md) and [backlog.md](backlog.md) are look-ups, not reading.
 
 ## Keeping this folder true
 
@@ -66,10 +81,11 @@ Stop as soon as you can act. [repo-map.md](repo-map.md), [ontology.md](ontology.
   code or test that holds it.
 - **Only names that exist.** If it is not in the code, it is not in these files: a reader will grep for it.
 - **One fact, one home.** Link to the file that owns a fact; do not restate it.
+- **A folder guide changes with its folder**: local rules only, at most 80 lines, links written relative to it.
 - **A new, renamed or deleted file changes ONE list**: AGENTS.md's reading guide for a file under architecture/,
-  the table above for a top-level file or a tool (a top-level file is in both). Correct a file's ≈ tokens when it
-  grows or shrinks by a quarter. tests/suites/16-agents-docs.js fails when a list names a file that is not there,
-  misses one that is, or is badly out on a size.
+  the tables above for a top-level file, a tool or a folder guide (a top-level file is in both). Correct a file's
+  ≈ tokens when it grows or shrinks by a quarter. tests/suites/16-agents-docs.js fails when a list names a file
+  that is not there, misses one that is, or is badly out on a size.
 - **Search with `git grep`**, not `grep -r`: untracked folders at the repository root (a tool's worktrees,
   node_modules) can hold whole copies of the repository, and every hit then comes back many times over.
 - **Every file opens the same way**: a title, its purpose, then when to read it and when to skip it, all within

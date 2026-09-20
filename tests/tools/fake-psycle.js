@@ -1,4 +1,4 @@
-/* A fake Psycle server for browser checks and App Store captures (tests/README.md → "Driving the app in a browser").
+/* A fake Psycle server for browser checks and App Store captures (tests/README.md → "Driving the app against a stubbed API").
  * Evaluate it on a blank same-origin page BEFORE the app's HTML is written into the document, so window.fetch is the
  * fake server from the app's first line:  (0, eval)(await fetch('/tests/tools/fake-psycle.js').then(r => r.text()));
  * then  await __H.boot({})  writes the REAL psycle-finder.html into the page. Every request to psycle.codexfit.com is

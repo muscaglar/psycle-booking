@@ -16,8 +16,11 @@
 //   --quiet    no map, findings and summary only
 //
 // Reading the result LATER: the proof belongs to the commit that made the split. Once a moved paragraph
-// is edited (as it should be, when the code it describes changes), its old lines show up here as
-// "missing" — that is the list of what has changed since the split, not an error to fix by undoing it.
+// is edited (as it should be, when the code it describes changes), its old lines are gone from these
+// files. A line that WAS in them at the split commit is printed as "EDITED SINCE" and does not fail the
+// run: that is the list of what has changed since the split, not an error to fix by undoing it. Only a
+// line the split itself never carried over is "MISSING". (Without that commit in git — a shallow clone —
+// the two cannot be told apart, and every such line is MISSING.)
 //
 // "Generic" lines — a code fence, a table's |---|---| rule — are written by every Markdown file, so they
 // are only checked for "at least as many as the original had". Dependency-free; Node 18+.
@@ -29,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LAST_UNSPLIT_COMMIT = '124a0b0';   // the last commit whose CLAUDE.md is the whole guide
+const SPLIT_COMMIT = 'bdd5ef5';          // the commit after it: the split, where this proof read 0 missing, 0 duplicated
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -92,13 +96,30 @@ origLines.forEach((text, i) => {
   need.get(text).push(i + 1);
 });
 
-const missing = [];
+const absent = [];
 const duplicated = [];
 for (const [text, at] of need) {
   const found = where.get(text) || [];
-  if (found.length < at.length) missing.push({ text, at, found });
+  if (found.length < at.length) absent.push({ text, at, found });
   else if (found.length > at.length && !isGeneric(text)) duplicated.push({ text, at, found });
 }
+
+// Lost by the split, or edited since? Every line these files held AT the split commit, read from git in one
+// call (null when that commit is not there). A line the split carried over and a later commit rewrote is not a loss.
+function linesAtSplit() {
+  try {
+    const out = execFileSync('git', ['grep', '-h', '-I', '-e', '', SPLIT_COMMIT, '--', 'AGENTS.md', ':(glob)agents/**/*.md'],
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+    const count = new Map();
+    out.split('\n').map(norm).forEach((text) => { if (text !== '') count.set(text, (count.get(text) || 0) + 1); });
+    return count;
+  } catch (e) {
+    return null;
+  }
+}
+const atSplit = absent.length ? linesAtSplit() : null;
+const editedSince = atSplit ? absent.filter((m) => (atSplit.get(m.text) || 0) >= m.at.length) : [];
+const missing = absent.filter((m) => editedSince.indexOf(m) === -1);
 
 // Where each run of original lines went (original line numbers are frozen in that last unsplit commit, so they
 // do not drift). Blank and generic lines ride with their neighbours.
@@ -138,10 +159,14 @@ if (!quiet) {
 for (const m of missing) {
   console.log('MISSING     (original line ' + m.at.join(', ') + '; found ' + m.found.length + ' of ' + m.at.length + ')  ' + clip(m.text));
 }
+for (const m of editedSince) {
+  console.log('EDITED SINCE (original line ' + m.at.join(', ') + '; in these files at ' + SPLIT_COMMIT + ', rewritten later)  ' + clip(m.text));
+}
+if (absent.length && !atSplit) console.log('check-split: cannot read ' + SPLIT_COMMIT + ' from git, so a line edited since the split cannot be told from a lost one.');
 for (const d of duplicated) {
   console.log('DUPLICATED  (original line ' + d.at.join(', ') + ')  ' + clip(d.text));
   for (const f of d.found) console.log('              in ' + f.file + ':' + f.line);
 }
 console.log('check-split: ' + origLines.length + ' lines in ' + original.name + ', ' + nonBlank + ' non-blank, checked against ' + files.length + ' file(s): ' +
-  missing.length + ' missing, ' + duplicated.length + ' duplicated.');
+  missing.length + ' missing, ' + duplicated.length + ' duplicated' + (editedSince.length ? ', ' + editedSince.length + ' edited since the split' : '') + '.');
 process.exit(missing.length || (strict && duplicated.length) ? 1 : 0);

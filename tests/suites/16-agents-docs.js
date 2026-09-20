@@ -8,12 +8,18 @@
 // tools and the two big folders as folders (architecture/ is listed file by file by the reading guide,
 // index/ by its own generated README — one fact, one home). Both are held to the disk: nothing missing,
 // nothing twice, nothing that is not there, no size badly out. AGENTS.md ≤ 160 lines, CLAUDE.md ≤ 8.
-// None of it ships: not in ios-app/www, not in the service worker's precache list.
+// The rules local to a folder live IN it: js/, css/, tests/, ios-app/ and ios-app/ios/App/ each hold an AGENTS.md
+// (≤ 80 lines, line 1 names the folder, its links resolve from there) and a CLAUDE.md pointer of at most 3 lines.
+// agents/HANDOVER.md opens with its session log, newest entry on top; it and agents/backlog.md are in both lists.
+// None of it ships: not in ios-app/www (js/ and css/ are copied there by extension), not in the precache list.
 module.exports = function (t) {
   const { ok, eq, fs, path, REPO_ROOT } = t;
   t.section('Agents docs: a lean entry, a thin pointer, every topic file routed');
   const has = (rel) => fs.existsSync(path.join(REPO_ROOT, rel));
   const lines = (rel) => t.readSource(rel).replace(/\n$/, '').split('\n');
+  // The folders that carry a guide of their own (section 5 below); agents/README.md lists each one.
+  const guideDirs = ['js', 'css', 'tests', 'ios-app', 'ios-app/ios/App'];
+  const folderGuides = guideDirs.map((d) => d + '/AGENTS.md');
 
   const pointer = lines('CLAUDE.md');
   ok(pointer.length <= 8 && pointer.indexOf('@AGENTS.md') !== -1 && /AGENTS\.md/.test(pointer[0]),
@@ -104,10 +110,10 @@ module.exports = function (t) {
   });
   eq(guideSizes, [], 'each "≈ tokens" cell of the reading guide is within a quarter of bytes ÷ 4');
 
-  // 2. agents/README.md: every top-level file and every tool, exactly once — and nothing that is not there. The files of
-  // architecture/ and index/ are NOT repeated in it (list 1 and agents/index/README.md own them): it names the two
-  // folders, with an honest total. A file cell is nothing but a name (or a link to one); a "### folder/" heading says
-  // where the bare names below it live.
+  // 2. agents/README.md: every top-level file, every tool and the five folder guides, exactly once — and nothing that is
+  // not there. The files of architecture/ and index/ are NOT repeated in it (list 1 and agents/index/README.md own
+  // them): it names the two folders, with an honest total. A file cell is nothing but a name (or a link to one); a
+  // "### folder/" heading says where the bare names below it live.
   const readme = lines('agents/README.md');
   const mFrom = readme.indexOf('## What each file answers');
   const mRest = readme.slice(mFrom + 1);
@@ -143,8 +149,8 @@ module.exports = function (t) {
     });
   });
   const listedElsewhere = (f) => f.indexOf(dir + '/') === 0 || f.indexOf('agents/index/') === 0;
-  const expected = ['AGENTS.md'].concat(everyFile.filter((f) => !listedElsewhere(f)));
-  eq(expected.filter((f) => listed.filter((l) => l === f).length !== 1), [], 'agents/README.md lists AGENTS.md, every top-level file of agents/ and every tool exactly once (' + expected.length + ' files)');
+  const expected = ['AGENTS.md'].concat(folderGuides, everyFile.filter((f) => !listedElsewhere(f)));
+  eq(expected.filter((f) => listed.filter((l) => l === f).length !== 1), [], 'agents/README.md lists AGENTS.md, the five folder guides, every top-level file of agents/ and every tool exactly once (' + expected.length + ' files)');
   eq(listed.filter((l) => expected.indexOf(l) === -1), [], 'and no file that is not there — nor one that the reading guide or agents/index/README.md already lists');
   eq(listedDirs.filter((d) => !has(d)), [], 'and every folder it names exists (' + listedDirs.length + ')');
   eq([dir + '/', 'agents/index/', 'agents/tools/'].filter((d) => listedDirs.indexOf(d) === -1), [], 'it names architecture/, index/ and tools/ as folders');
@@ -173,9 +179,61 @@ module.exports = function (t) {
   eq(deadElsewhere, [], 'every agents/ path and every link in the other hand-written files resolves (' + others.length + ' files)');
 
   // 4. None of it ships. ios-app/build.js copies js/, css/, fonts/ and five named root files; the docs are for the repository only.
+  // js/ and css/ now hold an AGENTS.md and a CLAUDE.md each: the build copies those folders by extension, so neither may
+  // turn up in www/ — at any depth.
   const www = fs.readdirSync(path.join(REPO_ROOT, 'ios-app', 'www'));
   eq(www.filter((f) => /^agents$/i.test(f) || /^(?:AGENTS|CLAUDE)\.md$/i.test(f)), [], 'ios-app/www holds no agents/ folder, no AGENTS.md, no CLAUDE.md');
+  eq(walk('ios-app/www').filter((f) => /(?:^|\/)(?:AGENTS|CLAUDE)\.md$/i.test(f)), [], 'nor a folder guide or its pointer copied in with js/ or css/, at any depth');
   ok(!/agents\/|AGENTS\.md|CLAUDE\.md/.test(t.readSource('sw.js')) && !/agents\/|AGENTS\.md|CLAUDE\.md/.test(t.readSource('ios-app/www/sw.js')),
     'neither sw.js copy precaches (or names) any of it');
   ok(!/['"`]agents['"`/]|AGENTS\.md/.test(t.readSource('ios-app/build.js')), 'ios-app/build.js does not know the folder exists');
+
+  // ── The folder guides and the handover ─────────────────────────────────────────────────────────
+  // 5. A folder guide is read (or loaded for you, through the pointer beside it) when a file in its folder is first
+  // opened — so it is short, says on line 1 which folder it speaks for, and every link in it resolves FROM that folder.
+  t.section('Agents docs: a folder guide in each working folder, a thin pointer beside it');
+  eq(folderGuides.filter((f) => !has(f)), [], 'js/, css/, tests/, ios-app/ and ios-app/ios/App/ each hold an AGENTS.md');
+  const present = guideDirs.filter((d) => has(d + '/AGENTS.md'));
+  eq(present.filter((d) => lines(d + '/AGENTS.md')[0].indexOf('# ' + d + '/') !== 0), [], 'each opens with a line-1 heading that names its folder ("# <folder>/ …")');
+  eq(present.filter((d) => lines(d + '/AGENTS.md').length > 80).map((d) => d + '/AGENTS.md: ' + lines(d + '/AGENTS.md').length), [],
+    'each stays within 80 lines — the repo-wide rules are the root AGENTS.md\'s, the depth is under agents/');
+  eq(present.filter((d) => !/\]\((?:\.\.\/)+AGENTS\.md\)/.test(lines(d + '/AGENTS.md').slice(0, 3).join('\n'))), [], 'each links the root AGENTS.md within its first three lines');
+  const deadInGuides = [];
+  present.forEach((d) => {
+    const rel = d + '/AGENTS.md';
+    const re = /\]\(([^)#\s]+)(?:#[^)\s]*)?\)/g;
+    let m;
+    while ((m = re.exec(t.readSource(rel)))) {
+      if (/^[a-z]+:/i.test(m[1])) continue;
+      if (!has(path.posix.normalize(path.posix.join(d, m[1])))) deadInGuides.push(rel + ' → ' + m[1]);
+    }
+  });
+  eq(deadInGuides, [], 'every link in a folder guide resolves relative to ITS folder');
+  const badPointers = guideDirs.filter((d) => {
+    if (!has(d + '/CLAUDE.md')) return true;
+    const p = lines(d + '/CLAUDE.md');
+    return !(p.length <= 3 && p.indexOf('@AGENTS.md') !== -1);
+  });
+  eq(badPointers, [], 'each has a sibling CLAUDE.md of at most 3 lines, one of them exactly "@AGENTS.md"');
+  ok(entry.some((l) => /AGENTS\.md/.test(l) && guideDirs.every((d) => l.indexOf(d + '/') !== -1)), 'the root AGENTS.md says, in one line, which folders carry a guide of their own');
+
+  // 6. agents/HANDOVER.md is where a stretch of work ends and the next one starts: the session log comes FIRST, newest
+  // entry on top, at most the ten it says it keeps. It and agents/backlog.md are in both lists of the folder.
+  t.section('Agents docs: the handover opens with its session log; it and the backlog are listed');
+  ok(has('agents/HANDOVER.md') && has('agents/backlog.md'), 'agents/HANDOVER.md and agents/backlog.md exist');
+  const handoverAll = has('agents/HANDOVER.md') ? lines('agents/HANDOVER.md') : [];
+  let fenced = false;                                        // the entry template sits in a code fence: it is not an entry
+  const handover = handoverAll.filter((l) => { if (/^\s*```/.test(l)) { fenced = !fenced; return false; } return !fenced; });
+  ok(handoverAll.length > 0 && handoverAll.length <= 160, 'agents/HANDOVER.md stays within 160 lines (' + handoverAll.length + ')');
+  const h2 = handover.filter((l) => /^## /.test(l));
+  eq(h2[0], '## Session log', '"## Session log" is the first of its ## sections');
+  const logFrom = handover.indexOf('## Session log');
+  const logEnd = handover.findIndex((l, i) => i > logFrom && /^## /.test(l));
+  const logDates = logFrom === -1 ? [] : handover.slice(logFrom + 1, logEnd === -1 ? handover.length : logEnd)
+    .map((l) => /^### (\d{4}-\d{2}-\d{2})(?:\s|$)/.exec(l)).filter(Boolean).map((m) => m[1]);
+  ok(logDates.length >= 1 && logDates.length <= 10, 'the log holds at least one "### YYYY-MM-DD" entry, and no more than the ten it keeps (' + logDates.length + ')');
+  eq(logDates, logDates.slice().sort().reverse(), 'newest entry on top');
+  ['agents/HANDOVER.md', 'agents/backlog.md'].forEach((f) => {
+    ok(guideRows.some((cells) => namedIn(cells[1] || '', f)) && listed.indexOf(f) !== -1, f + ' is a row of AGENTS.md\'s reading guide and of agents/README.md\'s table');
+  });
 };

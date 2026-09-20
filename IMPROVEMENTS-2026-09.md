@@ -411,17 +411,18 @@ where it sits, for every theme alike). What was still true and small was closed:
   css/styles.css; css/theme.css's copy of the old literals went, and with it the Graphite rule that only undid
   them. `.book-btn`'s radius and the class sheet's top corners are tokens. css/crisp.css styles every card and
   sheet button, so nothing changes on a drawn card or sheet. (One `.book-btn` sits outside both — the carrier
-  "Same class next week" parks on the page: see the list.)
+  "Same class next week" parks on the page — and it is never drawn: see the bullet above.)
 
 Left alone, and listed at the end of this file: the usual-week review sheet on the smallest phone, which is a
-deliberate trade-off; the plain disc a photo that cannot load leaves behind, also deliberate; and the carrier
-button "Same class next week" parks on the page while it books, which two guards read where it is.
-The month-step keys and the seat map were driven in desktop Chrome on the fake Psycle server
-(tests/tools/fake-psycle.js); the day-pick hand-back was added after that round and is held by
-tests/suites/17-leftovers.js, which runs the real `pickCalDate` — it has not been driven in a browser. Nothing was
-sent to the live API.
+deliberate trade-off; and the plain disc a photo that cannot load leaves behind, also deliberate.
+All of it was driven in desktop Chrome on the fake Psycle server (tests/tools/fake-psycle.js) with every write
+counted: the month step and the day pick with real key presses (focus stays on the new arrow; after Enter on a day
+the calendar closes and the button, now reading the date, holds focus), the calendar button as a circle and as a
+pill at 375 and 390px, a booking (one request), "Same class next week" (its carrier sampled while the class detail
+loaded: in the page, never drawn; no request until the picker's confirm), a cancel (one request) and the emptied
+pill. tests/suites/17-leftovers.js holds each fix and was seen to fail without it. Nothing was sent to the live API.
 
-Assertions: 7,991 → 8,036.
+Assertions: 7,991 → 8,046.
 
 ## How it was done
 

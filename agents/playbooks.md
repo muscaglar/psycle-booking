@@ -42,8 +42,8 @@ npm run ci                            # = check + test + drift, as CI runs them
 2. New DOM-free logic goes in a `// ── pure:<name>:start … :end` block, named in a suite through `t.loadPure` (B2). One file per feature area in `tests/suites/`; nothing to register.
 3. Behaviour or layout changed → P8. Swift or assets → P7.
 4. Stage the generated files with the source: `ios-app/www/**` and both `sw.js` copies.
-5. Move the documentation with the code: the matching `agents/architecture/` file; then `npm run agents:index` (it rewrites `agents/index/`; `npm run agents:check` must exit 0 — nothing else runs it). A file added to or removed from `agents/` also changes the list that names it — `AGENTS.md`'s reading guide, and `agents/README.md` for a top-level file — and each list carries a size per file (bytes ÷ 4) that 16-agents-docs.js holds to within 25%: after a large edit to an agents/ doc, update its size. `AGENTS.md` ≤ 160 lines; `CLAUDE.md` stays a ≤ 8-line pointer.
-6. Commit on a branch. `main` ships (P10).
+5. Move the documentation with the code: the matching `agents/architecture/` file, and the AGENTS.md of the folder (js/, css/, tests/, ios-app/, ios-app/ios/App/) when a rule local to it changed; then `npm run agents:index` (it rewrites `agents/index/`; `npm run agents:check` must exit 0 — nothing else runs it). A file added to or removed from `agents/` also changes the list that names it — `AGENTS.md`'s reading guide, and `agents/README.md` for a top-level file — and each list carries a size per file (bytes ÷ 4) that 16-agents-docs.js holds to within 25%: after a large edit to an agents/ doc, update its size. `AGENTS.md` ≤ 160 lines; `CLAUDE.md` stays a ≤ 8-line pointer.
+6. Commit on a branch. `main` ships (P10). A stretch of work ends with a dated entry at the top of the session log in `agents/HANDOVER.md`.
 
 ## P1. Add or change a Discover filter
 

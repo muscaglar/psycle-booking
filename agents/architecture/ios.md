@@ -81,7 +81,7 @@ Any Swift edit must be re-proved with the App-scheme simulator build before it s
 
 | Payload | Fields |
 |---|---|
-| Snapshot entry — `PsycleNextClass`, written by the bridge's `updateWidgetSnapshot` | `eventId, startAt, instrName, typeName, studioName, locName, slots` + the optional flat `ct…` colour fields |
+| Snapshot entry — `PsycleNextClass`, built per class by the bridge's `_snapshotEventFor`, stored by `updateWidgetSnapshot` | `eventId, startAt, instrName, typeName, studioName, locName, slots` + the optional flat `ct…` colour fields |
 | Live Activity attributes — `PsycleClassActivityAttributes`, FIXED at start | `eventId, typeName, instrName, locName, slotSummary?` |
 | `ContentState` — dynamic | `startAt, status, slotSummary?, style?` |
 
