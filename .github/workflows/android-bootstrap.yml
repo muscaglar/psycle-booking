@@ -8,6 +8,10 @@ on:
     branches: ['android/**']
   workflow_dispatch:
 
+# Read-only token: the job only reads the repository and uploads artifacts.
+permissions:
+  contents: read
+
 jobs:
   bootstrap:
     name: Generate + compile the Android platform
@@ -15,6 +19,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # no token left in .git/config for install-time scripts to read
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -34,12 +40,26 @@ jobs:
           echo "core is $CORE"
           npm install "@capacitor/android@$CORE"
           node -p "'android is ' + require('@capacitor/android/package.json').version"
+          echo "--- what changed in package.json / package-lock.json"
+          git --no-pager diff --stat -- package.json package-lock.json
+          git --no-pager diff -U2 -- package.json package-lock.json | head -80
 
       - name: Generate the Android project (only when it is not committed yet)
         working-directory: ios-app
         run: |
           if [ ! -d android ]; then npx cap add android; fi
           npx cap sync android
+
+      # @ebarooni/capacitor-calendar 6.7.2 pins androidx.core:core-ktx:1.15.0, which must be COMPILED against API 35.
+      # Only the compile SDK moves (what the code may call); targetSdk stays as generated, so runtime behaviour does not.
+      # AGP 8.2 predates API 35 and says so as a warning; the property below records that this is deliberate.
+      - name: Compile against API 35 (target stays as generated)
+        working-directory: ios-app/android
+        run: |
+          sed -i 's/compileSdkVersion = 34/compileSdkVersion = 35/' variables.gradle
+          grep -q 'compileSdkVersion = 35' variables.gradle
+          grep -q 'suppressUnsupportedCompileSdk' gradle.properties || printf '\n# compileSdk 35 is deliberate (see variables.gradle); AGP 8.2 only knows up to 34.\nandroid.suppressUnsupportedCompileSdk=35\n' >> gradle.properties
+          tail -4 gradle.properties
 
       - name: What was generated
         working-directory: ios-app
