@@ -496,9 +496,11 @@ either, by reading. What it took:
 
 **What is proved, and what is not.** The web layer and the bridge were driven in desktop Chromium on the fake
 Psycle server with a fake Capacitor answering `'android'`: Back through every layer, a booking (one request, on the
-fake server), nothing sent towards the live API. That is all. **Nothing Android has been compiled with these
-changes, installed or run**: not Gradle, not aapt2, not the manifest merger; not Back's round trip through
-`evaluateJavascript`; not a notification, a calendar event, a status bar or a launch screen. The iPhone app was not
+fake server), nothing sent towards the live API. Then GitHub Actions compiled it and ran it on an emulator: it
+launches into the first-run welcome, one Back key skips the welcome and leaves the app alive on Discover, the log
+shows no crash or script error, and natively the bridge created its two channels, set the status-bar colour and
+read its mirrored keys. **Nothing has been seen on a phone, and the emulator run never taps**: not a sign-in, a
+booking, a notification firing, a calendar event or the share sheet. The iPhone app was not
 rebuilt either — its path is proved by recorded plugin calls. The list of what only a phone can show is
 [ios-app/ANDROID.md → "On-device checklist"](ios-app/ANDROID.md#on-device-checklist); it is separate from the iPhone
 list at the end of this file, and none of it is ticked.

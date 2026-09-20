@@ -5,10 +5,11 @@ The Android app is the same app as the iPhone one: the same web layer (`ios-app/
 is still called `ios-app/`; that name is historical.) It is "level 2": everything the iPhone app does **except the
 widgets, the Live Activity and Siri**.
 
-**Where it stands — read this first.** Nothing here has been compiled with its customisations, run on an emulator
-or seen on a phone: it was written without an Android toolchain (no JDK, no SDK), by reading. The unmodified
-Capacitor project was generated and compiled once on a GitHub runner; everything since is proved by the Node test
-suites and, for the web layer, in a desktop browser against the fake Psycle server. GitHub Actions is the compiler:
+**Where it stands — read this first.** Compiled, and launched on an emulator; not yet seen on a phone. It was
+written without an Android toolchain (no JDK, no SDK), by reading, and then compiled by CI's `android-build` job and run on an emulator by `android-smoke`:
+it launches into the first-run welcome, one Back key skips the welcome and leaves the app alive on Discover, the log shows no crash or script error, and natively the bridge created its two channels, set the status-bar colour and read its mirrored keys through Preferences. That run never taps: signing in, booking,
+a reminder firing, a calendar write and the share sheet have not happened anywhere.
+GitHub Actions is the compiler:
 the `android-build` job builds a debug APK on every push to `main` or to an `android/…` branch. What only a phone
 can prove is the [on-device checklist](#on-device-checklist) at the end, and none of it is ticked.
 
