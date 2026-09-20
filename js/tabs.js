@@ -3503,24 +3503,26 @@
   // while nothing is armed invites no tap. So it is on only when it really
   // is, and the detail line says what a tap will do. (Detail strings are
   // literals — they go into innerHTML unescaped.)
-  // `plain` (optional): the Android app — it has no Live Activity, so the line
-  // promises no live countdown. Left out, the iPhone app's line, as before.
-  function _classReminderSwitch(prefOn, granted, plain) {
+  // `android` (optional): the Android app — it has no Live Activity for the
+  // reminder to open. Its countdown is a second, silent notification, and this
+  // switch is its switch too, so the line says so. Left out, the iPhone app's
+  // line, as before.
+  function _classReminderSwitch(prefOn, granted, android) {
     var blocked = !!prefOn && granted === false;
     var row = {
       on: !!prefOn && !blocked,
       detail: blocked ? 'Tap to allow notifications' : '90 minutes before each class — opens the live countdown',
     };
-    if (plain && !blocked) row.detail = '90 minutes before each class';
+    if (android && !blocked) row.detail = '90 minutes before each class — with a countdown notification';
     return row;
   }
   // ── pure:reminder-row:end
 
   // These rows exist in both native apps. Two things are said differently in
-  // the Android one: no live countdown (above), and the Settings app a refused
-  // permission is put right in is Android's. The toasts below are written as
-  // the iPhone app's sentence and re-worded here, so the iPhone app's copy
-  // stays the literal it always was.
+  // the Android one: its countdown is a notification, not a Live Activity
+  // (above), and the Settings app a refused permission is put right in is
+  // Android's. The toasts below are written as the iPhone app's sentence and
+  // re-worded here, so the iPhone app's copy stays the literal it always was.
   function _reminderAndroid() {
     try {
       return !!(window.Capacitor && typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() === 'android');

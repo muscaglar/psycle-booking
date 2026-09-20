@@ -150,7 +150,8 @@ jobs:
   # run without it. `npm run sync` stays iOS-only: it is what Xcode Cloud runs.
   #
   # Before the APK: the JVM unit tests of the app module (app/src/test/ — the
-  # widget's snapshot rules). They need no emulator, and they BLOCK.
+  # widget's snapshot rules and the countdown notification's plan). They need no
+  # emulator, and they BLOCK.
   android-build:
     name: Android build check (debug APK)
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/android/')))
@@ -195,9 +196,26 @@ jobs:
       # not JSON. BLOCKING, and before the APK is compiled: an APK whose widget
       # names the wrong class never becomes an artifact someone installs.
       # :app: only — the plugins' modules ship no tests and are not ours to fix.
-      - name: JVM unit tests (the widget's snapshot logic)
+      #
+      # The countdown notification (the stand-in for the iPhone's Live Activity)
+      # decides WHAT to show, until WHEN, and when to look again in a pure class
+      # too, and its tests ride THIS task: testDebugUnitTest runs every class under
+      # app/src/test/, so there is no second command to forget.
+      - name: JVM unit tests (the widget's snapshot logic, the countdown's plan)
         working-directory: ios-app/android
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      # A test task with nothing to run for the countdown still PASSES, having
+      # proved nothing about it. So: say which test classes ran, and how many tests
+      # each held; then stop the job unless one of them is the countdown's and held
+      # at least one test. (tests/suites/19-android-project.js holds that test
+      # file's NAME to this pattern — "…Countdown…Test" — so the two cannot part.)
+      # Gradle writes one XML per class: <testsuite name="<class>" tests="<n>" …>.
+      - name: The countdown's JVM tests ran
+        working-directory: ios-app/android
+        run: |
+          grep -h -o '<testsuite name="[^"]*" tests="[0-9]*"' app/build/test-results/testDebugUnitTest/*.xml
+          grep -l -E '<testsuite name="[^"]*Countdown[^"]*Test" tests="[1-9]' app/build/test-results/testDebugUnitTest/*.xml
 
       # Gradle's console names a failed test and its line, not what it expected
       # and what it got; the XML result holds both. Nobody can re-run this on a
@@ -287,14 +305,72 @@ jobs:
   # and says so in its caption.) A widget it could NOT draw (RemoteViews.apply()
   # refusing a view or a call: the nearest thing here to a launcher's "Problem
   # loading widget") is logged as an error under the tag PsyncWidgetPreview,
-  # and the last line of the script looks for that tag.
+  # and the script's verdict looks for that tag.
+  #
+  # Then the COUNTDOWN: the one silent, ongoing notification that stands in for
+  # the iPhone's Live Activity, from 90 minutes before a held class until it
+  # starts. Here it is POSTED FOR REAL, by the app's own planner and notifier.
+  # The DEBUG build carries CountdownProofReceiver (app/src/debug/, never in a
+  # release build, and behind android.permission.DUMP like the preview, so only
+  # adb may send to it): it puts ONE fixed sample class with fictional names into
+  # the widget's store - `--es minutes 40`: starting in 40 minutes; `--es started
+  # 1`: started a minute ago; `--es clear 1`: nothing at all - and runs the
+  # plan. Every extra is a STRING (the sender picks a number, never a word), and
+  # the receiver reads no action, so none is sent. It is sent BY NAME (-n), and
+  # with --include-stopped-packages: every preview start force-stops the app
+  # first, and a broadcast does not reach a stopped app unless it says so. A
+  # RECEIVER, not a second preview activity: `am start -S` force-stops the app,
+  # and a force-stop removes its notifications by itself - "it went away" would
+  # prove nothing. POST_NOTIFICATIONS is granted with
+  # `pm grant` first (Android 13+; an older image has no such permission, hence
+  # `|| true`) - the app itself never asks from native code, and with the
+  # permission missing the notifier does nothing, silently. What is kept:
+  #   - countdown-posted.txt: `dumpsys notification --noredact --package <app>`
+  #     with the countdown up. Its "NotificationRecord(… pkg=<app> … importance=2
+  #     …: Notification(channel=class-countdown … flags=0x… category=event
+  #     vis=PRIVATE publicVersion=Notification(…" line names the channel, the
+  #     importance (2 = LOW: silent, no peek), the flags (0x2 = ongoing, 0x8 =
+  #     only alert once), the category and the lock-screen version; its extras
+  #     hold android.showChronometer / android.chronometerCountDown and, because
+  #     of --noredact, the title and the text (sample words: nobody's booking).
+  #     Under the record, "timeout=" is setTimeoutAfter - what removes the
+  #     notification at the class's start even if nothing wakes the app. The
+  #     platform prints the DURATION as a date (TimeUtils.formatForLogging): 40
+  #     minutes reads "timeout=1970-01-01 00:39:5x" ("1969-12-31 ..." on an image
+  #     west of UTC), and no timeout at all reads "timeout=unknown". The verdict
+  #     judges it: a countdown without one would outstay its class on Android 8+;
+  #   - countdown-alarms.txt: `dumpsys alarm`, cut down to the system's own
+  #     alarm for that TIMEOUT and to the app's alarms (the planner's next look,
+  #     the widget's repaint). Read by a person, never judged: nobody here has
+  #     seen how this image prints them;
+  #   - countdown-shade.png: the notification shade, opened with `cmd statusbar
+  #     expand-notifications` (a status-bar command, not a touch) and closed again;
+  #   - countdown-after-start.txt: the same dump after the "started" sample. The
+  #     notification must be GONE: no NotificationRecord of the app on that
+  #     channel. (The channel itself is still listed there, under the app's
+  #     settings, and so is the archive of what was shown - neither is a record.)
+  #   - countdown-broadcasts.txt: what `am broadcast` printed for each of the
+  #     three - the hook hands back what it did as the broadcast's result
+  #     ("seeded a class 40 min ahead; stored=true; enabled=true; canPost=true;
+  #     shows=9001 …; untilInSeconds=…; nextWakeInSeconds=…"). Read by a person:
+  #     canPost=false there means the grant did not take, and nothing was posted;
+  #   - logcat-countdown.txt: warnings and above, from the grant to the end. A
+  #     hook that could NOT seed the store logs an error under the tag
+  #     PsyncCountdownProof (what it did, when it worked, is at INFO and is not
+  #     kept here: countdown-broadcasts.txt has it), and the verdict looks for it.
+  # The verdict's patterns were written from the platform's source, by reading:
+  # if one does not match what the image prints, the evidence above is what to
+  # read, and the pattern is what to fix.
   #
   # The repository is not checked out here: the runner holds the APK only.
   # Each line of `script:` runs as its own `sh -c`, so no line depends on a
   # shell variable, a `cd` or a multi-line construct from another — and the
   # first line that fails ends the script. So evidence is gathered first, every
-  # widget line ends in `|| true` (a preview that will not open must not cost
-  # the log or the verdict), and the lines that can fail the step come last.
+  # widget and countdown line ends in `|| true` (a preview that will not open,
+  # or a broadcast nothing answers, must not cost the log or the verdict), and
+  # the lines that can fail the step come last: the launch's, the widget's, then
+  # the countdown's - no crash, a hook that seeded, posted, gone after the start,
+  # and only then its details, the timeout last.
   android-smoke:
     name: Android emulator smoke (advisory)
     needs: android-build
@@ -328,7 +404,7 @@ jobs:
       - name: Make the output folder
         run: mkdir -p android-smoke
 
-      - name: Launch on an emulator, one back key, then the widget preview
+      - name: Launch on an emulator, one back key, the widget preview, then the countdown notification
         id: emulator
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0 (third-party: pinned to a commit, not a moving tag)
@@ -381,10 +457,36 @@ jobs:
             adb exec-out screencap -p > android-smoke/widget-compact-large-type.png || true
             adb shell settings put system font_scale 1.0 || true
             adb logcat -d '*:W' > android-smoke/logcat-widget.txt || true
+            adb logcat -c || true
+            adb shell pm grant com.psyclefinder.app android.permission.POST_NOTIFICATIONS || true
+            adb shell am broadcast --include-stopped-packages -n com.psyclefinder.app/.CountdownProofReceiver --es minutes 40 > android-smoke/countdown-broadcasts.txt || true
+            sleep 5
+            adb shell dumpsys notification --noredact --package com.psyclefinder.app > android-smoke/countdown-posted.txt || true
+            adb shell dumpsys alarm | grep -E -B 3 -A 12 'NotificationManagerService.TIMEOUT|com.psyclefinder.app' > android-smoke/countdown-alarms.txt || true
+            adb shell cmd statusbar expand-notifications || true
+            sleep 3
+            adb exec-out screencap -p > android-smoke/countdown-shade.png || true
+            adb shell cmd statusbar collapse || true
+            adb shell am broadcast --include-stopped-packages -n com.psyclefinder.app/.CountdownProofReceiver --es started 1 >> android-smoke/countdown-broadcasts.txt || true
+            sleep 5
+            adb shell dumpsys notification --noredact --package com.psyclefinder.app > android-smoke/countdown-after-start.txt || true
+            adb shell am broadcast --include-stopped-packages -n com.psyclefinder.app/.CountdownProofReceiver --es clear 1 >> android-smoke/countdown-broadcasts.txt || true
+            adb logcat -d '*:W' > android-smoke/logcat-countdown.txt || true
             grep -q '[0-9]' android-smoke/pid-after-back.txt
             ! grep -q 'FATAL EXCEPTION' android-smoke/logcat.txt
             ! grep -q 'Process: com.psyclefinder.app' android-smoke/logcat-widget.txt
             ! grep -q 'PsyncWidgetPreview' android-smoke/logcat-widget.txt
+            ! grep -q 'Process: com.psyclefinder.app' android-smoke/logcat-countdown.txt
+            ! grep -q 'PsyncCountdownProof' android-smoke/logcat-countdown.txt
+            grep -q 'NotificationRecord(.*pkg=com.psyclefinder.app .*: Notification(channel=class-countdown ' android-smoke/countdown-posted.txt
+            grep -q 'Notification Manager state' android-smoke/countdown-after-start.txt
+            ! grep -q 'NotificationRecord(.*pkg=com.psyclefinder.app .*channel=class-countdown' android-smoke/countdown-after-start.txt
+            grep -q 'NotificationRecord(.*pkg=com.psyclefinder.app .* importance=2 .*: Notification(channel=class-countdown ' android-smoke/countdown-posted.txt
+            grep -q 'NotificationRecord(.*pkg=com.psyclefinder.app .*: Notification(channel=class-countdown [^(]* flags=0x[0-9a-f]*[2367abef] ' android-smoke/countdown-posted.txt
+            grep -q 'NotificationRecord(.*pkg=com.psyclefinder.app .*: Notification(channel=class-countdown [^(]* category=event [^(]*vis=PRIVATE publicVersion=Notification(' android-smoke/countdown-posted.txt
+            grep -q 'android.showChronometer=Boolean (true)' android-smoke/countdown-posted.txt
+            grep -q 'android.chronometerCountDown=Boolean (true)' android-smoke/countdown-posted.txt
+            grep -q 'timeout=19[67][0-9]-' android-smoke/countdown-posted.txt
 
       - name: Upload the screenshots and the log
         if: always()
@@ -397,4 +499,4 @@ jobs:
 
       - name: Say so when the smoke did not pass
         if: steps.emulator.outcome == 'failure'
-        run: echo "::warning title=Android emulator smoke::The advisory emulator smoke did not pass - read the android-smoke artifact (launch.png, after-back.png, pid-after-back.txt, logcat.txt, the nine widget-*.png, logcat-widget.txt)."
+        run: echo "::warning title=Android emulator smoke::The advisory emulator smoke did not pass - read the android-smoke artifact (launch.png, after-back.png, pid-after-back.txt, logcat.txt, the nine widget-*.png, logcat-widget.txt, then the countdown - countdown-posted.txt, countdown-shade.png, countdown-after-start.txt, countdown-alarms.txt, countdown-broadcasts.txt, logcat-countdown.txt). The step's log ends at the first line of the verdict that failed."

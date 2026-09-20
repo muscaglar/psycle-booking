@@ -48,7 +48,7 @@ in IndexedDB (`psycle_sec`), not localStorage.
 | psycle_native_cal_events | ✓ | iOS: `{eventId: nativeCalendarEventId}` — without it a storage purge would create duplicates on the next sync |
 | psycle_weekly_reminder | ✓ | iOS: `'on'` \| `'off'` (unset = off) — the Monday 12:00 "New Psycle dates are open" reminder |
 | psycle_weekly_reminder_asked | ✓ | iOS: `'1'` once the in-app "Remind you on Mondays at 12:00, when new dates open?" ask (shown once, after a usual week is first saved — never at launch) was answered; a dialog displaced by another is not an answer |
-| psycle_class_reminders | ✓ | iOS: `'off'` disables the T-90min class notifications (default on, permission-gated) |
+| psycle_class_reminders | ✓ | Both native apps: `'off'` disables the T-90min class notifications (default on, permission-gated). On Android it is also the class countdown's off switch: the bridge hands it to the native side as `countdown_enabled` (`'1'` / `'0'`; never written = off) — a key of the widget's native store, NOT of localStorage. That store holds one key more that the page can neither read nor write, `countdown_dismissed`: which countdown the member swiped away ([android.md](android.md) → "The class countdown") |
 | psycle_class_reminder_asked | ✓ | iOS: `'1'` once the in-app "remind me before class?" ask (shown after a first booking, never at launch) was answered |
 | psycle_class_reminder_map |  | iOS: `{eventId: {id, startAt}}` of scheduled class reminders (device-local by nature) |
 | psycle_error_log | ✓ | Error entries (max 100) |

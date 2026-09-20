@@ -39,10 +39,16 @@ import org.json.JSONTokener;
  */
 public final class PsyncSnapshot {
 
-    /** The three keys the bridge writes through the AppGroupPreferences plugin - and the only ones it may. */
+    /** The three SNAPSHOT keys the bridge writes through the AppGroupPreferences plugin (isWidgetKey). */
     public static final String KEY_NEXT = "widget_next_class";
     public static final String KEY_UPCOMING = "widget_upcoming";
     public static final String KEY_WEEK = "widget_week";
+    /**
+     * The one stored key that is NOT part of the snapshot: whether the class countdown
+     * (countdown/PsyncCountdownPlan) may show, "1" or "0". The bridge writes it on Android only,
+     * from the member's class-reminders preference, beside every snapshot pass.
+     */
+    public static final String KEY_COUNTDOWN_ENABLED = "countdown_enabled";
 
     /** A stored value is at most 64 KB of UTF-8. The bridge writes five classes: a few KB. */
     public static final int MAX_VALUE_BYTES = 64 * 1024;
@@ -242,6 +248,36 @@ public final class PsyncSnapshot {
         return value.getBytes(StandardCharsets.UTF_8).length <= MAX_VALUE_BYTES;
     }
 
+    /** True for every key the store takes: the three snapshot keys, and the countdown's one switch. */
+    public static boolean isStoreKey(String key) {
+        return isWidgetKey(key) || KEY_COUNTDOWN_ENABLED.equals(key);
+    }
+
+    /**
+     * True when THIS value may be stored under THIS key. A snapshot key takes any string that
+     * fits; the countdown's switch takes "1" or "0" and nothing else - not "true", not "",
+     * not " 1" - so that what is filed under it can only ever mean on or off.
+     */
+    public static boolean fitsKey(String key, String value) {
+        if (KEY_COUNTDOWN_ENABLED.equals(key)) {
+            return "1".equals(value) || "0".equals(value);
+        }
+        return isWidgetKey(key) && fitsStore(value);
+    }
+
+    /**
+     * What the stored switch says. ONLY "1" turns the countdown on: a key that was never
+     * written is OFF. The countdown FOLLOWS the member's class-reminders preference, and only
+     * the page can read that - so after an update over a build that had no such key, the plan
+     * runs that come before the page has loaded (the activity's start, a restart of the phone,
+     * the widget's update) must not count down for a member who has reminders off. The first
+     * snapshot pass, seconds into the first launch, writes the real value, and the plugin
+     * plans at once when that turns the switch on (AppGroupPreferencesPlugin).
+     */
+    public static boolean countdownEnabled(String stored) {
+        return "1".equals(stored);
+    }
+
     // -- The tap ------------------------------------------------------------------------------
 
     /**
@@ -333,6 +369,12 @@ public final class PsyncSnapshot {
                 return null;
             }
             JSONObject json = (JSONObject) value;
+            // A waitlist place is not a held class. The bridge never writes one (it skips a
+            // booking that is `waitlisted`), and no entry carries such a field today; should one
+            // ever arrive saying so, it is not shown and not counted down to.
+            if (Boolean.TRUE.equals(json.opt("waitlisted"))) {
+                return null;
+            }
             String eventId = idText(json.opt("eventId"));
             int[] when = wallClock(json.opt("startAt"));
             if (eventId == null || when == null) {

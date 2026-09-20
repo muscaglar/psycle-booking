@@ -1,0 +1,254 @@
+name: Android release (signed AAB)
+
+# MANUAL ONLY. Builds the signed Android App Bundle that the owner uploads to
+# Google Play by hand - the runbook is ios-app/PLAY_STORE_DEPLOY.md. It does
+# NOT talk to Google Play: the first upload of an app can only be made in the
+# Play Console, and an automated upload would need a service-account key, which
+# this repository does not hold (the guide says what that would take).
+#
+# What it needs: four SECRETS, created by the owner in the `play-release`
+# environment (Settings -> Environments), which the guide limits to main and
+# puts behind an approval. Only their NAMES are written here:
+#   PSYNC_KEYSTORE_BASE64     the upload keystore file, base64-encoded
+#   PSYNC_KEYSTORE_PASSWORD   the store's password
+#   PSYNC_KEY_ALIAS           the key's alias
+#   PSYNC_KEY_PASSWORD        the key's password
+# With any of them missing the run FAILS before anything is built. It must
+# never "succeed" with an unsigned bundle: app/build.gradle leaves a release
+# unsigned when a value is missing, and an unsigned .aab looks like any other.
+#
+# Rules this file keeps (tests/suites/22-play-release.js reads it):
+#   - workflow_dispatch only, and only from main - a step of THIS file says so,
+#     which a copy on another branch could drop: the control is the environment,
+#     whose secrets GitHub hands to main alone (the guide, step 4b);
+#   - a read-only token, and no credentials left in the checkout;
+#   - a secret reaches a step through `env:` only, never through `${{ }}`
+#     inside a script, never through echo, and no step uses `set -x` or
+#     Gradle's --info / --debug (both can print the environment);
+#   - the keystore is decoded AFTER `npm ci` (install scripts never see it),
+#     into the runner's temp folder - never the workspace, never an artifact -
+#     and is shredded as soon as the bundle is verified, BEFORE the upload
+#     action runs, and again in an always() step, whatever happened;
+#   - no action but GitHub's own (actions/*). A third-party action would have
+#     to be pinned to a commit SHA, as ci.yml pins the emulator runner.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "The versionName you mean to release, exactly as ios-app/android/app/build.gradle on main has it (e.g. 1.0). The run stops if they differ."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One release build at a time; a second run waits instead of racing the first.
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: Signed release bundle (.aab)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The four secrets live IN this environment (the guide, step 4b): limited to
+    # main under "Deployment branches", behind a required reviewer. That is what
+    # keeps them from a workflow on any other branch - the first step below only
+    # says so out loud. (GitHub makes an EMPTY environment of this name on a
+    # first run if the owner has not: the run then stops at the missing secrets.)
+    environment: play-release
+
+    steps:
+      # A job-level `if:` would SKIP the job in silence. A release asked for
+      # from the wrong branch should say so, in red.
+      - name: Refuse any branch but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error title=Android release::Run this workflow from main only (this run was started from '$GITHUB_REF_NAME'). A release is built from what main holds."
+          exit 1
+
+      # First, and before anything is installed or built: all four, or nothing.
+      - name: Check that the four signing secrets exist
+        env:
+          PSYNC_KEYSTORE_BASE64: ${{ secrets.PSYNC_KEYSTORE_BASE64 }}
+          PSYNC_KEYSTORE_PASSWORD: ${{ secrets.PSYNC_KEYSTORE_PASSWORD }}
+          PSYNC_KEY_ALIAS: ${{ secrets.PSYNC_KEY_ALIAS }}
+          PSYNC_KEY_PASSWORD: ${{ secrets.PSYNC_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$PSYNC_KEYSTORE_BASE64" ] || missing="$missing PSYNC_KEYSTORE_BASE64"
+          [ -n "$PSYNC_KEYSTORE_PASSWORD" ] || missing="$missing PSYNC_KEYSTORE_PASSWORD"
+          [ -n "$PSYNC_KEY_ALIAS" ] || missing="$missing PSYNC_KEY_ALIAS"
+          [ -n "$PSYNC_KEY_PASSWORD" ] || missing="$missing PSYNC_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error title=Android release::Missing signing secret(s):$missing. Nothing was built. Create them in the play-release environment (Settings -> Environments): ios-app/PLAY_STORE_DEPLOY.md, step 4b."
+            exit 1
+          fi
+          echo "All four signing secrets are set."
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # no token left in .git/config for install-time scripts to read
+
+      # versionCode / versionName are set by hand in app/build.gradle. The
+      # input is a confirmation, not an override: nothing is edited on the
+      # runner, so the bundle is exactly what the commit on main describes.
+      - name: Read the version from app/build.gradle, and hold it to the input
+        id: version
+        env:
+          WANTED_VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          gradle=ios-app/android/app/build.gradle
+          # Letters, digits and . _ + - only, 30 at most: what is typed is never echoed before it has passed this.
+          plain() { case "$1" in ''|*[!0-9A-Za-z._+-]*) return 1 ;; esac; [ "${#1}" -le 30 ]; }
+          if ! plain "$WANTED_VERSION_NAME"; then
+            echo "::error title=Android release::The version name you typed is not one this workflow accepts: letters, digits and . _ + - only, 30 at most."
+            exit 1
+          fi
+          name=$(sed -n 's/^[[:space:]]*versionName[[:space:]]*"\([^"]*\)".*$/\1/p' "$gradle" | head -n 1)
+          code=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*\([0-9][0-9]*\).*$/\1/p' "$gradle" | head -n 1)
+          if ! plain "$name" || [ -z "$code" ]; then
+            echo "::error title=Android release::Could not read versionName / versionCode from $gradle (the name must be letters, digits and . _ + - only)."
+            exit 1
+          fi
+          if [ "$name" != "$WANTED_VERSION_NAME" ]; then
+            echo "::error title=Android release::You asked for versionName '$WANTED_VERSION_NAME', but $gradle on main says '$name' (versionCode $code). Set both by hand there, merge to main, then run this again."
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Releasing versionName $name, versionCode $code."
+
+      # No dependency cache in a release build: nothing is restored that this
+      # run did not fetch against the lockfile itself.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # No secret is in the environment of these two steps.
+      - name: Install JS dependencies (lockfile)
+        working-directory: ios-app
+        run: npm ci
+
+      - name: Build web assets + sync the Android project
+        working-directory: ios-app
+        run: npm run sync:android
+
+      # The keystore exists on disk from here until the bundle is verified - three
+      # steps - and no longer. umask 077: readable by this user alone. The temp
+      # folder is outside the workspace, so no `path:` of an upload can sweep it up.
+      - name: Decode the upload keystore into the runner's temp folder
+        env:
+          PSYNC_KEYSTORE_BASE64: ${{ secrets.PSYNC_KEYSTORE_BASE64 }}
+          PSYNC_KEYSTORE_PASSWORD: ${{ secrets.PSYNC_KEYSTORE_PASSWORD }}
+          PSYNC_KEY_ALIAS: ${{ secrets.PSYNC_KEY_ALIAS }}
+          PSYNC_KEYSTORE_FILE: ${{ runner.temp }}/psync-upload.keystore
+        run: |
+          umask 077
+          printf '%s' "$PSYNC_KEYSTORE_BASE64" | base64 --decode --ignore-garbage > "$PSYNC_KEYSTORE_FILE"
+          if [ ! -s "$PSYNC_KEYSTORE_FILE" ]; then
+            echo "::error title=Android release::PSYNC_KEYSTORE_BASE64 did not decode to a file. Encode the keystore again: ios-app/PLAY_STORE_DEPLOY.md, step 4."
+            exit 1
+          fi
+          # The store opens with this password and holds this alias - said now, in plain words,
+          # and not twenty minutes later as a Gradle stack trace. keytool reads the password
+          # from the environment (:env); its own output is dropped.
+          if ! keytool -list -keystore "$PSYNC_KEYSTORE_FILE" -storepass:env PSYNC_KEYSTORE_PASSWORD -alias "$PSYNC_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error title=Android release::The keystore did not open with PSYNC_KEYSTORE_PASSWORD, or holds no key under PSYNC_KEY_ALIAS. Nothing was built."
+            exit 1
+          fi
+          echo "The keystore opens and holds the alias."
+
+      # The four names app/build.gradle reads from the environment - and the only step that holds
+      # the two passwords together with the file. No --info, no --debug.
+      - name: Build the signed bundle
+        working-directory: ios-app/android
+        env:
+          PSYNC_KEYSTORE_FILE: ${{ runner.temp }}/psync-upload.keystore
+          PSYNC_KEYSTORE_PASSWORD: ${{ secrets.PSYNC_KEYSTORE_PASSWORD }}
+          PSYNC_KEY_ALIAS: ${{ secrets.PSYNC_KEY_ALIAS }}
+          PSYNC_KEY_PASSWORD: ${{ secrets.PSYNC_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
+      # `jarsigner -verify` exits 0 for an UNSIGNED jar too ("jar is unsigned."), so its words are
+      # read, not its exit code. Then the signer is held to the upload key itself: the bundle's
+      # certificate fingerprint must equal the keystore's. A fingerprint is public - it is inside
+      # every build anyone installs - and Play Console shows the same one under App integrity.
+      - name: Verify the bundle is signed, and by the upload key
+        env:
+          PSYNC_KEYSTORE_FILE: ${{ runner.temp }}/psync-upload.keystore
+          PSYNC_KEYSTORE_PASSWORD: ${{ secrets.PSYNC_KEYSTORE_PASSWORD }}
+          PSYNC_KEY_ALIAS: ${{ secrets.PSYNC_KEY_ALIAS }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          aab=ios-app/android/app/build/outputs/bundle/release/app-release.aab
+          if [ ! -s "$aab" ]; then
+            echo "::error title=Android release::Gradle finished, but $aab is not there."
+            exit 1
+          fi
+          if ! jarsigner -verify "$aab" 2>&1 | grep -q 'jar verified'; then
+            echo "::error title=Android release::The bundle is NOT signed (jarsigner did not say 'jar verified'). It is not a release: do not upload it. No artifact is kept."
+            exit 1
+          fi
+          want=$(keytool -list -v -keystore "$PSYNC_KEYSTORE_FILE" -storepass:env PSYNC_KEYSTORE_PASSWORD -alias "$PSYNC_KEY_ALIAS" 2>/dev/null | grep -m 1 'SHA256:' | tr -d ' \t')
+          got=$(keytool -printcert -jarfile "$aab" 2>/dev/null | grep -m 1 'SHA256:' | tr -d ' \t')
+          if [ -z "$want" ] || [ "$want" != "$got" ]; then
+            echo "::error title=Android release::The bundle is signed, but not by the key in the upload keystore. Do not upload it. No artifact is kept."
+            exit 1
+          fi
+          {
+            echo "### Signed Android App Bundle"
+            echo ""
+            echo "- versionName \`$VERSION_NAME\`, versionCode \`$VERSION_CODE\`, built from \`$GITHUB_SHA\`"
+            echo "- file: \`app-release.aab\`, $(wc -c < "$aab" | tr -d ' ') bytes, sha256 \`$(sha256sum "$aab" | cut -d ' ' -f 1)\`"
+            echo "- upload certificate \`${got}\` - the same fingerprint as Play Console -> App integrity -> Upload key certificate"
+            echo ""
+            echo "Download the artifact below and upload \`app-release.aab\` in Play Console: ios-app/PLAY_STORE_DEPLOY.md, step 7."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "jar verified, and signed by the upload key."
+
+      # Nothing after the verification needs the key: it goes NOW, before the upload action -
+      # code that is not this repository's - runs on the same machine. The last step, below, is
+      # the same thing again for a run that failed before it got here.
+      - name: Shred the keystore, before anything else runs
+        env:
+          PSYNC_KEYSTORE_FILE: ${{ runner.temp }}/psync-upload.keystore
+        run: |
+          if [ -e "$PSYNC_KEYSTORE_FILE" ]; then
+            shred -u "$PSYNC_KEYSTORE_FILE" 2>/dev/null || rm -f "$PSYNC_KEYSTORE_FILE"
+          fi
+          [ ! -e "$PSYNC_KEYSTORE_FILE" ]
+
+      # The bundle ONLY: one file, by its full path. Kept for a few days - long enough to upload
+      # it, short enough that old bundles do not pile up. In a public repository anyone signed in
+      # to GitHub can download an artifact; a signed bundle holds no secret.
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: psync-release-aab-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          path: ios-app/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 5
+
+      # Whatever happened above: a run that failed before the first shred still leaves nothing.
+      # Hosted runners are thrown away after a job, so this is a further lock, not the only one.
+      - name: Shred the keystore
+        if: always()
+        env:
+          PSYNC_KEYSTORE_FILE: ${{ runner.temp }}/psync-upload.keystore
+        run: |
+          if [ -e "$PSYNC_KEYSTORE_FILE" ]; then
+            shred -u "$PSYNC_KEYSTORE_FILE" 2>/dev/null || rm -f "$PSYNC_KEYSTORE_FILE"
+          fi
+          [ ! -e "$PSYNC_KEYSTORE_FILE" ]

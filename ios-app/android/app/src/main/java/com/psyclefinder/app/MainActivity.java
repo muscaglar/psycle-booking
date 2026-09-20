@@ -15,7 +15,9 @@ import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginHandle;
+import com.psyclefinder.app.countdown.PsyncCountdownReceiver;
 import com.psyclefinder.app.widget.NextClassWidgetProvider;
+import com.psyclefinder.app.widget.PsyncTapIntent;
 
 public class MainActivity extends BridgeActivity {
 
@@ -69,6 +71,12 @@ public class MainActivity extends BridgeActivity {
         // The sign-out and session-expiry rules are the bridge's, and are not touched by it.
         NextClassWidgetProvider.requestRefresh(this);
 
+        // The class countdown, for the same reasons: a force-stop took its alarm and its
+        // notification with it, and a wiped store must take the notification down. It reads
+        // the store, never the page; it cannot throw into the activity's start; and it never
+        // asks for the notification permission - that stays the page's own, in-context ask.
+        PsyncCountdownReceiver.plan(this);
+
         // After super.onCreate: that is where BridgeActivity builds the bridge and the web view.
         // It can also return early WITHOUT one (the device has no WebView), so nothing below
         // assumes it is there.
@@ -118,8 +126,9 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Hands a widget tap to the page. The widget opens this activity with an EXPLICIT intent
-     * (NextClassWidgetProvider.ACTION_OPEN) carrying the shown class's id as an extra - no URL
+     * Hands a widget tap to the page - and a tap on the class countdown's notification, which
+     * is the same intent from the same builder. Both open this activity with an EXPLICIT intent
+     * (PsyncTapIntent.ACTION_OPEN) carrying the shown class's id as an extra - no URL
      * scheme, no intent filter - and PsycleDeepLinkPlugin turns it into the 'openURL' event the
      * bridge already listens for, retained until the page is there to hear it.
      *
@@ -134,7 +143,7 @@ public class MainActivity extends BridgeActivity {
      */
     private void handWidgetTap(Intent intent) {
         if (intent == null || intent == answeredTap
-                || !NextClassWidgetProvider.ACTION_OPEN.equals(intent.getAction())) {
+                || !PsyncTapIntent.ACTION_OPEN.equals(intent.getAction())) {
             return;
         }
         answeredTap = intent;
@@ -143,7 +152,7 @@ public class MainActivity extends BridgeActivity {
         }
         String eventId;
         try {
-            eventId = intent.getStringExtra(NextClassWidgetProvider.EXTRA_EVENT_ID);
+            eventId = intent.getStringExtra(PsyncTapIntent.EXTRA_EVENT_ID);
         } catch (RuntimeException e) {
             // Extras that cannot be unparcelled (a forged intent): a tap with no id.
             eventId = null;

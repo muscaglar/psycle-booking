@@ -13,12 +13,14 @@
       run (cap run -l) serves plain http and would need this lifted locally; never commit that.
 
       ONE component is exported, because it must be: the launcher activity. The home-screen
-      widget's provider is not (its own note is on the receiver below). There is no custom URL
-      scheme, and no intent filter beyond the launcher's and the provider's APPWIDGET_UPDATE: a
-      tap on the widget reaches the activity as an EXPLICIT intent with the class id as an
-      extra, and MainActivity turns it into the psync:// link the page already understands.
-      Any app can start an exported activity with extras of its own choosing, so that id is
-      untrusted: digits only, or it is dropped.
+      widget's provider is not, and nor are the class countdown's two receivers (each has its
+      own note below). There is no custom URL scheme, and no intent filter beyond the
+      launcher's, the provider's APPWIDGET_UPDATE and the countdown's four system broadcasts
+      (BOOT_COMPLETED, MY_PACKAGE_REPLACED, TIMEZONE_CHANGED, TIME_SET): a tap on the widget,
+      or on the countdown's notification, reaches the activity as an EXPLICIT intent with the
+      class id as an extra, and MainActivity turns it into the psync:// link the page already
+      understands. Any app can start an exported activity with extras of its own choosing, so
+      that id is untrusted: digits only, or it is dropped.
 
       The activity is portrait only, as the iPhone app is (Info.plist) and as the web manifest
       asks (manifest.json, "portrait-primary"): the page has no landscape layout, and its sheets
@@ -80,6 +82,57 @@
                 android:resource="@xml/next_class_widget_info" />
         </receiver>
 
+        <!--
+          The class countdown: ONE silent, ongoing notification that counts down to the next
+          held class from 90 minutes before it - Android's stand-in for the iPhone's Live
+          Activity. This receiver plans it with the app not running: on its own inexact alarm
+          (an explicit intent, sent as the app itself), and on four broadcasts that only the
+          SYSTEM may send - BOOT_COMPLETED (a restart clears every alarm and every
+          notification), MY_PACKAGE_REPLACED (an update of the app removes its notifications),
+          and TIMEZONE_CHANGED and TIME_SET (a class's start is read on the phone's own clock,
+          so the instant the countdown runs to moves with it). A manifest receiver still
+          hears all four (the limits on implicit broadcasts exempt three, and the update's is
+          sent to this package alone), and only the first needs a permission. Declared AFTER
+          the widget's provider on purpose: tests/suites/19-android-project.js reads the first
+          receiver as the provider.
+
+          exported="false": nothing outside the app has any business sending to it, and the
+          SYSTEM reaches an unexported receiver with its own broadcasts - the
+          local-notifications plugin declares its restore receiver the same way. It takes
+          nothing from an intent, whatever arrives: it re-reads the app's own stored snapshot,
+          posts, updates or takes down the one notification, and re-arms its one alarm. It
+          sends no request, and writes one thing only: it forgets a recorded swipe (below)
+          once the plan is about another class.
+
+          NO new permission: RECEIVE_BOOT_COMPLETED and POST_NOTIFICATIONS are declared by
+          @capacitor/local-notifications and merged in (the note at the foot of this file).
+          There is no service, no exact alarm and no wake lock of the app's own, and the
+          notification permission is never asked for from here.
+          Not yet seen on a phone: ios-app/ANDROID.md's checklist is its proof.
+        -->
+        <receiver
+            android:name=".countdown.PsyncCountdownReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          The countdown's DELETE intent lands here: from Android 14 a member can swipe an
+          ongoing notification away, and a swipe is an answer for that class - this receiver
+          records which countdown it was (the class's id and its start, in the widget's
+          private store, under a name the page cannot write), and no later plan run posts it
+          again. NOT exported and with NO intent filter: only the app's own immutable
+          PendingIntent, sent by the system, reaches it. It sends no request.
+        -->
+        <receiver
+            android:name=".countdown.PsyncCountdownDismissReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -103,5 +156,7 @@
 
     <!-- Declared by the plugins themselves, and merged in at build time, so NOT repeated here:
          VIBRATE (@capacitor/haptics); POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED and WAKE_LOCK
-         (@capacitor/local-notifications). -->
+         (@capacitor/local-notifications). The class countdown LEANS on the first two of those
+         three: if that plugin is ever removed, or a later version of it stops declaring them,
+         declare POST_NOTIFICATIONS and RECEIVE_BOOT_COMPLETED here. -->
 </manifest>

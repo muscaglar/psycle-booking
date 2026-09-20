@@ -460,8 +460,9 @@ either, by reading. What it took:
   path the iPhone app always took: tests/suites/18-android.js holds the iPhone's plugin calls for one launch to a
   digest taken at the commit before this work.
 - **Inexact reminders, on purpose.** The app does not ask for Android's "Alarms & reminders" special access, so a
-  reminder may arrive a few minutes late. That is fine for "starts in 90 minutes" and "new dates are open", and it
-  spares the member a settings screen.
+  reminder may arrive late — usually by minutes; read later off the platform's source, Android 12 and later MAY hold
+  such an alarm for up to an hour (agents/learnings.md G16). That is fine for "new dates are open"; for "starts in
+  90 minutes" the on-device checklist asks how late it really is. It spares the member a settings screen.
 - **What a web view on Android cannot do.** It has no Web Share API and no download manager: the stats and year
   cards used to fall through to a download that did nothing, under a toast that said "Image saved". They go out as
   text through the native share sheet there, with a truthful toast; settings and ICS export already had a text
@@ -580,9 +581,150 @@ widget" block of [ios-app/ANDROID.md → "On-device checklist"](ios-app/ANDROID.
 
 **Deliberately left out.** A Lock Screen widget, Siri, and an ongoing countdown notification standing in for the Live
 Activity: it was not requested by name, and it needs native alarm and notification code that nobody can check
-without a phone (agents/backlog.md).
+without a phone. (The owner then asked for it: the next follow-up.)
 
 Assertions: 8,388 → 8,608 (and 45 JVM tests, which `npm test` does not count).
+
+### Follow-up: a countdown on Android, and the road to Google Play
+
+The owner's words: "Go ahead with the countdown notification too. Then push it all etc. Add deployment to Play store
+details somewhere too for me." Two pieces of work, under level 2's standing condition — **the iPhone app must not
+change**: no npm package, no Capacitor plugin, no Swift, `npm run sync` still iOS-only.
+
+**The class countdown.** Before a class the iPhone app shows a Live Activity: it starts within 90 minutes of the
+next held class, shows the class, the place, the seat and the time as a countdown, and ends at the start. Android
+has no Live Activities, so the Android app now shows ONE silent, ongoing notification with the system's own
+countdown chronometer, from 90 minutes before the class until it starts.
+
+- **Native, local, and it adds nothing.** Plain Java in the app module (`…/app/countdown/`): a pure planner, a small
+  notifier and two small receivers (one plans, one hears a swipe). No foreground service, no exact alarm, no new permission (`POST_NOTIFICATIONS` and
+  `RECEIVE_BOOT_COMPLETED` are the notifications plugin's own, already merged into the manifest), no new dependency.
+  It reuses what the widget brought: the snapshot the bridge already writes, the store that holds it, and the tap.
+  The Live Activity's plugin still has no Android twin, so the iPhone path cannot have moved.
+- **The rules are the iPhone's, in a class a JVM can run.** `PsyncCountdownPlan` takes the parsed snapshot, the
+  instant, the phone's zone and the off switch, and answers three things: which class to show (the FIRST one still
+  to come, once its start is at most 90 minutes away — never a later class while an earlier one is ahead, never one
+  that has started, never a waitlist place), until when, and when to look again (the earlier of that class's start
+  and the moment the next class comes inside its own window). 36 JVM tests hold it: both edges of the window to the
+  millisecond, two and three classes inside it, the hand-over at a start, a start with seconds, a moved booking,
+  both days the UK's clocks change, a clock set so far back that the arithmetic would overflow, a countdown swiped
+  away, whether a plan may be posted at all, and the store's keys. Times are the phone's own, as the widget's are — the
+  owner's closed decision covers this too.
+- **One notification, which cannot stack.** One tag and one id, so a second post replaces the first. Its OWN
+  channel, `class-countdown`, created natively at low importance: no sound, no vibration, no pop-up, and a member can
+  switch it off in Android's settings without touching reminders. The title is the class; the text is the place and
+  the seat in the widget's own words ("Shoreditch · Bike 9"); the header counts down to the start (below Android 7
+  the system cannot count down, so the text opens with the 24-hour start time instead); the accent is the class's
+  colour. No action buttons. The T-90 class reminder is a different, alerting notification and is exactly as it was.
+- **It must not outstay its class** — a notification that will not go away is worse than none, which is why this
+  was first left out. From Android 8 the SYSTEM removes it at the class's start (`setTimeoutAfter`), with the app
+  dead; the receiver's own alarm takes it down too; below Android 8 it is posted only once that alarm is armed; and
+  every plan run cancels it when there is nothing to show.
+- **When it plans.** Whenever the bridge has just written a snapshot (the `WidgetCenter` twin's reload: a booking, a
+  cancel, a moved class, and the empty snapshot a sign-out writes), when the off switch flips, at every cold start,
+  at the widget's half-hourly update, on its own alarm, and when Android says the phone has restarted, the app was
+  updated, or the zone or the clock changed. Every run is idempotent: post, update or cancel to match the plan. The
+  alarm is inexact and does NOT wake a sleeping phone (`setWindow` on `RTC`, not `RTC_WAKEUP`, with a ten-minute
+  window): a countdown is only seen on a phone that is awake, so it may appear up to about ten minutes late and
+  costs no battery to post to nobody. The receiver is not exported, takes nothing from an intent, and the system
+  reaches it all the same.
+- **A swipe is an answer.** From Android 14 a member can swipe it away; it then stays away for that class at that
+  start (a delete intent records which, natively, where the page cannot write), and the class after it still shows.
+- **Private on a lock screen.** A phone that hides sensitive content shows a public version that says "Next class"
+  and the time — never the class, the place or the seat. The tap is the widget's, from ONE shared builder
+  (`PsyncTapIntent`): an explicit, immutable intent with an id that is judged again where it arrives.
+- **The off switch is the one the member already has.** The countdown follows Class reminders. Only the page can
+  read that preference, so on ANDROID ONLY the bridge hands it over with each snapshot pass as one more key,
+  `countdown_enabled` ('1' or '0'), after the three snapshot keys and before the reload; a flip with no pass to
+  carry it goes out by itself, so switching reminders off takes the countdown down at once. The twin's allow-list
+  gained exactly that key, with exactly those two values; never written means OFF, so nothing counts down before the
+  page has said. It never asks for the notification permission: refused, it does nothing, silently, and the app's
+  own in-context ask stays the only one. (On Android 12 and earlier there is no such permission and that ask never
+  runs: reminders and the countdown are simply on from the first booking. The privacy policy and the owner's guide
+  say so; asking there all the same is the owner's to decide — agents/backlog.md.)
+- **Sign-out and expiry** are the iPhone's rule again: a deliberate sign-out empties the snapshot and the countdown
+  goes at once; a session that merely expired writes nothing, the class is still held, and the countdown stays.
+- **Copy.** On Android the Settings row reads "90 minutes before each class — with a countdown notification", and
+  the first-booking ask names both, since one yes allows both: "… — and a countdown until it starts." The class
+  reminder's body still asks for no tap. The welcome does not list it. The iPhone's three sentences are what they
+  were, to the letter.
+- **Proof without a phone, designed in.** The planner's JVM tests run on CI before the APK, and a new blocking step
+  proves they RAN — a test task with nothing to run passes, so the step reads the result files for a class named
+  …Countdown…Test. The emulator job then posts a REAL one: a debug-only receiver (never in a release, and reachable
+  by `adb` alone) seeds one made-up class 40 minutes ahead and runs the app's own planner; the job grants the
+  notification permission with `adb`, reads the posted record back from `dumpsys notification` — its channel, its
+  importance, ongoing, the countdown chronometer, the category, private with a public version, its timeout — opens the shade and
+  keeps a screenshot, then seeds a class that has started and proves the notification is gone.
+  tests/suites/19-android-project.js reads the Java, the manifests and that script for what can be read, and holds
+  the debug hook to the script that drives it; the new 21-android-countdown.js holds the bridge's half, and that the
+  iPhone app never writes the key.
+
+Four streams wrote this apart, and met disagreeing about the debug hook — its name, an action nobody read, and typed
+`adb` extras against a receiver that reads strings, which `adb` hands over as null in silence. They were reconciled
+to the Java, and the suite now holds each side to the other (agents/learnings.md G14).
+
+**The road to Google Play.** Everything the owner needs is in ONE runbook, `ios-app/PLAY_STORE_DEPLOY.md`, in
+order: two preconditions, the developer account, the upload key, building the signed bundle, every Play Console form,
+the testing tracks, the first release and the later ones, what to watch afterwards, and a one-page checklist. Every
+figure of Google's in it is hedged: none was checked against a live Play Console.
+
+- **Two things stand in the way, and the runbook opens with them.** A Play upload is refused today: Capacitor 6
+  builds for target API 34 and Google's floor has moved past it. Both routes are set out — the Capacitor upgrade
+  (recommended) and raising the target by hand (a stopgap, with edge-to-edge arriving either way). And Psync is an
+  unofficial client that signs in with the member's Psycle password: the only real protection against a rejection or
+  a later removal is written permission from Psycle. That is the owner's to weigh.
+- **As much automated as is safe.** `.github/workflows/android-release.yml` builds the signed bundle: by hand only,
+  from `main` only, with a read-only token and GitHub's own actions. It reads four secrets — kept in a `main`-only `play-release` environment, behind the owner's approval — that only the
+  owner can create, and FAILS, naming what is missing, before anything is installed — a release with a value missing
+  would otherwise come out unsigned and look like any other. The keystore is decoded after `npm ci`, into the runner's
+  temp folder, shredded as soon as the bundle is verified — before the upload action runs — and again whatever happens; the bundle must read "jar verified" AND carry the upload key's own
+  certificate before it is kept, alone, for five days. **It uploads nothing to Google Play**: the first upload of an
+  app can only be made in Play Console, and an automated one would need a service-account key this repository does
+  not hold. No secret, keystore or password is in the repository — only the names of the four secrets.
+- **A privacy policy**, `privacy.html`: one page for both apps and the web app, written from what the code does — no
+  server of its own, no analytics, the password to Psycle's host and nowhere else, what the native apps are built
+  with (Capacitor, its plugins, AndroidX), how wide the calendar read is, and what the stores themselves give a
+  publisher. 22-play-release.js holds those promises to the code: the shells' `connect-src`, the hosts js/ names,
+  ios-app/package.json's dependencies. It is served with the web app and
+  is no part of the app shell. It holds ONE placeholder, the publisher's name and a contact e-mail address: nothing
+  was invented for it.
+- **Graphics.** The Play icon and the feature graphic are built and committed (`sh assets/render-play-assets.sh`);
+  `node tests/tools/appstore-shots.mjs --play` draws the six screenshots on Play's 9:16 canvas, and has not been run
+  yet. The new tests/suites/22-play-release.js reads the workflow, the page, the runbook and the pictures' sizes,
+  and refuses a tracked keystore or service-account key.
+
+**What is proved, and what is not.** When this was written: `npm run ci` green, the iPhone path's plugin calls
+unchanged to the byte, every res/ XML and both manifests parsed by a second parser — and NOTHING native compiled.
+The Java was written by reading, with every `android.*` signature from memory; off CI its pure classes and all 81
+JVM tests have run (first 71 against a stand-in for org.json, with 17 of 17 deliberate mutations caught; after the
+review below, 81 against Android's own org.json classes, 8 of 8 more caught), the rest has been compiled against an
+API 34 framework jar with stand-ins for Capacitor and `R`, and the planner, notifier and receivers have been run
+under Robolectric. Then the real thing: the countdown was compiled by CI's `android-build` job, which first ran all 81 JVM tests against the real org.json (36 of them the countdown's; all pass), and POSTED on an emulator by `android-smoke`: Android's own record (`dumpsys notification`) shows one notification, id 7090, tag `psync-countdown`, on the channel `class-countdown` at importance LOW with no sound, vibration or badge, flags ongoing + only-alert-once, the class colour, a count-down chronometer and a timeout equal to the time left; its private version reads "RIDE 45" / "Shoreditch · Bike 9" and its PUBLIC version only "Next class" and the time; the shade screenshot shows it under "Silent" counting down; and after the class was marked started the app had no notification left.
+The release workflow has never run. Beyond CI's reach altogether: that it appears by itself with
+the app closed, and how late; that the system removes it at the start in Doze; the lock screen; silence; the tap,
+cold and warm; a restart; the Class reminders switch; the channel switched off. They are the "The class countdown"
+block of [ios-app/ANDROID.md → "On-device checklist"](ios-app/ANDROID.md#on-device-checklist); none is ticked.
+
+**A review before the first push** found, by reading the platform's source, three things no local check could
+have seen, and they are fixed above: both alarms were `AlarmManager.set()`, whose delivery window is the system's —
+up to an HOUR from Android 12, unbounded before — not the "few minutes" every doc promised (now `setWindow`, ten
+minutes; agents/learnings.md G16); a countdown swiped away on Android 14+ came back at every plan run; and a switch
+that was "never written = on" ran ahead of the preference it follows. It also found the planning receiver deaf to a
+changed zone, a changed clock and an update of the app; CI's verdict not judging the timeout; the two decisions that
+lived in `android.*` code under no test (now the pure `mayPost`); a keystore still on disk while the upload action
+ran; and a privacy policy that claimed more than the code does — "no third-party code of any kind", a calendar read
+narrower than it is, notifications "only if you ask" on phones that have no permission to refuse, and no mention of
+the stores' own diagnostics. The runbook gained what a first-timer needs early: the review-only account and the
+testers before the forms, the secrets in a `main`-only environment by default, an honest Route B, and a checklist
+box for the privacy link the app does not yet have.
+
+**Decisions the owner may want to overrule** (the end of agents/decisions.md): the countdown has no switch of its
+own; it says only "Next class" and the time on a locked phone; it is silent; its alarm does not wake a sleeping
+phone; a swipe keeps it away for that class; on Android 12 and earlier nobody is asked before the first reminder;
+and the release workflow puts the upload key into GitHub's encrypted secrets once the owner creates them —
+a build on their own machine needs none of it.
+
+Assertions: 8,608 → 8,944 (and 36 more JVM tests, 81 in all, which `npm test` does not count).
 
 ## How it was done
 

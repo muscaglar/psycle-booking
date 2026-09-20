@@ -23,16 +23,24 @@ Read this when a check fails, you add a suite or a `pure:<name>` block, or you t
   compiles the full native project unsigned for the simulator on main pushes / manual dispatch. TestFlight delivery is
   Xcode Cloud's (ios-app/CICD.md): every push to main archives and uploads. Two Android jobs ([android.md](android.md)):
   `android-build` — on `main` and `android/**` pushes and manual dispatch — runs `npm ci`, `npm run sync:android`, the
-  app module's JVM unit tests (`./gradlew :app:testDebugUnitTest`: the Android widget's snapshot rules — BLOCKING, and
-  before the APK; artifact `android-unit-test-report`) and `./gradlew assembleDebug`, uploads the debug APK as the
+  app module's JVM unit tests (`./gradlew :app:testDebugUnitTest`: the Android widget's snapshot rules and the class
+  countdown's plan — BLOCKING, and before the APK; artifact `android-unit-test-report`; a second step stops the job
+  unless a class named …Countdown…Test really ran) and `./gradlew assembleDebug`, uploads the debug APK as the
   artifact `psync-debug-apk`, then an advisory `:app:lintDebug`; it is the ONLY compiler — and the only JVM — the
   Android project has. `android-smoke` — advisory, `android/**` pushes and manual dispatch — installs that APK on a
-  phone-sized emulator, launches it, sends one Back key, then opens the debug-only widget preview in nine states; it
-  uploads eleven screenshots and two logs, and fails (as a warning) on a crash or on a widget the preview logged it
-  could not draw. It never taps. tests/suites/19-android-project.js holds both jobs' shape, and that the
+  phone-sized emulator, launches it, sends one Back key, opens the debug-only widget preview in nine states, then has
+  the debug-only `CountdownProofReceiver` seed a sample class so that the app posts its REAL countdown notification,
+  which is read back from `dumpsys notification` and photographed in the shade, and must be gone once a started class
+  is seeded; it uploads twelve screenshots, three logs and the dumps, and fails (as a warning) on a crash, on a widget
+  the preview logged it could not draw, or on a countdown that was not posted as it should be or did not go. It never
+  taps. tests/suites/19-android-project.js holds both jobs' shape, and that the
   bootstrap workflow is gone.
 - tests/smoke.html — load in a browser/sim to assert every module loads in production order and the critical
   globals exist (title → "SMOKE: PASS"). It stubs `fetch`, so it cannot reach the live API.
+- .github/workflows/android-release.yml is NOT part of CI: a manual (`workflow_dispatch`), `main`-only build of the
+  signed Android bundle from four secrets the owner creates in a `main`-only `play-release` environment. It never runs on a push, holds the only
+  `secrets.` in the repository, and uploads nothing to a store. tests/suites/22-play-release.js reads it
+  ([android.md](android.md) → "Release signing, the target API"; the owner's runbook: ios-app/PLAY_STORE_DEPLOY.md).
 
 ### Tests
 - tests/unit.js runs as a non-UK device (`TZ=America/New_York`) so a device-local parse of a gym time shows up as a failure.

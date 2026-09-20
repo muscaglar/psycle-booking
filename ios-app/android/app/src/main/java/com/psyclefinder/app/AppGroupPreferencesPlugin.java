@@ -5,6 +5,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.psyclefinder.app.countdown.PsyncCountdownReceiver;
 import com.psyclefinder.app.widget.PsyncSnapshot;
 import com.psyclefinder.app.widget.PsyncWidgetStore;
 
@@ -20,6 +21,12 @@ import com.psyclefinder.app.widget.PsyncWidgetStore;
  * that works there works here) and then ignored - everything goes to ONE private preferences
  * file (PsyncWidgetStore). And this twin is stricter: only the three widget keys are taken,
  * only strings, none over 64 KB, so that a page cannot use it as general storage.
+ *
+ * ONE more key is taken, which the iPhone app has no use for and the bridge writes on Android
+ * only: "countdown_enabled", "1" or "0" and nothing else - the member's class-reminders
+ * preference, which is the class countdown's off switch (countdown/PsyncCountdownReceiver).
+ * When it CHANGES the countdown is planned again at once, so that switching reminders off
+ * takes the notification down without waiting for the next snapshot pass.
  *
  * Signing out needs nothing here: the bridge's sign-out pass writes an EMPTY snapshot
  * ("null", "[]", "[]") through set(), exactly as it does on the iPhone, and a session that
@@ -47,7 +54,14 @@ public class AppGroupPreferencesPlugin extends Plugin {
             call.reject("Value is too large");
             return;
         }
+        if (!PsyncSnapshot.fitsKey(key, value)) {
+            // The countdown's switch, given anything but "1" or "0".
+            call.reject("Not a value for this key");
+            return;
+        }
+        boolean wasOn = PsyncWidgetStore.countdownEnabled(getContext());
         PsyncWidgetStore.set(getContext(), key, value);
+        planIfTheSwitchFlipped(key, wasOn);
         call.resolve();
     }
 
@@ -69,8 +83,24 @@ public class AppGroupPreferencesPlugin extends Plugin {
         if (key == null) {
             return;
         }
+        boolean wasOn = PsyncWidgetStore.countdownEnabled(getContext());
         PsyncWidgetStore.remove(getContext(), key);
+        planIfTheSwitchFlipped(key, wasOn);
         call.resolve();
+    }
+
+    /**
+     * Plans the countdown again when a write to its switch changed what the switch MEANS - on
+     * to off, or back. Not on every write: each snapshot pass writes the switch again, and the
+     * reload that ends a pass plans the countdown anyway. A first "1" over nothing stored IS a
+     * change (never written is off): the first pass after an update turns the countdown on
+     * here. plan() never throws.
+     */
+    private void planIfTheSwitchFlipped(String key, boolean wasOn) {
+        if (PsyncSnapshot.KEY_COUNTDOWN_ENABLED.equals(key)
+                && wasOn != PsyncWidgetStore.countdownEnabled(getContext())) {
+            PsyncCountdownReceiver.plan(getContext());
+        }
     }
 
     /** The call's key when the call is well-formed; otherwise the call is rejected and this is null. */
@@ -80,7 +110,7 @@ public class AppGroupPreferencesPlugin extends Plugin {
             call.reject("Must provide group and key");
             return null;
         }
-        if (!PsyncSnapshot.isWidgetKey(key)) {
+        if (!PsyncSnapshot.isStoreKey(key)) {
             call.reject("Not a widget key");
             return null;
         }

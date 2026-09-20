@@ -8,11 +8,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.os.Build;
 import android.os.Bundle;
 import android.widget.RemoteViews;
 
-import com.psyclefinder.app.MainActivity;
+import com.psyclefinder.app.countdown.PsyncCountdownReceiver;
 
 import java.util.List;
 import java.util.TimeZone;
@@ -35,31 +34,32 @@ import java.util.TimeZone;
  *   - WidgetCenterPlugin.reloadAllTimelines() - the bridge calls it after every snapshot write -
  *     sends ACTION_REFRESH here, as an explicit broadcast; MainActivity sends one at every
  *     cold start too (a store wiped under a force-stopped app writes nothing);
- *   - ONE inexact alarm (AlarmManager.set: no exact-alarm permission) for the instant
- *     PsyncSnapshot.nextRepaintMillis names: a minute after the shown class starts, so the
- *     widget rolls on to the next class by itself - or just after midnight if that comes
- *     first, when "Tomorrow" has become "Today";
+ *   - ONE inexact alarm (AlarmManager.setWindow, ten minutes: no exact-alarm permission) for
+ *     the instant PsyncSnapshot.nextRepaintMillis names: a minute after the shown class
+ *     starts, so the widget rolls on to the next class by itself - or just after midnight if
+ *     that comes first, when "Tomorrow" has become "Today";
  *   - updatePeriodMillis, 30 minutes (res/xml/next_class_widget_info.xml), as the backstop -
  *     the only thing that notices a changed clock or time zone.
+ *
+ * That backstop serves the class countdown too (countdown/PsyncCountdownReceiver): onUpdate -
+ * the system's own update, half-hourly, after a restart and after an app update - asks it to
+ * plan again. The app's own ACTION_REFRESH does not: whoever sends that plans the countdown
+ * itself (WidgetCenterPlugin, MainActivity).
  */
 public class NextClassWidgetProvider extends AppWidgetProvider {
 
     /** Repaint now: sent by the app itself, and by the repaint alarm. Always explicit. */
     public static final String ACTION_REFRESH = "com.psyclefinder.app.widget.REFRESH";
 
-    /**
-     * The action of the intent a tap sends to MainActivity. Not MAIN, on purpose: the
-     * local-notifications plugin reads every MAIN intent that reaches the activity as a
-     * possible notification tap.
-     */
-    public static final String ACTION_OPEN = "com.psyclefinder.app.widget.OPEN";
-    /** The shown class's id, as a string of digits. MainActivity treats it as untrusted. */
-    public static final String EXTRA_EVENT_ID = "com.psyclefinder.app.widget.EVENT_ID";
-
     /** For scheduleRepaint: the alarm that is armed stays as it is. */
     private static final long KEEP_ALARM = Long.MIN_VALUE;
     /** For scheduleRepaint: no alarm - what PsyncSnapshot.nextRepaintMillis says with nothing upcoming. */
     private static final long NO_ALARM = -1L;
+    /**
+     * How late the repaint alarm may be delivered on a phone that is awake: ten minutes, the
+     * shortest window Android 12+ honours for an alarm that is not exact (setWindow).
+     */
+    private static final long REPAINT_WINDOW_MILLIS = 10L * 60L * 1000L;
 
     /** Asks the provider to repaint every widget. Cheap and safe to call with none on screen. */
     public static void requestRefresh(Context context) {
@@ -96,6 +96,10 @@ public class NextClassWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
         refreshAll(context);
+        // The system's own update is the class countdown's backstop as well: the one caller
+        // that comes round with nobody asking - and so notices a changed clock, a lost alarm.
+        // It never throws, and it paints nothing here.
+        PsyncCountdownReceiver.plan(context);
     }
 
     @Override
@@ -180,8 +184,11 @@ public class NextClassWidgetProvider extends AppWidgetProvider {
             views = PsyncWidgetViews.empty(context);
         }
         // The whole card is the tap target. (A landscape + portrait pair cannot take a click
-        // once it is put together: each half gets its own.)
-        views.setOnClickPendingIntent(PsyncWidgetViews.ROOT_ID, openApp(context, shownId));
+        // once it is put together: each half gets its own.) The tap itself is PsyncTapIntent's:
+        // an explicit, immutable intent for MainActivity with an untrusted id - the one the
+        // class countdown's notification opens the app with too.
+        views.setOnClickPendingIntent(PsyncWidgetViews.ROOT_ID,
+            PsyncTapIntent.open(context, shownId, PsyncTapIntent.FROM_WIDGET));
         return views;
     }
 
@@ -194,38 +201,11 @@ public class NextClassWidgetProvider extends AppWidgetProvider {
         return mode == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    // -- The tap ------------------------------------------------------------------------------
-
-    /**
-     * Opens MainActivity with an EXPLICIT intent: no URL scheme, no new intent filter. The id
-     * rides as an extra, so FLAG_UPDATE_CURRENT is what keeps it current (extras are not part
-     * of a PendingIntent's identity); FLAG_IMMUTABLE so that whoever holds it - the launcher -
-     * cannot fill anything in.
-     */
-    private static PendingIntent openApp(Context context, String eventId) {
-        Intent open = new Intent(context, MainActivity.class);
-        open.setAction(ACTION_OPEN);
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        String id = PsyncSnapshot.tapId(eventId);
-        if (id != null) {
-            open.putExtra(EXTRA_EVENT_ID, id);
-        }
-        return PendingIntent.getActivity(context, 0, open, pendingFlags());
-    }
-
-    private static int pendingFlags() {
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flags |= PendingIntent.FLAG_IMMUTABLE;
-        }
-        return flags;
-    }
-
     // -- The repaint alarm --------------------------------------------------------------------
 
     private static PendingIntent repaint(Context context) {
         Intent refresh = new Intent(context, NextClassWidgetProvider.class).setAction(ACTION_REFRESH);
-        return PendingIntent.getBroadcast(context, 0, refresh, pendingFlags());
+        return PendingIntent.getBroadcast(context, 0, refresh, PsyncTapIntent.immutableFlags());
     }
 
     /**
@@ -233,8 +213,10 @@ public class NextClassWidgetProvider extends AppWidgetProvider {
      * PsyncSnapshot.nextRepaintMillis worked out - the roll-over to the next class, or the
      * midnight that turns "Tomorrow" into "Today"; NO_ALARM cancels it, KEEP_ALARM leaves it.
      * RTC, not RTC_WAKEUP: a widget nobody is looking at need not wake the phone - the alarm is
-     * delivered when it next wakes. set() is inexact from Android 4.4 and needs no permission;
-     * the manifest asks for no exact-alarm access and must not start to.
+     * delivered when it next wakes. setWindow() with a ten-minute window is inexact and needs
+     * no permission; the manifest asks for no exact-alarm access and must not start to. NOT
+     * set(): the system chooses that window - three quarters of the wait, up to an hour from
+     * Android 12 and more before - and a class that has started would sit on the card for it.
      *
      * Called from a finally, so it throws nothing itself: an alarm that cannot be armed
      * leaves updatePeriodMillis as the only clock.
@@ -249,7 +231,7 @@ public class NextClassWidgetProvider extends AppWidgetProvider {
                 return;
             }
             if (atMillis > 0) {
-                alarms.set(AlarmManager.RTC, atMillis, repaint(context));
+                alarms.setWindow(AlarmManager.RTC, atMillis, REPAINT_WINDOW_MILLIS, repaint(context));
             } else {
                 alarms.cancel(repaint(context));
             }

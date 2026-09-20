@@ -1,12 +1,17 @@
 # Play Store Listing — Psync
 
+**The runbook that uses this file is `PLAY_STORE_DEPLOY.md`**: the developer account, the upload key, the manual
+release workflow, every Play Console form in order, the testing tracks, the checklist. This file holds the words,
+the pictures and the data-safety answers.
+
 The Google Play counterpart of `APP_STORE_LISTING.md`. **Nothing here can be submitted yet**: Play asks new apps to
 target a newer Android API level than Capacitor 6 builds for, so a submission waits for the Capacitor upgrade
 (`ANDROID.md` → "Release", step 3). The copy is ready for that day; the release steps, the keystore and the on-device
 checklist are in `ANDROID.md`.
 
-The Android app has ONE home-screen widget ("Next class") — no Lock Screen widget, no Live Activity, no Siri — and
-its share card goes out as text. The copy below promises nothing more. Keep it that way when it is edited.
+The Android app has ONE home-screen widget ("Next class") and a silent countdown notification before a class — no
+Lock Screen widget, no Live Activity, no Siri — and its share card goes out as text. The copy below promises
+nothing more. Keep it that way when it is edited.
 
 ## Play Console fields
 
@@ -66,6 +71,7 @@ EVERYTHING YOU HOLD
 KEEP UP
 • A home screen widget for your next class: the time, the class and your seat
 • A reminder 90 minutes before each class
+• A silent countdown to it in your notifications, until it starts
 • A reminder on Mondays at 12:00, when Psycle opens new dates
 • Calendar sync: your bookings in a calendar you choose, kept in step as you book and cancel
 • 24-hour times throughout
@@ -87,9 +93,12 @@ PRIVATE BY DESIGN
 
 | Asset | Play wants | Where it comes from |
 |---|---|---|
-| App icon | 512 × 512 PNG, full square (Play rounds the corners itself) | `rsvg-convert -w 512 -h 512 assets/psync-logo.svg -o <file>.png` — the same drawing as `appstore-assets/AppIcon-1024.png` |
-| Feature graphic | 1024 × 500 PNG or JPEG, required | **To make.** The mark and the wordmark on the Graphite ground (`#12161F`), as the screenshot frames are drawn; no device, no Psycle mark, no text near the edges |
-| Phone screenshots | 2 to 8, PNG or JPEG, each side 320 to 3,840 px, and the long side at most TWICE the short side | **To rebuild** — see below |
+| App icon | 512 × 512 PNG, full square (Play rounds the corners itself) | `playstore-assets/icon-512.png` — `assets/psync-logo.svg`, the same drawing as `appstore-assets/AppIcon-1024.png` |
+| Feature graphic | 1024 × 500 PNG or JPEG, no alpha channel, required | `playstore-assets/feature-graphic-1024x500.png` — the mark and the wordmark on the Graphite ground (`#12161F`), as the launch screen wears them; no device, no Psycle mark, no text near the edges. Source: `assets/psync-play-feature.svg` (the wordmark is outlines: no font is needed) |
+| Phone screenshots | 2 to 8, PNG or JPEG, no alpha channel, each side 320 to 3,840 px, and the long side at most TWICE the short side | `playstore-assets/01-discover.png` … `06-light-and-dark.png`, 1080 × 1920 — **to build**, see below |
+
+`sh assets/render-play-assets.sh` rebuilds the icon and the feature graphic (it needs `rsvg-convert` only); both
+are committed. `tests/suites/22-play-release.js` holds their sizes, and the feature graphic's mark to the icon's.
 
 ### Screenshots: reuse the six, rebuild the files
 
@@ -107,10 +116,12 @@ every name in them is the fake server's.
 | 6 | `06-light-and-dark.png` | Light and dark — Follows your phone, or pick your own. |
 
 **The files themselves cannot be uploaded as they are**: they are 1290 × 2796, which is 2.17 to 1, and Play refuses
-anything longer than 2 to 1. They need rebuilding on a 9:16 canvas (1080 × 1920 is the usual choice).
-`tests/tools/appstore-shots.mjs` has the iPhone canvas written into it (a 430 × 932 frame at 3×, around a 390 × 844
-capture); giving it a second canvas and a second output folder is a small change that has not been made
-(agents/backlog.md). Do not crop or squash the iPhone files by hand.
+anything longer than 2 to 1. Do not crop or squash them by hand. `tests/tools/appstore-shots.mjs` has a second
+canvas for Play: serve the repository on :8080, then `node tests/tools/appstore-shots.mjs --play` writes the same
+six scenes, with the same captions, as 1080 × 1920 pictures (9:16: a 360 × 640 page at 3×, around a 412 × 732
+capture) into `ios-app/playstore-assets/` — a plain picture under its caption, no phone drawn round it — and
+fails if a file comes out any other size. The App Store files are not touched. It needs Google Chrome. The six
+Play files are built and in that folder; rebuild them after any change to the look.
 
 No member data in any of it: the screenshots come from the fake server only.
 
@@ -148,10 +159,10 @@ means sent by the app, from the phone, straight to Psycle.
 | Bookings, waitlist places, profile, plan and credits | Fetched from and sent to Psycle | Psycle's API only | A saved copy of the bookings, for opening the app with no signal | The app's purpose |
 | Booking history, favourites, instructor rankings, spot preferences, the usual week, settings, theme | No | — | Yes | The app's features |
 | Error log and action log | No — unless the member shares a bug report themselves, through the share sheet | whoever the member sends it to | Yes | Diagnostics |
-| Calendar events | No | — | Written to the calendar the member hands over, on the phone | Calendar sync |
-| Notifications | No — scheduled on the phone; there is no push server | — | — | Reminders |
+| Calendar events | No | — | Written to the calendar the member hands over, on the phone. To find its own events the app READS the coming events of every calendar on the phone (the plugin has no calendar filter) and looks only at its own; none of it leaves the phone | Calendar sync |
+| Notifications | No — scheduled and posted on the phone; there is no push server | — | — | Reminders, and the silent countdown to a class that comes with them. On Android 12 and earlier there is no notification permission: both are on from the first booking until Class reminders are switched off |
 | Location, contacts, photos, microphone, camera, advertising ID, device identifiers | Not read at all | — | — | — |
-| Analytics, crash reporting, advertising | None: no SDK of any kind | — | — | — |
+| Analytics, crash reporting, advertising | None: no analytics, crash-reporting or advertising SDK. (The libraries the app IS built with — Capacitor, its plugins, AndroidX — run on the phone and contact no one; Play Console's own vitals come from Google, not from the app) | — | — | — |
 
 Also true: all traffic is HTTPS (cleartext is refused in the manifest); the app's data is excluded from Google
 backup and from device-to-device transfer; instructor photos are loaded from the image addresses Psycle's API
@@ -175,9 +186,11 @@ The declaration is the owner's to make, and Google's definitions move: read them
 
 ### Privacy policy
 
-Required. The template in `APP_STORE_LISTING.md` is the right one; before it is published for Play, change
-"iOS Keychain/Preferences" to "the app's private storage on your phone", and add that the app's data is excluded
-from Google backup.
+Required, as a public web address. The page is `privacy.html` at the repository root — one policy for the iPhone
+app, the Android app and the web app, written from the table above — and it is published with the web app. Its
+address, the one placeholder in it that the owner fills in (a name and a contact e-mail address), and Play's wish
+for a link to it inside the app as well: `PLAY_STORE_DEPLOY.md`, step 5.3. When a row of the table above changes,
+the page changes in the same commit.
 
 ---
 

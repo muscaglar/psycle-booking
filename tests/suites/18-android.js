@@ -1,7 +1,9 @@
 'use strict';
 // The Android app ("level 2": everything the iPhone app does except the
 // widgets, the Live Activity and Siri — then "level 3", a home-screen widget,
-// which has its own suite: 20-android-widget.js, on this file's launchScenario).
+// which has its own suite: 20-android-widget.js, on this file's launchScenario;
+// then a countdown notification in the Live Activity's place, whose bridge half
+// is 21-android-countdown.js, on the same launch).
 // It ships the SAME www/ folder, so what is tested here is the web layer and the
 // bridge being platform-aware:
 //   A. Back — the pure decision (js/app.js, pure:android-back), exhaustively
@@ -9,8 +11,9 @@
 //      dialog that waits on the member before any busy mark, a request in
 //      flight swallows the press, focus handed back; and the shipped bookClass,
 //      to hold what the actor assumes about it
-//   C. copy that named the iPhone: the welcome, the reminder rows, Settings,
-//      the token dialog, the waitlist "You're in" notice
+//   C. copy that named the iPhone or its Live Activity: the welcome, the
+//      reminder rows (Android's countdown is a NOTIFICATION, and is called
+//      one), Settings, the token dialog, the waitlist "You're in" notice
 //   D. the bridge booted as 'android' (tests/suites/ios-bridge.js's harness):
 //      channels once, channelId + smallIcon + iconColor, the status-bar
 //      colour, nothing said about the iPhone app's own plugins when an Android
@@ -521,12 +524,13 @@ module.exports = async function (t) {
   // ════════════════════════════════════════════════════════════════════
   // C. Copy
   // ════════════════════════════════════════════════════════════════════
-  t.section('Android copy: a widget and reminders — no Lock Screen widget, no live countdown, no Siri, no iPhone');
+  t.section('Android copy: a widget, reminders and a countdown in its notifications — no Lock Screen widget, no Live Activity, no Siri, no iPhone');
   {
     const w = t.loadPure('js/app.js', 'welcome');
     const android = w._welcomePages(true, true, 'android');
     const text = android.map((x) => x.title + ' ' + x.body + ' ' + (x.note || '')).join(' ');
-    ok(!/iPhone|iOS|widgets|Siri|Lock Screen|Live Activity|countdown/i.test(text), 'the Android welcome promises nothing the Android app lacks: no iPhone, no widgetS (it has one, on the home screen), no Lock Screen, no countdown, no Siri');
+    ok(!/iPhone|iOS|widgets|Siri|Lock Screen|Live Activity/i.test(text), 'the Android welcome promises nothing the Android app lacks: no iPhone, no widgetS (it has one, on the home screen), no Lock Screen, no Live Activity, no Siri');
+    ok(!/countdown/i.test(text) && !/countdown/i.test(w._welcomePages(true, true, 'ios').map((x) => x.title + ' ' + x.body).join(' ')), '…and it does not list the countdown either: the iPhone\'s welcome never did, and a welcome is one sentence a page');
     eq(android[3].body, 'Everything you hold in one place, with a widget and reminders.', '…its last page says what it has, in as few words as the iPhone\'s: a widget and reminders');
     ok(android[3].body.split(' ').length <= w._welcomePages(true, true, 'ios')[3].body.split(' ').length, '…and is no longer than the iPhone\'s sentence');
     ok(text.indexOf('!') === -1 && /swipe between days/.test(android[1].body), '…in the house style, and told to swipe (a touch screen)');
@@ -537,9 +541,14 @@ module.exports = async function (t) {
   }
   {
     const r = t.loadPure('js/tabs.js', 'reminder-row');
-    eq([r._classReminderSwitch(true, true, true).detail, r._classReminderSwitch(true, false, true).detail, r._classReminderSwitch(true, true, true).on],
-      ['90 minutes before each class', 'Tap to allow notifications', true], 'the class-reminder row on Android: no "live countdown" (there is no Live Activity)');
-    eq(r._classReminderSwitch(true, true).detail, '90 minutes before each class — opens the live countdown', 'the iPhone app\'s line is what it was');
+    const androidRow = r._classReminderSwitch(true, true, true).detail, iphoneRow = r._classReminderSwitch(true, true).detail;
+    eq([androidRow, r._classReminderSwitch(true, false, true).detail, r._classReminderSwitch(true, true, true).on],
+      ['90 minutes before each class — with a countdown notification', 'Tap to allow notifications', true],
+      'the class-reminder row on Android names its countdown — a NOTIFICATION, which this switch turns off with the reminders — and a refused permission reads as on the iPhone');
+    eq(r._classReminderSwitch(false, true, true).detail, androidRow, '…the same line with the switch off: it says what turning it on brings');
+    ok(!/Live Activity|Lock Screen|live countdown|iPhone|iOS/i.test(androidRow) && androidRow.split(' ').length <= iphoneRow.split(' ').length && androidRow.indexOf('!') === -1 && !/[<>&"']/.test(androidRow),
+      '…never a "Live Activity", a "Lock Screen" or the iPhone\'s "live countdown"; no longer than the iPhone\'s line; safe to drop into innerHTML');
+    eq(iphoneRow, '90 minutes before each class — opens the live countdown', 'the iPhone app\'s line is what it was');
 
     // The shipped toggles, sliced as tests/suites/ios-bridge.js slices them.
     const from = tabsSrc.indexOf('  var _classReminderGranted = null;');
@@ -676,7 +685,7 @@ module.exports = async function (t) {
     eq(Array.from(new Set(mondays.map((x) => [x.channelId, x.smallIcon, x.iconColor].join('|')))), ['new-dates|ic_stat_psync|#1B2130'], 'the Monday reminder → channel new-dates, the same icon and tint');
     ok(classes.concat(mondays).every((x) => x.schedule.allowWhileIdle === true && x.sound === 'default'), 'allowWhileIdle is kept on every one (what lets an inexact alarm fire while the phone dozes)');
     ok(classes.concat(mondays).every((x) => /^#[0-9a-f]{6}$/i.test(x.iconColor)), 'the tint is a literal #rrggbb: a colour the plugin cannot parse would REJECT the whole schedule()');
-    eq(classes[0].body, 'Ann · Bank', 'the class reminder promises no "live countdown" on Android');
+    eq(classes[0].body, 'Ann · Bank', 'the class reminder asks for no tap on Android: its countdown is a notification of its own and arrives by itself, so the body is who and where');
 
     // More scheduling in the same launch: a second class, the switch, a re-arm.
     b.ctx._myBookings['502'] = { bookingId: 10, slots: [3] };
@@ -785,7 +794,13 @@ module.exports = async function (t) {
     await h.flush();
     b.events.emit('booking:complete');
     await b.clock.advance(2500);
-    ok(b.calls.modals.length === 1 && !/countdown/i.test(b.calls.modals[0].opts.body), 'the first-booking ask says nothing of a live countdown');
+    const askBody = b.calls.modals.length === 1 ? b.calls.modals[0].opts.body : '';
+    const iphoneAsk = 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.';
+    eq(askBody, 'Psync can send a notification 90 minutes before each class you book — and a countdown until it starts.',
+      'the first-booking ask on Android: the reminder AND the countdown — one yes allows both, so both are named');
+    ok(!/Live Activity|Lock Screen|live countdown|tap it|iPhone|iOS/i.test(askBody) && askBody.indexOf('!') === -1 && askBody.split(' ').length <= iphoneAsk.split(' ').length,
+      '…never a "Live Activity", a "Lock Screen" or a "live countdown" to tap for, and no longer than the iPhone\'s sentence');
+    ok(bridgeSrc.indexOf(": '" + iphoneAsk + "',") !== -1, '…which is still in the bridge, to the letter (18-android.js section E and ios-bridge.js boot the iPhone path)');
     b.calls.modals[0].answer(false);
     await h.flush();
     b.ctx._offerWeeklyReminder('test');

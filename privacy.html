@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cloud">
+<head>
+<meta charset="UTF-8">
+<!-- The privacy policy of Psync: the iPhone app, the Android app and the web app. Google Play and
+     the App Store each ask for its address (ios-app/PLAY_STORE_DEPLOY.md, step 5).
+     A page of text: it loads nothing from anywhere but this origin, talks to no host at all
+     (no connect-src), links to nothing outside the site and registers NO service worker.
+     It is served from the repository root with the web app, but it is NOT part of the app shell:
+     ios-app/build.js copies five named root files and this is not one of them, so it is neither
+     in sw.js's SHELL list nor in ios-app/www/. tests/suites/22-play-release.js holds all of that.
+     'unsafe-inline' because the page is self-contained, as login.html is. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Privacy policy &middot; Psync</title>
+<meta name="theme-color" content="#e6e9ee">
+<script id="themeBoot">
+// First paint in the reader's own theme: the same script as the head of login.html
+// (tests/suites/22-play-release.js compares the two). A visitor who has never opened the app
+// gets Cloud or Graphite, by the system's light / dark setting.
+(function () {
+  try {
+    var BG = { cloud: '#e6e9ee', graphite: '#12161f', terminal: '#060906', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var RETIRED = { linen: 'cloud', synthwave: 'graphite' };
+    var id = null;
+    try { id = localStorage.getItem('psycle_theme'); } catch (e) {}
+    if (id && Object.prototype.hasOwnProperty.call(RETIRED, id)) id = RETIRED[id];
+    if (!id || !Object.prototype.hasOwnProperty.call(BG, id)) {
+      id = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'graphite' : 'cloud';
+    }
+    document.documentElement.setAttribute('data-theme', id);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', BG[id]);
+  } catch (e) {}
+})();
+</script>
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @font-face { font-family:'Sofia Sans'; font-style:normal; font-weight:400 800; font-display:swap; src:url('fonts/sofia-sans.woff2') format('woff2'); }
+  @font-face { font-family:'Sofia Sans Condensed'; font-style:normal; font-weight:600 900; font-display:swap; src:url('fonts/sofia-sans-condensed.woff2') format('woff2'); }
+  /* The few tokens this page needs, copied value for value from login.html, theme by theme
+     (22-play-release.js compares them). <html data-theme> is always one of these ids. */
+  :root {
+    --radius-8xl: 28px; --hairline: 1.5px;
+    --font-display: 'Sofia Sans Condensed', 'Avenir Next Condensed', 'Helvetica Neue', sans-serif;
+    --font-body: 'Sofia Sans', 'Helvetica Neue', Helvetica, sans-serif;
+  }
+  [data-theme="cloud"] { --bg: #e6e9ee; --bg-panel: #fcfdfe; --border: #d3d9e1; --text: #1b2130; --text-heading: #1b2130; --text-muted: #3a4252; --text-ghost: #566073; --badge-full-bg: #fbe1e2; --badge-full-text: #a81f28; --badge-full-border: #f2b8bc; }
+  [data-theme="graphite"] { --bg: #12161f; --bg-panel: #1b2130; --border: #2b3345; --text: #eef1f5; --text-heading: #ffffff; --text-muted: #b7bfcc; --text-ghost: #8d97a9; --badge-full-bg: #3a1b20; --badge-full-text: #ff9aa2; --badge-full-border: #5e2b33; }
+  [data-theme="terminal"] { --bg: #060906; --bg-panel: #0a120a; --border: #16341a; --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c; --text-ghost: #518a51; --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d; --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; }
+  [data-theme="gameboy"] { --bg: #0f380f; --bg-panel: #133f13; --border: #306230; --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f; --text-ghost: #8bac0f; --badge-full-bg: #2a572a; --badge-full-text: #c6e034; --badge-full-border: #3f7a3f; --radius-8xl: 0; --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; }
+  [data-theme="blueprint"] { --bg: #0a1c30; --bg-panel: #0e2440; --border: #1c3d61; --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0; --text-ghost: #6e90ad; --badge-full-bg: #3a1525; --badge-full-text: #ff8097; --badge-full-border: #66293f; }
+  body {
+    font-family: var(--font-body); background: var(--bg); color: var(--text); min-height: 100vh;
+    padding: 24px 16px; padding-bottom: calc(32px + env(safe-area-inset-bottom)); -webkit-font-smoothing: antialiased;
+  }
+  main { background: var(--bg-panel); border-radius: var(--radius-8xl); padding: 28px 24px 24px; max-width: 680px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  .brand svg .bm-top { fill: var(--text-heading); } .brand svg .bm-bot { fill: var(--text-ghost); }
+  .brand .word { font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing: 0.2px; color: var(--text-heading); line-height: 1; }
+  h1 { font-family: var(--font-display); font-size: 34px; font-weight: 900; line-height: 1.05; color: var(--text-heading); margin-bottom: 10px; }
+  h2 { font-family: var(--font-display); font-size: 22px; font-weight: 800; line-height: 1.15; color: var(--text-heading); margin: 28px 0 8px; }
+  p, li { font-size: 16px; font-weight: 500; line-height: 1.55; color: var(--text-muted); }
+  p + p { margin-top: 10px; }
+  ul + p { margin-top: 12px; }
+  ul { margin: 8px 0 0 20px; }
+  li + li { margin-top: 6px; }
+  strong { color: var(--text); font-weight: 700; }
+  .lede { color: var(--text); }
+  .host { font-family: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 0.92em; overflow-wrap: anywhere; }
+  .owner-fill { background: var(--badge-full-bg); color: var(--badge-full-text); border: var(--hairline) dashed var(--badge-full-border); border-radius: 6px; padding: 1px 6px; font-weight: 700; }
+  .foot { margin-top: 28px; padding-top: 16px; border-top: var(--hairline) solid var(--border); font-size: 14px; color: var(--text-ghost); }
+  .foot a { color: var(--text-muted); font-weight: 700; }
+  a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="136 136 752 752" aria-hidden="true" focusable="false" width="32" height="32"><defs><mask id="privacyGrooves" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><path d="M304.2 367.7A180 180 0 0 1 551.2 328.6" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/><path d="M719.8 656.3A180 180 0 0 1 591.7 727.3" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/></mask></defs><g mask="url(#privacyGrooves)"><path class="bm-top" d="M201.2 476A40 40 0 0 1 161.7 429.6A290 290 0 0 1 734.3 429.6A40 40 0 0 1 694.8 476L534.5 476A16 16 0 0 1 518.8 462.9A72 72 0 0 0 377.2 462.9A16 16 0 0 1 361.5 476Z"/><path class="bm-bot" d="M822.8 548A40 40 0 0 1 862.3 594.4A290 290 0 0 1 289.7 594.4A40 40 0 0 1 329.2 548L489.5 548A16 16 0 0 1 505.2 561.1A72 72 0 0 0 646.8 561.1A16 16 0 0 1 662.5 548Z"/></g></svg>
+    <span class="word">Psync</span>
+  </div>
+
+  <h1>Privacy policy</h1>
+  <p class="lede">This policy covers Psync for iPhone, Psync for Android and the Psync web app. They are one app in three shells, and they treat your data in the same way.</p>
+
+  <h2>Who publishes Psync</h2>
+  <!-- THE ONE PLACEHOLDER ON THIS PAGE. The owner replaces the whole <span> with their name and a contact
+       e-mail address before the page's address is given to a store. Nothing else here is to be filled in. -->
+  <p>Psync is published by <span class="owner-fill" id="publisher">[OWNER TO COMPLETE: your name, and an e-mail address for privacy questions]</span>. Write to that address about anything on this page.</p>
+  <p>Psync is an independent companion for Psycle London members. It is not affiliated with, or endorsed by, Psycle.</p>
+
+  <h2>The short version</h2>
+  <ul>
+    <li>Psync has <strong>no server of its own</strong>. Its publisher receives nothing from the app itself: no account, no usage data, no crash reports.</li>
+    <li>Your Psycle sign-in goes <strong>to Psycle and nowhere else</strong>.</li>
+    <li>Everything else Psync keeps stays <strong>on your device</strong>.</li>
+    <li><strong>No analytics, no advertising, no tracking</strong> and no cookies.</li>
+  </ul>
+
+  <h2>What is sent, and to whom</h2>
+  <p>Psync talks to one service: Psycle's own booking system, at <span class="host">psycle.codexfit.com</span>, always over an encrypted connection (HTTPS). It is the same system that Psycle's own booking pages use.</p>
+  <ul>
+    <li><strong>When you sign in</strong>, the e-mail address and password you type are sent straight to that system. Your password is never stored, and it is never sent anywhere else.</li>
+    <li>Psycle answers with a <strong>session token</strong>. Psync sends it back to Psycle with each request, so that you stay signed in.</li>
+    <li>With it, Psync asks Psycle for the timetable, your bookings, your waitlist places, your profile, and your plan and credits &mdash; and sends Psycle your requests to book, cancel, join or leave a waitlist, or claim a place. Nothing is booked or claimed unless you confirm it.</li>
+  </ul>
+  <p>What Psycle does with that information is for Psycle's own privacy policy. It is the information Psycle would hold if you booked on its own pages.</p>
+  <p>Three smaller things leave your device, and only in the ordinary way of the web:</p>
+  <ul>
+    <li>Instructor photos are loaded from the image addresses that Psycle's system gives.</li>
+    <li>A map, &ldquo;Add to Google Calendar&rdquo;, or an instructor's own page opens in a browser <strong>only when you tap it</strong>. That site then sees you as it sees any visitor.</li>
+    <li>The web app is a set of plain files. The host that serves them sees the network address of whoever loads them, as every web host does. Psync adds nothing to that.</li>
+  </ul>
+
+  <h2>What is stored on your device</h2>
+  <ul>
+    <li>The <strong>session token</strong>, encrypted (AES-GCM) wherever the device can do so. In the iPhone and Android apps a copy is kept in the app's private storage, so that you are not signed out when the system clears a web view's data.</li>
+    <li>A customer number that Psycle gives your account, so that what is on the device stays with the right member.</li>
+    <li>A <strong>saved copy of your bookings</strong>, for opening the app with no signal.</li>
+    <li>Your <strong>booking history</strong>, favourites, instructor rankings, spot preferences, your usual week, your filters, your settings and your theme.</li>
+    <li>In the apps, a small copy of your next classes, which the home screen widget reads &mdash; and, on Android, the countdown to your next class.</li>
+    <li>An <strong>error log and an action log</strong>, for bug reports. They leave your device only if you choose to share a bug report yourself.</li>
+  </ul>
+  <p>On Android, all of this is kept out of Google backups and out of phone-to-phone transfers: on a new phone you sign in again. On iPhone it may be part of your phone's own backup, as it is for any app.</p>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><strong>Calendar</strong> &mdash; only if you switch on Calendar sync. Psync writes your classes into the calendar you choose, on your device. To find the events it made and keep them in step, Psync reads the coming events in your device's calendars and looks only at its own. It changes nothing it did not create, and nothing about your calendar leaves your device.</li>
+    <li><strong>Notifications</strong> &mdash; for reminders: 90 minutes before a class you hold and, if you ask for it, on Mondays when new dates open. On Android a silent countdown to your next class comes with the class reminders, and goes with them. All of them are made on your device. There is no push server. On iPhone, and on Android 13 and later, nothing is shown until you have said yes, to Psync's own question and then to the system's. On Android 12 and earlier the system has no notification permission: class reminders and the countdown are on from your first booking until you switch Class reminders off (Membership &rarr; Settings) or silence the channel in Android's settings.</li>
+  </ul>
+  <p>Psync does not read your location, contacts, photos, microphone, camera, health data, advertising ID or any device identifier.</p>
+
+  <h2>No analytics, no advertising, nothing sold</h2>
+  <p>Psync contains no analytics, no crash reporting and no advertising. Nothing about you is sold, shared or used to build a profile. There are no in-app purchases: a class credit is spent with Psycle, on your own Psycle account.</p>
+  <p>The iPhone and Android apps are built with the open-source Capacitor framework and its plugins (storage, notifications, calendar, share, haptics, the status bar and the in-app browser) and, on Android, Google's AndroidX libraries. These run on your device and contact no one.</p>
+  <p>The App Store and Google Play give every publisher aggregated install, crash and performance figures for their app, from people who have agreed to share diagnostics with Apple or Google. Psync adds nothing to them and cannot identify anyone from them.</p>
+
+  <h2>Deleting your data</h2>
+  <ul>
+    <li><strong>Sign out</strong> (Membership &rarr; Sign out) removes your session from the device.</li>
+    <li><strong>Uninstalling</strong> the app removes everything it stored. For the web app, clear this site's data in your browser.</li>
+    <li>Calendar events that Psync has already written stay in your calendar until you delete them there.</li>
+    <li>Psync holds no account of its own, so its publisher has nothing to delete. Your Psycle account, your bookings and your history with Psycle are Psycle's to delete: ask Psycle.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>Psync is for adult members of Psycle. It is not directed at children, and it knowingly collects nothing from anyone.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, this page changes, and the date below changes with it.</p>
+
+  <p class="foot">Last updated: 20 September 2026. <a href="./psycle-finder.html">Back to Psync</a></p>
+</main>
+</body>
+</html>

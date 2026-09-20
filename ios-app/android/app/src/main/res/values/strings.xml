@@ -21,4 +21,15 @@
     <string name="widget_preview_time" translatable="false">18:30</string>
     <string name="widget_preview_title" translatable="false">RIDE 45</string>
     <string name="widget_preview_seat" translatable="false">Bike 9</string>
+
+    <!-- The class countdown: one silent notification that counts down to the next booked class,
+         from 90 minutes before it. The channel's name and description are what Android's own
+         notification settings show for it, beside "Class reminders" and "New dates" (those two
+         are named by the bridge, in native-bridge.js). The channel's ID is "class-countdown"
+         (PsyncCountdownNotifier.CHANNEL_ID) and must never change. -->
+    <string name="countdown_channel_name">Class countdown</string>
+    <string name="countdown_channel_description">A silent countdown to your next booked class, from 90 minutes before it starts.</string>
+    <!-- ALL a locked phone shows when it hides private content: these words and the start time.
+         Never the class, the place or the seat. -->
+    <string name="countdown_public_title">Next class</string>
 </resources>

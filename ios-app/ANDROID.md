@@ -13,15 +13,17 @@ a reminder firing, a calendar write and the share sheet have not happened anywhe
 **The widget has been compiled by CI's `android-build` job, which first ran its 45 JVM tests against the real org.json (all pass), and drawn on an emulator by `android-smoke`: the debug preview rendered the widget's own RemoteViews in nine states — compact and wide, day and night, intensity off, a narrow and the smallest box, large type, four seats, empty — with no crash and no preview error in the log, and every one was looked at: the time leads, the card wears the class tint, the pictogram tile and the seat badge are drawn in the class colour, night picks the dark literals, large type keeps every row whole (a long class name ends in an ellipsis), four seats read "4 bikes", and the empty card says "Nothing booked" and names nobody.** Nobody has put it on a
 home screen: the picker, a real launcher's sizes, the corner clipping, the roll-over alarm on a sleeping phone and
 the tap are in the checklist below.
+**The class countdown — the silent notification that stands in for the iPhone's Live Activity — has been
+compiled by CI's `android-build` job, which first ran all 81 JVM tests against the real org.json (36 of them the countdown's; all pass), and POSTED on an emulator by `android-smoke`: Android's own record (`dumpsys notification`) shows one notification, id 7090, tag `psync-countdown`, on the channel `class-countdown` at importance LOW with no sound, vibration or badge, flags ongoing + only-alert-once, the class colour, a count-down chronometer and a timeout equal to the time left; its private version reads "RIDE 45" / "Shoreditch · Bike 9" and its PUBLIC version only "Next class" and the time; the shade screenshot shows it under "Silent" counting down; and after the class was marked started the app had no notification left.** On a phone, nobody has seen it: its section of the checklist is its proof.
 GitHub Actions is the compiler:
 the `android-build` job builds a debug APK on every push to `main` or to an `android/…` branch. What only a phone
 can prove is the [on-device checklist](#on-device-checklist) at the end, and none of it is ticked.
 
 | Leg | System | Trigger | What it does |
 |-----|--------|---------|--------------|
-| Compile + debug APK | GitHub Actions, job `android-build` (`.github/workflows/ci.yml`) | push to `main` or `android/**`, or "Run workflow" | `npm ci`, `npm run sync:android`, the widget's JVM unit tests (`./gradlew :app:testDebugUnitTest` — a failure stops the job before any APK exists; report: **`android-unit-test-report`**), `./gradlew assembleDebug`; uploads the artifact **`psync-debug-apk`** (kept 30 days); then an advisory Android lint |
-| Emulator smoke (advisory) | GitHub Actions, job `android-smoke` | push to `android/**`, or "Run workflow" | installs that APK on a phone-sized emulator, opens it, screenshot, ONE Back key, screenshot; then opens the debug-only widget preview nine times (compact, wide, wide at night, class colours off, empty, four seats, two seats on the narrowest card, the smallest card, a long class name with a larger system font) and keeps a picture of each; uploads **`android-smoke`** (eleven pictures, two logs and a process id, for a person to read). It fails — as a warning, never the workflow — when the app did not survive Back, crashed, or logged a widget the preview could not draw. It never taps, so it can book nothing |
-| Release | you, by hand | — | a signed bundle from your own keystore, uploaded in Play Console. Nothing about Android is wired to a store, and no key lives in GitHub |
+| Compile + debug APK | GitHub Actions, job `android-build` (`.github/workflows/ci.yml`) | push to `main` or `android/**`, or "Run workflow" | `npm ci`, `npm run sync:android`, the JVM unit tests — the widget's snapshot rules and the countdown's plan (`./gradlew :app:testDebugUnitTest` — a failure stops the job before any APK exists; report: **`android-unit-test-report`**), a check that the countdown's tests really ran, `./gradlew assembleDebug`; uploads the artifact **`psync-debug-apk`** (kept 30 days); then an advisory Android lint |
+| Emulator smoke (advisory) | GitHub Actions, job `android-smoke` | push to `android/**`, or "Run workflow" | installs that APK on a phone-sized emulator, opens it, screenshot, ONE Back key, screenshot; then opens the debug-only widget preview nine times (compact, wide, wide at night, class colours off, empty, four seats, two seats on the narrowest card, the smallest card, a long class name with a larger system font) and keeps a picture of each; then POSTS THE COUNTDOWN for real — it grants the notification permission with `adb`, has a debug-only hook put a made-up class 40 minutes ahead, reads the posted notification back from the system (its channel, silent, ongoing, counting down, private with a public version, and the timeout that removes it at the start), photographs the open notification shade, then seeds a class that has started and checks the notification is gone; uploads **`android-smoke`** (twelve pictures, three logs, the notification dumps and a process id, for a person to read). It fails — as a warning, never the workflow — when the app did not survive Back, crashed, logged a widget the preview could not draw, or the countdown was not posted as it should be or did not go. It never taps, so it can book nothing |
+| Release | you, by hand | — | a signed bundle from your own keystore, uploaded by you in Play Console. Nothing about Android is wired to a store. The bundle is built on your machine, or by the MANUAL workflow **Android release (signed AAB)**, which reads the keystore from four repository secrets that only you can create — until you do, no key lives in GitHub. The runbook: [PLAY_STORE_DEPLOY.md](PLAY_STORE_DEPLOY.md) |
 
 The iPhone pipeline is untouched: `npm run sync` (what Xcode Cloud runs) is still iOS-only, no npm package and no
 Capacitor plugin package was added for Android's sake (the widget's three plugins are Java classes inside
@@ -57,8 +59,9 @@ Know this about a debug build:
 | What keeps the widget current | a WidgetKit timeline | a repaint whenever bookings change and whenever the app starts, one inexact alarm — a minute after the shown class starts, or just after midnight if that comes first — and Android's own half-hourly update |
 | The widget after a light / dark flip | at once | at once from Android 12; on older phones at its next repaint, half an hour at most |
 | Back | — | the hardware / gesture Back closes what is on top; see below |
-| Reminders | the same two: 90 minutes before a class, Mondays at 12:00 | the same, filed under two notification channels; they may arrive a few minutes late |
-| Reminder wording | "open Psync for the live countdown" | no mention of a countdown (there is no Live Activity) |
+| Reminders | the same two: 90 minutes before a class, Mondays at 12:00 | the same, filed under two notification channels; they may arrive late (usually minutes — "Notifications" below) |
+| The countdown before a class | a Live Activity on the Lock Screen, which a tap on the reminder starts | ONE silent notification that counts down by itself, from 90 minutes before the class until it starts — see "The class countdown" |
+| Reminder wording | "open Psync for the live countdown" | who and where, and no more: there is nothing to tap for — the countdown arrives by itself |
 | Calendar sync | events stamped Europe/London | the same events at the same instants, stamped with the phone's own zone |
 | Share a stats or year card | an image | **text only** |
 | Settings export, ICS export | a file through the share sheet, text as the fallback | text through the share sheet |
@@ -101,14 +104,22 @@ gives the first Back to the keyboard.
 
 - Two channels appear under Android Settings → Apps → Psync → Notifications: **Class reminders** ("90 minutes
   before each class you hold") and **New dates** ("Mondays at 12:00, when Psycle opens new dates"). Each can be
-  silenced on its own there. They are created the first time the app runs.
+  silenced on its own there. They are created the first time the app runs. A third, **Class countdown**, appears the
+  first time a countdown is shown: silent by design ("The class countdown", below).
 - On **Android 13 and later** the system asks "Allow Psync to send you notifications?" — but only after you say yes
   to Psync's own question, which comes after a first booking or after saving a usual week, never at launch. If you
   refuse the system prompt, the app says to enable notifications in Android Settings.
+- On **Android 12 and earlier** the system has no notification permission, so there is nothing to ask and Psync's
+  own question never appears: class reminders AND the countdown are on from your first booking, until you switch
+  **Class reminders** off (Membership → Settings) or silence a channel in Android's settings. Nobody was asked,
+  and the privacy policy says so. Whether the app should ask there all the same is the owner's to decide
+  (agents/backlog.md). The Monday reminder is different: it is off until you say yes to it, on every version.
 - **Reminders use inexact alarms.** The app does not ask for Android's "Alarms & reminders" special access, so the
-  system may deliver a reminder a few minutes late, more so on a phone that is dozing. That is acceptable for
-  "starts in 90 minutes" and "new dates are open". If a phone proves badly late, exact alarms are a small, known
-  follow-up (agents/backlog.md).
+  system may deliver a reminder late: usually by minutes, more so on a phone that is dozing — and from Android 12
+  the system is ALLOWED to hold such an alarm for up to an hour (the notifications plugin arms it; the window is
+  Android's). That is acceptable for "new dates are open"; for "starts in 90 minutes" the checklist asks you to
+  note how late it really is. If a phone proves badly late, exact alarms are a small, known follow-up
+  (agents/backlog.md).
 - The small icon in the status bar is the mark (`ic_stat_psync`), tinted `#1B2130` in the shade.
 - The Monday reminder is still eight one-off notifications at 12:00 London, re-armed at every launch. After a
   reboot the notifications plugin re-arms what was pending; nobody has watched it do so.
@@ -116,6 +127,52 @@ gives the first Back to the keyboard.
   app with the right extras). Psync therefore ignores a "Snooze" it is handed on Android — it would have re-posted
   the faker's own words under Psync's name — and opens no class for an id that is not a number. A faked tap can at
   most switch the tab, open the sheet of a class you hold, or open the usual-week review. It cannot book or cancel.
+
+## The class countdown
+
+The iPhone app shows a Live Activity before a class. Android has no such thing, so the Android app shows **one
+silent notification** instead: from 90 minutes before your next held class until it starts.
+
+- **What it shows:** the class as its title, the place and your seat under it ("Shoreditch · Bike 9"), and the
+  system's own countdown to the start. It makes no sound, does not vibrate and does not pop up over what you are
+  doing: it sits in the notification shade. A tap opens that class in My Bookings, exactly as the widget's tap does.
+- **On a locked phone** that hides private content it says only "Next class" and the time — never the class, the
+  place or your seat.
+- **There is only ever one.** With two classes inside 90 minutes it shows the first, and the second takes over when
+  the first starts. It is not the 90-minute class reminder: that one still arrives, with its sound, as before.
+- **It goes by itself** when the class starts (from Android 8 the system removes it, even if Psync is not running),
+  when you cancel the class, and at once when you sign out. A session that merely expired leaves it, as on the
+  iPhone: the class is still yours.
+- **If you swipe it away, it stays away** — for that class. Android 14 and later let you dismiss it (before that an
+  ongoing notification cannot be swiped). A swipe is taken as your answer for that class at that time: opening the
+  app, a booking change or the widget's own updates do not put it back. If the class MOVES, or when the next class
+  comes inside its 90 minutes, that is another countdown, and it shows.
+- **After a restart** of the phone it comes back without Psync being opened: a restart clears every notification,
+  and Android tells Psync when the phone has started. (A phone whose maker adds an "auto-start" switch may hold that
+  back until the app is next opened.) The same goes for an update of the app, which removes its notifications, and
+  for a change of the phone's time zone or clock, which moves the moment the countdown runs to: Android tells Psync
+  of each, and the countdown is put right without the app being opened.
+- **After installing a build that first has the countdown**, nothing counts down until Psync has been opened once:
+  the countdown follows Class reminders, and only the app itself can say whether those are on.
+- **Switching it off.** It follows **Class reminders** (Membership → Settings): off there, no countdown. To keep
+  the reminders and lose only the countdown, silence or switch off the channel **Class countdown** under Android
+  Settings → Apps → Psync → Notifications. The other two channels are untouched.
+- **It never asks for anything.** On Android 13 and later it uses the notification permission you gave for
+  reminders; on Android 12 and earlier there is no such permission, and it is simply on with them ("Notifications",
+  above). If notifications are refused it simply does not appear; once you allow them it appears by itself — at the
+  latest at the next booking change or the next time Psync is opened. It needs no "Alarms & reminders" access and
+  runs no background service.
+- **It may appear up to about ten minutes late.** It wakes on an inexact alarm with a ten-minute window — the
+  shortest Android allows an app that has no "Alarms & reminders" access — which does not wake a sleeping phone: a
+  countdown is only ever seen on a phone that is awake, so a dozing phone is not woken to post one; it is posted
+  when the phone next wakes. From Android 8 it ENDS on time all the same, because the system removes it at the
+  start. On Android 7 and below there is no such timeout: on a phone that is awake it can stay for up to about ten
+  minutes past the start, and on a sleeping one until it next wakes. Below Android 7 the system cannot count down
+  either: the text opens with the start time instead.
+- **Times are the phone's own**, as the widget's are. In the UK that is the class's time.
+- **What proves it:** its rules are 36 unit tests that CI runs before it builds the APK, and CI's emulator posts the
+  real notification and reads it back (the table at the top); both have run and passed ("Where it stands").
+  On a phone, nobody has seen it: the checklist below is its proof.
 
 ## Calendar
 
@@ -162,8 +219,9 @@ ways.
 - **How it stays current.** The app repaints it after every change to your bookings and to your class colours, and
   every time it starts (so a widget is never left showing a class over storage that was cleared). It arms ONE
   inexact alarm: for a minute after the shown class starts, so it moves on to the next class by itself — or for
-  just after midnight if that comes first, when "Tomorrow" has become "Today". A sleeping phone is not woken for
-  it, so it catches up when the phone next wakes. Android's own update, every 30 minutes, is the backstop — and the
+  just after midnight if that comes first, when "Tomorrow" has become "Today". On a phone that is awake the alarm
+  may be up to about ten minutes late (its window: the shortest Android allows without "Alarms & reminders"
+  access); a sleeping phone is not woken for it, so it catches up when the phone next wakes. Android's own update, every 30 minutes, is the backstop — and the
   only thing that notices a changed clock or time zone. Every repaint reads the stored snapshot again and drops
   what has started.
 - **Times are the phone's own.** "18:30" prints exactly as Psycle wrote it, but WHEN a class counts as started is
@@ -182,8 +240,8 @@ ways.
   repository converts one — so no font file ships.
 - **Light and dark.** The snapshot carries each class's colours for both. From Android 12 the launcher is handed
   both and flips by itself; on older phones the widget catches up at its next repaint — half an hour at most.
-- **Not there:** no Lock Screen widget, nothing standing in for the Live Activity (no ongoing countdown
-  notification), no Siri, no count of the week, no settings screen of its own.
+- **Not there:** no Lock Screen widget, no Siri, no count of the week, no settings screen of its own. (What stands
+  in for the Live Activity is not part of the widget: "The class countdown", below.)
 
 For someone with `adb` and a DEBUG build, the widget can be drawn without a launcher — this is what CI photographs.
 The activity exists in debug builds only and shows built-in sample classes with made-up names; it reads nothing the
@@ -199,7 +257,7 @@ adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es siz
 
 ## What is NOT there
 
-Lock Screen widgets, the Live Activity (and any notification standing in for it), Siri, a `psync://` URL scheme (the
+Lock Screen widgets, the Live Activity itself (a silent notification stands in for it: "The class countdown"), Siri, a `psync://` URL scheme (the
 widget's tap is an explicit intent; no link is ever opened), an image share card, a wordmark on the launch screen,
 exact-time alarms, Google backup of the app's data, and any store delivery.
 
@@ -229,6 +287,11 @@ npm run android:test    # sync:android, then ./gradlew :app:testDebugUnitTest �
 - Do not commit a live-reload set-up (`server.url`, cleartext): tests/suites/19-android-project.js refuses it.
 
 ## Release
+
+**The full runbook is [PLAY_STORE_DEPLOY.md](PLAY_STORE_DEPLOY.md)**: the two preconditions (the target API level
+and the policy risk), the developer account, the upload key, the manual release workflow and its four secrets,
+every Play Console form in order, the testing tracks, the first release and the later ones, and a one-page
+checklist. What follows here is the short version of the key, the build and the data the app handles.
 
 ### 1. The keystore — create once, keep safe, NEVER commit
 
@@ -266,6 +329,13 @@ cd ios-app && npm run sync:android
 cd android && ./gradlew bundleRelease     # → app/build/outputs/bundle/release/app-release.aab
 ```
 
+Or let GitHub build it: the manual workflow **Android release (signed AAB)**
+(`.github/workflows/android-release.yml`) runs only when you press its button, only from `main`, reads the
+keystore and its passwords from four secrets you create in a `main`-only `play-release` environment, fails — and
+says which — if one is missing,
+proves the bundle is signed by your key, and keeps the `.aab` as an artifact for 5 days. It uploads nothing to
+Google. Setting it up, and what you are trusting when you do: `PLAY_STORE_DEPLOY.md`, step 4b.
+
 ### 3. The target-API requirement — this blocks a Play submission today
 
 Capacitor 6 builds for the SDK level in `ios-app/android/variables.gradle`: `targetSdkVersion = 34` (Android 14).
@@ -283,7 +353,8 @@ draws the app edge to edge and ignores the bar colours this project sets, and th
    publish to production — Google has asked for at least a dozen testers over two weeks; check the current rule.
 2. Create the app: name, default language, "App", "Free". Store copy, category and screenshots:
    `ios-app/PLAY_STORE_LISTING.md`.
-3. **App content**: the privacy policy URL; ads — none; app access — booking and My Bookings need a Psycle
+3. **App content**: the privacy policy URL (the page is `privacy.html` at the repository root, published with the
+   web app — `PLAY_STORE_DEPLOY.md`, step 5.3); ads — none; app access — booking and My Bookings need a Psycle
    sign-in, so give the reviewers instructions and test credentials; the content rating questionnaire; target
    audience — adults; the **Data safety** form (answers below and, as a table, in the listing file).
 4. **Testing → Internal testing**: create a release, upload `app-release.aab`, accept Play App Signing, add
@@ -300,10 +371,16 @@ The facts, from the code:
 - Everything else the app keeps — booking history, favourites, rankings, spot preferences, the usual week, settings,
   its own error and action logs, the widget's copy of your next classes — stays **on the phone**, and is excluded
   from Google backup and device transfer.
-- The developer runs no server and receives nothing. **No analytics, no ads, no crash reporting, no third-party
-  SDKs.** Requests go only to Psycle's API; instructor photos load from the addresses that API gives; a map, a
+- The developer runs no server and receives nothing from the app. **No analytics, no ads, no crash reporting — no
+  SDK of that kind.** The app IS built with other people's code: the open-source Capacitor framework and its
+  plugins, and Google's AndroidX libraries; they run on the phone and contact no one. (Play Console's vitals and
+  pre-launch report come from Google, from people who share diagnostics with Google: the app adds nothing to
+  them.) Requests go only to Psycle's API; instructor photos load from the addresses that API gives; a map, a
   Google Calendar link or an instructor's page opens in the in-app browser only when tapped.
-- Calendar events and notifications are made on the phone. There is no push server.
+- Calendar events and notifications are made on the phone. There is no push server. Calendar sync READS the coming
+  events of every calendar on the phone to find its own (the plugin has no calendar filter); none of it leaves the
+  phone. On Android 12 and earlier there is no notification permission, so reminders and the countdown need no
+  yes ("Notifications", above).
 - A bug report leaves the phone only when the member shares it themselves, through the share sheet.
 
 Google's form counts data as "collected" when an app sends it off the device, whoever receives it, so the careful
@@ -336,7 +413,7 @@ logs.
 - [ ] The launcher icon looks right under the phone's icon shape; with themed icons on (Android 13+) the mark keeps
       its two tones and its grooves.
 - [ ] The first-run welcome's last page reads "with a widget and reminders", and nothing in the app mentions
-      a Lock Screen widget, a live countdown, Siri or an iPhone.
+      a Lock Screen widget, a Live Activity, a "live countdown" to tap for, Siri or an iPhone.
 - [ ] With no signal the app still opens, and My Bookings shows the saved copy.
 
 **Sign-in**
@@ -372,7 +449,7 @@ logs.
 - [ ] Android 13+: the system prompt appears after the in-app "Remind me", not at launch; after "Don't allow" the
       app says to enable notifications in Android Settings.
 - [ ] A class reminder arrives about 90 minutes before a held class; note how late. Its body names the instructor
-      and the studio and says nothing of a countdown. Its icon is the mark.
+      and the studio and asks for no tap. Its icon is the mark.
 - [ ] Its tap opens My Bookings and that class — from a running app and from a cold start.
 - [ ] The Monday 12:00 reminder arrives (note how late), and its tap opens the usual-week review on the new dates —
       it must book nothing.
@@ -386,6 +463,57 @@ logs.
 adb shell "am start -a android.intent.action.MAIN -n com.psyclefinder.app/.MainActivity --ei LocalNotificationId 1 --es LocalNotificationUserAction SNOOZE --es LocalNotficationObject '{\"id\":1,\"title\":\"x\",\"body\":\"y\"}'"
 ```
 
+**The class countdown** — written by reading; CI compiles it, tests its rules and posts one on its emulator; never yet seen on a phone
+- [ ] Book (or already hold) a class that starts within 90 minutes: a silent **Psync** notification appears by
+      itself — no sound, no vibration, no pop-up over what you are doing — with the class as its title, the place
+      and your seat under it, and a countdown that ticks down in the header. Its small icon is the mark, tinted in
+      the class's colour. Note how the countdown reads with more than an hour to go.
+- [ ] With the app CLOSED and a class more than 90 minutes away — booked HOURS before, in the morning for the
+      evening — it appears by itself about 90 minutes before the class. Note how late: on a phone that is awake it
+      should be at most about ten minutes (an inexact alarm with a ten-minute window); it does not wake a sleeping
+      phone. Anything like an hour late is a bug: report it.
+- [ ] At the class's start it goes by itself — with the app closed too, with the phone asleep on the table, and
+      with battery saver on. It never counts up past zero. (Android 8+: the system removes it. On Android 7 and
+      below it goes within about ten minutes on a phone that is awake, else when the phone next wakes — note how
+      long it outstays the start.)
+- [ ] Open and close the app a few times inside the 90 minutes (each time re-posts it, silently): it still goes at
+      the start, not later.
+- [ ] On the lock screen, with "sensitive content" hidden, it reads "Next class" and the time — no class, no place,
+      no seat. With sensitive content shown it reads as in the shade.
+- [ ] It cannot be swiped away on Android 13 and below. On Android 14+ swipe it away: it STAYS away for that class
+      — open and close Psync, change another booking, wait half an hour with a widget on the home screen: it does
+      not come back. Then book a second class inside 90 minutes of the first's start: when the first starts, the
+      second's countdown appears (nobody dismissed that one).
+- [ ] Its tap opens My Bookings and that class — from a running app and from a cold start — and the notification
+      is still there afterwards. The WIDGET's tap still opens its class too.
+- [ ] Cancel the class: it goes at once. Book another inside 90 minutes: it comes back for that one. There is
+      never more than ONE.
+- [ ] Two classes inside 90 minutes: the FIRST is shown; when it starts, the second takes over.
+- [ ] Sign out: it goes at once. Let a session merely expire: it stays, as the widget's classes do.
+- [ ] Membership → Settings → Class reminders OFF: it goes at once. ON again: it comes back. The row reads
+      "90 minutes before each class — with a countdown notification".
+- [ ] Android Settings → Apps → Psync → Notifications shows a third channel, **Class countdown**, silent. Switch
+      it off: no countdown, and class reminders still arrive.
+- [ ] With notifications refused for Psync: no countdown, and Psync does NOT ask because of it. Allow them through
+      the app's own "Remind me": the countdown appears — at the latest at the next booking change or app start.
+- [ ] Restart the phone inside the 90 minutes: it comes back without the app being opened. On a phone with an
+      "auto-start" or "background activity" switch for apps, note whether it needs that switch.
+- [ ] Install a newer build over this one inside the 90 minutes (`adb install -r`), without opening it: the
+      countdown, which the update removed, comes back by itself.
+- [ ] A phone on **Android 12 or earlier**, if you have one: after a first booking the 90-minute reminder and the
+      countdown arrive WITHOUT any question having been asked (there is no notification permission to give).
+      Expected, and said in the privacy policy — note whether it feels right; the alternative is in
+      agents/backlog.md. Class reminders OFF stops both.
+- [ ] Installed over a build that had no countdown (or after Settings → Apps → Psync → Clear storage and signing in
+      again): nothing counts down until Psync has been opened once; after that it appears by itself.
+- [ ] Android 7 and below, if you have such a phone: the header shows the start as a time of day, and the text
+      opens with it — "18:30 · Shoreditch · Bike 9".
+- [ ] The 90-minute class reminder still arrives as before, with its sound — the countdown has not replaced it.
+- [ ] Abroad (or with the phone's zone changed): it counts down to the phone's own reading of the time, as the
+      widget does. Expected, by decision — note it, do not report it. Change the zone WHILE a countdown is up, with
+      Psync closed and no widget placed: within a moment the countdown runs to the new reading (or goes, if the
+      class is now more than 90 minutes away, or has "started").
+
 **Calendar**
 - [ ] The permission prompt appears; the calendar list loads.
 - [ ] The hand-over dialog counts the other events correctly; "Choose another" changes nothing; "Use this calendar"
@@ -394,7 +522,7 @@ adb shell "am start -a android.intent.action.MAIN -n com.psyclefinder.app/.MainA
       same class within a minute leaves exactly ONE event — on a Google-synced calendar in particular.
 - [ ] "Re-sync now" and "Remove duplicates" tell the truth. Picking a read-only calendar (Holidays) does no harm.
 
-**The widget** — none of it has been seen anywhere: written by reading, and as yet not even compiled
+**The widget** — compiled, tested and drawn in nine states by CI; never yet put on a home screen
 - [ ] Long-press the home screen → Widgets → Psync: **Next class** is listed, with a sample card as its preview on
       Android 12+ (the app icon on older pickers). Dragged out, it arrives two cells by two and PAINTS — not
       "Problem loading widget", not "Nothing booked" while you hold a class, and not a card that says only "Psync"
@@ -419,8 +547,8 @@ adb shell "am start -a android.intent.action.MAIN -n com.psyclefinder.app/.MainA
       the tile and the badge; Soft and Bold tint the card; text stays readable on every class type you hold.
 - [ ] System dark mode on, then off: on Android 12+ the widget follows at once, and its corners match the
       launcher's other widgets; below Android 12 note how long it takes (half an hour at most).
-- [ ] About a minute after a held class starts, the widget moves to the next class — or to "Nothing booked" — by
-      itself. Note how late, and whether it had caught up when you woke a sleeping phone.
+- [ ] Between one and about eleven minutes after a held class starts, the widget moves to the next class — or to
+      "Nothing booked" — by itself. Note how late, and whether it had caught up when you woke a sleeping phone.
 - [ ] With a class booked for tomorrow morning, look at the widget shortly after midnight: "Today", not
       "Tomorrow". Note how late the word changed, and whether it was right when you woke the phone in the morning.
 - [ ] Tap it with Psync swiped away from the task switcher (a cold start), and again with Psync in the background:
@@ -471,4 +599,6 @@ adb shell "am start -n com.psyclefinder.app/.MainActivity -a com.psyclefinder.ap
 **Release, when the day comes**
 - [ ] `./gradlew bundleRelease` signs with your keystore from the environment and from `keystore.properties`, and
       with neither it produces an unsigned bundle rather than failing or debug-signing.
+- [ ] The manual workflow **Android release (signed AAB)**: with a secret missing it fails at once and names it;
+      with all four it ends green, and its summary shows the SHA-256 fingerprint of YOUR upload certificate.
 - [ ] After "Clear storage", or on a second phone restored from a Google backup: Psync opens signed OUT.

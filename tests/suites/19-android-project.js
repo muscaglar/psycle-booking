@@ -15,7 +15,8 @@
 //     still agrees with the lockfile (`npm ci` refuses otherwise);
 //   • ci.yml runs the JVM unit tests (blocking) and then compiles a debug APK; the emulator smoke is advisory,
 //     never taps, runs on a phone-sized emulator and photographs the debug-only widget preview in nine states,
-//     failing when the preview logs a widget it could not draw; the bootstrap workflow is gone;
+//     failing when the preview logs a widget it could not draw — then posts the countdown notification and
+//     reads it back (the last bullet); the bootstrap workflow is gone;
 //   • every XML under app/src/main/res parses, and every file there has a name aapt accepts;
 //   • every @type/name a resource, the manifest or MainActivity names resolves inside res/ (aapt stops at the
 //     first one that does not), and what the BRIDGE names is there: the notification icon and its tint
@@ -29,8 +30,16 @@
 //     MainActivity; the three plugins the bridge finds by name (AppGroupPreferences, WidgetCenter,
 //     PsycleDeepLink) registered BEFORE super.onCreate, and a repaint asked for at every cold start; a pure
 //     snapshot class with JVM tests CI runs; the preview activity in app/src/debug/ ONLY, behind a permission
-//     only adb holds; no new runtime dependency, no Kotlin.
-// None of that is javac, aapt2 or a launcher: a green run here means "read, not built".
+//     only adb holds; no new runtime dependency, no Kotlin;
+//   • the countdown notification (the stand-in for the iPhone's Live Activity), as far as it can be READ: a
+//     pure planner (no android.*) with JVM tests of its own, which CI's build job proves RAN; ONE notification
+//     id on its OWN channel 'class-countdown', created IMPORTANCE_LOW — private, with a public version;
+//     ongoing, a countdown chronometer, a timeout, no action, no sound; a notifier that NEVER asks for a
+//     permission; a receiver that is NOT exported; no service, no exact alarm, no new permission, no new
+//     dependency; the tap built ONCE, for the widget and the notification alike; the debug hook in
+//     app/src/debug/ ONLY, behind the permission only adb holds; and CI's emulator script, which posts a REAL
+//     one, dumps its record, photographs the shade, and holds it GONE once the class has started.
+// None of that is javac, aapt2, a launcher or a notification shade: a green run here means "read, not built".
 // The XML reader below is small and strict on purpose; its first section proves it can fail.
 module.exports = function (t) {
   const { ok, eq, fs, path, REPO_ROOT } = t;
@@ -300,13 +309,22 @@ module.exports = function (t) {
   // receiver, and the app's own refresh and alarm are sent as the app (Android's widget guide declares a
   // provider exported="false"). The widget section below holds what its filter may say. A tap on the widget is
   // an explicit intent for MainActivity: no new filter.
+  // The countdown notification adds a receiver of its OWN kind — its alarm, and the system's "the phone has
+  // started" — and that one is not exported either. It is told from the widget's by what it carries (the
+  // provider's meta-data) and by its name (a class or a package that says "countdown"); the countdown's own
+  // section holds that there IS one and what it may hear. No other receiver has any business here.
+  const fqcn = (name) => (!name ? '' : name[0] === '.' ? appId + name : name.indexOf('.') === -1 ? appId + '.' + name : name);
+  const isWidgetReceiver = (e) => !!manifest && within(manifest, e).some((x) => x.name === 'meta-data' && x.attrs['android:name'] === 'android.appwidget.provider');
+  const isCountdownReceiver = (e) => /countdown/i.test(fqcn(e.attrs['android:name']).slice(appId.length));
   if (manifest) {
     eq(manifest.elements.filter((e) => e.attrs['android:exported'] === 'true').map((e) => e.name + ' ' + e.attrs['android:name']), ['activity .MainActivity'],
       'ONE component is exported, the launcher activity — no receiver, service, provider or alias is');
     eq(manifest.elements.filter((e) => ['activity', 'activity-alias', 'service', 'receiver', 'provider'].indexOf(e.name) !== -1 && e.attrs['android:exported'] === undefined).map((e) => e.name), [],
       '…and every component says so itself (from Android 12 a component with an intent filter and no android:exported stops the install)');
-    eq(manifest.elements.filter((e) => e.name === 'service' || e.name === 'activity-alias').map((e) => e.name), [], 'the app declares no service or alias of its own');
-    eq(manifest.elements.filter((e) => e.name === 'receiver').length, 1, '…and ONE receiver: the home-screen widget\'s provider');
+    eq(manifest.elements.filter((e) => e.name === 'service' || e.name === 'activity-alias').map((e) => e.name), [], 'the app declares no service or alias of its own (the countdown is a notification and an alarm: never a foreground service)');
+    eq(manifest.elements.filter((e) => e.name === 'receiver' && isWidgetReceiver(e)).length, 1, '…and ONE receiver that is a widget provider: the home-screen widget\'s');
+    eq(manifest.elements.filter((e) => e.name === 'receiver' && !isWidgetReceiver(e) && !isCountdownReceiver(e)).map((e) => e.attrs['android:name']), [],
+      '…and no other receiver, but for the countdown notification\'s own (not exported either: this block\'s first line holds that for every component)');
     eq(manifest.elements.filter((e) => e.name === 'activity').map((e) => e.attrs['android:name']), ['.MainActivity'], '…and one activity (the widget preview belongs to DEBUG builds, and is not named here)');
     eq(manifest.elements.filter((e) => e.name === 'data').map((e) => Object.keys(e.attrs).join(' ')), [], 'no intent filter carries a <data> element: no custom URL scheme, no host, nothing BROWSABLE');
     eq(manifest.elements.filter((e) => e.name === 'category').map((e) => e.attrs['android:name']), ['android.intent.category.LAUNCHER'], '…the activity\'s one filter is MAIN / LAUNCHER');
@@ -418,7 +436,7 @@ module.exports = function (t) {
     'every locked package resolves from registry.npmjs.org (Xcode Cloud and GitHub reach nothing else)');
 
   // ── 6. CI ────────────────────────────────────────────────────────────────
-  t.section('CI: the JVM tests block, a debug APK is compiled, the emulator smoke is advisory, never taps and photographs the widget preview, the bootstrap is gone');
+  t.section('CI: the JVM tests block (the countdown\'s are proved to have RUN), a debug APK is compiled, the emulator smoke is advisory, never taps, photographs the widget preview, then posts the countdown notification and reads it back; the bootstrap is gone');
   ok(!has('.github/workflows/android-bootstrap.yml'), 'the temporary bootstrap workflow is deleted (the project it generated is committed)');
   const ci = t.readSource('.github/workflows/ci.yml');
   const job = (id) => ((new RegExp('\\n {2}' + id + ':[ \\t]*\\n[\\s\\S]*?(?=\\n {2}[A-Za-z_][\\w-]*:[ \\t]*\\n|$)').exec(ci) || [''])[0]).replace(/^[ \t]*#.*$/gm, '');
@@ -453,6 +471,22 @@ module.exports = function (t) {
     'the report (app/build/reports/tests) is uploaded whatever happened, and kept 30 days');
   ok(build.indexOf('- name: JVM unit tests') < build.indexOf('- name: Upload the unit-test report') && build.indexOf('- name: Upload the unit-test report') < build.indexOf('- name: Compile (debug APK)'),
     '…before the compile step, which a failed test never reaches');
+  // The countdown's planner tests ride the SAME Gradle task (it runs every class under app/src/test/). A task
+  // with nothing to run for the countdown still passes — so one more step reads the results: which classes
+  // ran, and that one of them is the countdown's, with at least one test in it. BLOCKING, before the APK.
+  const ran = step(build, 'The countdown\'s JVM tests ran');
+  ok(/working-directory: ios-app\/android\n/.test(ran) && !/continue-on-error/.test(ran) && !/\|\|/.test(ran) && !/\n\s+if:/.test(ran),
+    'a step "The countdown\'s JVM tests ran" reads the results in ios-app/android — no `if:`, no `|| true`, not advisory: it can fail the job');
+  ok(build.indexOf('- name: JVM unit tests') < build.indexOf('- name: The countdown\'s JVM tests ran') && build.indexOf('- name: The countdown\'s JVM tests ran') < build.indexOf('- name: Compile (debug APK)'),
+    '…after the tests, and BEFORE the APK is compiled');
+  ok(/\n\s+grep -h -o '<testsuite name="\[\^"\]\*" tests="\[0-9\]\*"' app\/build\/test-results\/testDebugUnitTest\/\*\.xml\n/.test(ran), '…it prints every test class that ran, and how many tests each held (nobody can re-run them on a development machine)');
+  const ranPattern = (/\n\s+grep -l -E '([^'\n]+)' app\/build\/test-results\/testDebugUnitTest\/\*\.xml(?:\n|$)/.exec(ran) || [])[1] || '';
+  // The pattern is an ERE with nothing in it that JavaScript reads differently: run it as written.
+  const ranRe = ranPattern ? new RegExp(ranPattern) : /(?!)/;
+  const suiteHeader = (cls, tests) => '<testsuite name="' + cls + '" tests="' + tests + '" skipped="0" failures="0" errors="0" timestamp="2026-01-01T00:00:00" hostname="runner" time="0.1">';
+  eq([suiteHeader(appId + '.countdown.PsyncCountdownPlanTest', 12), suiteHeader(appId + '.widget.CountdownPlannerTest', 3), suiteHeader(appId + '.countdown.PsyncCountdownPlanTest', 0),
+    suiteHeader(appId + '.widget.PsyncSnapshotTest', 45), suiteHeader(appId + '.countdown.PlannerTest', 9)].map((h) => ranRe.test(h)), [true, true, false, false, false],
+    '…then stops unless a class named …Countdown…Test ran with at least one test (it can fail: no tests in it, the widget\'s class alone, a class whose NAME does not say "Countdown")');
   const why = step(build, 'Show why a JVM test failed');
   ok(/if: failure\(\)/.test(why) && /continue-on-error: true/.test(why) && /test-results\/testDebugUnitTest\/\*\.xml/.test(why), 'a failed test\'s "expected … but was …" is printed into the log: nobody can re-run it on a development machine');
   const lint = step(build, 'Android lint');
@@ -488,9 +522,10 @@ module.exports = function (t) {
   const judges = (l) => /^!/.test(l) || /^grep -q\b/.test(l);
   const firstJudge = script.findIndex(judges);
   ok(firstJudge > at(/after-back\.png/) && script.slice(firstJudge).every(judges) && script.slice(0, firstJudge).every((l) => !judges(l)), 'the lines that judge the run come LAST, after every piece of evidence is gathered');
-  eq(script.slice(firstJudge === -1 ? script.length : firstJudge), ["grep -q '[0-9]' android-smoke/pid-after-back.txt", "! grep -q 'FATAL EXCEPTION' android-smoke/logcat.txt", "! grep -q 'Process: " + appId + "' android-smoke/logcat-widget.txt",
+  const verdictLines = script.slice(firstJudge === -1 ? script.length : firstJudge);
+  eq(verdictLines.slice(0, 4), ["grep -q '[0-9]' android-smoke/pid-after-back.txt", "! grep -q 'FATAL EXCEPTION' android-smoke/logcat.txt", "! grep -q 'Process: " + appId + "' android-smoke/logcat-widget.txt",
     "! grep -q 'PsyncWidgetPreview' android-smoke/logcat-widget.txt"],
-    '…the process BACK left was alive, the launch log holds no FATAL EXCEPTION, the app did not crash under the widget preview ("Process: <appId>" is the header of AndroidRuntime\'s crash report), and the preview logged no widget it could NOT DRAW (its tag, at error level: the section on the preview holds the Java to it)');
+    '…FIRST the launch\'s and the widget\'s: the process BACK left was alive, the launch log holds no FATAL EXCEPTION, the app did not crash under the widget preview ("Process: <appId>" is the header of AndroidRuntime\'s crash report), and the preview logged no widget it could NOT DRAW (its tag, at error level: the section on the preview holds the Java to it). The countdown\'s lines follow them — held further down — so a countdown that fails can never hide a verdict on the launch');
 
   // The widget preview. WidgetPreviewActivity is in DEBUG builds only (app/src/debug/ — held further down) and
   // shows the RemoteViews the provider builds. `-S` force-stops the app before each start: a fresh activity
@@ -523,6 +558,104 @@ module.exports = function (t) {
   ok(previews.length > 0 && widgetLog > previews[previews.length - 1].i + 2 && widgetLog < firstJudge, 'after the last picture, what the log holds at warning level and above goes to logcat-widget.txt');
   ok(previews.length > 0 && script.slice(at(/^adb logcat -d -s /) + 1, firstJudge).every((l) => /^sleep \d+$/.test(l) || / \|\| true$/.test(l)),
     'no widget line can end the script: from the launch log to the verdict each is a sleep or ends in `|| true` (a preview that will not open must not cost the verdict on the launch)');
+
+  // The countdown notification, posted FOR REAL. CountdownProofReceiver is in DEBUG builds only (app/src/debug/ —
+  // its own section, at the end, holds the Java and the manifest to this script): it puts ONE fixed sample class
+  // into the widget's store and runs the app's OWN plan and notifier. It is sent by NAME, and with
+  // --include-stopped-packages: every preview start force-stops the app, and a broadcast does not reach a
+  // stopped app unless it says so. NO action: the receiver reads none, and a name nothing answers to is noise.
+  // Every extra is a STRING (--es): the hook reads getStringExtra, and a typed extra (--ei, --ez) would come
+  // back null from it — the default sample, labelled as the one that was asked for. Still no touch: the shade
+  // is opened by a status-bar command.
+  const HOOK_CLASS = 'CountdownProofReceiver', HOOK = appId + '/.' + HOOK_CLASS;
+  const numbered = script.map((l, i) => ({ l: l, i: i }));
+  const hookLines = numbered.filter((x) => new RegExp('\\b' + HOOK_CLASS + '\\b').test(x.l));
+  eq(hookLines.length, 3, 'the emulator script sends the countdown\'s debug hook three broadcasts');
+  ok(hookLines.every((x, n) => new RegExp('^adb shell am broadcast --include-stopped-packages -n ' + esc(HOOK) + ' --es [a-z]+ [a-z0-9]+ ' + (n === 0 ? '>' : '>>') + ' android-smoke/countdown-broadcasts\\.txt \\|\\| true$').test(x.l)),
+    '…each by NAME (-n ' + HOOK + ', and no action: the hook reads none), reaching a stopped app too, with ONE string extra, what `am` answered kept in countdown-broadcasts.txt, and `|| true`');
+  eq(script.filter((l) => /\bam broadcast\b/.test(l) && !new RegExp('\\b' + HOOK_CLASS + '\\b').test(l)), [], '…and it sends no other broadcast: nothing reaches a receiver a release build also has');
+  const hookExtra = (l) => { const m = / (--e[a-z]) ([a-z]+) ([a-z0-9]+) >/.exec(l) || []; return { flag: m[1], name: m[2], value: m[3] }; };
+  eq(hookLines.map((x) => hookExtra(x.l)), [{ flag: '--es', name: 'minutes', value: '40' }, { flag: '--es', name: 'started', value: '1' }, { flag: '--es', name: 'clear', value: '1' }],
+    '…a class that starts in 40 minutes (inside the 90-minute window: the countdown goes UP), one that started a minute ago (it comes DOWN), then nothing at all (the store is left empty, as it was found)');
+  const dumps = numbered.filter((x) => /\bdumpsys notification\b/.test(x.l));
+  eq(dumps.map((x) => x.l), ['posted', 'after-start'].map((name) => 'adb shell dumpsys notification --noredact --package ' + appId + ' > android-smoke/countdown-' + name + '.txt || true'),
+    'the notification service is dumped twice — --noredact (the title and the text are sample words) and cut to the app\'s records: countdown-posted.txt, then countdown-after-start.txt');
+  const lineAt = (text, from) => script.indexOf(text, from || 0);
+  const grantAt = lineAt('adb shell pm grant ' + appId + ' android.permission.POST_NOTIFICATIONS || true');
+  const clearLogAt = lineAt('adb logcat -c || true', widgetLog === -1 ? script.length : widgetLog);
+  const alarmsAt = at(new RegExp("^adb shell dumpsys alarm \\| grep -E -B \\d+ -A \\d+ 'NotificationManagerService\\.TIMEOUT\\|" + esc(appId) + "' > android-smoke/countdown-alarms\\.txt \\|\\| true$"));
+  const expandAt = lineAt('adb shell cmd statusbar expand-notifications || true');
+  const shadeAt = lineAt('adb exec-out screencap -p > android-smoke/countdown-shade.png || true');
+  const collapseAt = lineAt('adb shell cmd statusbar collapse || true');
+  const countdownLogAt = lineAt("adb logcat -d '*:W' > android-smoke/logcat-countdown.txt || true");
+  const inOrder = (list) => list.every((n, k) => n !== -1 && n !== undefined && (k === 0 || n > list[k - 1]));
+  const hookAt = (n) => (hookLines[n] ? hookLines[n].i : -1), dumpAt = (n) => (dumps[n] ? dumps[n].i : -1);
+  ok(grantAt !== -1, 'POST_NOTIFICATIONS is granted with `pm grant` (Android 13+; `|| true` for an image that has no such permission): the app never asks from native code, and with it missing the notifier does nothing');
+  ok(inOrder([widgetLog, clearLogAt, grantAt, hookAt(0), dumpAt(0), alarmsAt, expandAt, shadeAt, collapseAt, hookAt(1), dumpAt(1), hookAt(2), countdownLogAt, firstJudge]),
+    'in order, AFTER the widget\'s log is written: the log cleared, the grant, the 40-minute class, the dump, the alarms, the shade opened, countdown-shade.png, the shade closed, the started class, the second dump, the store cleared, logcat-countdown.txt — and only then the verdict');
+  ok([hookAt(0), hookAt(1)].every((n) => n !== -1 && /^sleep [3-9]$/.test(script[n + 1] || '')) && expandAt !== -1 && /^sleep [2-5]$/.test(script[expandAt + 1] || '') && shadeAt === expandAt + 2,
+    '…with a few seconds after each broadcast that must change something, and after the shade is asked to open, before it is photographed');
+  ok(alarmsAt !== -1, 'the system\'s own alarm for the notification\'s TIMEOUT (setTimeoutAfter) and the app\'s alarms are cut out of `dumpsys alarm` into countdown-alarms.txt — kept for a person: nothing judges THAT file (the timeout itself is judged in the record, below)');
+  // The verdict. Each pattern is a BASIC regular expression for grep, written from the platform's source
+  // (NotificationRecord.toString, Notification.toString, the dump of a record's extras) — by reading.
+  const RECORD = "NotificationRecord(.*pkg=" + appId + " .*", MAIN_NOTE = RECORD + ": Notification(channel=class-countdown ";
+  const countdownVerdict = ["! grep -q 'Process: " + appId + "' android-smoke/logcat-countdown.txt",
+    "! grep -q 'PsyncCountdownProof' android-smoke/logcat-countdown.txt",
+    "grep -q '" + RECORD + ": Notification(channel=class-countdown ' android-smoke/countdown-posted.txt",
+    "grep -q 'Notification Manager state' android-smoke/countdown-after-start.txt",
+    "! grep -q '" + RECORD + "channel=class-countdown' android-smoke/countdown-after-start.txt",
+    "grep -q '" + RECORD + " importance=2 .*: Notification(channel=class-countdown ' android-smoke/countdown-posted.txt",
+    "grep -q '" + MAIN_NOTE + "[^(]* flags=0x[0-9a-f]*[2367abef] ' android-smoke/countdown-posted.txt",
+    "grep -q '" + MAIN_NOTE + "[^(]* category=event [^(]*vis=PRIVATE publicVersion=Notification(' android-smoke/countdown-posted.txt",
+    "grep -q 'android.showChronometer=Boolean (true)' android-smoke/countdown-posted.txt",
+    "grep -q 'android.chronometerCountDown=Boolean (true)' android-smoke/countdown-posted.txt",
+    // The TIMEOUT: the one property that ends the notification with the app dead. NotificationRecord's dump
+    // prints "timeout=" + TimeUtils.formatForLogging(getTimeoutAfter()): the word "unknown" for 0, otherwise the
+    // DURATION formatted as a date — 40 minutes reads 1970-01-01 00:39:5x (1969-12-31 … west of UTC).
+    "grep -q 'timeout=19[67][0-9]-' android-smoke/countdown-posted.txt"];
+  eq(verdictLines.slice(4), countdownVerdict,
+    '…the countdown\'s verdict, after the launch\'s and the widget\'s: no crash; no hook that could NOT seed the store (its tag, at error level: the last section holds the Java to it); a record of the app\'s ON the channel class-countdown; the second dump was taken, and holds NO such record (the class had started); then the details — importance 2 (LOW: silent, no peek), the ongoing bit (0x2) in the MAIN notification\'s flags, category "event", PRIVATE with a public version, a chronometer that counts DOWN, and a TIMEOUT (setTimeoutAfter: what removes it at the start with the app dead)');
+  // grep is not run here. The same patterns are, as JavaScript, against a record written the way the platform
+  // prints one — so a pattern that could never match, or never fail, shows up on a development machine.
+  const breToJs = (bre) => {
+    let out = '', inClass = false;
+    for (let k = 0; k < bre.length; k++) {
+      const c = bre[k];
+      if (inClass) { out += c; if (c === ']' && bre[k - 1] !== '[' && bre.slice(k - 2, k) !== '[^') inClass = false; continue; }
+      if (c === '[') { inClass = true; out += c; continue; }
+      out += /[(){}|+?]/.test(c) ? '\\' + c : c;   // literal in a basic expression, special in JavaScript
+    }
+    return new RegExp(out);
+  };
+  const runVerdict = (files) => verdictLines.slice(4).map((l) => {
+    const m = /^(! )?grep -q '([^']*)' android-smoke\/(\S+)$/.exec(l);
+    if (!m) return null;
+    const hit = files[m[3]] !== undefined && files[m[3]].split('\n').some((row) => breToJs(m[2]).test(row));
+    return m[1] ? !hit : hit;   // as sh has it: `! grep` on a file that is not there "passes"
+  });
+  const recordLine = (o) => '    NotificationRecord(0x0a1b2c3d: pkg=' + appId + ' user=UserHandle{0} id=9001 tag=null importance=' + o.importance + ' key=0|' + appId + '|9001|null|10190: Notification(channel=' + o.channel +
+    ' shortcut=null contentView=null vibrate=null sound=null defaults=0x0 flags=0x' + o.flags + ' color=0xff2f6fed category=' + o.category + ' vis=' + o.vis +
+    (o.pub ? ' publicVersion=Notification(channel=' + o.channel + ' shortcut=null contentView=null vibrate=null sound=null defaults=0x0 flags=0x' + o.pubFlags + ' color=0xff2f6fed category=' + o.category + ' vis=PUBLIC)' : '') + ')';
+  const dumpOf = (rows) => ['Current Notification Manager state (filtered to pkg=' + appId + '):'].concat(rows.length ? ['  Notification List:'] : [], rows,
+    // What stays in a dump after a cancel, and is NOT a record: the channel under the app's settings, the archive.
+    ['  AppSettings: ' + appId + ' (10190)', "      NotificationChannel{mId='class-countdown', mName=Class countdown, mImportance=2}", '  Notification archive:',
+      '    StatusBarNotification(pkg=' + appId + ' user=UserHandle{0} id=9001 tag=null key=0|' + appId + '|9001|null|10190: Notification(channel=class-countdown shortcut=null flags=0xa vis=PRIVATE))']).join('\n');
+  const GOOD = { importance: 2, channel: 'class-countdown', flags: 'a', category: 'event', vis: 'PRIVATE', pub: true, pubFlags: '0', timeout: '1970-01-01 00:39:59' };
+  // The rows under a record, as dumpNotification writes them: the timeout among the notification's fields, then the extras.
+  const extrasRows = (countDown, timeout) => ['        color=0xff2f6fed', '        timeout=' + timeout, '        extras={', '            android.title=String (RIDE 45)', '            android.text=String (Shoreditch · Bike 9)', '            android.showChronometer=Boolean (true)',
+    '            android.chronometerCountDown=Boolean (' + countDown + ')', '        }'];
+  const evidence = (o, countDown, after, log) => ({ 'countdown-posted.txt': dumpOf(o ? [recordLine(o)].concat(extrasRows(countDown, o.timeout)) : []), 'countdown-after-start.txt': after, 'logcat-countdown.txt': log });
+  const failing = (files) => runVerdict(files).map((pass, n) => (pass ? -1 : n)).filter((n) => n !== -1);
+  const but = (change) => Object.assign({}, GOOD, change);
+  eq(failing(evidence(GOOD, true, dumpOf([]), 'W/System: nothing of note')), [], 'against a record written the way the platform prints one, every line of the countdown\'s verdict passes — with the channel\'s settings and the archive still naming class-countdown after the cancel');
+  eq([failing(evidence(GOOD, true, dumpOf([]), 'E/AndroidRuntime: Process: ' + appId + ', PID: 4321')), failing(evidence(GOOD, true, dumpOf([]), 'E/PsyncCountdownProof: Could not seed the countdown')),
+    failing(evidence(null, true, dumpOf([]), '')).slice(0, 1), failing(evidence(but({ channel: 'class-reminders' }), true, dumpOf([]), '')).slice(0, 1),
+    failing(evidence(GOOD, true, undefined, '')), failing(evidence(GOOD, true, dumpOf([recordLine(GOOD)]), '')), failing(evidence(but({ importance: 3 }), true, dumpOf([]), '')),
+    failing(evidence(but({ flags: '8' }), true, dumpOf([]), '')), failing(evidence(but({ flags: '8', pubFlags: 'a' }), true, dumpOf([]), '')), failing(evidence(but({ vis: 'PUBLIC', pub: false }), true, dumpOf([]), '')),
+    failing(evidence(but({ category: 'reminder' }), true, dumpOf([]), '')), failing(evidence(GOOD, false, dumpOf([]), '')), failing(evidence(but({ timeout: 'unknown' }), true, dumpOf([]), ''))],
+    [[0], [1], [2], [2], [3], [4], [5], [6], [6], [7], [7], [9], [10]],
+    '…and each line can fail, alone: a crash; a hook that could not seed the store; nothing posted; posted on the REMINDERS\' channel; a second dump that was never taken (without that line, "gone" would pass on a missing file); still up after the start; importance 3; not ongoing; ongoing only in the PUBLIC version; no private / public pair; another category; a chronometer that counts UP; NO timeout ("timeout=unknown": setTimeoutAfter dropped, or handed nothing positive)');
+  eq(failing(evidence(but({ timeout: '1969-12-31 16:39:58' }), true, dumpOf([]), '')), [], '…and a timeout printed by an image whose zone is west of UTC (the same forty minutes, read as a date in 1969) passes too');
   const shots = step(smoke, 'Upload the screenshots and the log');
   ok(/if: always\(\)/.test(shots) && /\n\s+name: android-smoke\n/.test(shots) && /\n\s+path: android-smoke\/\n/.test(shots), 'the pictures and the logs — the whole android-smoke/ folder — are uploaded as "android-smoke", whatever happened');
   ok(!/\$\{\{/.test(build + smoke) && !/secrets\./.test(build + smoke), 'neither Android job interpolates an expression into a shell, or reads a secret');
@@ -658,8 +791,8 @@ module.exports = function (t) {
   // JVM unit tests (app/src/test/, run by CI); what the bridge writes is 20-android-widget.js's business.
   t.section('Android widget: one provider, declared the way a launcher needs it');
   const short = (f) => f.slice((ANDROID + '/app/src/').length);
-  const fqcn = (name) => (!name ? '' : name[0] === '.' ? appId + name : name.indexOf('.') === -1 ? appId + '.' + name : name);
-  const receiver = (manifest ? manifest.elements.filter((e) => e.name === 'receiver')[0] : null) || { attrs: {} };
+  // The provider is found by what it CARRIES, not by where it stands: the countdown's receiver may be written above it.
+  const receiver = (manifest ? manifest.elements.filter((e) => e.name === 'receiver' && isWidgetReceiver(e))[0] : null) || { attrs: {} };
   const providerClass = fqcn(receiver.attrs['android:name']);
   const providerName = providerClass.split('.').pop();
   const providerFile = JAVA_ROOT + '/' + providerClass.split('.').join('/') + '.java';
@@ -867,15 +1000,43 @@ module.exports = function (t) {
   javaFiles.concat(debugJava).forEach((f) => pendingIntents(codeOf(f)).forEach((p) => built.push({ f: f, how: p.how, flags: p.flags })));
   const everyCode = allCode + '\n' + debugJava.map(codeOf).join('\n');
   const inWidget = built.filter((p) => widgetFiles.indexOf(p.f) !== -1);
-  ok(inWidget.some((p) => p.how === 'getActivity') && inWidget.some((p) => p.how === 'getBroadcast'), 'the widget package builds a PendingIntent for the tap (getActivity) and one for its roll-over alarm (getBroadcast) — ' + built.length + ' in the app');
+  // The tap is built ONCE in the app: the widget's card and the countdown notification open the class the same
+  // way — an explicit, immutable intent with an untrusted id — by sharing the code, never a copy of it. So the
+  // ONE getActivity may sit in the widget package (where it began) or in a class the widget's code calls.
+  const taps = built.filter((p) => p.how === 'getActivity' && javaFiles.indexOf(p.f) !== -1);
+  const tapHome = taps.length === 1 ? taps[0].f : '';
+  const reaches = (files, home) => !!home && (files.indexOf(home) !== -1 || new RegExp('\\b' + path.basename(home, '.java') + '\\s*\\.\\s*\\w+\\s*\\(').test(files.map(codeOf).join('\n')));
+  ok(taps.length === 1, 'the app builds ONE PendingIntent for a tap (getActivity) — the widget\'s and the countdown notification\'s are the same code, not two copies that can drift (' + (taps.map((p) => short(p.f)).join(', ') || 'none') + ')');
+  ok(reaches(widgetFiles, tapHome) && inWidget.some((p) => p.how === 'getBroadcast'), '…the widget package builds it, or calls the class that does, and builds one for its roll-over alarm (getBroadcast) — ' + built.length + ' in the app');
   eq(built.filter((p) => !holdsFlag(IMMUTABLE, p.flags, codeOf(p.f), everyCode)).map((p) => short(p.f) + ': ' + p.how + '(…, ' + p.flags + ')'), [],
     'EVERY PendingIntent the app builds carries FLAG_IMMUTABLE (from Android 12 one without it throws; before that, whoever holds it could fill in the intent)');
   ok(!/\bFLAG_MUTABLE\b/.test(everyCode), '…and none is FLAG_MUTABLE');
-  eq(inWidget.filter((p) => p.how === 'getActivity' && !holdsFlag(REPLACES, p.flags, codeOf(p.f), everyCode)).map((p) => short(p.f) + ': ' + p.flags), [],
+  eq(taps.filter((p) => !holdsFlag(REPLACES, p.flags, codeOf(p.f), everyCode)).map((p) => short(p.f) + ': ' + p.flags), [],
     'the tap\'s PendingIntent is FLAG_UPDATE_CURRENT: two that differ only in their EXTRAS are one to Android, so without it a tap opens the class the widget showed before');
   ok(/\bsetOnClickPendingIntent\s*\(/.test(widgetCode), 'a tap is wired with setOnClickPendingIntent');
-  ok(/\bMainActivity\s*\.\s*class\b/.test(widgetCode) && !/\bACTION_VIEW\b/.test(allCode), '…for an intent that names MainActivity by CLASS — explicit: no URL scheme, no ACTION_VIEW, no intent filter');
-  ok(/\bAlarmManager\b/.test(widgetCode) && /\.\s*(?:set|setWindow)\s*\(/.test(widgetCode), 'the provider arms its roll-over with AlarmManager.set(…): inexact, so no permission and no special-access screen');
+  ok(/\bMainActivity\s*\.\s*class\b/.test(tapHome ? codeOf(tapHome) : '') && !/\bACTION_VIEW\b/.test(allCode), '…for an intent that names MainActivity by CLASS — explicit: no URL scheme, no ACTION_VIEW, no intent filter');
+  // An alarm is armed with setWindow(RTC, at, TEN MINUTES, …) — inexact, no permission — and NEVER with the bare
+  // set(…): that window is the system's to choose (three quarters of the wait; capped at an hour from Android 12,
+  // not at all before), so a roll-over or a countdown armed hours ahead could come an hour late, or never. Ten
+  // minutes is the shortest window Android 12+ honours for an alarm that is not exact. RTC, never RTC_WAKEUP.
+  const WINDOWED = /\.\s*setWindow\s*\(\s*AlarmManager\s*\.\s*RTC\s*,/, BARE_SET = /\.\s*set\s*\(\s*AlarmManager\s*\./;
+  const windowsOf = (code) => {
+    const found = [], re = /\.\s*setWindow\s*\(/g;
+    let m;
+    while ((m = re.exec(code))) {
+      const arg = (callArgs(code, re.lastIndex - 1)[2] || '').trim();
+      const expr = /^[A-Z][A-Z0-9_]*$/.test(arg) ? ((new RegExp('\\bstatic\\s+final\\s+long\\s+' + arg + '\\s*=\\s*([^;]+);').exec(code) || [])[1] || '') : arg;
+      const plain = expr.replace(/[Ll_\s]/g, '');
+      found.push(/^\d+(?:\*\d+)*$/.test(plain) ? plain.split('*').reduce((a, b) => a * Number(b), 1) : NaN);
+    }
+    return found;
+  };
+  eq([WINDOWED.test('alarms.setWindow(AlarmManager.RTC, at, W, pi);'), WINDOWED.test('alarms.setWindow(AlarmManager.RTC_WAKEUP, at, W, pi);'), BARE_SET.test('alarms.set(AlarmManager.RTC, at, pi);'), BARE_SET.test('calendar.set(Calendar.YEAR, 2026);'),
+    windowsOf('static final long W = 10L * 60L * 1000L; void a() { alarms.setWindow(AlarmManager.RTC, at, W, pi); alarms.setWindow(AlarmManager.RTC, at, 0, pi); }')],
+    [true, false, true, false, [600000, 0]], '(the alarm reader: setWindow on RTC is found and RTC_WAKEUP is not; a bare AlarmManager.set is, a Calendar.set is not; a window is read through its constant)');
+  ok(/\bAlarmManager\b/.test(widgetCode) && WINDOWED.test(widgetCode), 'the provider arms its roll-over with AlarmManager.setWindow(RTC, …): inexact, so no permission and no special-access screen, and it wakes no sleeping phone');
+  ok(!BARE_SET.test(allCode), '…and NOTHING in the app arms the bare AlarmManager.set(…): the system picks that window — up to an hour late from Android 12, later still before — and a started class would sit on the card, or a countdown not appear, for as long');
+  eq(windowsOf(allCode).filter((w) => w !== 10 * 60 * 1000), [], '…every window is ten minutes: the shortest Android 12+ honours for an alarm that is not exact (0 would BE an exact alarm, and need the permission)');
   ok(!/\.\s*(?:setExact\w*|setAlarmClock|setRepeating|setInexactRepeating)\s*\(/.test(allCode) && !/\b(?:canScheduleExactAlarms|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM)\b/.test(allText), '…never an exact alarm, never a repeating one');
   ok(/\bonDisabled\s*\(/.test(widgetCode) && /\.\s*cancel\s*\(/.test(widgetCode), '…and it is cancelled when the last widget is removed (onDisabled)');
   // WHEN the alarm fires is a rule with a trap in it — the day words are relative, so "Tomorrow 07:30" painted
@@ -891,7 +1052,7 @@ module.exports = function (t) {
     const refresh = methodBody(providerCode, 'refreshAll');
     const fin = /\bfinally\s*\{([\s\S]*)\}\s*$/.exec(refresh);
     const armer = fin ? (/\b([A-Za-z_]\w*)\s*\(/.exec(fin[1]) || [])[1] : '';
-    ok(!!fin && !!armer && /\.\s*set\s*\(/.test(methodBody(providerCode, armer)) && /\.\s*cancel\s*\(/.test(methodBody(providerCode, armer)) && !/\.\s*set\s*\(/.test(refresh.slice(0, fin.index)),
+    ok(!!fin && !!armer && WINDOWED.test(methodBody(providerCode, armer)) && /\.\s*cancel\s*\(/.test(methodBody(providerCode, armer)) && !/\.\s*set(?:Window)?\s*\(/.test(refresh.slice(0, fin.index)),
       '…and arms (or cancels) its ONE alarm in a `finally` of the repaint, nowhere else in it: a throwing updateAppWidget cannot leave the roll-over unarmed');
     ok(/\bcatch\s*\(\s*RuntimeException\b/.test(methodBody(providerCode, armer)), '…through a method that throws nothing itself (it runs in a finally)');
   }
@@ -915,8 +1076,15 @@ module.exports = function (t) {
       .forEach((re) => { const m = re.exec(text); if (m) found.push(m[0].replace(/\s+/g, '')); });
     // Newer framework calls are fine BEHIND a version test: one must come before them in the SAME method (or
     // the method says @RequiresApi / @TargetApi). By reading: a test earlier in the method is taken to cover it.
+    // The countdown notification's: a NotificationChannel is API 26 whoever builds it. On the PLATFORM's
+    // builder a countdown chronometer is 24 and a timeout 26, and NotificationManager.areNotificationsEnabled
+    // is 24 — androidx's NotificationCompat / NotificationManagerCompat carry those tests themselves, so a
+    // file that imports them is not asked for one.
+    const compat = (cls) => new RegExp('^import\\s+androidx\\.core\\.app\\.' + cls + '\\s*;', 'm').test(src);
     [/\.\s*isNightModeActive\s*\(/g, /\.\s*setAndAllowWhileIdle\s*\(/g, /\.\s*setImageViewIcon\s*\(/g, /\bOPTION_APPWIDGET_SIZES\b/g, /"setClipToOutline"/g,
-      /\.\s*(?:setColorStateList|setColorInt|setColorAttr|setViewLayoutWidth|setViewLayoutHeight|setViewLayoutMargin|setViewOutlinePreferredRadius\w*)\s*\(/g]
+      /\.\s*(?:setColorStateList|setColorInt|setColorAttr|setViewLayoutWidth|setViewLayoutHeight|setViewLayoutMargin|setViewOutlinePreferredRadius\w*)\s*\(/g,
+      /\bnew\s+NotificationChannel\s*\(/g]
+      .concat(compat('NotificationCompat') ? [] : [/\.\s*setChronometerCountDown\s*\(/g, /\.\s*setTimeoutAfter\s*\(/g], compat('NotificationManagerCompat') ? [] : [/\.\s*areNotificationsEnabled\s*\(/g])
       .forEach((re) => {
         let m;
         while ((m = re.exec(text))) {
@@ -936,6 +1104,10 @@ module.exports = function (t) {
     const verdict = (body) => tooNew(sample(body)).length;
     eq([verdict('views.setColorStateList(1, "m", null);'), verdict('if (Build.VERSION.SDK_INT >= 31) { views.setColorStateList(1, "m", null); }'), verdict('views.setBoolean(1, "setClipToOutline", true);'), verdict('map.getOrDefault("a", 1);'), verdict('views.setInt(1, "setColorFilter", 2);')],
       [1, 0, 1, 1, 0], '(the API reader can fail: a version test in ANOTHER method does not cover a call, one in the same method does — and a "{" inside a string does not confuse it)');
+    eq([verdict('Object c = new NotificationChannel("id", "name", 2);'), verdict('if (Build.VERSION.SDK_INT >= 26) { Object c = new NotificationChannel("id", "name", 2); }'), verdict('b.setChronometerCountDown(true); b.setTimeoutAfter(5L);'),
+      verdict('if (Build.VERSION.SDK_INT >= 24) { b.setChronometerCountDown(true); }'), tooNew('import androidx.core.app.NotificationCompat;\n' + sample('b.setChronometerCountDown(true); b.setTimeoutAfter(5L);')).length,
+      tooNew('import androidx.core.app.NotificationCompat;\n' + sample('Object c = new NotificationChannel("id", "name", 2);')).length, verdict('if (manager.areNotificationsEnabled()) { post(); }')],
+      [1, 0, 2, 0, 0, 1, 1], '(…the same for a notification: a channel always wants its API 26 test; a countdown chronometer, a timeout and areNotificationsEnabled want theirs on the platform\'s classes, not through androidx\'s compat ones)');
   }
   eq(javaFiles.reduce((out, f) => out.concat(tooNew(read(f)).map((what) => short(f) + ': ' + what)), []), [],
     'nothing under src/main/java needs more than API 22 unguarded: no java.time / streams / Optional / java.util.function, no Map.getOrDefault, List.sort or Iterable.forEach, no getSystemService(Class), and API 23+ framework calls only after a Build.VERSION.SDK_INT test');
@@ -1041,8 +1213,9 @@ module.exports = function (t) {
   try { debugManifest = parseXml(read(DEBUG + '/AndroidManifest.xml')); } catch (e) { debugManifest = null; }
   const debugElements = debugManifest ? debugManifest.elements : [];
   ok(!!debugManifest && debugManifest.root.name === 'manifest', 'app/src/debug/AndroidManifest.xml parses (the merger adds it to DEBUG builds only)');
-  eq(debugElements.filter((e) => ['activity', 'activity-alias', 'service', 'receiver', 'provider'].indexOf(e.name) !== -1).map((e) => e.name + ' ' + fqcn(e.attrs['android:name']) + ' exported=' + e.attrs['android:exported']),
-    ['activity ' + appId + '.WidgetPreviewActivity exported=true'], 'it declares ' + appId + '/.WidgetPreviewActivity — exported, so CI\'s `adb shell am start -n` may open it — and no other component');
+  const debugComponents = debugElements.filter((e) => ['activity', 'activity-alias', 'service', 'receiver', 'provider'].indexOf(e.name) !== -1).map((e) => e.name + ' ' + fqcn(e.attrs['android:name']) + ' exported=' + e.attrs['android:exported']);
+  eq(debugComponents.filter((c) => c.indexOf(' ' + appId + '.' + HOOK_CLASS + ' ') === -1), ['activity ' + appId + '.WidgetPreviewActivity exported=true'],
+    'it declares ' + appId + '/.WidgetPreviewActivity — exported, so CI\'s `adb shell am start -n` may open it — and no other component, but for the countdown\'s debug hook (the last section holds that one)');
   eq(debugElements.filter((e) => e.name === 'uses-permission' || e.name === 'data' || (e.name === 'category' && /LAUNCHER/.test(e.attrs['android:name'] || ''))).map((e) => e.name), [], '…no permission, no URL scheme, no second launcher icon');
   // The DEBUG build is also the one a person sideloads onto a signed-in phone. Exported with no permission, any
   // app there could start the preview with words of its choosing, under the app's name. DUMP is held by the adb
@@ -1069,4 +1242,212 @@ module.exports = function (t) {
   const debugRes = walk(DEBUG + '/res');
   const inDebugRes = (type, name) => debugRes.some((f) => { const parts = f.slice((DEBUG + '/res/').length).split('/'); return (parts[0].split('-')[0] === type && parts[1].split('.')[0] === name) || (/\.xml$/.test(f) && new RegExp('@\\+id/' + name + '["\']|\\bname="' + name + '"').test(read(f))); });
   eq(rRefs(previewCode).filter((r) => javaNames(r[0]).indexOf(r[1]) === -1 && !inDebugRes(r[0], r[1])).map((r) => 'R.' + r[0] + '.' + r[1]), [], 'every R.<type>.<name> it names is a resource of src/main/res or src/debug/res');
+
+  // ── 15. The countdown notification ───────────────────────────────────────
+  // The iPhone app shows a Live Activity from 90 minutes before a held class until it starts. Android has
+  // none: the stand-in is ONE silent, ongoing notification with the system's countdown chronometer, for the
+  // same 90 minutes. It is native and local, like the widget, and REUSES the widget's snapshot, its store and
+  // its tap: a pure planner, a small notifier, a receiver — no foreground service, no exact alarm, no new
+  // permission, no new dependency, and no plugin called PsycleLiveActivity (the iPhone path must not change).
+  // What the classes are called is the code's business: this suite finds them by the word "countdown" in a
+  // file's path under the app's package, and the debug hook by the name CI's script sends to. These sections
+  // were written against the DESIGN, before the Java: a line that fails here names what is still missing.
+  t.section('Android countdown: a pure planner, with JVM tests of its own that CI proves ran');
+  const countdownFiles = javaFiles.filter((f) => /countdown/i.test(f.slice(PKG_DIR.length)));
+  const bodyOf = (f) => codeOf(f).replace(/^\s*(?:package|import)\s[^;]*;/gm, '');
+  const namesAndroid = (f) => importsAndroid(f) || /^import\s+(?:static\s+)?com\.getcapacitor\./m.test(read(f)) || /(^|[^\w.])androidx?\s*\.\s*[a-z]\w*\s*\.\s*\w/.test(bodyOf(f));
+  const countdownPure = countdownFiles.filter((f) => !namesAndroid(f));
+  const countdownNative = countdownFiles.filter(namesAndroid);
+  const classNames = (files) => files.map((f) => path.basename(f, '.java'));
+  const namesAny = (code, classes) => classes.some((n) => new RegExp('(^|[^\\w.])' + n + '\\b').test(code));
+  ok(countdownPure.length >= 1 && countdownNative.length >= 1, 'under the app\'s package, the files that say "countdown" hold at least one PURE class and one native one (' + (countdownFiles.map(short).join(', ') || 'none yet') + ')');
+  const planners = countdownPure.filter((f) => /\bPsyncSnapshot\b/.test(codeOf(f)));
+  const plannerCode = planners.map(codeOf).join('\n');
+  ok(planners.length >= 1, 'a countdown class that names NOTHING of android.*, androidx.* or Capacitor reads the parsed PsyncSnapshot: what to show, until when, and when to look again are decided on a plain JVM');
+  // An import of the app's own resolves to a file (an inner class by its outer one); a wildcard does not, and is refused.
+  const ownFile = (imp) => { const parts = imp.split('.'); for (let n = parts.length; n > appId.split('.').length; n--) { const f = JAVA_ROOT + '/' + parts.slice(0, n).join('/') + '.java'; if (has(f)) return f; } return ''; };
+  const importsOf = (f) => (read(f).match(/^import\s+(?:static\s+)?[\w.]+(?:\.\*)?\s*;/gm) || []).map((l) => l.replace(/^import\s+(?:static\s+)?/, '').replace(/\s*;$/, ''));
+  const impure = (imp) => !/^java\./.test(imp) && !/^org\.json\./.test(imp) && !(imp.indexOf(appId + '.') === 0 && !!ownFile(imp) && !namesAndroid(ownFile(imp)));
+  eq([impure('java.util.TimeZone'), impure('org.json.JSONObject'), impure(appId + '.widget.PsyncSnapshot'), impure(appId + '.widget.PsyncSnapshot.Entry'), impure(appId + '.widget.PsyncWidgetStore'), impure(appId + '.widget.*'), impure('android.content.Context'), impure('javax.inject.Inject')],
+    [false, false, false, false, true, true, true, true], '(the import reader: java.*, org.json and the app\'s own PURE classes pass — an inner class by its outer one; the store, a wildcard, android.* and javax.* do not)');
+  eq(planners.reduce((out, f) => out.concat(importsOf(f).filter(impure).map((imp) => short(f) + ': ' + imp)), []), [], '…its every import is java.*, org.json or a class of the app that is pure too (PsyncSnapshot)');
+  const paramLists = [];
+  plannerCode.replace(/\b[A-Za-z_]\w*\s*\(([^()]*)\)\s*(?:throws\s+[\w.,\s]+?)?\{/g, (all, params) => { paramLists.push(params); return all; });
+  ok(paramLists.some((p) => /\bPsyncSnapshot\s+\w+/.test(p) && /\blong\s+\w+/.test(p) && /\bTimeZone\s+\w+/.test(p) && /\bboolean\s+\w+/.test(p)),
+    'the plan is a FUNCTION of the parsed snapshot, now (a long), the device\'s zone and "enabled" (a boolean)');
+  ok(planners.length >= 1 && !/\bSystem\s*\.\s*(?:currentTimeMillis|nanoTime)\s*\(|\bnew\s+(?:Date|GregorianCalendar)\s*\(\s*\)|\bCalendar\s*\.\s*getInstance\s*\(\s*\)/.test(plannerCode),
+    '…it reads no clock of its own: a rule that asks the time itself cannot be tested one minute before a class');
+  ok(/\b90[Ll]?\b|\b5_?400(?:_?000)?[Ll]?\b/.test(plannerCode), '…the 90-minute lead is written in it (PsycleLiveActivityController.leadWindow on the iPhone: 90 * 60)');
+  ok(/\.\s*(?:upcoming|startMillis)\s*\(/.test(plannerCode), '…and "has not started", device-local, is PsyncSnapshot\'s own rule (upcoming / startMillis) — the owner\'s closed decision covers the countdown as it does the widget, and a second rule would drift from the first');
+  const hasTests = (f) => /@Test\b/.test(codeOf(f)) && /^import\s+org\.junit\.Test\s*;/m.test(read(f));
+  const countdownTests = testFiles.filter((f) => /Countdown\w*Test\.java$/.test(f));
+  ok(countdownTests.length >= 1 && countdownTests.every(hasTests), 'app/src/test/java holds a JUnit 4 class named …Countdown…Test (' + (countdownTests.map(short).join(', ') || 'none yet') + ')');
+  ok(countdownTests.some((f) => namesAny(codeOf(f), classNames(planners))), '…that names the pure planner (that it imports nothing of android.*, and names no class that does, is held for EVERY test file above)');
+  eq(countdownTests.filter((f) => !ranRe.test('<testsuite name="' + pkgOf(read(f)) + '.' + path.basename(f, '.java') + '" tests="3" skipped="0"')).map(short), [],
+    '…and its class name is one CI\'s "The countdown\'s JVM tests ran" step looks for: the job stops when no such class ran');
+
+  t.section('Android countdown: ONE silent, ongoing notification on its OWN channel — private, with a public version — from a notifier that never asks');
+  const nativeCode = countdownNative.map(codeOf).join('\n');
+  // Strings kept, but a bracket, a comma or a semicolon inside one must not end a call's argument list.
+  const flat = (text) => text.replace(/"(?:[^"\\\n]|\\.)*"/g, (s) => s.replace(/[()[\]{},;]/g, ' '));
+  const nativeText = flat(countdownNative.map(textOf).join('\n'));
+  // A string argument: the literal itself, or the String constant of the app that it names.
+  const literalOf = (arg) => {
+    const a = (arg || '').trim();
+    if (/^"[^"]*"$/.test(a)) return a.slice(1, -1);
+    const name = (a.match(/[A-Za-z_]\w*$/) || [])[0];
+    const m = name ? new RegExp('\\bString\\s+' + name + '\\s*=\\s*"([^"]*)"').exec(flat(allText)) : null;
+    return m ? m[1] : '';
+  };
+  const channelsMade = (text) => {
+    const found = [], re = /\bnew\s+NotificationChannel(Compat\s*\.\s*Builder)?\s*\(/g;
+    let m;
+    while ((m = re.exec(text))) { const a = callArgs(text, re.lastIndex - 1); found.push({ id: literalOf(a[0]), importance: (m[1] ? a[1] : a[2]) || '' }); }
+    return found;
+  };
+  eq([channelsMade(flat('c = new NotificationChannel("class-countdown", "Next class (countdown)", NotificationManager.IMPORTANCE_LOW);')), channelsMade('b = new NotificationChannelCompat.Builder("x", NotificationManagerCompat.IMPORTANCE_HIGH);')],
+    [[{ id: 'class-countdown', importance: 'NotificationManager.IMPORTANCE_LOW' }], [{ id: 'x', importance: 'NotificationManagerCompat.IMPORTANCE_HIGH' }]], '(the channel reader finds the id and the importance, on the platform\'s class and on androidx\'s — a bracket in the channel\'s name does not confuse it)');
+  const channels = channelsMade(nativeText);
+  eq(channels.map((c) => c.id), ['class-countdown'], 'the countdown\'s code creates ONE channel, natively, and its id is "class-countdown" — its OWN, so the member can switch the countdown off in system settings without touching the reminders');
+  ok(channels.length === 1 && holdsFlag(/\bIMPORTANCE_LOW\b/, channels[0].importance, nativeCode, everyCode), '…created with IMPORTANCE_LOW: silent, no peek');
+  ok(/\.\s*createNotificationChannel\s*\(/.test(nativeCode) && !/\bIMPORTANCE_(?:DEFAULT|HIGH|MAX)\b/.test(nativeCode) && !/\.\s*deleteNotificationChannels?\s*\(/.test(nativeCode),
+    '…registered with createNotificationChannel; no louder importance is named anywhere in the countdown\'s code, and no channel is ever deleted');
+  ok(!/"(?:class-reminders|new-dates)"/.test(nativeText), '…and it never names the reminders\' channels (class-reminders, new-dates): the T-90 reminder stays exactly as it is');
+  const calls = (name) => new RegExp('\\.\\s*' + name + '\\s*\\(').test(nativeCode);
+  eq(['setOngoing', 'setOnlyAlertOnce', 'setUsesChronometer', 'setChronometerCountDown', 'setShowWhen'].filter((n) => !new RegExp('\\.\\s*' + n + '\\s*\\(\\s*true\\s*\\)').test(nativeCode)), [],
+    'the notification is setOngoing(true), setOnlyAlertOnce(true), setUsesChronometer(true) + setChronometerCountDown(true) and setShowWhen(true)');
+  eq(['setWhen', 'setTimeoutAfter', 'setContentIntent', 'setColor', 'setContentTitle', 'setContentText'].filter((n) => !calls(n)), [],
+    '…with a when (the class\'s start), a timeout (the system takes it down at the start even if nothing wakes the app), a tap, the class\'s colour, a title and a text');
+  ok(/\.\s*setCategory\s*\([^;]*\bCATEGORY_EVENT\b/.test(nativeCode), '…filed as CATEGORY_EVENT');
+  ok(!!icon && new RegExp('\\.\\s*setSmallIcon\\s*\\(\\s*R\\s*\\.\\s*drawable\\s*\\.\\s*' + icon + '\\s*\\)').test(nativeCode), '…under the small icon the reminders already wear (R.drawable.' + icon + ': the bridge\'s ANDROID_NOTIF_ICON)');
+  ok(/\.\s*setVisibility\s*\([^;]*\bVISIBILITY_PRIVATE\b/.test(nativeCode) && calls('setPublicVersion'), 'it is VISIBILITY_PRIVATE, with a public version: a lock screen must not name the place to a stranger');
+  {
+    // When the public version is built by a method of its own, that method reads nothing a stranger must not see.
+    const m = /\.\s*setPublicVersion\s*\(/.exec(nativeCode);
+    const arg = m ? (callArgs(nativeCode, m.index + m[0].length - 1)[0] || '') : '';
+    const builder = (/^([A-Za-z_]\w*)\s*\(/.exec(arg) || [])[1] || '';
+    const body = builder ? methodBody(nativeCode, builder) : '';
+    const TELLS = /\.\s*(?:place|whoWhere|seatLabel|seatBadge|title|shortTitle)\s*\(|\.\s*(?:typeName|instrName|studioName|locName|slots)\b/;
+    ok(TELLS.test('e.place()') && TELLS.test('entry.locName') && !TELLS.test('entry.timeLabel()') && (!builder || (body !== '' && !TELLS.test(body))),
+      '…and that version says "Next class" and the time only: where a method of its own builds it, the method reads no class name, place, instructor or seat of the entry');
+    ok(/"Next class"/.test(nativeText) || (Object.keys(strings).some((k) => strings[k] === 'Next class') && /\bR\s*\.\s*string\s*\.\s*\w+/.test(nativeCode)), '…"Next class" being a string of the app\'s (strings.xml) or of the notifier');
+  }
+  const notifyIds = [];
+  { const re = /\.\s*notify\s*\(/g; let m; while ((m = re.exec(nativeCode))) { const a = callArgs(nativeCode, re.lastIndex - 1); notifyIds.push(a.length >= 2 ? a[a.length - 2] : ''); } }
+  const idName = notifyIds[0] || '';
+  ok(notifyIds.length >= 1 && notifyIds.every((id) => id === idName) && /^(?:[A-Za-z_]\w*\s*\.\s*)?[A-Z][A-Z0-9_]*$/.test(idName) &&
+    new RegExp('\\bstatic\\s+final\\s+int\\s+' + idName.split('.').pop().trim() + '\\s*=\\s*-?(?:0x)?[0-9A-Fa-f_]+\\s*;').test(countdownFiles.map(codeOf).join('\n')),
+    'it posts under ONE id, a constant of its own (' + (idName || 'none yet') + '): a new plan REPLACES the notification, it never stacks a second');
+  ok(!!idName && new RegExp('\\.\\s*cancel\\s*\\((?:[^()]*,\\s*)?' + esc(idName) + '\\s*\\)').test(nativeCode), '…and takes it down by the same id: a plan that shows nothing cancels (sign-out empties the snapshot, so the next plan cancels at once)');
+  eq([/\.\s*addAction\s*\(/, /\.\s*setFullScreenIntent\s*\(/, /\.\s*setSound\s*\(\s*(?!null\b)/, /\.\s*setVibrate\s*\(\s*(?!null\b)/, /\.\s*setDefaults\s*\(\s*(?!0\s*\))/, /\.\s*enable(?:Vibration|Lights)\s*\(\s*true/, /\.\s*setTicker\s*\(/]
+    .filter((re) => re.test(nativeCode)).map(String), [], 'no action button, and nothing that sounds, buzzes, lights up, scrolls a ticker or takes the screen');
+  ok(!/\brequestPermissions?\s*\(|\bshouldShowRequestPermissionRationale\s*\(|\brequestPermissionForAlias(?:es)?\s*\(|\brequestAllPermissions\s*\(|\bregisterForActivityResult\s*\(/.test(allCode),
+    'NOTHING in the app\'s Java asks for a permission: the page\'s own in-context ask (through the notifications plugin) stays the only one');
+  ok(/\.\s*areNotificationsEnabled\s*\(|\bcheckSelfPermission\s*\(/.test(nativeCode), '…the notifier LOOKS first (areNotificationsEnabled / checkSelfPermission) and, refused, does nothing — silently');
+  ok(calls('setContentIntent') && reaches(countdownNative, tapHome), 'a tap on it is the widget\'s tap — the ONE getActivity PendingIntent of the app, reached by calling its class: explicit, immutable, the id untrusted; shared, not copied');
+
+  t.section('Android countdown: a receiver that is NOT exported, an inexact alarm, no service, no new permission — and what runs the plan');
+  const countdownReceivers = manifest ? manifest.elements.filter((e) => e.name === 'receiver' && !isWidgetReceiver(e) && isCountdownReceiver(e)) : [];
+  const receiverFile = (e) => JAVA_ROOT + '/' + fqcn(e.attrs['android:name']).split('.').join('/') + '.java';
+  ok(countdownReceivers.length >= 1, 'the main manifest declares a receiver for the countdown (' + (countdownReceivers.map((e) => e.attrs['android:name']).join(', ') || 'none yet') + '): its own alarm, and the system\'s "the phone has started"');
+  eq(countdownReceivers.filter((e) => e.attrs['android:exported'] !== 'false').map((e) => e.attrs['android:name']), [], '…NOT exported (android:exported="false", written out): the system reaches it all the same, the app\'s own alarm is sent as the app, and no other app has any business starting it');
+  eq(countdownReceivers.filter((e) => !(has(receiverFile(e)) && /\bextends\s+BroadcastReceiver\b/.test(codeOf(receiverFile(e))) && /^import\s+android\.content\.BroadcastReceiver\s*;/m.test(read(receiverFile(e))))).map((e) => e.attrs['android:name']), [],
+    '…its class exists under src/main/java and extends android.content.BroadcastReceiver');
+  eq(countdownReceivers.filter((e) => e.attrs['android:directBootAware'] === 'true' || e.attrs['android:enabled'] === 'false' || e.attrs['android:permission'] !== undefined || e.attrs['android:process'] !== undefined).map((e) => e.attrs['android:name']), [],
+    '…enabled, in the app\'s own process, and not direct-boot aware (before the first unlock the store it reads is not there to read)');
+  // Every action written in a filter is one ANY sender may try; on an unexported receiver only the system gets
+  // through. So: the system's own, protected broadcasts — and the app's alarm and "plan now" are explicit intents.
+  const SYSTEM_ONLY = ['BOOT_COMPLETED', 'MY_PACKAGE_REPLACED', 'TIME_SET', 'TIMEZONE_CHANGED'].map((a) => 'android.intent.action.' + a);
+  const heard = countdownReceivers.reduce((out, e) => out.concat(within(manifest, e).filter((x) => x.name === 'action').map((x) => x.attrs['android:name'])), []);
+  eq(heard.filter((a) => SYSTEM_ONLY.indexOf(a) === -1), [], '…its filter, if it has one, holds only broadcasts the SYSTEM alone may send (BOOT_COMPLETED, MY_PACKAGE_REPLACED, TIME_SET, TIMEZONE_CHANGED): the app\'s own alarm and "plan now" are EXPLICIT intents and need none');
+  eq(heard.slice().sort(), SYSTEM_ONLY.slice().sort(), '…and it hears all FOUR, once each: a restart clears every alarm and notification, an update of the app removes its notifications, and a changed zone or clock moves the instant a device-local start MEANS — with no widget placed (no half-hourly update) nothing else would plan again before the app is next opened');
+  // Who plans takes NOTHING from an intent; who hears a SWIPE is a class of its own. From Android 14 a member can
+  // swipe an ongoing notification away: without a delete intent every plan run (each foreground, the widget's
+  // half-hourly update with the app closed) would put the same countdown back for up to ninety minutes.
+  const filtered = countdownReceivers.filter((e) => within(manifest, e).some((x) => x.name === 'intent-filter'));
+  const unfiltered = countdownReceivers.filter((e) => filtered.indexOf(e) === -1);
+  eq([countdownReceivers.length, filtered.length, unfiltered.length], [2, 1, 1], 'the countdown has TWO receivers: the one that plans (the filter above) and one with NO intent filter at all, for the notification\'s delete intent');
+  const READS_INTENT = /\.\s*(?:getAction|get\w*Extra|getExtras|getData(?:String)?|getDataString|getClipData)\s*\(/;
+  const plannerReceiver = filtered[0] ? codeOf(receiverFile(filtered[0])) : 'x.getAction()', swipeReceiver = unfiltered[0] ? codeOf(receiverFile(unfiltered[0])) : '';
+  ok(READS_INTENT.test('intent.getStringExtra(K)') && READS_INTENT.test('i.getAction()') && !READS_INTENT.test('context.getApplicationContext()') && !READS_INTENT.test(plannerReceiver),
+    '…the one that PLANS reads nothing from the intent that arrives — no action, no extra: whatever it is, it plans');
+  ok(calls('setDeleteIntent') && /\bgetBroadcast\s*\(/.test(swipeReceiver) && unfiltered.length === 1 && new RegExp('\\b' + path.basename(receiverFile(unfiltered[0]), '.java') + '\\s*\\.\\s*class\\b').test(swipeReceiver),
+    'the notification carries a DELETE intent (setDeleteIntent) — an explicit broadcast, by class, to that second receiver: a swipe is the member\'s answer for that class');
+  ok((swipeReceiver.match(/\.\s*get\w*Extra\s*\(/g) || []).length === 1 && /\.\s*getStringExtra\s*\(/.test(swipeReceiver) && !/\.\s*getAction\s*\(/.test(swipeReceiver) && /\bisKey\s*\(/.test(swipeReceiver) && /\bstatic\s+boolean\s+isKey\s*\(\s*String\s+\w+\s*\)/.test(plannerCode),
+    '…which reads ONE string from it, and stores it only when the PURE planner says it has the shape of a key (isKey: the JVM tests hold it)');
+  ok(/\bString\s+\w+\s*\)\s*\{/.test(plannerCode) && paramLists.some((p) => /\bPsyncSnapshot\s+\w+/.test(p) && /\bboolean\s+\w+/.test(p) && /\bString\s+\w+/.test(p)), '…and the plan is a function of that key too: swiped away, it shows nothing for that class at that start and keeps its wake (PsyncCountdownPlanTest)');
+  {
+    // The marker is NATIVE ONLY: filed in the widget\'s store under a name the twin\'s allow-list does not hold, so the page can neither read nor write it.
+    const storeCode = textOf(PKG_DIR + '/widget/PsyncWidgetStore.java'), snapshotText = textOf(PKG_DIR + '/widget/PsyncSnapshot.java');
+    const markerKey = (/\bString\s+KEY_COUNTDOWN_DISMISSED\s*=\s*"([a-z_]+)"\s*;/.exec(storeCode) || [])[1] || '';
+    ok(!!markerKey && snapshotText.indexOf('"' + markerKey + '"') === -1 && bridgeSrc.indexOf(markerKey) === -1 && allText.split('"' + markerKey + '"').length === 2,
+      'what it stores is filed under a key of the STORE\'s own ("' + (markerKey || 'none yet') + '"), named once — not in PsyncSnapshot, whose isStoreKey is what the plugin twin accepts, and not in the bridge: the page cannot reach it');
+  }
+  const manifestWords = manifestSrc.replace(/<!--[\s\S]*?-->/g, '') + '\n' + read(DEBUG + '/AndroidManifest.xml').replace(/<!--[\s\S]*?-->/g, '');
+  eq(['SCHEDULE_EXACT_ALARM', 'USE_EXACT_ALARM', 'FOREGROUND_SERVICE', 'foregroundServiceType', 'POST_NOTIFICATIONS', 'RECEIVE_BOOT_COMPLETED', 'WAKE_LOCK', 'SYSTEM_ALERT_WINDOW', 'USE_FULL_SCREEN_INTENT'].filter((w) => manifestWords.indexOf(w) !== -1), [],
+    'neither manifest of the app (main, debug), comments aside, names an exact-alarm or a foreground-service permission — nor POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED or WAKE_LOCK, which the notifications plugin already declares and the merger brings in: the countdown asks for NOTHING new');
+  // That premise, held: the plugin's own manifest was READ at the locked version. With ios-app/node_modules
+  // installed the file itself is read again; CI's test job runs before that install, and says so.
+  const NOTIF_PLUGIN = 'node_modules/@capacitor/local-notifications';
+  eq((lock.packages[NOTIF_PLUGIN] || {}).version, '6.1.3', '@capacitor/local-notifications is locked at 6.1.3 — the version whose AndroidManifest.xml was read to declare POST_NOTIFICATIONS and RECEIVE_BOOT_COMPLETED (after a bump: read it again, then move this pin)');
+  const pluginManifest = read('ios-app/' + NOTIF_PLUGIN + '/android/src/main/AndroidManifest.xml');
+  if (pluginManifest) {
+    let doc = null;
+    try { doc = parseXml(pluginManifest); } catch (e) { doc = null; }
+    const declared = doc ? doc.elements.filter((e) => e.name === 'uses-permission').map((e) => e.attrs['android:name']) : [];
+    eq(['POST_NOTIFICATIONS', 'RECEIVE_BOOT_COMPLETED'].filter((p) => declared.indexOf('android.permission.' + p) === -1), [], '…and the installed plugin\'s manifest declares both (ios-app/node_modules is here, so it was read)');
+  } else {
+    console.log('  · ios-app/node_modules is not installed: the notifications plugin\'s own AndroidManifest.xml is not re-read here (the lockfile pin above stands in for it)');
+  }
+  ok(!/\bstartForeground(?:Service)?\s*\(|\bgetForegroundService\s*\(|\bstartService\s*\(|\bbindService\s*\(|\bextends\s+(?:\w+\.)*(?:Service|IntentService|JobService|JobIntentService|Worker|ListenableWorker)\b|\bJobScheduler\b|\bWorkManager\b/.test(allCode),
+    'no service of any kind in the app\'s Java — no startForeground, no JobScheduler, no WorkManager: a notification, an alarm and a receiver');
+  ok(/\bAlarmManager\b/.test(nativeCode) && WINDOWED.test(nativeCode) && (nativeCode.match(/\.\s*setWindow\s*\(/g) || []).length === 1 && /\.\s*cancel\s*\(/.test(nativeCode),
+    'the next look is ONE alarm armed with AlarmManager.setWindow(RTC, …, ten minutes, …) — inexact, and late by ten minutes at most on a phone that is awake (the lines on the bare set(…), the window and exact alarms, above, read every file of the app) — and cancelled when the plan names no instant');
+  const inCountdown = built.filter((p) => countdownFiles.indexOf(p.f) !== -1);
+  ok(inCountdown.some((p) => p.how === 'getBroadcast'), '…through a PendingIntent of the countdown\'s own (getBroadcast)');
+  eq(inCountdown.filter((p) => !holdsFlag(IMMUTABLE, p.flags, codeOf(p.f), everyCode)).map((p) => short(p.f) + ': ' + p.how + '(…, ' + p.flags + ')'), [], '…and EVERY PendingIntent the countdown\'s code builds is FLAG_IMMUTABLE');
+  ok(countdownReceivers.length >= 1 && new RegExp('\\b(?:' + (countdownReceivers.map((e) => fqcn(e.attrs['android:name']).split('.').pop()).join('|') || '_none_') + ')\\s*\\.\\s*class\\b').test(nativeCode),
+    '…that names the receiver by CLASS: explicit, like the widget\'s "repaint now" — never an Intent made of an action alone');
+  // WHEN the plan runs: after every snapshot write (the bridge ends each pass with WidgetCenter.reloadAllTimelines),
+  // at every cold start, on the widget provider's own update, on the countdown's alarm, and after a restart.
+  const callers = javaFiles.filter((f) => countdownFiles.indexOf(f) === -1 && namesAny(bodyOf(f), classNames(countdownFiles)));
+  ok(callers.indexOf(ACTIVITY) !== -1, 'MainActivity runs the plan when it starts (it names a class of the countdown)');
+  ok(callers.some((f) => /WidgetCenterPlugin\.java$/.test(f) || f === providerFile), '…and so does WidgetCenter.reloadAllTimelines — directly, or through the widget\'s provider: the bridge calls it after EVERY snapshot write, so the countdown follows a booking, a cancel and a sign-out with no bridge call of its own');
+  eq(pluginFiles('PsycleLiveActivity'), [], '…with NO plugin called PsycleLiveActivity on Android (held above too): the bridge\'s iPhone path finds none, and does not change');
+  // The off switch: the bridge, on Android only, writes 'countdown_enabled' ('1' | '0') through
+  // AppGroupPreferences on each snapshot pass — the member's class-reminders preference. The twin's allow-list
+  // gains exactly that key (what the bridge sends is 20-android-widget.js's business; that the list holds that
+  // key and no fifth is the JVM tests'). Here: both sides spell it the same.
+  ok(/"countdown_enabled"/.test(allText), 'the app\'s Java names the store key "countdown_enabled"');
+  ok(bridgeSrc.indexOf("'countdown_enabled'") !== -1, '…and so does the bridge (ios-app/www/native-bridge.js), letter for letter: a key the twin does not know is REJECTED, and the countdown would never learn it was switched off');
+
+  t.section('Android countdown: the debug hook that posts a REAL one on CI\'s emulator — DEBUG builds only, and only for adb');
+  // A RECEIVER, not a second preview activity: `am start -S` force-stops the app, and a force-stop removes the
+  // app's notifications by itself — "it went away" would prove nothing. A broadcast leaves the process as it is.
+  const HOOK_FILE = DEBUG + '/java/' + appId.split('.').join('/') + '/' + HOOK_CLASS + '.java';
+  eq(sourceSets.filter((f) => /(^|\/)Countdown(?:Proof|Debug)\w*\.java$/.test(f)), [HOOK_FILE], HOOK_CLASS + '.java exists under app/src/debug/, and nowhere else (and there is ONE hook: no second one under another name)');
+  eq(sourceSets.filter((f) => f.indexOf(DEBUG + '/') !== 0 && /Countdown(?:Proof|Debug)/.test(uncommented(f))).map(short), [], 'nothing outside app/src/debug/ names it (a comment may) — not the main manifest, not a class a release build compiles');
+  ok(!/Countdown(?:Proof|Debug)/.test(appGradle), '…and app/build.gradle does nothing to carry it elsewhere');
+  eq(debugComponents.filter((c) => c.indexOf(' ' + appId + '.' + HOOK_CLASS + ' ') !== -1), ['receiver ' + appId + '.' + HOOK_CLASS + ' exported=true'],
+    'the DEBUG manifest declares it as a receiver — ' + HOOK + ', the component CI\'s script sends to — exported, so that adb\'s `am broadcast -n` reaches it');
+  const hookElement = debugElements.filter((e) => e.name === 'receiver' && fqcn(e.attrs['android:name']) === appId + '.' + HOOK_CLASS)[0] || { attrs: {} };
+  eq(hookElement.attrs['android:permission'], 'android.permission.DUMP', '…and only adb may: android:permission="android.permission.DUMP" (named, not requested — the debug APK is also what is sideloaded onto a signed-in phone, and this receiver WRITES the widget\'s store)');
+  eq((debugManifest ? within(debugManifest, hookElement) : []).filter((e) => e.name === 'intent-filter' || e.name === 'action').map((e) => e.name), [], '…with NO intent filter: CI sends by NAME, and a filter would let an implicit broadcast find it');
+  const hookCode = has(HOOK_FILE) ? codeOf(HOOK_FILE) : '', hookText = has(HOOK_FILE) ? textOf(HOOK_FILE) : '';
+  ok(/\bextends\s+BroadcastReceiver\b/.test(hookCode) && /^import\s+android\.content\.BroadcastReceiver\s*;/m.test(read(HOOK_FILE)), 'it extends android.content.BroadcastReceiver');
+  eq(hookLines.map((x) => hookExtra(x.l)).filter((x) => x.flag !== '--es' || hookText.indexOf('"' + x.name + '"') === -1).map((x) => x.flag + ' ' + x.name), [],
+    'every extra CI\'s script sends is one it reads, by that NAME (minutes, started, clear) — a name it does not know is a test of the wrong state, labelled as the right one');
+  ok(/\bgetStringExtra\s*\(/.test(hookCode) && !/\bget(?:Int|Boolean|Long|Float|Double|Short|Byte|Char)Extra\s*\(/.test(hookCode) && !/\bgetExtras\s*\(/.test(hookCode),
+    '…with the getter of its TYPE: every extra is a STRING (--es: getStringExtra) and it has no typed getter — `--ei minutes 40` would read as null there, and the DEFAULT sample would be judged as the 40-minute one');
+  ok(!/\bgetAction\s*\(/.test(hookCode), '…and it never looks at the action: CI sends none');
+  // What it seeds is FIXED: a sender picks a number of minutes, never a word that would then stand in a
+  // notification under the app's name. Each of the four names is put ONCE, and its value is a literal.
+  const NAMES = '(?:typeName|instrName|studioName|locName)';
+  ok(!new RegExp('\\.\\s*put\\s*\\(\\s*"' + NAMES + '"\\s*,(?!\\s*")').test(hookText) && (hookText.match(new RegExp('\\.\\s*put\\s*\\(\\s*"' + NAMES + '"\\s*,\\s*"', 'g')) || []).length === 4,
+    '…every NAME it seeds is a literal of its own: the class, the instructor, the studio and the place are never the sender\'s');
+  ok(/\bPsyncWidgetStore\b|\bgetSharedPreferences\s*\(/.test(hookCode) && namesAny(bodyOf(HOOK_FILE), classNames(countdownFiles)) && !/\.\s*notify\s*\(/.test(hookCode) && !/\bnew\s+(?:\w+\.)*(?:Notification|NotificationCompat)\s*\.\s*Builder\b/.test(hookCode),
+    'it SEEDS the widget\'s store and runs the app\'s own plan: the notification CI reads is posted by the shipped notifier — the hook builds none, and posts none, itself');
+  ok(/\bLog\s*\.\s*e\s*\(\s*TAG\b/.test(hookCode) && /\bString\s+TAG\s*=\s*"PsyncCountdownProof"\s*;/.test(hookText) && verdictLines.indexOf("! grep -q 'PsyncCountdownProof' android-smoke/logcat-countdown.txt") !== -1,
+    '…and a hook that could NOT seed says so at ERROR under the tag PsyncCountdownProof, which CI\'s verdict looks for (what it did, when it worked, is at INFO — below what logcat-countdown.txt keeps — and is the broadcast\'s result: rename both or neither)');
+  eq(rRefs(hookCode).filter((r) => javaNames(r[0]).indexOf(r[1]) === -1 && !inDebugRes(r[0], r[1])).map((r) => 'R.' + r[0] + '.' + r[1]), [], 'every R.<type>.<name> it names is a resource of src/main/res or src/debug/res');
 };

@@ -16,7 +16,7 @@ send it a write (POST / PUT / DELETE). Everything is verified against a stubbed 
 3. **Script load order matters.** psycle-finder.html loads the 15 js/ modules as `defer` scripts in a fixed order, and later modules monkey-patch earlier ones (`apiFetch`, `submitBooking`, `eventCard`, `showBikePicker`); every `submitBooking` wrapper forwards all four arguments. The four cancel functions (`confirmUnbook`, `upcomingCancel`, `cancelBikeSlot`, `upcomingSeatCancel`) are each wrapped twice — js/features.js `patchCancelFunctions` (marks history cancelled only when NO seat is left) and, in the iOS and Android apps, ios-app/www/native-bridge.js (arms the calendar reconcile); neither sends a request. A wrapper forwards every argument and returns the original's result, but never rely on what `submitBooking` or a cancel returns: two wrappers return nothing (agents/learnings.md B6; who wraps what: agents/index/globals.md). tests/suites/shell.js guards the order (agents/repo-map.md).
 4. **Generated files are never hand-edited:** everything in ios-app/www/ EXCEPT native-bridge.js (hand-maintained, and it lives only there), and the `SHELL` list and `CACHE` stamp in both sw.js copies. After editing root js/, css/, fonts/, `*.html`, manifest.json, sw.js OR ios-app/www/native-bridge.js (its bytes are in the `CACHE` hash), run `cd ios-app && npm run build` and commit the result — `npm run drift` fails otherwise. In ios-app/android/ the two `capacitor.*.gradle` files and the launcher PNGs are generated too (its AGENTS.md, rule 3).
 5. **A native edit is proved by a compile before it ships.** Swift or the asset catalogue: the App-scheme simulator build (`xcodebuild … -scheme App -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`, as .github/workflows/ci.yml runs it; the runnable form, in a scratch copy: agents/playbooks.md P7 step 3) — every push to main is archived and uploaded to TestFlight (ios-app/CICD.md). Android (ios-app/android/: Java, the manifest, res/, Gradle): no JDK or Android SDK is assumed on a development machine, so CI is the compiler — push to an `android/**` branch, read the `android-build` job, and call the change "read, not built" until it is green (agents/playbooks.md P14; tests/suites/19-android-project.js holds only what can be READ). Neither compile says anything about a phone.
-6. **Never push to `main` unasked.** Every push there — a web-only one included — is archived to TestFlight, spends Xcode Cloud compute hours and publishes the web app. Work on a branch, keep `main` fast-forwardable, never force-push (agents/decisions.md section 7, ios-app/CICD.md).
+6. **Never push to `main` unasked.** Every push there — a web-only one included — is archived to TestFlight, spends Xcode Cloud compute hours and publishes the web app. Work on a branch, keep `main` fast-forwardable, never force-push (agents/decisions.md section 7, ios-app/CICD.md). A store release is the owner's too: never trigger the manual .github/workflows/android-release.yml (agents/playbooks.md P15).
 7. **Suites slice shipped source.** Many tests cut a function out of js/*.js by its opener line and run it against fakes, so moving, renaming or re-indenting it fails the suite ("anchor moved?"). A `// ── pure:<name>:start` … `:end` block stays free of DOM and app globals (agents/architecture/testing-and-ci.md).
 
 ## Quick Start
@@ -37,6 +37,7 @@ git grep -n "<name>"           # not grep -r: untracked folders at the root (a t
 | Path | What it is |
 |---|---|
 | psycle-finder.html · login.html · index.html | The app shell (CSP, first-paint `themeBoot`, SW-update script) · the sign-in page · a redirect |
+| privacy.html | The privacy policy of both apps and the web app, served with the web app. NOT part of the app shell: ios-app/build.js does not copy it and sw.js does not precache it, so an edit needs no rebuild (tests/suites/22-play-release.js) |
 | js/ | 15 modules, no bundler; the load order is fixed |
 | css/ | 9 stylesheets; tokens and themes in theme.css; crisp.css is linked LAST and is tokens only |
 | tests/ | unit.js + suites/ (Node, no dependencies), smoke.html, tools/ (fake-psycle.js, App Store capture) |
@@ -63,13 +64,13 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 | If your task or question is… | Read | ≈ tokens |
 |---|---|---|
 | a first visit: what is in agents/, and in what order | agents/README.md | 2,050 |
-| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md | 7,050 |
-| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 6,050 |
-| "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 4,000 |
-| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 10,950 |
-| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 12,350 |
+| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md | 8,600 |
+| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 8,400 |
+| "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 5,750 |
+| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 12,300 |
+| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 14,100 |
 | what a word means (seat / space / place, record / entry, held / unverified): grep it there, or read §4 (≈ 1,250); a field shape → §1; a state machine → §3; the invariants → §5 — never the whole file | agents/ontology.md | 8,700 |
-| where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 6,050 |
+| where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 6,950 |
 | after a push to `main`: the Xcode Cloud check is missing, cancelled or failed; a TestFlight build did not arrive (checklist: playbooks P10; lesson: learnings G5) | ios-app/CICD.md → "Notes / gotchas" | 2,850 |
 | a line number: function, pure block, event, storage key, global, API call, CSS section, DOM id, suite, Swift type | agents/index/README.md, then grep agents/index/ | 1,850 (the folder: 70,500 — grep it, never read it whole) |
 | rebuilding the index (`npm run agents:index`), or re-proving that the split lost nothing | agents/tools/build-index.mjs · agents/tools/check-split.mjs | run them, do not read them (25,500 · 2,200) |
@@ -97,9 +98,10 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 | the class card (Discover and My Bookings wear the same one) | class-card.md | 1,100 |
 | an overlay (checklist: playbooks P5), a toast, focus, a control that is not a `<button>` | accessibility.md | 850 |
 | sw.js or the update banner | pwa-shell.md | 450 |
-| native-bridge.js, Swift, widgets, the Live Activity, calendar sync, notifications (then playbooks P7 for the commands) | ios.md | 5,100 |
-| the Android app: how it differs (Back, channels, the status bar, backups off, what is absent), its home-screen widget (the plugin twins, the snapshot reader, RemoteViews), how it is built and proved (then playbooks P14) | android.md | 11,050 (the widget section alone: 3,950) |
-| installing the Android debug APK, adding the widget, a release build, the keystore, Play Console, the Android on-device checklist | ios-app/ANDROID.md (store copy: ios-app/PLAY_STORE_LISTING.md) | 9,600 (the checklist alone: 2,950) |
+| native-bridge.js, Swift, widgets, the Live Activity, calendar sync, notifications (then playbooks P7 for the commands) | ios.md | 5,200 |
+| the Android app: how it differs (Back, channels, the status bar, backups off, what is absent), its home-screen widget (the plugin twins, the snapshot reader, RemoteViews), its class countdown (the one silent notification in the Live Activity's place: the planner, the notifier, the alarm, the off switch), how it is built and proved (then playbooks P14) | android.md | 16,750 (the widget section alone: 4,150; the countdown's: 3,250) |
+| installing the Android debug APK, adding the widget, the class countdown as the owner sees it, a release build, the keystore, Play Console, the Android on-device checklist | ios-app/ANDROID.md (store copy: ios-app/PLAY_STORE_LISTING.md) | 12,100 (the checklist alone: 3,900) |
+| getting the Android app onto Google Play: the target-API and policy preconditions, the developer account, the upload key, the manual release workflow (.github/workflows/android-release.yml) and its four secrets, every Play Console form, the testing tracks, the privacy page, a one-page checklist (an agent's part of a release: playbooks P15) | ios-app/PLAY_STORE_DEPLOY.md | 9,150 |
 | a request to Psycle, or a stub for one | api.md | 650 |
 | a localStorage / sessionStorage key | storage-keys.md | 2,850 |
 | a failing check, a new suite, build.js, the plugin patcher, CI | testing-and-ci.md | 1,450 |

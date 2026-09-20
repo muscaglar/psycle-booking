@@ -105,12 +105,15 @@ The same wrapper also holds an Android project, `ios-app/android/` (the folder n
 same web layer and the same native bridge as the iPhone app, and everything it does except the widgets, the Live
 Activity and Siri — calendar sync, class and Monday 12:00 reminders, the share sheet, storage that survives a cleared
 web view, haptics, the in-app browser, and a hardware Back that closes what is on top and never the app — plus one
-home-screen widget of its own, "Next class", fed by the same snapshot as the iPhone's. Nothing was
+home-screen widget of its own, "Next class", fed by the same snapshot as the iPhone's, and, in the Live Activity's
+place, one silent notification that counts down to the next class from 90 minutes before it. Nothing was
 added to the iPhone build for it. It was written without an Android toolchain, so GitHub Actions is its compiler:
 every push to `main` or an `android/…` branch builds a debug APK (the `psync-debug-apk` artifact) that can be
 sideloaded with nothing installed. It has not yet been seen on a phone, and a Google Play release waits for the
 Capacitor upgrade. Installing it, building it, releasing it and the on-device checklist:
-[ios-app/ANDROID.md](ios-app/ANDROID.md); store copy: [ios-app/PLAY_STORE_LISTING.md](ios-app/PLAY_STORE_LISTING.md).
+[ios-app/ANDROID.md](ios-app/ANDROID.md); store copy: [ios-app/PLAY_STORE_LISTING.md](ios-app/PLAY_STORE_LISTING.md); the
+road to Google Play, step by step: [ios-app/PLAY_STORE_DEPLOY.md](ios-app/PLAY_STORE_DEPLOY.md). The privacy policy of
+both apps and the web app is [privacy.html](privacy.html).
 
 ## Licence
 

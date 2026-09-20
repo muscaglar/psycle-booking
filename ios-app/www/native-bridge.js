@@ -160,10 +160,13 @@
   // the iPhone's alone: on Android it is skipped, with nothing logged — as all
   // four are in an Android app built before the twins existed. IS_ANDROID guards
   // only what Android ALONE has: a status-bar colour, notification channels and
-  // a small icon, and a calendar store that keeps a deleted event's row for a
-  // while. Anything but 'android' — 'ios', or a bridge that cannot say — takes
-  // the path the iPhone app always took: not one call more, not one field more
-  // (tests/suites/18-android.js; the Android widget: 20-android-widget.js).
+  // a small icon, a calendar store that keeps a deleted event's row for a
+  // while, and the switch of its class countdown — the notification that stands
+  // in for the Live Activity (_androidCountdownSwitch). Anything but 'android' —
+  // 'ios', or a bridge that cannot say — takes the path the iPhone app always
+  // took: not one call more, not one field more (tests/suites/18-android.js;
+  // the Android widget: 20-android-widget.js; its countdown:
+  // 21-android-countdown.js).
   var PLATFORM = 'unknown';
   try {
     if (typeof Capacitor.getPlatform === 'function') PLATFORM = String(Capacitor.getPlatform());
@@ -1041,8 +1044,8 @@
   // `channelId` is ignored there.
   // EXACT ALARMS ARE NOT ASKED FOR. With no SCHEDULE_EXACT_ALARM permission
   // the plugin arms an inexact alarm (setAndAllowWhileIdle), so a reminder may
-  // arrive a few minutes late. That is fine for "new dates are open" and for
-  // "starts in 90 minutes", and it spares the member a special-access screen.
+  // arrive late: usually minutes; Android 12+ MAY hold one for up to an hour.
+  // The owner's call (decisions.md): it spares a special-access screen.
   // `allowWhileIdle` stays on every schedule: it is what lets the alarm fire
   // while the phone dozes.
   // None of this runs on iOS: no channel is created, and a scheduled
@@ -1540,7 +1543,10 @@
   // twin keeps them in ONE private SharedPreferences file that the home-screen
   // widget's provider reads; `group` still goes out and is ignored there
   // (Android has no app groups). Only set() is ever called from here, with
-  // these three keys, each value a JSON string of a few kilobytes at most.
+  // these three keys, each value a JSON string of a few kilobytes at most —
+  // and, from the Android app alone, a fourth: 'countdown_enabled', '1' | '0',
+  // once per pass, after the three and BEFORE the reload
+  // (_androidCountdownSwitch, beside the class reminders below).
   // An EMPTY widget is a WRITTEN one — 'null' for the next class, '[]' for the
   // other two (a deliberate sign-out, or the last class cancelled): nothing is
   // ever removed, so a reader must take 'null' and '[]' as "nothing booked".
@@ -1894,11 +1900,17 @@
       // All three keys are written: these are the class colours they carry.
       _snapColourSig = _classColourSig();
 
+      // The Android app's countdown follows the Class reminders switch, which
+      // only this page can read: handed over with the snapshot, before the
+      // reload that has the native side plan. Nothing at all on the iPhone.
+      _androidCountdownSwitch();
+
       // Hint the native side to reload widget timelines, if a reload plugin
       // is wired up. No-op otherwise. (See NATIVE_FEATURES.md.) ONE reload per
       // pass, after its three writes — which are not awaited: a plugin's set()
       // must have stored the value by the time it returns. (Android: the
-      // WidgetCenter twin asks the widget's provider to paint again.)
+      // WidgetCenter twin asks the widget's provider to paint again, and the
+      // class countdown to be planned again from what was just written.)
       try {
         var WC = Capacitor.Plugins.WidgetCenter || Capacitor.Plugins.WidgetReloader;
         if (WC && typeof WC.reloadAllTimelines === 'function') {
@@ -1938,14 +1950,58 @@
   var CLASS_REMINDER_MAP = 'psycle_class_reminder_map'; // {eventId: {id, startAt}}
 
   // How the reminder's body ends. "The live countdown" is the iPhone's Live
-  // Activity, which the tap starts; the Android app has none, so there the body
-  // is the instructor and the studio and promises nothing more.
+  // Activity, which only a foreground app may start: the tap is what starts it,
+  // so the body asks for the tap. The Android app's countdown is a notification
+  // of its own that arrives by itself, beside this one — there is nothing to
+  // ask for, so there the body is the instructor and the studio and no more.
   function _classReminderTail() {
     return IS_ANDROID ? '' : ' — open Psync for the live countdown.';
   }
 
   function _classRemindersEnabled() {
     return localStorage.getItem(CLASS_REMINDER_PREF) !== 'off';
+  }
+
+  // ── The Android countdown's switch ───────────────────────────────
+  // The Android app has no Live Activity. What stands in for it is ONE silent,
+  // ongoing notification that counts down to the next held class, from 90
+  // minutes before it until it starts. It is planned and posted NATIVELY, from
+  // the widget snapshot the twins already store (ios-app/android/): nothing
+  // here schedules it, and it is not the T-90 reminder above, which stays as
+  // it is. What the native side cannot read is the member's switch — the
+  // countdown follows Class reminders (CLASS_REMINDER_PREF), and that lives in
+  // localStorage. So each snapshot pass hands it over as one more key through
+  // the AppGroupPreferences twin, '1' | '0', after the pass's three keys and
+  // BEFORE its reload, which is when the native side plans. Whether Psync may
+  // post at all is the native side's to judge, silently: nothing here asks for
+  // permission. An app built before the key (its twin refuses a key it does not
+  // know) or before the twins (no such plugin) is served without a word —
+  // _appGroupSet swallows both. On the iPhone: not one call.
+  var COUNTDOWN_ENABLED_KEY = 'countdown_enabled';
+  var _countdownSwitchSends = 0; // how many times the switch went out (see _androidCountdownFlipped)
+  function _androidCountdownSwitch() {
+    if (!IS_ANDROID) return;
+    _countdownSwitchSends++;
+    _appGroupSet(COUNTDOWN_ENABLED_KEY, _classRemindersEnabled() ? '1' : '0');
+  }
+
+  // The member flipped Class reminders. A snapshot pass carries the switch
+  // (enable() runs one) — but a pass that ends early writes nothing (nothing
+  // held and the server not heard yet; an expired session, whose snapshot is
+  // kept and may be counting down), and disable() runs none. Then the switch
+  // goes out by itself, with a reload of its own, so the countdown appears or
+  // goes at once and not at the next booking change. `sendsBefore` =
+  // _countdownSwitchSends as it was before the flip: a pass that did carry the
+  // switch is not repeated.
+  function _androidCountdownFlipped(sendsBefore) {
+    if (!IS_ANDROID || _countdownSwitchSends !== sendsBefore) return;
+    _androidCountdownSwitch();
+    try {
+      var WC = Capacitor.Plugins.WidgetCenter || Capacitor.Plugins.WidgetReloader;
+      if (WC && typeof WC.reloadAllTimelines === 'function') {
+        WC.reloadAllTimelines().catch(function () {});
+      }
+    } catch (e) {}
   }
 
   function _loadReminderMap() {
@@ -2051,11 +2107,14 @@
         if (perm.display !== 'granted') return false;
       } catch (e) { return false; }
       localStorage.setItem(CLASS_REMINDER_PREF, 'on');
+      var sends = _countdownSwitchSends;
       updateWidgetSnapshot(); // re-runs scheduling with current classes
+      _androidCountdownFlipped(sends); // Android: the countdown comes back with them
       return true;
     },
     disable: async function () {
       localStorage.setItem(CLASS_REMINDER_PREF, 'off');
+      _androidCountdownFlipped(_countdownSwitchSends); // Android: the countdown goes with them, at once
       var map = _loadReminderMap();
       var ids = Object.keys(map).map(function (k) { return { id: map[k].id }; });
       if (ids.length && LocalNotifications) {
@@ -2133,8 +2192,9 @@
       var displaced = false;
       var yes = await window.confirmModal({
         title: 'Remind you 90 min before class?',
-        // (Android has no Live Activity: nothing about a countdown there.)
-        body: IS_ANDROID ? 'Psync can send a notification 90 minutes before each class you book.'
+        // (Android has no Live Activity to tap for: its countdown is a second,
+        // silent notification, and one yes here allows both.)
+        body: IS_ANDROID ? 'Psync can send a notification 90 minutes before each class you book — and a countdown until it starts.'
           : 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.',
         confirmText: 'Remind me',
         cancelText: 'Not now',

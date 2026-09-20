@@ -10,7 +10,9 @@
 //   PsycleLiveActivity: there is no Live Activity on Android.
 //
 //   A. the snapshot: three keys through AppGroupPreferences.set, each a JSON
-//      string a reader can parse, ONE reload per pass, nothing else called
+//      string a reader can parse, ONE reload per pass, nothing else called —
+//      but for the ONE key the Android app adds to a pass, the switch of its
+//      class countdown ('countdown_enabled': 21-android-countdown.js)
 //   B. what an entry is: the seven facts, colours OPTIONAL; never a waitlist
 //      place, never a class that has started, five at most; nothing personal
 //   C. a widget tap: the retained 'openURL' of a cold start, a warm tap, and a
@@ -53,6 +55,12 @@ module.exports = async function (t) {
   // 'set:<key>' / 'reload' / the call's own name — one word per widget call.
   const word = (c) => (c[0] === 'AppGroupPreferences.set' ? 'set:' + c[1].key : c[0] === 'WidgetCenter.reloadAllTimelines' ? 'reload' : c[0]);
   const ONE_PASS = ['set:widget_next_class', 'set:widget_upcoming', 'set:widget_week', 'reload'];
+  // The Android app's pass carries one call more: the switch of its class countdown (the notification that stands
+  // in for the Live Activity), after the three keys and BEFORE the reload the native side plans on. What it says,
+  // and when, is 21-android-countdown.js's; here it is only told apart from the calls the two apps share.
+  const SWITCH_KEY = 'countdown_enabled';
+  const ANDROID_PASS = ONE_PASS.slice(0, 3).concat(['set:' + SWITCH_KEY, 'reload']);
+  const isSwitch = (c) => c[0] === 'AppGroupPreferences.set' && c[1].key === SWITCH_KEY;
   const parsed = (box) => ({ next: JSON.parse(box.values.widget_next_class), upcoming: JSON.parse(box.values.widget_upcoming), week: JSON.parse(box.values.widget_week) });
   const quiet = (b) => [b.calls.warns, b.calls.errors];
 
@@ -77,15 +85,16 @@ module.exports = async function (t) {
     eq(b.calls.plugin.filter((c) => c[0] === 'PsycleDeepLink.addListener')[0][1], 'openURL', '…for the event the iPhone plugin sends: \'openURL\'');
 
     const words = widgetCalls(b).filter((c) => c[0] !== 'PsycleDeepLink.addListener').map(word);
-    ok(words.length >= 4 && words.length % 4 === 0, 'the snapshot was written (' + (words.length / 4) + ' passes in this launch: the bookings landing, then the 4 s launch pass)');
+    const per = ANDROID_PASS.length;
+    ok(words.length >= per && words.length % per === 0, 'the snapshot was written (' + (words.length / per) + ' passes in this launch: the bookings landing, then the 4 s launch pass)');
     const passes = [];
-    for (let i = 0; i < words.length; i += 4) passes.push(words.slice(i, i + 4));
-    eq(passes.filter((p) => JSON.stringify(p) !== JSON.stringify(ONE_PASS)), [], 'every pass is exactly: next class, upcoming, week — then ONE reload, after the writes it is for');
+    for (let i = 0; i < words.length; i += per) passes.push(words.slice(i, i + per));
+    eq(passes.filter((p) => JSON.stringify(p) !== JSON.stringify(ANDROID_PASS)), [], 'every pass is exactly: next class, upcoming, week, the countdown\'s switch — then ONE reload, after the writes it is for');
     ok(words.indexOf('AppGroupPreferences.get') === -1 && words.indexOf('AppGroupPreferences.remove') === -1, 'only set() is ever called: nothing is read back, and nothing is removed (an empty widget is a WRITTEN one — section E)');
 
     const sets = b.calls.plugin.filter((c) => c[0] === 'AppGroupPreferences.set').map((c) => c[1]);
     eq(Array.from(new Set(sets.map((o) => o.group))), [GROUP], 'the `group` argument still goes out, as on the iPhone (the Android twin accepts and ignores it)');
-    eq(Array.from(new Set(sets.map((o) => o.key))).sort(), KEYS.slice().sort(), 'the keys are the three widget keys and no other — what the twin may limit itself to');
+    eq(Array.from(new Set(sets.map((o) => o.key))).sort(), KEYS.concat([SWITCH_KEY]).sort(), 'the keys are the three widget keys and the countdown\'s switch, and no other — what the twin may limit itself to');
     ok(KEYS.every((k) => new RegExp("'" + k + "'").test(bridgeSrc)) && new RegExp("var WIDGET_APP_GROUP = '" + GROUP.replace(/\./g, '\\.') + "'").test(bridgeSrc), '…the literals the bridge holds (anchor moved?)');
 
     ok(box.writes.every((w) => typeof w[1] === 'string'), 'every value is a STRING (the twin stores strings only)');
@@ -125,7 +134,7 @@ module.exports = async function (t) {
     const mark = b.calls.plugin.length;
     b.events.emit('booking:complete');
     await h.flush();
-    eq(widgetCalls(b, mark).map(word), ONE_PASS, 'a booking rewrites the three keys and asks for ONE reload');
+    eq(widgetCalls(b, mark).map(word), ANDROID_PASS, 'a booking rewrites the three keys (and the switch) and asks for ONE reload');
 
     const now = parsed(box);
     eq(now.upcoming.map((e) => e.eventId), ['501', '502', '505'], 'soonest first; the waitlist place (503, sooner than all of them) is NOT a seat and is never written; the class that has started (504) is gone');
@@ -290,26 +299,29 @@ module.exports = async function (t) {
     const { b, box, story } = await signOutStory('android');
     const idOf = (json) => { const v = JSON.parse(json); return v && v.eventId; };
 
-    eq([story['signed in, a class held'].calls, idOf(story['signed in, a class held'].next)], [ONE_PASS, '501'], 'signed in: the class is on the widget');
-    eq([story['the session expires'].calls, idOf(story['the session expires'].next)], [ONE_PASS, '501'], 'a 401 keeps the bookings, so a pass after it writes the SAME class: the widget keeps serving what is still held');
+    eq([story['signed in, a class held'].calls, idOf(story['signed in, a class held'].next)], [ANDROID_PASS, '501'], 'signed in: the class is on the widget');
+    eq([story['the session expires'].calls, idOf(story['the session expires'].next)], [ANDROID_PASS, '501'], 'a 401 keeps the bookings, so a pass after it writes the SAME class: the widget keeps serving what is still held');
     eq([story['then a refetch empties the map'].writes, story['then a refetch empties the map'].calls, idOf(story['then a refetch empties the map'].next)], [[], [], '501'],
       '…and when a refetch then empties the map (no token, no sign-out) NOTHING is written and no reload is asked for: an expired session never blanks the widget');
-    eq([story['the same member signs back in'].calls, idOf(story['the same member signs back in'].next)], [ONE_PASS, '501'], 'signing back in rewrites it from the server\'s answer');
+    eq([story['the same member signs back in'].calls, idOf(story['the same member signs back in'].next)], [ANDROID_PASS, '501'], 'signing back in rewrites it from the server\'s answer');
 
-    eq(story['a deliberate sign-out'].writes, [['widget_next_class', 'null'], ['widget_upcoming', '[]'], ['widget_week', '[]']],
-      'a deliberate sign-out WRITES the empty snapshot — \'null\', \'[]\', \'[]\' — at once, in the same tick as clearToken');
-    eq(story['a deliberate sign-out'].calls, ONE_PASS, '…through set(), never remove(), followed by ONE reload: the widget repaints empty without waiting for its next update');
+    eq(story['a deliberate sign-out'].writes, [['widget_next_class', 'null'], ['widget_upcoming', '[]'], ['widget_week', '[]'], [SWITCH_KEY, '1']],
+      'a deliberate sign-out WRITES the empty snapshot — \'null\', \'[]\', \'[]\' — at once, in the same tick as clearToken (the countdown\'s switch rides along unchanged: it is the empty snapshot that ends a countdown)');
+    eq(story['a deliberate sign-out'].calls, ANDROID_PASS, '…through set(), never remove(), followed by ONE reload: the widget repaints empty without waiting for its next update');
     ok(names(b).indexOf('AppGroupPreferences.remove') === -1, '…so a reader must take \'null\' and \'[]\' as "nothing booked" (a key is never removed)');
     ok(KEYS.every((k) => !/501|Ann|Bank|RIDE/.test(box.values[k])), 'nothing of the member who left is still in the store');
     ok(b.calls.cancelled.length >= 1, 'and their armed class reminder is cancelled with it, as on the iPhone');
     eq([story['the app comes to the foreground, signed out'].writes, box.values.widget_next_class], [[], 'null'], 'signed out, later passes write nothing more: it stays empty');
-    eq([story['another member signs in and holds nothing'].calls, box.values.widget_next_class], [ONE_PASS, 'null'], 'the next member\'s confirmed-empty list is written as empty too ("Nothing booked" is an honest state, not a missing one)');
+    eq([story['another member signs in and holds nothing'].calls, box.values.widget_next_class], [ANDROID_PASS, 'null'], 'the next member\'s confirmed-empty list is written as empty too ("Nothing booked" is an honest state, not a missing one)');
     eq(quiet(b), [[], []], 'none of it is warned about');
 
     const ios = await signOutStory('ios');
     eq(Object.keys(ios.story), Object.keys(story), 'the iPhone app, walked through the same steps…');
-    eq(Object.keys(story).filter((k) => JSON.stringify([story[k].writes, story[k].calls]) !== JSON.stringify([ios.story[k].writes, ios.story[k].calls])), [],
+    // …the Android app's one call of its own left aside: the countdown's switch, which the iPhone never writes.
+    const sharedOf = (s) => [s.writes.filter((w) => w[0] !== SWITCH_KEY), s.calls.filter((w) => w !== 'set:' + SWITCH_KEY)];
+    eq(Object.keys(story).filter((k) => JSON.stringify(sharedOf(story[k])) !== JSON.stringify([ios.story[k].writes, ios.story[k].calls])), [],
       '…writes and asks for the same, step for step — the same values, in the same order: ONE rule, reached through the twins (a step named here differs)');
+    eq(Object.keys(ios.story).filter((k) => ios.story[k].writes.some((w) => w[0] === SWITCH_KEY)), [], '…and never the countdown\'s switch: that key is the Android app\'s alone');
   }
   {
     ok(/window\.clearToken = function \(\) \{\s*var result = _origClearTokenNative\.apply\(this, arguments\);\s*_snapServerConfirmed = true;[^\n]*\s*_signOutPass = true;[^\n]*\s*try \{ updateWidgetSnapshot\(\); \} catch \(e\) \{\} finally \{ _signOutPass = false; \}/.test(bridgeSrc),
@@ -327,8 +339,9 @@ module.exports = async function (t) {
     eq(d.got, d.want, 'as \'ios\' the recorded plugin calls of one launch are still IPHONE_LAUNCH_DIGEST, to the byte');
 
     const droid = await launch(h, 'android', { twins: {} });
-    const shared = (b) => widgetCalls(b).filter((c) => c[0] !== 'PsycleLiveActivity.refresh');
+    const shared = (b) => widgetCalls(b).filter((c) => c[0] !== 'PsycleLiveActivity.refresh' && !isSwitch(c));
     eq(shared(droid.b), shared(ios.b), 'the Android app\'s calls on the three shared names are the iPhone\'s — same methods, same arguments, same order');
+    eq([widgetCalls(ios.b).filter(isSwitch).length, widgetCalls(droid.b).filter(isSwitch).length > 0], [0, true], '…plus ONE of its own per pass, which the iPhone never makes: the switch of its class countdown (21-android-countdown.js)');
     ok(names(ios.b).indexOf('PsycleLiveActivity.refresh') !== -1 && names(droid.b).indexOf('PsycleLiveActivity.refresh') === -1, 'the Live Activity refresh is the iPhone\'s alone');
 
     // No branch of its own: the widget path never asks which platform it is on.
@@ -338,7 +351,7 @@ module.exports = async function (t) {
       return bridgeSrc.slice(a, z).replace(/\/\/.*$/gm, '');
     };
     const path = [cut('  // ── pure:widget-link:start', '  // ── Widget / Live Activity / Siri Snapshot'), cut('  function _prefSet(', '  // ── pure:ios-polish:start'), cut('  function updateWidgetSnapshot() {', '  window.updateWidgetSnapshot = updateWidgetSnapshot;')].join('\n');
-    ok(!/IS_ANDROID|PLATFORM\b|getPlatform/.test(path), 'the tap listener, the two writers and updateWidgetSnapshot hold no platform test: the twins are found by NAME, as the Swift plugins are');
+    ok(!/IS_ANDROID|PLATFORM\b|getPlatform/.test(path), 'the tap listener, the two writers and updateWidgetSnapshot hold no platform test: the twins are found by NAME, as the Swift plugins are (what Android ALONE has is a helper that holds its own test, as _forAndroid does: _androidCountdownSwitch)');
     eq(['AppGroupPreferences', 'WidgetCenter', 'PsycleDeepLink', 'PsycleLiveActivity'].map((n) => new RegExp('Capacitor\\.Plugins\\.' + n + '\\b').test(path)), [true, true, true, true], '…by existence, each of the four');
   }
 
