@@ -1,0 +1,75 @@
+# TEMPORARY — generates the Capacitor Android platform on a machine that can reach the public npm registry and has
+# a JDK + Android SDK (a GitHub runner), compiles it, and hands the generated project + lockfile back as an artifact.
+# It is deleted again once ios-app/android/ is committed; the permanent Android job lives in ci.yml.
+name: Android bootstrap (temporary)
+
+on:
+  push:
+    branches: ['android/**']
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    name: Generate + compile the Android platform
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install JS dependencies (lockfile)
+        working-directory: ios-app
+        run: npm ci
+
+      - name: Add the Android platform package (same major as @capacitor/core)
+        working-directory: ios-app
+        run: |
+          CORE=$(node -p "require('@capacitor/core/package.json').version")
+          echo "core is $CORE"
+          npm install "@capacitor/android@$CORE"
+          node -p "'android is ' + require('@capacitor/android/package.json').version"
+
+      - name: Generate the Android project (only when it is not committed yet)
+        working-directory: ios-app
+        run: |
+          if [ ! -d android ]; then npx cap add android; fi
+          npx cap sync android
+
+      - name: What was generated
+        working-directory: ios-app
+        run: |
+          find android -maxdepth 3 -not -path '*/build/*' -not -path '*/.gradle/*' | sort | head -80
+          echo "--- variables.gradle"; cat android/variables.gradle
+          echo "--- capacitor.settings.gradle"; cat android/capacitor.settings.gradle
+          echo "--- AndroidManifest"; cat android/app/src/main/AndroidManifest.xml
+
+      - name: Compile (debug APK)
+        working-directory: ios-app/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Hand back the generated project + lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-project
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            ios-app/android
+            !ios-app/android/**/build
+            !ios-app/android/.gradle
+            !ios-app/android/app/src/main/assets/public
+            ios-app/package.json
+            ios-app/package-lock.json
+
+      - name: Hand back the debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: psync-debug-apk
+          if-no-files-found: error
+          path: ios-app/android/app/build/outputs/apk/debug/app-debug.apk
