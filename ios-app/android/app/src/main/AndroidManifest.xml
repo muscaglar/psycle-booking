@@ -12,8 +12,13 @@
       view (capacitor.config.json, server.androidScheme) and talks to one HTTPS API. A live-reload
       run (cap run -l) serves plain http and would need this lifted locally; never commit that.
 
-      No component here is exported except the launcher activity, and there is no custom URL
-      scheme: the iPhone app's psync:// link exists for its widgets, which Android does not have.
+      ONE component is exported, because it must be: the launcher activity. The home-screen
+      widget's provider is not (its own note is on the receiver below). There is no custom URL
+      scheme, and no intent filter beyond the launcher's and the provider's APPWIDGET_UPDATE: a
+      tap on the widget reaches the activity as an EXPLICIT intent with the class id as an
+      extra, and MainActivity turns it into the psync:// link the page already understands.
+      Any app can start an exported activity with extras of its own choosing, so that id is
+      untrusted: digits only, or it is dropped.
 
       The activity is portrait only, as the iPhone app is (Info.plist) and as the web manifest
       asks (manifest.json, "portrait-primary"): the page has no landscape layout, and its sheets
@@ -48,6 +53,32 @@
             </intent-filter>
 
         </activity>
+
+        <!--
+          The home-screen widget ("Next class"). exported="false", as Android's own widget
+          guide declares a provider: nothing outside the app and the system has any business
+          sending to it, and both reach it unexported. APPWIDGET_UPDATE and the other widget
+          broadcasts come from the SYSTEM's widget service (a launcher never broadcasts to a
+          provider; it asks that service), and the system may send to any receiver; the app's
+          own "repaint now" and the repaint alarm's PendingIntent are sent as the app itself.
+          Exported, any app could start this process and have it rebuild the widget as often
+          as it liked. The provider takes nothing from an intent all the same: whatever
+          arrives, it only re-reads the app's own stored snapshot and repaints (or re-arms its
+          one alarm), writes nothing, and sends no request. The filter is APPWIDGET_UPDATE
+          alone - the app's own refresh and the alarm are explicit intents and need none.
+          Not yet seen on a phone: "it PAINTS" in ios-app/ANDROID.md's checklist is its proof.
+        -->
+        <receiver
+            android:name=".widget.NextClassWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_next_class_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/next_class_widget_info" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The hairline above the wide widget's following classes. White, coloured by an ImageView colour
+  filter (see drawable/widget_card.xml); the layout makes it faint with android:alpha.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+</shape>

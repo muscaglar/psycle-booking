@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The "pilates" class-type pictogram of the home-screen widget: a reformer bed. It is the app's own mark
+  (js/app.js CLASS_PICTOGRAMS.pilates; the iPhone widget draws the same numbers in
+  PsyclePictogram.swift): a 24 grid, stroked, round caps and joins, never filled. One path per
+  element of the web mark, in its order: a path keeps its own data, with every number written
+  out; a circle is two half-turn arcs; a rounded rect is its sides and four quarter arcs.
+  The stroke is 2.2 grid units, the web mark's weight at the 18px it is drawn at in a tile.
+  White, so that the colour filter the widget sets (PsyncWidgetViews) IS the mark's colour.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M 2.5 17.5 h 19"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 5 17.5 V 20"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 19 17.5 V 20"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 9.5 13 h 5 a 1.5 1.5 0 0 1 1.5 1.5 v 1.5 a 1.5 1.5 0 0 1 -1.5 1.5 h -5 a 1.5 1.5 0 0 1 -1.5 -1.5 v -1.5 a 1.5 1.5 0 0 1 1.5 -1.5 z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 4.5 17.5 v -6"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 3 11.5 h 3"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 19.5 17.5 V 7.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 19.5 8.5 l -4 4.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+</vector>

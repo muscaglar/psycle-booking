@@ -11,16 +11,16 @@ Every top-level file and folder, once. ≈ tokens = bytes ÷ 4, rounded: what th
 
 | File | The question it answers | ≈ tokens |
 |---|---|---|
-| [../AGENTS.md](../AGENTS.md) | What is this repository, what must I never do, which commands prove a change, where next? Start here: its reading guide routes you by task. | 3,650 |
+| [../AGENTS.md](../AGENTS.md) | What is this repository, what must I never do, which commands prove a change, where next? Start here: its reading guide routes you by task. | 3,700 |
 | README.md | This file: what is in the folder, the order to read it in, how to keep it true. | 2,050 |
-| [decisions.md](decisions.md) | What has the owner already decided, and why? What is CLOSED and must not be re-offered? | 6,000 |
-| [HANDOVER.md](HANDOVER.md) | Where do things stand? The session log (newest first), how to check what `main` holds, what is and is not proved, what is the owner's, your first hour. | 4,300 |
-| [backlog.md](backlog.md) | What could be done next? Candidate work with a size and a risk — propose from it, never start from it. | 3,550 |
-| [learnings.md](learnings.md) | What went wrong before, and which trap is my change about to step into? Its first 20 lines, then one section. | 9,550 |
-| [playbooks.md](playbooks.md) | How do I carry out a common task safely, step by step? P0 and the one playbook; its contents table gives each one's size. | 11,650 |
+| [decisions.md](decisions.md) | What has the owner already decided, and why? What is CLOSED and must not be re-offered? | 7,050 |
+| [HANDOVER.md](HANDOVER.md) | Where do things stand? The session log (newest first), how to check what `main` holds, what is and is not proved, what is the owner's, your first hour. | 6,050 |
+| [backlog.md](backlog.md) | What could be done next? Candidate work with a size and a risk — propose from it, never start from it. | 4,000 |
+| [learnings.md](learnings.md) | What went wrong before, and which trap is my change about to step into? Its first 20 lines, then one section. | 10,950 |
+| [playbooks.md](playbooks.md) | How do I carry out a common task safely, step by step? P0 and the one playbook; its contents table gives each one's size. | 12,350 |
 | [ontology.md](ontology.md) | What does this word mean here? The domain and code vocabulary, the state machines, the invariants. Grep it, or read one section (sizes in its opening lines). | 8,700 |
-| [repo-map.md](repo-map.md) | Where does X live? The file tree, the script load order, and "I want to… → edit this file". | 5,600 |
-| [architecture/](architecture/) | How does this mechanism work? One file per area — read only the one your task touches. | 51,650 in all |
+| [repo-map.md](repo-map.md) | Where does X live? The file tree, the script load order, and "I want to… → edit this file". | 6,050 |
+| [architecture/](architecture/) | How does this mechanism work? One file per area — read only the one your task touches. | 58,400 in all |
 | [index/](index/) | On which line is this symbol, marker or suite? GENERATED, and the only place line numbers are written. Grep it; never read it whole. | 70,500 in all |
 | [tools/](tools/) | What builds the index, and what proves the split lost nothing? Two dependency-free scripts: run them, do not read them. | below |
 
@@ -34,10 +34,10 @@ of at most 3 lines beside it. Read one when you first open a file in its folder.
 |---|---|---|
 | [../js/AGENTS.md](../js/AGENTS.md) | the 15 modules: wrappers and the `apiFetch` replacement, spend paths, sliced functions, `pure:` blocks, the one global scope, gym time | 1,950 |
 | [../css/AGENTS.md](../css/AGENTS.md) | the 9 stylesheets: link order, crisp.css tokens only, the light-base tie, safe-area insets, `[data-ct]`, the one card | 1,800 |
-| [../tests/AGENTS.md](../tests/AGENTS.md) | the runner, the suites, the smoke page, the fake Psycle server | 1,850 |
-| [../ios-app/AGENTS.md](../ios-app/AGENTS.md) | the build into www/ (both native apps ship it), the plugin patcher, the bridge: `SYNC_KEYS`, gym time, the calendar deleters, `IS_ANDROID` | 1,800 |
+| [../tests/AGENTS.md](../tests/AGENTS.md) | the runner, the suites, the smoke page, the fake Psycle server | 2,000 |
+| [../ios-app/AGENTS.md](../ios-app/AGENTS.md) | the build into www/ (both native apps ship it), the plugin patcher, the bridge: `SYNC_KEYS`, gym time, the calendar deleters, `IS_ANDROID`, the plugin twins | 1,850 |
 | [../ios-app/ios/App/AGENTS.md](../ios-app/ios/App/AGENTS.md) | the Xcode project and the Swift: the simulator build, target membership, `Codable` fields, dates, widget layouts | 2,250 |
-| [../ios-app/android/AGENTS.md](../ios-app/android/AGENTS.md) | the Android Gradle project: CI is the compiler, what is generated, the Back contract, backups off, no secrets, the names other files hold | 1,900 |
+| [../ios-app/android/AGENTS.md](../ios-app/android/AGENTS.md) | the Android Gradle project: CI is the compiler, what is generated, the Back contract, backups off, no secrets, the names other files hold, the widget's traps (plugin twins, RemoteViews, the untrusted tap, the pure classes and the XML numbers they copy) | 3,750 |
 
 ### architecture/ and index/
 

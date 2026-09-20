@@ -10,4 +10,10 @@
 
     <color name="psync_status_bar">#12161F</color>
     <color name="psync_navigation_bar">#12161F</color>
+
+    <!-- The widget's neutral look on Graphite: see values/colors.xml. White on the tile stays. -->
+    <color name="psync_widget_surface">#1B2130</color>
+    <color name="psync_widget_ink">#EEF1F5</color>
+    <color name="psync_widget_ink_2">#B7BFCC</color>
+    <color name="psync_widget_tile">#68758D</color>
 </resources>

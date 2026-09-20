@@ -789,17 +789,11 @@ function _announceAllocations(eventIds, diffToPersist) {
       const clashLine = ids.map(id => _clashLabel(_clashFor(id))).find(Boolean);
       if (clashLine) warn = clashLine + '. ' + warn;
     } catch (e) {}
-    // Where else the seat shows up. The Android app has no widgets, so there it
-    // is the calendar alone; everywhere else the sentence is what it always was.
-    // (typeof: the suites run this function on its own.)
-    const alsoIn = (typeof _onboardPlatform === 'function' && _onboardPlatform() === 'android')
-      ? '(and your calendar if you sync)'
-      : '(and your calendar/widget if you sync)';
     let replaced = false;
     _announceShowing = true;
     confirmModal({
       title: "You're in — Psycle gave you a spot",
-      body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings ${alsoIn}.`,
+      body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings (and your calendar/widget if you sync).`,
       warn,
       confirmText: 'View my bookings',
       cancelText: 'OK',
@@ -13172,15 +13166,15 @@ function _welcomeDecision(s) {
 // The four pages: a title and ONE sentence each — except the first, whose line
 // is the Crisp Colour welcome board's headline (two short sentences, set
 // large). Widgets and reminders exist
-// in the iOS app only, so the web build says nothing about them — and only a
+// in the native apps only, so the web build says nothing about them — and only a
 // touch screen is told to swipe: the day pager's swipe is touch-only (its own
 // hint is gated on a coarse pointer too), and with a mouse the days are
 // stepped through with the strip, the arrow keys or a swipe. The note on
 // the first page is required wording, not decoration.
 // `platform` (optional — Capacitor's 'ios' | 'android' | 'web'): the Android
-// app has reminders and calendar sync but no widgets, and is not an iPhone, so
-// its last page says what it has. Left out, a native build reads as the iPhone
-// app, as it always did.
+// app has ONE home-screen widget (no Lock Screen widget, no Live Activity, no
+// Siri) and is not an iPhone, so its last page says "a widget" and names no
+// phone. Left out, a native build reads as the iPhone app, as it always did.
 function _welcomePages(native, touch, platform) {
   return [
     { id: 'welcome', title: 'Psync', body: 'Find a class. Book a spot.',
@@ -13188,7 +13182,7 @@ function _welcomePages(native, touch, platform) {
     { id: 'find', title: 'Find your class', body: touch ? 'Choose your dates, then swipe between days.' : 'Choose your dates, then step through the days.' },
     { id: 'book', title: 'Book in two taps', body: 'Your usual spot is ready to confirm, and you are warned about clashes and the late-cancel window.' },
     { id: 'keep', title: 'Keep up', body: !native ? 'Everything you hold in one place.'
-      : platform === 'android' ? 'Everything you hold in one place, with reminders and calendar sync.'
+      : platform === 'android' ? 'Everything you hold in one place, with a widget and reminders.'
       : 'Everything you hold in one place, with widgets and reminders on iPhone.' },
   ];
 }

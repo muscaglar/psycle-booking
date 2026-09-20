@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The "barre" class-type pictogram of the home-screen widget: a barre. It is the app's own mark
+  (js/app.js CLASS_PICTOGRAMS.barre; the iPhone widget draws the same numbers in
+  PsyclePictogram.swift): a 24 grid, stroked, round caps and joins, never filled. One path per
+  element of the web mark, in its order: a path keeps its own data, with every number written
+  out; a circle is two half-turn arcs; a rounded rect is its sides and four quarter arcs.
+  The stroke is 2.2 grid units, the web mark's weight at the 18px it is drawn at in a tile.
+  White, so that the colour filter the widget sets (PsyncWidgetViews) IS the mark's colour.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M 2.5 8 h 19"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 6 5 v 14.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 18 5 v 14.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 6 13 h 12"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 3.5 19.5 h 5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M 15.5 19.5 h 5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+</vector>

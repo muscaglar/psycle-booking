@@ -1,7 +1,9 @@
 'use strict';
 // The Android app ("level 2": everything the iPhone app does except the
-// widgets, the Live Activity and Siri). It ships the SAME www/ folder, so what
-// is tested here is the web layer and the bridge being platform-aware:
+// widgets, the Live Activity and Siri — then "level 3", a home-screen widget,
+// which has its own suite: 20-android-widget.js, on this file's launchScenario).
+// It ships the SAME www/ folder, so what is tested here is the web layer and the
+// bridge being platform-aware:
 //   A. Back — the pure decision (js/app.js, pure:android-back), exhaustively
 //   B. Back — the actor over a fake page: the TOP layer only, never "yes", a
 //      dialog that waits on the member before any busy mark, a request in
@@ -11,7 +13,8 @@
 //      the token dialog, the waitlist "You're in" notice
 //   D. the bridge booted as 'android' (tests/suites/ios-bridge.js's harness):
 //      channels once, channelId + smallIcon + iconColor, the status-bar
-//      colour, nothing said about the plugins only the iPhone app has, and a
+//      colour, nothing said about the iPhone app's own plugins when an Android
+//      app has none of them (one built before the widget twins), and a
 //      FORGED notification tap (any app can send one on Android)
 //   E. the bridge booted as 'ios': NOT ONE of those calls — its plugin calls
 //      are what they were before the Android work, to the byte
@@ -23,21 +26,54 @@
 const crypto = require('crypto');
 const { harness } = require('./ios-bridge.js');
 
+// The Android app's TWINS of three of the iPhone app's own plugins (level 3, the
+// home-screen widget): local Java plugins under the same names and method
+// shapes — and no PsycleLiveActivity. They record as the iPhone fakes below do
+// and, in `box`, keep what a native reader would hold: the stored values, every
+// write in order, and the 'openURL' listener. `box.retained` = a widget tap that
+// cold-started the app: handed over when the listener attaches, once, as
+// Capacitor hands over a retained event (tests/suites/20-android-widget.js).
+function androidTwins(rec, box) {
+  box.values = box.values || {};
+  box.writes = box.writes || [];
+  box.listeners = box.listeners || {};
+  return {
+    AppGroupPreferences: {
+      set(o) { rec('AppGroupPreferences.set', { group: o.group, key: o.key }); box.values[o.key] = o.value; box.writes.push([o.key, o.value]); return Promise.resolve(); },
+      get(o) { rec('AppGroupPreferences.get', { group: o.group, key: o.key }); return Promise.resolve({ value: Object.prototype.hasOwnProperty.call(box.values, o.key) ? box.values[o.key] : null }); },
+      remove(o) { rec('AppGroupPreferences.remove', { group: o.group, key: o.key }); delete box.values[o.key]; return Promise.resolve(); },
+    },
+    WidgetCenter: { reloadAllTimelines() { rec('WidgetCenter.reloadAllTimelines'); return Promise.resolve(); } },
+    PsycleDeepLink: {
+      addListener(name, fn) {
+        rec('PsycleDeepLink.addListener', name);
+        box.listeners[name] = fn;
+        if (name === 'openURL' && box.retained) { const url = box.retained; box.retained = null; fn({ url: url }); }
+      },
+    },
+  };
+}
+
 // One launch, the same on every platform: a member with the Monday reminder on,
 // a usual week saved and one class held; notifications allowed. The bookings
 // land, the two launch timers run (3 s: the Monday reminder is re-armed; 4 s:
 // the snapshot pass, which arms the class reminder), then the theme changes.
 // Returns the boot and the ORDERED plugin calls, one JSON line each.
-async function launchScenario(h, platform) {
+// `opts.twins` (Android only): a box → the Android app WITH its widget twins.
+// Left out, 'android' is an app built before them: none of the four names.
+// `opts.globals`: page globals there before the bridge loads (boot's `globals`).
+async function launchScenario(h, platform, opts) {
+  const twins = platform === 'android' && opts && opts.twins ? opts.twins : null;
   const b = h.boot({
     platform: platform,
     perm: 'granted',
     theme: 'cloud',
     removeDelivered: true,
+    globals: opts && opts.globals,
     local: { psycle_weekly_reminder: 'on', psycle_weekly_template: '[{"day":1}]' },
-    // The plugins only the iPhone app has. The Android app registers none of
-    // them, so its Capacitor.Plugins simply has no such names.
-    plugins: platform === 'android' ? null : (rec) => ({
+    // The iPhone app's own four. An Android app has its twins of three of them,
+    // or — built before level 3 — no such names in Capacitor.Plugins at all.
+    plugins: platform === 'android' ? (twins ? (rec) => androidTwins(rec, twins) : null) : (rec) => ({
       AppGroupPreferences: { set(o) { rec('AppGroupPreferences.set', { group: o.group, key: o.key }); return Promise.resolve(); } },
       WidgetCenter: { reloadAllTimelines() { rec('WidgetCenter.reloadAllTimelines'); return Promise.resolve(); } },
       PsycleLiveActivity: { refresh() { rec('PsycleLiveActivity.refresh'); return Promise.resolve(); } },
@@ -485,13 +521,14 @@ module.exports = async function (t) {
   // ════════════════════════════════════════════════════════════════════
   // C. Copy
   // ════════════════════════════════════════════════════════════════════
-  t.section('Android copy: no widgets, no Siri, no iPhone — reminders and calendar sync');
+  t.section('Android copy: a widget and reminders — no Lock Screen widget, no live countdown, no Siri, no iPhone');
   {
     const w = t.loadPure('js/app.js', 'welcome');
     const android = w._welcomePages(true, true, 'android');
     const text = android.map((x) => x.title + ' ' + x.body + ' ' + (x.note || '')).join(' ');
-    ok(!/iPhone|iOS|widget|Siri|Lock Screen/i.test(text), 'the Android welcome promises nothing the Android app lacks');
-    ok(/reminders and calendar sync/.test(android[3].body), '…its last page says what it has: reminders and calendar sync');
+    ok(!/iPhone|iOS|widgets|Siri|Lock Screen|Live Activity|countdown/i.test(text), 'the Android welcome promises nothing the Android app lacks: no iPhone, no widgetS (it has one, on the home screen), no Lock Screen, no countdown, no Siri');
+    eq(android[3].body, 'Everything you hold in one place, with a widget and reminders.', '…its last page says what it has, in as few words as the iPhone\'s: a widget and reminders');
+    ok(android[3].body.split(' ').length <= w._welcomePages(true, true, 'ios')[3].body.split(' ').length, '…and is no longer than the iPhone\'s sentence');
     ok(text.indexOf('!') === -1 && /swipe between days/.test(android[1].body), '…in the house style, and told to swipe (a touch screen)');
     eq(w._welcomePages(true, true, 'ios'), w._welcomePages(true, true), 'the iPhone app\'s pages are what they were (a bridge that cannot say reads as the iPhone app)');
     ok(/widgets and reminders on iPhone/.test(w._welcomePages(true, true, 'ios')[3].body), '…widgets and reminders, "on iPhone"');
@@ -586,7 +623,8 @@ module.exports = async function (t) {
       return bodies[0] || [];
     };
     const android = notice('android');
-    eq(android[0], 'Your waitlist place for Ride, Mon 07:00 is now a confirmed booking. It\'s in My Bookings (and your calendar if you sync).', 'the waitlist "You\'re in" notice on Android: the calendar — no widget, the Android app has none');
+    eq(android[0], 'Your waitlist place for Ride, Mon 07:00 is now a confirmed booking. It\'s in My Bookings (and your calendar/widget if you sync).', 'the waitlist "You\'re in" notice on Android: the calendar AND the widget — the Android app has one now, so the sentence is the iPhone\'s');
+    ok(!/calendar if you sync/.test(appSrc) && (appSrc.match(/\(and your calendar\/widget if you sync\)/g) || []).length === 1, '…because it is ONE sentence again, with no platform branch left to drift (js/app.js)');
     const iphone = 'Your waitlist place for Ride, Mon 07:00 is now a confirmed booking. It\'s in My Bookings (and your calendar/widget if you sync).';
     eq([notice('ios')[0], notice('')[0], notice(undefined)[0]], [iphone, iphone, iphone], 'everywhere else the sentence is what it always was');
     eq([android[1], notice('ios')[1]], ["Psycle's normal 12-hour cancellation policy applies to it from now on.", "Psycle's normal 12-hour cancellation policy applies to it from now on."], '…and the cancellation-policy line under it is the same on both: money copy is not platform copy');
@@ -720,12 +758,16 @@ module.exports = async function (t) {
       [first('dark'), null, null, null], 'an unknown theme id → the dark base\'s ground; a colour that is not #rrggbb, or no registry → null, and the bar is left alone');
   }
 
-  t.section('Android bridge: the plugins only the iPhone app has are skipped without a word');
+  // The Android app has twins of AppGroupPreferences, WidgetCenter and
+  // PsycleDeepLink since level 3, and the bridge serves them by existence
+  // (20-android-widget.js). THIS launch is an Android app that has none of the
+  // four — one built before the twins: what it must never do is say so.
+  t.section('Android bridge: an app built before the widget twins — the missing plugins are skipped without a word');
   {
     const { b, lines } = await launchScenario(h, 'android');
     const used = Array.from(new Set(names(b).map((n) => n.split('.')[0]))).sort();
-    eq(used, ['LocalNotifications', 'Preferences', 'StatusBar'], 'one launch touches the plugins the Android app has — and no other name');
-    ok(!/AppGroupPreferences|WidgetCenter|WidgetReloader|PsycleLiveActivity|PsycleDeepLink/.test(lines.join('\n')), 'no call to AppGroupPreferences, WidgetCenter, PsycleLiveActivity or PsycleDeepLink');
+    eq(used, ['LocalNotifications', 'Preferences', 'StatusBar'], 'one launch touches the plugins that app has — and no other name');
+    ok(!/AppGroupPreferences|WidgetCenter|WidgetReloader|PsycleLiveActivity|PsycleDeepLink/.test(lines.join('\n')), 'no call to AppGroupPreferences, WidgetCenter, PsycleLiveActivity or PsycleDeepLink: none of them is there to call');
     eq([b.calls.warns, b.calls.errors], [[], []], 'and their absence is not warned about, at launch or in the snapshot pass');
     ok(b.calls.scheduled.length === 2, 'the snapshot pass still ran to its end: it is what arms the class reminders');
 
@@ -901,3 +943,8 @@ module.exports = async function (t) {
 };
 
 module.exports.launchScenario = async function (h, platform) { return (await launchScenario(h, platform)).lines; };
+// For 20-android-widget.js: the same launch WITH its boot ({ b, lines }), the
+// Android twins (`opts.twins`, a box), and what holds the iPhone path still.
+module.exports.launch = launchScenario;
+module.exports.androidTwins = androidTwins;
+module.exports.iphoneLaunchDigest = function (lines) { return { got: digest(lines.filter(notRestore)), want: IPHONE_LAUNCH_DIGEST }; };

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The corner of the home-screen widget's card (drawable/widget_card.xml and
+         widget_card_clip.xml). From Android 12 the launcher has a radius of its own, and
+         values-v31/dimens.xml hands it over instead, so card and launcher agree. -->
+    <dimen name="psync_widget_radius">20dp</dimen>
+</resources>

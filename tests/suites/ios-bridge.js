@@ -111,6 +111,9 @@ function harness(t) {
    *             the iOS-only ones); rec(name, arg) writes to calls.plugin
    *   channelsFail  true → createChannel rejects (Android before 8 has none)
    *   userAgent navigator.userAgent
+   *   globals   {name: value}: more page globals, there BEFORE the bridge is
+   *             evaluated — clearToken (the bridge wraps it at load, or not at
+   *             all), getBearerToken, classTypeKey, PsycleClassColours
    * calls.plugin is the ORDERED log of every call on the built-in fakes —
    * ['Plugin.method', argument] — and calls.warns / calls.errors what the
    * bridge said on console.warn / console.error.
@@ -219,6 +222,7 @@ function harness(t) {
       },
       _psycleNativeRestoreResolve() { calls.restoreResolved++; },
     };
+    Object.keys(opts.globals || {}).forEach((name) => { ctx[name] = opts.globals[name]; });
     ctx.window = ctx;
     ctx.self = ctx;
     t.vm.createContext(ctx);

@@ -63,13 +63,13 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 | If your task or question is… | Read | ≈ tokens |
 |---|---|---|
 | a first visit: what is in agents/, and in what order | agents/README.md | 2,050 |
-| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md | 6,000 |
-| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 4,300 |
-| "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 3,550 |
-| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 9,550 |
-| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 11,650 |
+| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md | 7,050 |
+| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 6,050 |
+| "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 4,000 |
+| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 10,950 |
+| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 12,350 |
 | what a word means (seat / space / place, record / entry, held / unverified): grep it there, or read §4 (≈ 1,250); a field shape → §1; a state machine → §3; the invariants → §5 — never the whole file | agents/ontology.md | 8,700 |
-| where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 5,600 |
+| where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 6,050 |
 | after a push to `main`: the Xcode Cloud check is missing, cancelled or failed; a TestFlight build did not arrive (checklist: playbooks P10; lesson: learnings G5) | ios-app/CICD.md → "Notes / gotchas" | 2,850 |
 | a line number: function, pure block, event, storage key, global, API call, CSS section, DOM id, suite, Swift type | agents/index/README.md, then grep agents/index/ | 1,850 (the folder: 70,500 — grep it, never read it whole) |
 | rebuilding the index (`npm run agents:index`), or re-proving that the split lost nothing | agents/tools/build-index.mjs · agents/tools/check-split.mjs | run them, do not read them (25,500 · 2,200) |
@@ -97,12 +97,12 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 | the class card (Discover and My Bookings wear the same one) | class-card.md | 1,100 |
 | an overlay (checklist: playbooks P5), a toast, focus, a control that is not a `<button>` | accessibility.md | 850 |
 | sw.js or the update banner | pwa-shell.md | 450 |
-| native-bridge.js, Swift, widgets, the Live Activity, calendar sync, notifications (then playbooks P7 for the commands) | ios.md | 4,900 |
-| the Android app: how it differs (Back, channels, the status bar, backups off, what is absent), how it is built and proved (then playbooks P14) | android.md | 6,300 |
-| installing the Android debug APK, a release build, the keystore, Play Console, the Android on-device checklist | ios-app/ANDROID.md (store copy: ios-app/PLAY_STORE_LISTING.md) | 6,400 (the checklist alone: 1,850) |
+| native-bridge.js, Swift, widgets, the Live Activity, calendar sync, notifications (then playbooks P7 for the commands) | ios.md | 5,100 |
+| the Android app: how it differs (Back, channels, the status bar, backups off, what is absent), its home-screen widget (the plugin twins, the snapshot reader, RemoteViews), how it is built and proved (then playbooks P14) | android.md | 11,050 (the widget section alone: 3,950) |
+| installing the Android debug APK, adding the widget, a release build, the keystore, Play Console, the Android on-device checklist | ios-app/ANDROID.md (store copy: ios-app/PLAY_STORE_LISTING.md) | 9,600 (the checklist alone: 2,950) |
 | a request to Psycle, or a stub for one | api.md | 650 |
 | a localStorage / sessionStorage key | storage-keys.md | 2,850 |
-| a failing check, a new suite, build.js, the plugin patcher, CI | testing-and-ci.md | 1,300 |
+| a failing check, a new suite, build.js, the plugin patcher, CI | testing-and-ci.md | 1,450 |
 
 ## Keeping these docs true
 - Text moves with the code: change behaviour a paragraph describes, and change that paragraph in the same commit. Use the code's exact names; a reader will grep for them.

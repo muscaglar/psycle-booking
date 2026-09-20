@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen widget with no class to show: "Nothing booked", and the app's name so that a
+  bare card can be told from any other (Android puts no label under a widget, as iOS does).
+  The SAME words whether nothing is booked, nobody is signed in, or the app was never opened:
+  the widget never says who is signed in, or whether anyone is. Shown only once the provider
+  has READ the stored snapshot and found no class to come: what is on screen before its first
+  paint is widget_next_class_loading.xml, which says nothing about bookings.
+
+  Nothing here is set from code. The colours are the neutral look (values/colors.xml and
+  values-night/), so this card follows the system's light and dark by itself.
+  Read widget_next_class_compact.xml for the rules every widget layout shares.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_clip"
+    android:clipToOutline="true">
+
+    <ImageView
+        android:id="@+id/widget_card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_card"
+        android:tint="@color/psync_widget_surface" />
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/widget_empty_text"
+            style="@style/PsyncWidgetTitle"
+            android:layout_width="match_parent"
+            android:text="@string/widget_nothing_booked"
+            android:textColor="@color/psync_widget_ink_2"
+            android:textSize="15sp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/widget_brand"
+            style="@style/PsyncWidgetDay"
+            android:text="@string/app_name" />
+    </LinearLayout>
+</FrameLayout>

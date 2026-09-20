@@ -200,6 +200,10 @@ the web layer's `classTypeKey` / `PsycleClassColours` are not there): `ct`,
 `ctIntensity`, `ctBase`, `ctTint`, `ctDeep`, `ctWash`, `ctBaseDark`, `ctTintDark`,
 `ctDeepDark`, `ctWashDark` — see the "Crisp Colour widgets" status block above.
 
+The Android app's home-screen widget reads these SAME three keys (through a Java twin of `AppGroupPreferences`,
+into its own private preferences file — `ANDROID.md` → "The widget"): a change to a shape here has two native
+readers, and a new field must be optional, with a fallback, in both.
+
 These are written to **Capacitor Preferences** (which on iOS is
 `UserDefaults(suiteName:)`) and **mirrored** into the App Group suite under the
 bare keys. The Swift side reads them via `PsycleSnapshotStore`

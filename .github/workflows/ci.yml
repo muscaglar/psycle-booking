@@ -148,6 +148,9 @@ jobs:
   # ios-app/android/.gitignore keeps out of the repository (the copied web
   # assets, capacitor.config.json, the Cordova shim project), so Gradle cannot
   # run without it. `npm run sync` stays iOS-only: it is what Xcode Cloud runs.
+  #
+  # Before the APK: the JVM unit tests of the app module (app/src/test/ — the
+  # widget's snapshot rules). They need no emulator, and they BLOCK.
   android-build:
     name: Android build check (debug APK)
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/android/')))
@@ -185,6 +188,39 @@ jobs:
       - name: Build web assets + sync the Android project
         working-directory: ios-app
         run: npm run sync:android
+
+      # The home-screen widget decides what to show in a PURE Java class
+      # (java.* and org.json only), so its rules run on this runner's JVM: a
+      # class that has started is dropped, the seat words, a snapshot that is
+      # not JSON. BLOCKING, and before the APK is compiled: an APK whose widget
+      # names the wrong class never becomes an artifact someone installs.
+      # :app: only — the plugins' modules ship no tests and are not ours to fix.
+      - name: JVM unit tests (the widget's snapshot logic)
+        working-directory: ios-app/android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      # Gradle's console names a failed test and its line, not what it expected
+      # and what it got; the XML result holds both. Nobody can re-run this on a
+      # development machine, so the log says it. (When an EARLIER step failed
+      # there are no results, and this prints nothing.)
+      - name: Show why a JVM test failed
+        if: failure()
+        continue-on-error: true
+        working-directory: ios-app/android
+        run: |
+          if ls app/build/test-results/testDebugUnitTest/*.xml >/dev/null 2>&1; then
+            grep -l -E '<(failure|error)[ >]' app/build/test-results/testDebugUnitTest/*.xml | xargs -r cat
+          fi
+
+      - name: Upload the unit-test report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-unit-test-report
+          path: ios-app/android/app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Compile (debug APK)
         working-directory: ios-app/android
@@ -225,10 +261,40 @@ jobs:
   # reads Psycle's public timetable (read-only GETs, as the web app does for
   # any visitor); nobody is signed in and nothing is written.
   #
+  # Then the home-screen widget. Putting one on a launcher means dragging it
+  # there, and this script never touches the screen — so the DEBUG build
+  # carries WidgetPreviewActivity (app/src/debug/, never in a release build),
+  # which builds the SAME RemoteViews the widget's provider builds and shows
+  # them with RemoteViews.apply(). It is opened nine times — compact, wide,
+  # wide at night, compact with class colours off (its built-in sample `off`),
+  # the empty state, FOUR seats in a two-cell badge, two seats on the
+  # narrowest card (110dp), the smallest card there is (110 x 110dp), and a
+  # long class name on a card with room for ONE line of it, with the system
+  # font at 1.3 (set just before, and put back after: the name must read
+  # "REFORMER PILATES", whole) — fed by STRING extras and showing a sample with
+  # fictional names; it reads nothing the app stores. A picture is kept of
+  # each. `-S` force-stops the app before each start, so every picture is a
+  # fresh activity reading ITS extras (a second start of an activity already
+  # in front can be "brought to the front" with the old ones). That also ends
+  # the process BACK left alive, which is why its id is written to a file
+  # first and judged from the file at the end.
+  #
+  # The emulator is a PHONE (`profile: pixel_6`, 411dp wide at high density).
+  # With no profile the AVD is made without a device definition, which is
+  # understood — not checked here — to be a 320dp screen at 1 px per dp:
+  # narrower than the 328dp wide card plus the page's padding, and too coarse
+  # to judge type by. (The preview also fits its frame to the screen it finds,
+  # and says so in its caption.) A widget it could NOT draw (RemoteViews.apply()
+  # refusing a view or a call: the nearest thing here to a launcher's "Problem
+  # loading widget") is logged as an error under the tag PsyncWidgetPreview,
+  # and the last line of the script looks for that tag.
+  #
   # The repository is not checked out here: the runner holds the APK only.
   # Each line of `script:` runs as its own `sh -c`, so no line depends on a
-  # shell variable, a `cd` or a multi-line construct from another.
-  # Evidence is gathered first; the two lines that can fail the step come last.
+  # shell variable, a `cd` or a multi-line construct from another — and the
+  # first line that fails ends the script. So evidence is gathered first, every
+  # widget line ends in `|| true` (a preview that will not open must not cost
+  # the log or the verdict), and the lines that can fail the step come last.
   android-smoke:
     name: Android emulator smoke (advisory)
     needs: android-build
@@ -262,7 +328,7 @@ jobs:
       - name: Make the output folder
         run: mkdir -p android-smoke
 
-      - name: Launch on an emulator, one back key
+      - name: Launch on an emulator, one back key, then the widget preview
         id: emulator
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0 (third-party: pinned to a commit, not a moving tag)
@@ -270,6 +336,7 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          profile: pixel_6
           disable-animations: true
           script: |
             adb install -r apk/app-debug.apk
@@ -280,9 +347,44 @@ jobs:
             adb shell input keyevent 4
             sleep 5
             adb exec-out screencap -p > android-smoke/after-back.png
+            adb shell pidof com.psyclefinder.app > android-smoke/pid-after-back.txt || true
             adb logcat -d -s 'Capacitor:*' 'chromium:*' 'AndroidRuntime:E' > android-smoke/logcat.txt
-            adb shell pidof com.psyclefinder.app
+            adb logcat -c || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-compact-light.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size wide --es night 0 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-wide-light.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size wide --es night 1 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-wide-dark.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 --es sample off || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-compact-off.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 --es empty 1 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-empty.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 --es sample four || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-compact-four-seats.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 --es sample two --es width 110 --es height 140 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-compact-narrow.png || true
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 --es width 110 --es height 110 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-compact-smallest.png || true
+            adb shell settings put system font_scale 1.3 || true
+            sleep 3
+            adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size compact --es night 0 --es sample long --es height 150 || true
+            sleep 4
+            adb exec-out screencap -p > android-smoke/widget-compact-large-type.png || true
+            adb shell settings put system font_scale 1.0 || true
+            adb logcat -d '*:W' > android-smoke/logcat-widget.txt || true
+            grep -q '[0-9]' android-smoke/pid-after-back.txt
             ! grep -q 'FATAL EXCEPTION' android-smoke/logcat.txt
+            ! grep -q 'Process: com.psyclefinder.app' android-smoke/logcat-widget.txt
+            ! grep -q 'PsyncWidgetPreview' android-smoke/logcat-widget.txt
 
       - name: Upload the screenshots and the log
         if: always()
@@ -295,4 +397,4 @@ jobs:
 
       - name: Say so when the smoke did not pass
         if: steps.emulator.outcome == 'failure'
-        run: echo "::warning title=Android emulator smoke::The advisory emulator smoke did not pass - read the android-smoke artifact (launch.png, after-back.png, logcat.txt)."
+        run: echo "::warning title=Android emulator smoke::The advisory emulator smoke did not pass - read the android-smoke artifact (launch.png, after-back.png, pid-after-back.txt, logcat.txt, the nine widget-*.png, logcat-widget.txt)."

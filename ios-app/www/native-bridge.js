@@ -151,14 +151,19 @@
 
   // ── Platform ───────────────────────────────────────────────────
   // Both native apps run this file. Every plugin below is reached by EXISTENCE
-  // (Capacitor.Plugins.X && …), so the ones only the iPhone app registers —
-  // AppGroupPreferences, WidgetCenter, PsycleLiveActivity, PsycleDeepLink: the
-  // widgets, the Live Activity and Siri — are simply skipped on Android, with
-  // nothing logged. IS_ANDROID guards only what Android ALONE has: a status-bar
-  // colour, notification channels and a small icon, and a calendar store that
-  // keeps a deleted event's row for a while. Anything but 'android' — 'ios',
-  // or a bridge that cannot say — takes the path the iPhone app always took:
-  // not one call more, not one field more (tests/suites/18-android.js).
+  // (Capacitor.Plugins.X && …). The iPhone app registers four of its own in
+  // Swift: AppGroupPreferences, WidgetCenter, PsycleDeepLink and
+  // PsycleLiveActivity. The Android app registers TWINS of the first three —
+  // local Java plugins under the SAME names and method shapes (ios-app/android/)
+  // — so the snapshot write, the reload and the widget-tap listener below drive
+  // its home-screen widget with no branch of their own. PsycleLiveActivity is
+  // the iPhone's alone: on Android it is skipped, with nothing logged — as all
+  // four are in an Android app built before the twins existed. IS_ANDROID guards
+  // only what Android ALONE has: a status-bar colour, notification channels and
+  // a small icon, and a calendar store that keeps a deleted event's row for a
+  // while. Anything but 'android' — 'ios', or a bridge that cannot say — takes
+  // the path the iPhone app always took: not one call more, not one field more
+  // (tests/suites/18-android.js; the Android widget: 20-android-widget.js).
   var PLATFORM = 'unknown';
   try {
     if (typeof Capacitor.getPlatform === 'function') PLATFORM = String(Capacitor.getPlatform());
@@ -1463,6 +1468,11 @@
   // PsycleWidget.swift). Parsed by hand rather than with URL(): WebKit has
   // changed how it reads the host of a custom scheme between iOS versions, and
   // this one shape is all that is ever minted. Anything else → null.
+  // ANDROID mints the same string and opens no URL: the widget's tap is an
+  // explicit intent to MainActivity with the class id as an extra, and the
+  // PsycleDeepLink twin turns it into this 'openURL' { url }. Any app can start
+  // that activity with an extra of its choosing, so the twin passes on digits
+  // only — and the id is judged again here, whatever the native side did.
   function _parseWidgetLink(url) {
     var m = /^psync:\/\/bookings\/?(?:\?([^#]*))?(?:#.*)?$/i.exec(String(url || ''));
     if (!m) return null;
@@ -1497,7 +1507,8 @@
   // The in-app PsycleDeepLink plugin RETAINS the URL until this listener
   // attaches — a widget tap usually cold-launches the app. This script is the
   // last deferred one, so switchTab/openClassDetail already exist when the
-  // retained tap is replayed here.
+  // retained tap is replayed here. (Swift on the iPhone; on Android its Java
+  // twin, which retains the event the same way — retainUntilConsumed.)
   var PsycleDeepLink = Capacitor.Plugins.PsycleDeepLink;
   if (PsycleDeepLink && typeof PsycleDeepLink.addListener === 'function') {
     try {
@@ -1524,6 +1535,15 @@
   //   which _appGroupSet() below calls to write the BARE keys into the real
   //   shared suite UserDefaults(suiteName: WIDGET_APP_GROUP).
   //   See NATIVE_FEATURES.md (status block) for the full story.
+  //
+  // ANDROID: the same three keys, through the same call. Its AppGroupPreferences
+  // twin keeps them in ONE private SharedPreferences file that the home-screen
+  // widget's provider reads; `group` still goes out and is ignored there
+  // (Android has no app groups). Only set() is ever called from here, with
+  // these three keys, each value a JSON string of a few kilobytes at most.
+  // An EMPTY widget is a WRITTEN one — 'null' for the next class, '[]' for the
+  // other two (a deliberate sign-out, or the last class cancelled): nothing is
+  // ever removed, so a reader must take 'null' and '[]' as "nothing booked".
 
   // App Group container id. MUST match the App Group capability you add in
   // Xcode to BOTH the main app target and every extension target. This is a
@@ -1875,7 +1895,10 @@
       _snapColourSig = _classColourSig();
 
       // Hint the native side to reload widget timelines, if a reload plugin
-      // is wired up. No-op otherwise. (See NATIVE_FEATURES.md.)
+      // is wired up. No-op otherwise. (See NATIVE_FEATURES.md.) ONE reload per
+      // pass, after its three writes — which are not awaited: a plugin's set()
+      // must have stored the value by the time it returns. (Android: the
+      // WidgetCenter twin asks the widget's provider to paint again.)
       try {
         var WC = Capacitor.Plugins.WidgetCenter || Capacitor.Plugins.WidgetReloader;
         if (WC && typeof WC.reloadAllTimelines === 'function') {
@@ -2230,6 +2253,9 @@
   // "starts in 90 minutes" notifications keep firing. Session EXPIRY is
   // deliberately not wrapped: the bookings still exist server-side, so the
   // stale-but-true snapshot should keep serving the widget until re-login.
+  // One rule for both apps: the Android widget is emptied by this same pass
+  // ('null', '[]', '[]' through its twins, then one reload) and by nothing
+  // else — an expired session leaves it serving the classes still held.
   var _origClearTokenNative = window.clearToken;
   if (typeof _origClearTokenNative === 'function') {
     window.clearToken = function () {

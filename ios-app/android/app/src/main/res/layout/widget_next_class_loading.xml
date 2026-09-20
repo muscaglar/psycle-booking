@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen widget BEFORE the provider has painted it: the card and the app's name, and
+  no other word. It is the widget's initialLayout (xml/next_class_widget_info.xml) and nothing
+  else - PsyncWidgetViews never builds it.
+
+  Why it is not the empty state: Android does not keep a widget's RemoteViews across a restart,
+  so after one the launcher draws the initialLayout until the provider's first paint. That is
+  seconds on most phones - and on a phone whose battery manager lets no app start after a
+  restart, it is until Psync is next opened. "Nothing booked" there would be a statement about
+  the member's bookings that nothing had checked, on the morning of a class. Those words
+  belong to widget_next_class_empty.xml, which is shown only once a snapshot has been READ and
+  holds no class to come.
+
+  Nothing here is set from code. The colours are the neutral look (values/colors.xml and
+  values-night/), so this card follows the system's light and dark by itself.
+  Read widget_next_class_compact.xml for the rules every widget layout shares.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_clip"
+    android:clipToOutline="true">
+
+    <ImageView
+        android:id="@+id/widget_card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_card"
+        android:tint="@color/psync_widget_surface" />
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/widget_brand"
+            style="@style/PsyncWidgetDay"
+            android:text="@string/app_name" />
+    </LinearLayout>
+</FrameLayout>

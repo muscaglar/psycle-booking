@@ -104,7 +104,8 @@ TestFlight pipeline is in [ios-app/CICD.md](ios-app/CICD.md).
 The same wrapper also holds an Android project, `ios-app/android/` (the folder name `ios-app/` is historical): the
 same web layer and the same native bridge as the iPhone app, and everything it does except the widgets, the Live
 Activity and Siri — calendar sync, class and Monday 12:00 reminders, the share sheet, storage that survives a cleared
-web view, haptics, the in-app browser, and a hardware Back that closes what is on top and never the app. Nothing was
+web view, haptics, the in-app browser, and a hardware Back that closes what is on top and never the app — plus one
+home-screen widget of its own, "Next class", fed by the same snapshot as the iPhone's. Nothing was
 added to the iPhone build for it. It was written without an Android toolchain, so GitHub Actions is its compiler:
 every push to `main` or an `android/…` branch builds a debug APK (the `psync-debug-apk` artifact) that can be
 sideloaded with nothing installed. It has not yet been seen on a phone, and a Google Play release waits for the

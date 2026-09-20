@@ -130,13 +130,15 @@ From IMPROVEMENTS-2026-09.md → "Deliberately NOT changed — owner decisions".
 
 ## 8. Platforms: the Android app
 
-Decided on 2026-09-20: of the levels put to them, the owner chose level 2.
+Decided on 2026-09-20: of the levels put to them, the owner chose level 2 — and, once it had compiled and launched, level 3.
 
 | Decision | Why | Held by |
 |---|---|---|
 | There is an Android app at "level 2": everything the iPhone app does EXCEPT the widgets, the Live Activity and Siri — calendar sync, the Monday 12:00 and class reminders, the share sheet, storage that survives a purge, haptics, the in-app browser — packaged with Capacitor around the same ios-app/www/. | "Go ahead with level 2 please." | ios-app/android/; `IS_ANDROID` (ios-app/www/native-bridge.js); 18-android.js, 19-android-project.js; architecture/android.md |
 | **The iPhone app must not change for Android's sake**: no new npm package, no new Capacitor plugin (a plugin is an iOS pod), no Swift edit, and `npm run sync` stays iOS-only. | Xcode Cloud runs `npm ci`, then `npm run sync`, on every push to `main`, and that build goes to testers (section 7). | 19-android-project.js (the scripts, the lockfile, ci_post_clone.sh); 18-android.js (`IPHONE_LAUNCH_DIGEST`: the iPhone path's plugin calls, unchanged to the byte) |
-| Level 3 — an Android home-screen widget — was NOT requested. Do not start it; it is a row of backlog.md. | The owner asked for level 2, no more. | — |
+| Level 3: the Android app has ONE home-screen widget, "Next class", in the look of the iPhone widget and fed by the same snapshot. Deliberately NOT built with it: a Lock Screen widget, Siri or shortcuts, and an ongoing countdown notification standing in for the Live Activity — do not start that one; it is a row of backlog.md. | "Go ahead with level 3, the Android widget". The countdown notification was not requested by name, and it needs native alarm and notification code that nobody can check without a phone. | ios-app/android/ (`NextClassWidgetProvider`, `PsyncSnapshot`, the three twins); 19-android-project.js, 20-android-widget.js; architecture/android.md → "The home-screen widget" |
+| The widget is driven by native TWINS of the iPhone app's own plugins — `AppGroupPreferences`, `WidgetCenter`, `PsycleDeepLink`, local Java classes under the same JS names and method shapes — never by an `IS_ANDROID` branch or a new Capacitor plugin. Its tap is an explicit intent: the app still answers no URL scheme. Its times are device-local. | Settled in the brief for the work, on the owner's behalf: the row above ("the iPhone app must not change") rules out a plugin package, one code path cannot drift, and the level-2 rule against a custom scheme stands. The times: section 4, CLOSED. | 20-android-widget.js (the bridge's names against the Java; the iPhone digest); 19-android-project.js (no `<data>`, every PendingIntent immutable, the dependencies block) |
+| The widget's empty state says "Nothing booked" and nothing else — the same words with nothing booked, signed out, or before the app was ever opened. A deliberate sign-out empties it at once; an expired session does not. | Settled in the brief, on the owner's behalf: a home screen is seen by whoever holds the phone, so the widget never says who is signed in, or whether anyone is. Sign-out and expiry are the iPhone's rule, mirrored and not reinvented. | res/values/strings.xml (`widget_nothing_booked`); the bridge's `clearToken` wrapper; 20-android-widget.js |
 | Android is released by hand, by the owner: nothing about it is wired to a store, no signing key lives in the repository or in GitHub, and CI builds a debug APK only. | The repository is public; a Play submission is blocked on the target API level anyway (backlog.md). | ios-app/android/app/build.gradle (the four `PSYNC_…` values); both .gitignore files; 19-android-project.js |
 | Hardware / gesture Back asks the page first and otherwise sends the app to the background, alive; it never finishes the activity, never confirms, never spends. | Settled in the brief for the work, on the owner's behalf ("nothing needed from me I hope"): without the @capacitor/app plugin — which would be a new iOS pod — Capacitor closes the app on Back, under whatever sheet is open. Section 2 decides the rest: Back is always the safe answer. | `MainActivity`; `window._psycleAndroidBack`, `pure:android-back` (js/app.js); 18-android.js, 19-android-project.js |
 | Back presses a confirm's cancel button WHATEVER it says, as Escape and a tap outside the dialog do. On three dialogs that is more than "leave it": "Book anyway" carries on to the picker or to the confirm that does spend, "Carry on" opens the usual-week review, "Discard" drops a queued offline booking. None books. On the welcome Back is the welcome's own Back, and its Skip only from the first page. | Made in review, on the owner's behalf: the three dialogs belong to spend paths the Android work must not edit, and a Back that did nothing on them would be a dead button. An edge swipe IS Android's Back and the welcome is turned by swiping, so Skip — which is for good — must not be one stray thumb away. | architecture/android.md → Back; ios-app/ANDROID.md → "How Back works"; 18-android.js (it fails when a fourth such label appears) |
@@ -167,6 +169,15 @@ Chosen on the owner's behalf in the Android work (section 8), and theirs to over
 - The Android app is portrait only, as the iPhone app is.
 - Back presses a confirm's cancel button whatever it says ("Book anyway", "Carry on" and "Discard" included — none
   of them books), and on the first-run welcome it is the welcome's own Back: Skip only from the first page.
+- The Android widget's time is set in the system's condensed bold face, not the app's own: no font file ships.
+- The Android widget's empty state is "Nothing booked" whether or not anyone is signed in.
+- Before its first paint (just added, or after a restart) the Android widget shows the word "Psync" and nothing
+  else: "Nothing booked" is said only once the stored snapshot has been read.
+- More seats than the Android widget's badge has room for are counted ("4 bikes") rather than cut or shrunk; on
+  one line a long class name prints as its head ("REFORMER PILATES"), as the iPhone widget's smallest steps do.
+- The Android widget's day word changes at midnight by an alarm of its own ("Tomorrow" → "Today"); the iPhone
+  widget prints a weekday there and needs none.
+- The Android welcome's last page reads "with a widget and reminders" (it read "with reminders and calendar sync").
 
 Never asked, so not decided — ask before building:
 - Card density / a compact-cards preference (standing preference: restraint; space on My Bookings matters).

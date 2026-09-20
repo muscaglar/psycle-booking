@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen widget's card: a WHITE rounded rectangle, shown in an ImageView that fills the
+  widget. White on purpose - a classic widget cannot set a shape's colour (RemoteViews has no
+  call for it below Android 12), but it can set an ImageView's colour filter, and over white the
+  filter IS the colour: the class tint at the member's intensity (PsyncWidgetViews), or the
+  neutral surface (android:tint in the layouts).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="@dimen/psync_widget_radius" />
+</shape>

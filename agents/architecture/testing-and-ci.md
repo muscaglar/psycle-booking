@@ -8,7 +8,8 @@ Read this when a check fails, you add a suite or a `pure:<name>` block, or you t
   `npm run sync` = patch plugins + build + `cap sync ios`; `npm run build:open` = sync + open Xcode. `npm run sync` is
   iOS-ONLY and stays so (Xcode Cloud runs it). Android has its own: `npm run sync:android` = build + `cap sync android`
   (no plugin patch: the patcher edits Swift only), `npm run open:android`, `npm run android:debug` = sync:android +
-  `./gradlew assembleDebug` — see [android.md](android.md).
+  `./gradlew assembleDebug`, `npm run android:test` = sync:android + `./gradlew :app:testDebugUnitTest` (the widget's
+  JVM tests; both need a JDK and the Android SDK, which no development machine is assumed to have) — see [android.md](android.md).
 - `ios-app/patch-plugins.js` — dependency-free anchored-edit patcher for native plugin source in
   node_modules (currently: `timeZone` support in @ebarooni/capacitor-calendar 6.7.2 — see Calendar contract — and a scene-aware presentation window in @capacitor/ios 6.2.1 — see iOS App → Scene life cycle).
   Runs on `postinstall` (so `npm ci` on Xcode Cloud / GH Actions patches before `cap sync`) and at the top of
@@ -21,11 +22,15 @@ Read this when a check fails, you add a suite or a `pure:<name>` block, or you t
   (advisory; every host but loopback is unresolvable) → typecheck (advisory) → `agents:check` (advisory). A second job
   compiles the full native project unsigned for the simulator on main pushes / manual dispatch. TestFlight delivery is
   Xcode Cloud's (ios-app/CICD.md): every push to main archives and uploads. Two Android jobs ([android.md](android.md)):
-  `android-build` — on `main` and `android/**` pushes and manual dispatch — runs `npm ci`, `npm run sync:android` and
-  `./gradlew assembleDebug`, uploads the debug APK as the artifact `psync-debug-apk`, then an advisory `:app:lintDebug`;
-  it is the ONLY compiler the Android project has. `android-smoke` — advisory, `android/**` pushes and manual dispatch —
-  installs that APK on an emulator, launches it, sends one Back key and uploads two screenshots and a log. It never
-  taps. tests/suites/19-android-project.js holds both jobs' shape, and that the bootstrap workflow is gone.
+  `android-build` — on `main` and `android/**` pushes and manual dispatch — runs `npm ci`, `npm run sync:android`, the
+  app module's JVM unit tests (`./gradlew :app:testDebugUnitTest`: the Android widget's snapshot rules — BLOCKING, and
+  before the APK; artifact `android-unit-test-report`) and `./gradlew assembleDebug`, uploads the debug APK as the
+  artifact `psync-debug-apk`, then an advisory `:app:lintDebug`; it is the ONLY compiler — and the only JVM — the
+  Android project has. `android-smoke` — advisory, `android/**` pushes and manual dispatch — installs that APK on a
+  phone-sized emulator, launches it, sends one Back key, then opens the debug-only widget preview in nine states; it
+  uploads eleven screenshots and two logs, and fails (as a warning) on a crash or on a widget the preview logged it
+  could not draw. It never taps. tests/suites/19-android-project.js holds both jobs' shape, and that the
+  bootstrap workflow is gone.
 - tests/smoke.html — load in a browser/sim to assert every module loads in production order and the critical
   globals exist (title → "SMOKE: PASS"). It stubs `fetch`, so it cannot reach the live API.
 

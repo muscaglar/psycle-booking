@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen widget, COMPACT (about two cells wide): the day word, the TIME, the class
+  name beside its pictogram tile, the seat. PsyncWidgetViews fills it in and colours it; the
+  wide twin is widget_next_class_wide.xml, and PsyncWidgetPlan decides which one a size gets.
+
+  A launcher inflates this through RemoteViews, which allows only a short list of views:
+  FrameLayout, LinearLayout, RelativeLayout, TextView and ImageView here - no ConstraintLayout,
+  no <View>, no <Space>, nothing custom. That is also why:
+    - the spacer is an empty FrameLayout with a weight;
+    - every coloured surface is an ImageView holding a WHITE shape, coloured with a colour
+      filter (drawable/widget_card.xml says why);
+    - the seat badge is a RelativeLayout: the pill is aligned to the four edges of its words,
+      so it is exactly their size (a lone match_parent child of a wrap_content FrameLayout
+      would measure to nothing).
+  No text is set here, on purpose: a layout that carried sample words could show them as if
+  they were a booking. The picker's sample is a separate file, widget_next_class_preview.xml.
+
+  The root is android:id/background with clipToOutline: Android 12's way for a widget to say it
+  rounds its own corners (drawable/widget_card_clip.xml). Every id is written "@+id/", also
+  where it is only referred to: tests/suites/19-android-project.js resolves a bare "@id/" as a
+  resource of res/ and would not find it.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_clip"
+    android:clipToOutline="true">
+
+    <ImageView
+        android:id="@+id/widget_card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_card"
+        android:tint="@color/psync_widget_surface" />
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/widget_day"
+            style="@style/PsyncWidgetDay" />
+
+        <TextView
+            android:id="@+id/widget_time"
+            style="@style/PsyncWidgetTime" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="24dp"
+                android:layout_height="24dp">
+
+                <ImageView
+                    android:id="@+id/widget_tile_fill"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/widget_tile"
+                    android:tint="@color/psync_widget_tile" />
+
+                <ImageView
+                    android:id="@+id/widget_tile_mark"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_gravity="center"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_ct_other"
+                    android:tint="@color/psync_widget_on_tile" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/widget_title"
+                style="@style/PsyncWidgetTitle"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <RelativeLayout
+            android:id="@+id/widget_seat_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp">
+
+            <ImageView
+                android:id="@+id/widget_seat_fill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignLeft="@+id/widget_seat"
+                android:layout_alignTop="@+id/widget_seat"
+                android:layout_alignRight="@+id/widget_seat"
+                android:layout_alignBottom="@+id/widget_seat"
+                android:importantForAccessibility="no"
+                android:scaleType="fitXY"
+                android:src="@drawable/widget_seat_badge"
+                android:tint="@color/psync_widget_tile" />
+
+            <TextView
+                android:id="@+id/widget_seat"
+                style="@style/PsyncWidgetSeat" />
+        </RelativeLayout>
+    </LinearLayout>
+</FrameLayout>

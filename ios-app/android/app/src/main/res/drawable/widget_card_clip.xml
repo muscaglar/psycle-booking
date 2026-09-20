@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The OUTLINE of the widget's root view, and nothing visible: a fully transparent rounded
+  rectangle of the card's radius. From Android 12 the root (android:id/background, with
+  android:clipToOutline) is clipped to it, which is how a widget tells the launcher that it
+  rounds its own corners; a drawable's outline keeps its shape whatever its alpha. Below
+  Android 12 the attribute is not read, and drawable/widget_card.xml alone rounds the card.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#00FFFFFF" />
+    <corners android:radius="@dimen/psync_widget_radius" />
+</shape>

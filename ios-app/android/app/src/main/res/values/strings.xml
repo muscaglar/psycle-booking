@@ -4,4 +4,21 @@
     <string name="title_activity_main">Psync</string>
     <string name="package_name">com.psyclefinder.app</string>
     <string name="custom_url_scheme">com.psyclefinder.app</string>
+
+    <!-- The home-screen widget. Its name and description are what the launcher's widget picker
+         shows. "Nothing booked" is ALL the empty state says - the same words with nothing
+         booked, signed out, or before the app was ever opened: the widget never says who is
+         signed in, or whether anyone is. -->
+    <string name="widget_next_class_label">Next class</string>
+    <string name="widget_next_class_description">Your next booked class: the time, the class and your seat.</string>
+    <string name="widget_nothing_booked">Nothing booked</string>
+    <!-- What a screen reader says for the whole card: "Next class: Today 18:30, RIDE 45, ...". -->
+    <string name="widget_spoken_next">Next class: %1$s</string>
+
+    <!-- The picker preview (layout/widget_next_class_preview.xml), Android 12+: sample words,
+         never a real booking. -->
+    <string name="widget_preview_day" translatable="false">Today</string>
+    <string name="widget_preview_time" translatable="false">18:30</string>
+    <string name="widget_preview_title" translatable="false">RIDE 45</string>
+    <string name="widget_preview_seat" translatable="false">Bike 9</string>
 </resources>

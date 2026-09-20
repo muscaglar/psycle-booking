@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the launcher's widget picker shows, Android 12+ (previewLayout in
+  xml/next_class_widget_info.xml; older versions show the app icon): the compact card with
+  SAMPLE words from strings.xml, in the neutral look. Never shown on a home screen, and never
+  filled in from code - which is why it is a file of its own: the live layouts carry no text,
+  so no sample can ever pass for a booking.
+
+  Keep it the shape of widget_next_class_compact.xml, and read that file for the rules.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_clip"
+    android:clipToOutline="true">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_card"
+        android:tint="@color/psync_widget_surface" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            style="@style/PsyncWidgetDay"
+            android:text="@string/widget_preview_day" />
+
+        <TextView
+            style="@style/PsyncWidgetTime"
+            android:text="@string/widget_preview_time" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="24dp"
+                android:layout_height="24dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/widget_tile"
+                    android:tint="@color/psync_widget_tile" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_gravity="center"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_ct_ride"
+                    android:tint="@color/psync_widget_on_tile" />
+            </FrameLayout>
+
+            <TextView
+                style="@style/PsyncWidgetTitle"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="@string/widget_preview_title" />
+        </LinearLayout>
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignLeft="@+id/widget_preview_seat"
+                android:layout_alignTop="@+id/widget_preview_seat"
+                android:layout_alignRight="@+id/widget_preview_seat"
+                android:layout_alignBottom="@+id/widget_preview_seat"
+                android:importantForAccessibility="no"
+                android:scaleType="fitXY"
+                android:src="@drawable/widget_seat_badge"
+                android:tint="@color/psync_widget_tile" />
+
+            <TextView
+                android:id="@+id/widget_preview_seat"
+                style="@style/PsyncWidgetSeat"
+                android:text="@string/widget_preview_seat" />
+        </RelativeLayout>
+    </LinearLayout>
+</FrameLayout>

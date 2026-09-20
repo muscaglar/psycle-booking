@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen widget, WIDE (about four cells): the time column - day word over the TIME -
+  beside the class: pictogram tile and name, "Instructor · Place", the seat. Under a hairline,
+  up to two following classes, one line each ("Tomorrow 07:30  RIDE 45"); PsyncWidgetPlan says
+  how many the height allows, and PsyncWidgetViews hides the rest, the hairline with them.
+
+  Read widget_next_class_compact.xml first: the same views, ids and rules (RemoteViews-safe
+  views only, white shapes under colour filters, no text set here, "@+id/" throughout).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_clip"
+    android:clipToOutline="true">
+
+    <ImageView
+        android:id="@+id/widget_card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_card"
+        android:tint="@color/psync_widget_surface" />
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_day"
+                    style="@style/PsyncWidgetDay" />
+
+                <TextView
+                    android:id="@+id/widget_time"
+                    style="@style/PsyncWidgetTime" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="28dp"
+                        android:layout_height="28dp">
+
+                        <ImageView
+                            android:id="@+id/widget_tile_fill"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:importantForAccessibility="no"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/widget_tile"
+                            android:tint="@color/psync_widget_tile" />
+
+                        <ImageView
+                            android:id="@+id/widget_tile_mark"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_gravity="center"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_ct_other"
+                            android:tint="@color/psync_widget_on_tile" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/widget_title"
+                        style="@style/PsyncWidgetTitle"
+                        android:layout_width="0dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/widget_who"
+                    style="@style/PsyncWidgetBody"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="3dp" />
+
+                <RelativeLayout
+                    android:id="@+id/widget_seat_group"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp">
+
+                    <ImageView
+                        android:id="@+id/widget_seat_fill"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignLeft="@+id/widget_seat"
+                        android:layout_alignTop="@+id/widget_seat"
+                        android:layout_alignRight="@+id/widget_seat"
+                        android:layout_alignBottom="@+id/widget_seat"
+                        android:importantForAccessibility="no"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/widget_seat_badge"
+                        android:tint="@color/psync_widget_tile" />
+
+                    <TextView
+                        android:id="@+id/widget_seat"
+                        style="@style/PsyncWidgetSeat" />
+                </RelativeLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:id="@+id/widget_rule"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="6dp"
+            android:alpha="0.25"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:src="@drawable/widget_row_divider"
+            android:tint="@color/psync_widget_ink_2" />
+
+        <LinearLayout
+            android:id="@+id/widget_row_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_row_1_when"
+                style="@style/PsyncWidgetRowWhen" />
+
+            <TextView
+                android:id="@+id/widget_row_1_what"
+                style="@style/PsyncWidgetBody"
+                android:layout_width="0dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_row_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_row_2_when"
+                style="@style/PsyncWidgetRowWhen" />
+
+            <TextView
+                android:id="@+id/widget_row_2_what"
+                style="@style/PsyncWidgetBody"
+                android:layout_width="0dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

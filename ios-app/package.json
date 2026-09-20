@@ -15,6 +15,7 @@
     "sync:android": "node build.js && npx cap sync android",
     "open:android": "npx cap open android",
     "android:debug": "npm run sync:android && cd android && ./gradlew assembleDebug",
+    "android:test": "npm run sync:android && cd android && ./gradlew :app:testDebugUnitTest",
     "update-web": "node build.js"
   },
   "dependencies": {

@@ -2,31 +2,36 @@
 
 The Android app is the same app as the iPhone one: the same web layer (`ios-app/www/`), the same bridge
 (`ios-app/www/native-bridge.js`), the same Capacitor 6, in a second native shell at `ios-app/android/`. (The folder
-is still called `ios-app/`; that name is historical.) It is "level 2": everything the iPhone app does **except the
-widgets, the Live Activity and Siri**.
+is still called `ios-app/`; that name is historical.) It is "level 2" — everything the iPhone app does **except the
+widgets, the Live Activity and Siri** — plus "level 3": **one home-screen widget**, "Next class"
+([The widget](#the-widget)).
 
 **Where it stands — read this first.** Compiled, and launched on an emulator; not yet seen on a phone. It was
 written without an Android toolchain (no JDK, no SDK), by reading, and then compiled by CI's `android-build` job and run on an emulator by `android-smoke`:
 it launches into the first-run welcome, one Back key skips the welcome and leaves the app alive on Discover, the log shows no crash or script error, and natively the bridge created its two channels, set the status-bar colour and read its mirrored keys through Preferences. That run never taps: signing in, booking,
 a reminder firing, a calendar write and the share sheet have not happened anywhere.
+**The widget has been compiled by CI's `android-build` job, which first ran its 45 JVM tests against the real org.json (all pass), and drawn on an emulator by `android-smoke`: the debug preview rendered the widget's own RemoteViews in nine states — compact and wide, day and night, intensity off, a narrow and the smallest box, large type, four seats, empty — with no crash and no preview error in the log, and every one was looked at: the time leads, the card wears the class tint, the pictogram tile and the seat badge are drawn in the class colour, night picks the dark literals, large type keeps every row whole (a long class name ends in an ellipsis), four seats read "4 bikes", and the empty card says "Nothing booked" and names nobody.** Nobody has put it on a
+home screen: the picker, a real launcher's sizes, the corner clipping, the roll-over alarm on a sleeping phone and
+the tap are in the checklist below.
 GitHub Actions is the compiler:
 the `android-build` job builds a debug APK on every push to `main` or to an `android/…` branch. What only a phone
 can prove is the [on-device checklist](#on-device-checklist) at the end, and none of it is ticked.
 
 | Leg | System | Trigger | What it does |
 |-----|--------|---------|--------------|
-| Compile + debug APK | GitHub Actions, job `android-build` (`.github/workflows/ci.yml`) | push to `main` or `android/**`, or "Run workflow" | `npm ci`, `npm run sync:android`, `./gradlew assembleDebug`; uploads the artifact **`psync-debug-apk`** (kept 30 days); then an advisory Android lint |
-| Emulator smoke (advisory) | GitHub Actions, job `android-smoke` | push to `android/**`, or "Run workflow" | installs that APK on an emulator, opens it, screenshot, ONE Back key, screenshot; uploads **`android-smoke`** (two pictures and a log, for a person to read). It never taps, so it can book nothing |
+| Compile + debug APK | GitHub Actions, job `android-build` (`.github/workflows/ci.yml`) | push to `main` or `android/**`, or "Run workflow" | `npm ci`, `npm run sync:android`, the widget's JVM unit tests (`./gradlew :app:testDebugUnitTest` — a failure stops the job before any APK exists; report: **`android-unit-test-report`**), `./gradlew assembleDebug`; uploads the artifact **`psync-debug-apk`** (kept 30 days); then an advisory Android lint |
+| Emulator smoke (advisory) | GitHub Actions, job `android-smoke` | push to `android/**`, or "Run workflow" | installs that APK on a phone-sized emulator, opens it, screenshot, ONE Back key, screenshot; then opens the debug-only widget preview nine times (compact, wide, wide at night, class colours off, empty, four seats, two seats on the narrowest card, the smallest card, a long class name with a larger system font) and keeps a picture of each; uploads **`android-smoke`** (eleven pictures, two logs and a process id, for a person to read). It fails — as a warning, never the workflow — when the app did not survive Back, crashed, or logged a widget the preview could not draw. It never taps, so it can book nothing |
 | Release | you, by hand | — | a signed bundle from your own keystore, uploaded in Play Console. Nothing about Android is wired to a store, and no key lives in GitHub |
 
-The iPhone pipeline is untouched: `npm run sync` (what Xcode Cloud runs) is still iOS-only, no package and no
-plugin was added for Android's sake, and no Swift changed.
+The iPhone pipeline is untouched: `npm run sync` (what Xcode Cloud runs) is still iOS-only, no npm package and no
+Capacitor plugin package was added for Android's sake (the widget's three plugins are Java classes inside
+`ios-app/android/`), and no Swift changed.
 
 ## Try it with nothing installed
 
 1. On github.com open the repository → **Actions** → the newest **CI** run on `main` with a green **Android build
-   check (debug APK)** job. (Until this work is merged, the newest run on the `android/level-2` branch.) You must be
-   signed in to GitHub to download artifacts.
+   check (debug APK)** job. (The widget is on the `android/widget` branch until it is merged: an APK that has it
+   comes from a green run on that branch.) You must be signed in to GitHub to download artifacts.
 2. At the bottom of the run, under **Artifacts**, download **psync-debug-apk**. It arrives as a zip; inside is
    `app-debug.apk`.
 3. Get the APK onto the phone (download it there, or send it to yourself) and open it. Android asks once to allow
@@ -46,7 +51,11 @@ Know this about a debug build:
 
 | | iPhone | Android |
 |---|---|---|
-| Widgets, Live Activity, Siri "next class" | yes | **no** — not part of level 2 |
+| Home-screen widget | small and medium | **one**, "Next class": a compact and a wide layout, chosen by its width — [The widget](#the-widget) |
+| Lock Screen widgets, Live Activity, Siri "next class" | yes | **no** |
+| A tap on the widget | opens `psync://bookings?event=<id>` | no link is opened: an explicit intent to the app, with the class id beside it — the same landing (My Bookings, then that class) |
+| What keeps the widget current | a WidgetKit timeline | a repaint whenever bookings change and whenever the app starts, one inexact alarm — a minute after the shown class starts, or just after midnight if that comes first — and Android's own half-hourly update |
+| The widget after a light / dark flip | at once | at once from Android 12; on older phones at its next repaint, half an hour at most |
 | Back | — | the hardware / gesture Back closes what is on top; see below |
 | Reminders | the same two: 90 minutes before a class, Mondays at 12:00 | the same, filed under two notification channels; they may arrive a few minutes late |
 | Reminder wording | "open Psync for the live countdown" | no mention of a countdown (there is no Live Activity) |
@@ -56,12 +65,11 @@ Know this about a debug build:
 | Status bar | the page is drawn under it | a band of its own, coloured to the theme's ground |
 | Launch screen | the mark and the wordmark | the mark alone |
 | Rotating the phone | does nothing: portrait only | the same: the activity is locked to portrait |
-| A waitlist place that became a seat | "in My Bookings (and your calendar/widget if you sync)" | "(and your calendar if you sync)" — there is no widget |
 | The line under "Connect Psycle account" | "Works on iPhone and desktop." | "Works on your phone and on desktop." |
 | Storage that survives a purge | the Preferences mirror | the same mirror (SharedPreferences); what it survives is the web view's storage being cleared |
 | Backups | — | **off**: nothing the app stores goes into a Google backup or a phone-to-phone transfer. On a new phone you sign in again |
 | Service worker | none | none (the files are in the app) |
-| Haptics, the in-app browser, the first-run welcome, themes | yes | yes — the welcome's last page says "with reminders and calendar sync" |
+| Haptics, the in-app browser, the first-run welcome, themes | yes — the welcome's last page says "with widgets and reminders on iPhone" | yes — it says "with a widget and reminders" |
 
 ## How Back works
 
@@ -123,11 +131,77 @@ gives the first Back to the keyboard.
   a launch and ignores those rows, so a class cancelled and re-booked a moment later still gets its event. This was
   written from the plugin's source, not seen on a phone.
 
+## The widget
+
+One home-screen widget, **Next class**, in the look of the iPhone one. To add it: long-press an empty part of the
+home screen → **Widgets** → **Psync** → drag **Next class** out. It arrives two cells by two and can be resized both
+ways.
+
+- **What it shows.** The day word ("Today", "Tomorrow", else "Thu 24"), the TIME in 24-hour digits as the hero, the
+  class type's pictogram in a tile, the class name and your seat ("Bike 9", "Bikes 5 & 6", "Bed 4"). More seats than
+  the badge has room for are counted — "4 bikes" — rather than cut off; a screen reader names them all. The card wears
+  that class's colour at the strength chosen in Membership → Class colours: Soft and Bold tint the whole card; Off
+  leaves the card neutral, with colour only in the tile and the seat badge. A studio with no seat map gets no badge.
+  A waitlist place is never shown, and neither is a class that has started.
+- **Two layouts, chosen by its width.** Compact (about two cells): day, time, class name, seat. Wide (from about four
+  cells — 250dp): the same, plus "Instructor · Place" and up to two following classes as one-line rows ("Tomorrow
+  07:30" and the class name, a long name cut to its head: "REFORMER PILATES"). A short widget — or a large system
+  font, which makes every line but the time taller — gives way from the class name down: one line instead of two
+  (a long name then prints as its head, whole, never cut mid-word), smaller digits, fewer rows. The seat is the
+  last thing to go. Anything that still does not fit ends in an ellipsis: nothing is cut out of sight.
+- **"Nothing booked"** is all the empty state says — with nothing booked, signed out, or before the app was ever
+  opened. The widget never says who is signed in, or whether anyone is. It says so only once it has READ what the
+  app stored: until its first paint — straight after it is added, and after a restart, which on a phone that lets
+  no app start by itself can last until Psync is opened — the card shows the word "Psync" and nothing else.
+- **Where its data comes from.** The same snapshot the iPhone widget reads: whenever bookings change, the bridge
+  writes three small JSON strings — the next class, the next five, and a count per day of the week ahead. On the
+  iPhone a Swift plugin puts them in the App Group; on Android a plugin of the SAME name, written in Java inside the
+  app, puts them in one private preferences file that the widget reads. Two more such twins repaint the widget and
+  hand a tap to the page. No package, no Capacitor plugin and no Swift was added for it, and the file is kept out of
+  backups like everything else the app stores.
+- **How it stays current.** The app repaints it after every change to your bookings and to your class colours, and
+  every time it starts (so a widget is never left showing a class over storage that was cleared). It arms ONE
+  inexact alarm: for a minute after the shown class starts, so it moves on to the next class by itself — or for
+  just after midnight if that comes first, when "Tomorrow" has become "Today". A sleeping phone is not woken for
+  it, so it catches up when the phone next wakes. Android's own update, every 30 minutes, is the backstop — and the
+  only thing that notices a changed clock or time zone. Every repaint reads the stored snapshot again and drops
+  what has started.
+- **Times are the phone's own.** "18:30" prints exactly as Psycle wrote it, but WHEN a class counts as started is
+  judged on the phone's clock in the phone's zone — as on the iPhone widget, and by the owner's decision. In London
+  there is no difference.
+- **A tap** anywhere on it opens Psync on My Bookings and then that class's sheet, while the seat is still held;
+  on "Nothing booked" it opens My Bookings. No link is opened and the app answers no URL scheme: the tap is an
+  explicit intent to the app carrying the class id. Another app on the phone can send the same intent with an id of
+  its own making, so the id is kept only if it is 1 to 12 digits, and the page judges it again. A forged tap can at
+  most show My Bookings and the sheet of a class you hold. It cannot book or cancel.
+- **Signing out empties it**, at once, exactly as on the iPhone: the same sign-out pass writes an empty snapshot and
+  asks for one repaint. A session that merely EXPIRED does not: those classes are still booked, so the widget keeps
+  showing them until you sign in again.
+- **The typeface.** The time is set in Android's own condensed bold face (`sans-serif-condensed`). The app's Sofia
+  Sans Condensed ships as a web font (woff2); a widget would need it as an Android font resource, and nothing in this
+  repository converts one — so no font file ships.
+- **Light and dark.** The snapshot carries each class's colours for both. From Android 12 the launcher is handed
+  both and flips by itself; on older phones the widget catches up at its next repaint — half an hour at most.
+- **Not there:** no Lock Screen widget, nothing standing in for the Live Activity (no ongoing countdown
+  notification), no Siri, no count of the week, no settings screen of its own.
+
+For someone with `adb` and a DEBUG build, the widget can be drawn without a launcher — this is what CI photographs.
+The activity exists in debug builds only and shows built-in sample classes with made-up names; it reads nothing the
+app stores, and only `adb` can start it (it asks its caller for a permission that the adb shell holds and no
+installed app can — the debug APK is also the one you sideload):
+
+```bash
+adb shell am start -S -W -n com.psyclefinder.app/.WidgetPreviewActivity --es size wide --es night 1 --es sample two
+# sample: one | two | four | spaces | long | bold | off | neutral · size: compact | wide · night: 0 | 1 · empty: 1
+# width, height: the card in dp (a width the screen has no room for is drawn narrower, and the caption says so)
+# a larger font: adb shell settings put system font_scale 1.3   (and 1.0 to put it back)
+```
+
 ## What is NOT there
 
-Widgets, the Live Activity, Siri, the `psync://` link the widgets use, an image share card, a wordmark on the launch
-screen, exact-time alarms, Google backup of the app's data, and any store delivery. An Android widget ("level 3")
-was not asked for and is not started.
+Lock Screen widgets, the Live Activity (and any notification standing in for it), Siri, a `psync://` URL scheme (the
+widget's tap is an explicit intent; no link is ever opened), an image share card, a wordmark on the launch screen,
+exact-time alarms, Google backup of the app's data, and any store delivery.
 
 ## Building it yourself
 
@@ -143,6 +217,7 @@ npm run sync:android    # builds www/, then `cap sync android`: copies the web a
 npm run open:android    # opens ios-app/android in Android Studio — press Run with a phone (USB debugging) or an emulator
 # or, without the IDE:
 npm run android:debug   # sync:android, then ./gradlew assembleDebug → android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:test    # sync:android, then ./gradlew :app:testDebugUnitTest — the widget's snapshot rules, on the JVM (no phone, no emulator)
 ```
 
 - `npm run sync:android` is not optional: the copied web assets and two generated config files are git-ignored, and
@@ -223,7 +298,8 @@ The facts, from the code:
   stored. Psycle answers with a session token, which is kept on the phone: the app encrypts it (AES-GCM) as soon
   as it loads, and falls back to weaker storage only where the web view offers no cryptography.
 - Everything else the app keeps — booking history, favourites, rankings, spot preferences, the usual week, settings,
-  its own error and action logs — stays **on the phone**, and is excluded from Google backup and device transfer.
+  its own error and action logs, the widget's copy of your next classes — stays **on the phone**, and is excluded
+  from Google backup and device transfer.
 - The developer runs no server and receives nothing. **No analytics, no ads, no crash reporting, no third-party
   SDKs.** Requests go only to Psycle's API; instructor photos load from the addresses that API gives; a map, a
   Google Calendar link or an instructor's page opens in the in-app browser only when tapped.
@@ -259,8 +335,8 @@ logs.
 - [ ] No pale flash between the launch screen and the first paint in dark mode.
 - [ ] The launcher icon looks right under the phone's icon shape; with themed icons on (Android 13+) the mark keeps
       its two tones and its grooves.
-- [ ] The first-run welcome's last page reads "with reminders and calendar sync", and nothing in the app mentions
-      widgets, Siri or an iPhone.
+- [ ] The first-run welcome's last page reads "with a widget and reminders", and nothing in the app mentions
+      a Lock Screen widget, a live countdown, Siri or an iPhone.
 - [ ] With no signal the app still opens, and My Bookings shows the saved copy.
 
 **Sign-in**
@@ -317,6 +393,54 @@ adb shell "am start -a android.intent.action.MAIN -n com.psyclefinder.app/.MainA
 - [ ] A held class appears with two alerts, at the right time; cancelling removes it; cancelling and re-booking the
       same class within a minute leaves exactly ONE event — on a Google-synced calendar in particular.
 - [ ] "Re-sync now" and "Remove duplicates" tell the truth. Picking a read-only calendar (Holidays) does no harm.
+
+**The widget** — none of it has been seen anywhere: written by reading, and as yet not even compiled
+- [ ] Long-press the home screen → Widgets → Psync: **Next class** is listed, with a sample card as its preview on
+      Android 12+ (the app icon on older pickers). Dragged out, it arrives two cells by two and PAINTS — not
+      "Problem loading widget", not "Nothing booked" while you hold a class, and not a card that says only "Psync"
+      for more than a moment. (The widget's receiver is deliberately NOT exported: Android's own widget service
+      reaches it regardless. A card stuck on "Psync" on your launcher is the one thing that would say otherwise.)
+- [ ] With a class held: the day word, the time in 24-hour digits, the pictogram tile, the class name and the seat
+      badge, in that class's colour. "18:30" is not clipped; a long class name takes two lines and is not cut
+      mid-word; the badge is exactly the size of its words.
+- [ ] With THREE or FOUR seats booked in one class: the badge names them all where there is room (the wide
+      layout) and says "4 bikes" where there is not (two cells) — never a list that stops short. Anything that
+      does not fit anywhere ends in "…".
+- [ ] Stretch it to four cells wide: the wide layout — "Instructor · Place" and up to two following classes. Note
+      what three cells gets on your launcher (wide starts at 250dp). Make it shorter: rows drop away first, then the
+      name goes to one line; nothing overlaps.
+- [ ] Make the two-cell widget ONE row tall, if your launcher allows it: the seat badge is whole — its pill not
+      shaved flat at the bottom — with smaller digits above it, and a long class name reads as its head
+      ("REFORMER PILATES"), not "REFORMER PIL…". The heights the widget plans by are sums nobody has measured.
+- [ ] Settings → Display → Font size at its largest, then look at the widget again at each size: the seat badge
+      is still whole. (On a one-row widget at the very largest font it may not be: note what is cut.)
+- [ ] Book or cancel in the app, then press Home: the widget already shows the new next class.
+- [ ] Membership → Class colours → Off, Soft, Bold, then Home each time: Off is a neutral card with colour only in
+      the tile and the badge; Soft and Bold tint the card; text stays readable on every class type you hold.
+- [ ] System dark mode on, then off: on Android 12+ the widget follows at once, and its corners match the
+      launcher's other widgets; below Android 12 note how long it takes (half an hour at most).
+- [ ] About a minute after a held class starts, the widget moves to the next class — or to "Nothing booked" — by
+      itself. Note how late, and whether it had caught up when you woke a sleeping phone.
+- [ ] With a class booked for tomorrow morning, look at the widget shortly after midnight: "Today", not
+      "Tomorrow". Note how late the word changed, and whether it was right when you woke the phone in the morning.
+- [ ] Tap it with Psync swiped away from the task switcher (a cold start), and again with Psync in the background:
+      both land on My Bookings with that class's sheet open. Tap "Nothing booked": My Bookings, no sheet.
+- [ ] After a widget tap, leave Psync, open it again from the task switcher an hour later: no sheet opens by itself.
+- [ ] Sign out in the app, press Home: "Nothing booked", at once. Sign in again: the class is back.
+- [ ] Restart the phone and do not open Psync: what does the card say before its first paint ("Psync" alone is
+      right; "Nothing booked" while you hold a class is not), and for how long? Then it shows the class, and still
+      rolls over after it starts.
+- [ ] Settings → Apps → Psync → Storage → Clear storage, with a class on the widget: open Psync once (you are
+      signed out) and press Home — the widget says "Nothing booked", not the class it showed before.
+- [ ] On a launcher other than the phone's own (another phone, or an installed launcher): it can be added, paints,
+      and resizes between the two layouts.
+- [ ] With TalkBack: the widget reads as one item, "Next class: Today 18:30, RIDE 45, …, Bike 9".
+- [ ] For someone with `adb` — a forged tap, as another app could send one. It must land on My Bookings and open
+      NO sheet:
+
+```bash
+adb shell "am start -n com.psyclefinder.app/.MainActivity -a com.psyclefinder.app.widget.OPEN --es com.psyclefinder.app.widget.EVENT_ID '12;drop'"
+```
 
 **Appearance**
 - [ ] In each of the five themes the status bar is the theme's ground with readable glyphs, straight after a theme

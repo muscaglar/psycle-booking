@@ -509,9 +509,80 @@ list at the end of this file, and none of it is ticked.
 level, so a Play submission waits for the Capacitor upgrade (`ios-app/UPGRADE-CAPACITOR-8.md`, which has no Android
 steps yet). Sideloading the debug APK needs neither. The owner's guide — installing, building, the keystore, Play
 Console, the data-safety answers — is `ios-app/ANDROID.md`; the store copy is `ios-app/PLAY_STORE_LISTING.md`. An
-Android widget ("level 3") was not asked for and was not started.
+Android widget ("level 3") was no part of this work; it followed, and is the next section.
 
 Assertions: 8,061 → 8,307.
+
+### Follow-up: the Android widget
+
+The owner's words: "Go ahead with level 3, the Android widget". The Android app gets ONE home-screen widget, "Next
+class", in the look of the iPhone one: the day word, the time in 24-hour digits as the hero, the class type's
+pictogram in a tile, the class name and the seat, on a card in the class's colour at the member's intensity; from
+about four cells wide also "Instructor · Place" and up to two following classes. A waitlist place is never shown, a
+class that has started is never shown, and with nothing to show it says "Nothing booked" — the same words signed
+out, or before the app was ever opened: the widget never says who is signed in. Level 2's condition stood: **the
+iPhone app must not change** — no npm package, no Capacitor plugin, no Swift, `npm run sync` still iOS-only.
+
+- **Native twins, not a branch.** The bridge already writes the widget snapshot (three JSON strings) through a
+  plugin it finds by name, asks a second one to reload, and listens to a third for a tap. The Android app now
+  registers local Java plugins under those SAME names and method shapes — `AppGroupPreferences`, `WidgetCenter`,
+  `PsycleDeepLink` — so the code path the iPhone app runs drives the Android widget, and the bridge's diff is comments
+  only. The Live Activity plugin has no twin. The store is one private preferences file, and stricter than the
+  iPhone's: three keys, strings only, 64 KB at most.
+- **A classic App Widget.** `AppWidgetProvider`, `RemoteViews` and XML layouts in plain Java — no Compose, Glance or
+  Kotlin, no new runtime dependency. RemoteViews shaped the rest: only a short list of views may be used; a surface
+  is coloured by putting a WHITE shape in an ImageView under a colour filter; from Android 12 the launcher is handed
+  both appearances and flips by itself, and below it the card catches up at its next repaint; a widget cannot measure
+  itself, so a small pure class decides from the size the launcher reports — and the member's font scale — which of
+  two layouts it gets and what fits: it ADDS a card's rows up and takes the first step of a ladder that fits, giving
+  way from the class name down so that the seat badge, the last row, is the last thing a short card cuts. Text that
+  still does not fit ends in an ellipsis, seats a badge has no room for are counted ("4 bikes"), and a name on one
+  line prints as its head. The eight pictograms are vector drawables converted from the app's own stroke data. The time is set in the
+  system's condensed bold face: the app's own is a web font, and no font file ships.
+- **Fresh without an exact alarm.** The app repaints the widget after every snapshot write and at every cold start;
+  the provider arms ONE inexact alarm, for an instant the pure class names — a minute after the shown class starts,
+  so the widget rolls to the next class by itself, or just after midnight if that comes first, because "Tomorrow" is
+  a relative word (the iPhone widget prints a weekday and needs no such tick); Android's half-hourly update is the
+  backstop. Every paint re-reads the snapshot and drops what has started — on the phone's
+  own clock, as the iPhone widget does, by the owner's closed decision.
+- **A tap with no URL.** Level 2's rule stands: no custom scheme, no new intent filter. The card opens the app
+  through an explicit, immutable PendingIntent carrying the class id; `MainActivity` hands it to the `PsycleDeepLink`
+  twin, which emits the `openURL` event the page already parses, retained until the listener attaches. Any app can
+  start the launcher activity with extras of its own, so the id is kept only as 1 to 12 digits, and the page judges
+  it again: a forged tap can show My Bookings and the sheet of a class the member holds, no more. The widget's
+  receiver is NOT exported — Android's own widget service sends the widget broadcasts and reaches it regardless, as
+  the app's own refresh and alarm do — and it takes nothing from the intents it receives all the same. (It was first
+  written exported, on the premise that a launcher could not otherwise paint it. A review corrected that.)
+- **Privacy.** A deliberate sign-out empties the widget, through the same pass that empties the iPhone's; an expired
+  session does not, because those classes are still booked.
+- **Copy.** The Android welcome's last page now reads "with a widget and reminders", and the waitlist "You're in"
+  notice is one sentence on every platform again ("your calendar/widget").
+- **Proof without a phone, designed in.** What the widget decides lives in two classes with no Android import, so 45
+  JVM unit tests run the real code on CI (`./gradlew :app:testDebugUnitTest`, blocking, before the APK) — the
+  repaint instant, the day words across zones and clock changes, every locale trap the iPhone once fell into, every
+  plan fitting the height that chose it, and a contrast floor over the whole class-colour palette. What it draws is
+  built by ONE class, which a debug-only activity (startable by `adb` alone) shows with `RemoteViews.apply()`; the
+  emulator job, on a phone-sized screen, opens that nine times — compact, wide, wide at night, class colours off,
+  empty, four seats, the narrowest card, the smallest card, a long name under a larger font — keeps the pictures,
+  and fails when the preview logged a widget it could not draw.
+  tests/suites/19-android-project.js reads the Java and XML for what can be read (RemoteViews-safe views, immutable
+  PendingIntents, an inexact alarm, API-level guards, the preview in debug builds only); the new 20-android-widget.js
+  holds what the bridge writes through the twins, a retained tap and a hostile one, sign-out against expiry, and the
+  iPhone's plugin calls to their digest.
+
+**What is proved, and what is not.** The widget was written without a compiler (the Capacitor plugin API from
+memory), then compiled by CI's `android-build` job, which first ran its 45 JVM tests against the real org.json (all pass), and drawn on an emulator by `android-smoke`: the debug preview rendered the widget's own RemoteViews in nine states — compact and wide, day and night, intensity off, a narrow and the smallest box, large type, four seats, empty — with no crash and no preview error in the log, and every one was looked at: the time leads, the card wears the class tint, the pictogram tile and the seat badge are drawn in the class colour, night picks the dark literals, large type keeps every row whole (a long class name ends in an ellipsis), four seats read "4 bikes", and the empty card says "Nothing booked" and names nobody.
+Beyond CI's reach
+altogether: adding it from a launcher's picker, which layout a launcher's sizes choose, the corner clipping, the
+roll-over and midnight alarm on a dozing phone, a one-row card under a large font, the card before its first paint
+and after Clear storage, the tap on a cold start, a sign-out repainting the home screen. They are the "The
+widget" block of [ios-app/ANDROID.md → "On-device checklist"](ios-app/ANDROID.md#on-device-checklist); none is ticked.
+
+**Deliberately left out.** A Lock Screen widget, Siri, and an ongoing countdown notification standing in for the Live
+Activity: it was not requested by name, and it needs native alarm and notification code that nobody can check
+without a phone (agents/backlog.md).
+
+Assertions: 8,388 → 8,608 (and 45 JVM tests, which `npm test` does not count).
 
 ## How it was done
 

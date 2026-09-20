@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The seat badge's pill ("Bike 9"). The radius is larger than any badge is tall, and a shape
+  never rounds a corner past half its shorter side: a pill at every size. White, and coloured by
+  an ImageView colour filter - see drawable/widget_card.xml.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="100dp" />
+</shape>

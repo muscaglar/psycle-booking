@@ -91,6 +91,9 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    // The widget's snapshot reader (widget/PsyncSnapshot.java) parses JSON with org.json and is run by
+    // plain JVM tests (app/src/test); android.jar's org.json is a stub there that throws "not mocked".
+    testImplementation "org.json:json:20240303"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

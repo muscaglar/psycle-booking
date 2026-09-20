@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The pictogram tile's ground (the web app's .ct-tile: a 10 radius on a 28 tile). White, and
+  coloured by an ImageView colour filter - see drawable/widget_card.xml.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="9dp" />
+</shape>

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The type of the home-screen widget, once, for all its layouts (layout/widget_next_class_*.xml).
+  The launcher inflates those layouts in ITS process, under its own theme: a style named on a
+  view still resolves (it is this app's resource), a theme attribute would not - so every value
+  here is literal or one of this app's own resources. No style has a parent, and no name has a
+  dot (a dotted name would need its prefix to exist as a style).
+
+  The time is the hero, as on the iPhone widget: the system's condensed bold face, tabular
+  digits, 24-hour. No font file ships - the app's Sofia Sans Condensed is a web font. Its size
+  is in dp, not sp, and PsyncWidgetViews sets it again per size: at the largest font scale
+  sp digits would leave the card. Everything else is sp and follows the member's font size.
+
+  EVERY one-line style ends in an ellipsis (android:ellipsize). maxLines="1" alone does not: a
+  TextView then wraps at the last space and hides line two, so "Bikes 12 & 14 & 16 & 18" in a
+  badge too narrow for it printed as "Bikes 12 & 14 & 16 &" - a seat gone, and nothing to say
+  so. The day word and the time are singleLine as well: they hold no space to wrap at, and
+  without it a box too narrow for them breaks mid-word ("18:3"). A cut must always be SEEN.
+  PsyncSnapshot.Entry.seatBadge keeps the badge from needing it: seats it has no room for
+  are counted ("4 bikes").
+
+  The sizes here are also written into widget/PsyncWidgetPlan.java, which adds a card's rows
+  up to decide what fits: change one, change the other (tests/suites/19-android-project.js
+  holds the two together).
+
+  The colours are the NEUTRAL look (values/colors.xml); PsyncWidgetViews paints a class in its
+  own colours over them.
+-->
+<resources>
+    <style name="PsyncWidgetDay">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/psync_widget_ink_2</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="PsyncWidgetTime">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:textSize">40dp</item>
+        <item name="android:textColor">@color/psync_widget_ink</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="PsyncWidgetTitle">
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/psync_widget_ink</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="PsyncWidgetBody">
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/psync_widget_ink_2</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <!-- The seat badge's words; the pill under them is drawable/widget_seat_badge.xml. -->
+    <style name="PsyncWidgetSeat">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/psync_widget_on_tile</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:paddingStart">9dp</item>
+        <item name="android:paddingEnd">9dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+    </style>
+
+    <!-- "Tomorrow 07:30" at the head of a following row. -->
+    <style name="PsyncWidgetRowWhen">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/psync_widget_ink</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+</resources>

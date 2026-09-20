@@ -5,8 +5,8 @@ target a newer Android API level than Capacitor 6 builds for, so a submission wa
 (`ANDROID.md` → "Release", step 3). The copy is ready for that day; the release steps, the keystore and the on-device
 checklist are in `ANDROID.md`.
 
-The Android app has no widgets, no Live Activity and no Siri, and its share card goes out as text. The copy below
-promises none of them. Keep it that way when it is edited.
+The Android app has ONE home-screen widget ("Next class") — no Lock Screen widget, no Live Activity, no Siri — and
+its share card goes out as text. The copy below promises nothing more. Keep it that way when it is edited.
 
 ## Play Console fields
 
@@ -64,6 +64,7 @@ EVERYTHING YOU HOLD
 • A saved copy of your bookings when you have no signal
 
 KEEP UP
+• A home screen widget for your next class: the time, the class and your seat
 • A reminder 90 minutes before each class
 • A reminder on Mondays at 12:00, when Psycle opens new dates
 • Calendar sync: your bookings in a calendar you choose, kept in step as you book and cancel
@@ -92,8 +93,8 @@ PRIVATE BY DESIGN
 
 ### Screenshots: reuse the six, rebuild the files
 
-The six App Store screenshots are the right pictures and the right captions: none shows a widget, a Live Activity
-or anything else the Android app lacks, the frame around each is a plain rounded rectangle and not an iPhone, and
+The six App Store screenshots are the right pictures and the right captions: none shows an iPhone widget, a Live
+Activity or anything else the Android app lacks, the frame around each is a plain rounded rectangle and not an iPhone, and
 every name in them is the fake server's.
 
 | Order | Source | Caption |
