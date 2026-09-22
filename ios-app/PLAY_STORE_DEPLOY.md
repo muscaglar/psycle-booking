@@ -426,6 +426,39 @@ against Google's definitions on the day.
 Category **Health & Fitness**; tags from Play's own list; the contact e-mail address again.
 Countries: Psycle is in London — **United Kingdom** alone is an honest start, and a small audience is a small risk.
 
+### 5.11 In-app products: the optional tips
+Psync is free, and "Support Psync" in the app (Membership) lets a member leave a tip. Play's payments policy has an
+app take money for a digital thing — a tip to its developer included — through **Google Play's billing system** and
+nothing else, and the app may not lead anywhere else to pay. So the app uses Play's Billing Library
+(`PsycleTipJarPlugin.java`, the one runtime dependency the Android project adds) and names no other way of paying.
+
+1. Play Console → Setup → **Payments profile**: selling anything needs a merchant account, with your bank details.
+   The account is an individual's, so what arrives is your own income.
+2. Monetise → Products → **In-app products** → create three **one-time** products with EXACTLY these ids — they are
+   fixed in the code (`tips/PsyncTips.java`, `js/tabs.js`, and the iPhone plugin):
+
+   | Product ID | Name | Description | Suggested price |
+   |---|---|---|---|
+   | `com.psyclefinder.app.tip.small` | Small tip | A small thank-you. Unlocks nothing. | £1.99 |
+   | `com.psyclefinder.app.tip.medium` | Tip | A thank-you. Unlocks nothing. | £4.99 |
+   | `com.psyclefinder.app.tip.large` | Large tip | A generous thank-you. Unlocks nothing. | £9.99 |
+
+   Activate each. The prices are yours: the app prints whatever price Play returns. A product can be created only
+   once a build that declares the billing permission has been uploaded (any track): the Billing Library's own
+   manifest declares it, so the first upload of this app is enough.
+3. Google's service fee is 15% on the first part of a developer's yearly earnings, for accounts enrolled in that
+   tier (Play Console → Setup → Account groups / service-fee programme: check the current page).
+4. Testing: add your tester accounts under Setup → **Licence testing**; a licence tester's purchases are not
+   charged. In the installed app, Membership → Support Psync → a tip → Play's sheet → "Thank you. Your tip went
+   through." The tip is consumed at once, so it can be given again; one that could not be consumed (no network
+   just then) is consumed the next time the app connects to Play.
+5. Until the products exist and are active, the app simply shows no Support Psync section: nothing to hide.
+
+In the forms: **Data safety** — the purchase is handled by Google Play's own billing, and the app neither reads nor
+keeps anything about it (no purchase token or order id reaches the page or a log: `tests/suites/24-tip-jar.js`);
+read Google's current guidance on whether Play-billing purchases are to be declared, and declare it if so.
+The store listing's "In-app purchases" line is set by Play from the products themselves.
+
 ---
 
 ## 6. Testing tracks: internal → closed → production

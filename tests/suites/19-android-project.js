@@ -1196,9 +1196,9 @@ module.exports = function (t) {
   const dependencyLines = ((/\ndependencies \{\n([\s\S]*?)\n\}/.exec(appGradle) || [])[1] || '').split('\n').map((l) => l.replace(/\/\/.*$/, '').trim().replace(/'/g, '"')).filter(Boolean).sort();
   eq(dependencyLines, ['implementation fileTree(include: ["*.jar"], dir: "libs")', 'implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"',
     'implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"', 'implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"',
-    'implementation project(":capacitor-android")', 'implementation project(":capacitor-cordova-android-plugins")', 'testImplementation "junit:junit:$junitVersion"', 'testImplementation "org.json:json:20240303"',
+    'implementation project(":capacitor-android")', 'implementation "com.android.billingclient:billing:8.0.0"', 'implementation project(":capacitor-cordova-android-plugins")', 'testImplementation "junit:junit:$junitVersion"', 'testImplementation "org.json:json:20240303"',
     'androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"', 'androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"'].sort(),
-    'app/build.gradle gained ONE dependency line — testImplementation "org.json:json:20240303" — and no implementation / api line at all');
+    'app/build.gradle gained TWO dependency lines and no more: testImplementation "org.json:json:20240303" (the widget\'s JVM tests) and implementation "com.android.billingclient:billing:8.0.0" — Play\'s own Billing Library, for the optional tips, the one runtime dependency added (24-tip-jar.js)');
   const gradleText = ['build.gradle', 'app/build.gradle', 'variables.gradle', 'settings.gradle', 'gradle.properties'].map((f) => read(ANDROID + '/' + f)).join('\n').replace(/\/\/.*$/gm, '');
   ok(!/kotlin|compose|glance/i.test(gradleText) && walk(ANDROID + '/app/src').filter((f) => /\.kts?$/.test(f)).length === 0, 'no Kotlin, no Compose, no Glance: plain Java and RemoteViews');
 

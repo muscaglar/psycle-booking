@@ -578,6 +578,12 @@ is not WidgetKit. On a signed build, with at least one class booked:
    chip follows. At class start it reads "In class"; about five minutes later it
    goes by itself, phone untouched (if it is still there after ten, note whether a
    Psync widget is on the Home or Lock Screen and whether Background App Refresh is on).
+7a. **Support Psync (the optional tips)** — needs the three products in App Store Connect and a sandbox tester
+   (`APP_STORE_LISTING.md` → "In-app purchases"). Before the products exist, Membership shows NO such section.
+   With them: three rows, cheapest first, with the App Store's own prices; a tap opens Apple's payment sheet
+   ("[Environment: Sandbox]") and the rows grey out; paying says "Thank you. Your tip went through."; closing the
+   sheet says nothing; the same tip can be given again. With Ask to Buy on the sandbox account: "Thank you. Your
+   tip is waiting for approval."
 8. **Live Activity, light ↔ dark while it is up** — with the card on the Lock
    Screen, toggle Dark / Light from Control Centre twice. The text must stay
    readable after EACH flip (ground and ink change together). Pale text on a

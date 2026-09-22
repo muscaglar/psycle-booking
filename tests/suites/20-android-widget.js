@@ -384,7 +384,7 @@ module.exports = async function (t) {
     if (!found.length) {
       ok(true, 'no @CapacitorPlugin class in ios-app/android/ yet: the seam is held from the commit that adds the twins (until then the bridge\'s path is the quiet one of section D)');
     } else {
-      eq(found, ['AppGroupPreferences', 'PsycleDeepLink', 'WidgetCenter'], 'the Android app registers exactly the three twins, under the iPhone plugins\' names — a name that differs by a letter is a widget that silently never updates — and no PsycleLiveActivity');
+      eq(found, ['AppGroupPreferences', 'PsycleDeepLink', 'PsycleTipJar', 'WidgetCenter'], 'the Android app registers exactly the three widget twins and the tip jar (24-tip-jar.js), under the iPhone plugins\' names — a name that differs by a letter is a widget that silently never updates — and no PsycleLiveActivity');
       const methods = (src) => { const out = []; const re = /@PluginMethod\b[^\n]*\s*public\s+void\s+(\w+)\s*\(/g; let m; while ((m = re.exec(src))) out.push(m[1]); return out.sort(); };
       eq(methods(plugins.AppGroupPreferences), ['get', 'remove', 'set'], 'AppGroupPreferences: set, get, remove — the Swift plugin\'s shape');
       ok(methods(plugins.WidgetCenter).indexOf('reloadAllTimelines') !== -1, 'WidgetCenter: reloadAllTimelines');

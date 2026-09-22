@@ -12,6 +12,7 @@
 		47D636BE091A4430BBBBD668 /* PsyclePictogram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45F98CD01C9D44F4A56CE159 /* PsyclePictogram.swift */; };
 		4B0773A4F5B64BCCB4902504 /* PsycleWidgetStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7246C734E64512AE513E09 /* PsycleWidgetStyle.swift */; };
 		4F8D649A975C4AFDF39B9C52 /* AppGroupPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B9A581D88135682C49890B4 /* AppGroupPreferences.swift */; };
+		A1F07C3E5B2D4E6F9A8B7C01 /* TipJarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F07C3E5B2D4E6F9A8B7C02 /* TipJarPlugin.swift */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
@@ -79,6 +80,7 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		715F53C1DD6AF6DE65D320D2 /* PsycleWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PsycleWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B9A581D88135682C49890B4 /* AppGroupPreferences.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroupPreferences.swift; sourceTree = "<group>"; };
+		A1F07C3E5B2D4E6F9A8B7C02 /* TipJarPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TipJarPlugin.swift; sourceTree = "<group>"; };
 		7E3D525D6B1A81CB4881778B /* PsycleLiveActivityView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PsycleLiveActivityView.swift; sourceTree = "<group>"; };
 		8236EAE45FEFA06ECEED2260 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		83CD02FD4644AB42491B73E5 /* AppShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
@@ -182,6 +184,7 @@
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				7B9A581D88135682C49890B4 /* AppGroupPreferences.swift */,
+				A1F07C3E5B2D4E6F9A8B7C02 /* TipJarPlugin.swift */,
 				A27ED0A0A598791FAE604B96 /* MainViewController.swift */,
 				8236EAE45FEFA06ECEED2260 /* App.entitlements */,
 				9DDB62B019A4759A25FDEDBF /* PrivacyInfo.xcprivacy */,
@@ -387,6 +390,7 @@
 				B3E8BCBAB72196A40F1018A2 /* NextClassIntent.swift in Sources */,
 				74C185E61731801A828CFEA0 /* AppShortcuts.swift in Sources */,
 				4F8D649A975C4AFDF39B9C52 /* AppGroupPreferences.swift in Sources */,
+				A1F07C3E5B2D4E6F9A8B7C01 /* TipJarPlugin.swift in Sources */,
 				931C2C018286D391138CDF1E /* MainViewController.swift in Sources */,
 				C0AA09180C7B40159F0B1943 /* PsycleClassType.swift in Sources */,
 			);

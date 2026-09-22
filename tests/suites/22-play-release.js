@@ -262,6 +262,17 @@ module.exports = function (t) {
     ok(/support\.html/.test(read('ios-app/APP_STORE_LISTING.md')) && /support@ajar\.dev/.test(read('ios-app/PLAY_STORE_LISTING.md')), '…the App Store listing gives it as the Support URL, and the Play listing gives the same address as the developer contact');
   }
 
+  // The review account's credentials belong in App Store Connect and Play Console ONLY: this repository is public.
+  // So the store documents may name one address of the publisher's — the support address — and no other.
+  {
+    const storeDocs = ['ios-app/APP_STORE_LISTING.md', 'ios-app/PLAY_STORE_LISTING.md', 'ios-app/PLAY_STORE_DEPLOY.md', 'ios-app/ANDROID.md'];
+    const others = storeDocs.reduce((out, f) => out.concat((read(f).match(/[A-Za-z0-9._%+-]+@ajar\.dev/g) || []).filter((a) => a !== 'support@ajar.dev').map((a) => f + ': ' + a)), []);
+    eq(others, [], 'no store document names a publisher address other than support@ajar.dev (a review account is never written down here)');
+    const listing = read('ios-app/APP_STORE_LISTING.md');
+    ok(/Sign-in information/.test(listing) && /never written into this file/.test(listing) && !/Password:\s*\S/.test(listing),
+      'the App Store listing says where the demo credentials go, and holds no "Password:" line');
+  }
+
   // The ONE owner placeholder — or, once filled in, one e-mail address, there and nowhere else.
   const publisher = (/<span\b[^>]*\bid="publisher"[^>]*>([\s\S]*?)<\/span>/.exec(page) || [])[1];
   ok(typeof publisher === 'string' && (page.match(/\bid="publisher"/g) || []).length === 1, 'ONE element names the publisher (<span id="publisher">)');

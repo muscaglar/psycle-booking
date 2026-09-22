@@ -514,6 +514,17 @@ adb shell "am start -a android.intent.action.MAIN -n com.psyclefinder.app/.MainA
       Psync closed and no widget placed: within a moment the countdown runs to the new reading (or goes, if the
       class is now more than 90 minutes away, or has "started").
 
+**Support Psync (the optional tips)** — compiled by CI, never seen on a phone. It needs the three products in Play
+Console and a licence-tester account (`PLAY_STORE_DEPLOY.md`, step 5.11).
+- [ ] Before the products exist: Membership shows NO "Support Psync" section.
+- [ ] With them: three rows, cheapest first, each with Play's own price. A tap opens Play's payment sheet; the rows
+      are greyed while it is up.
+- [ ] Pay as a licence tester: "Thank you. Your tip went through." The same tip can be given again straight away
+      (it was consumed).
+- [ ] Close the sheet instead: nothing is said, and nothing is charged.
+- [ ] A slow test card ("pending"): "Thank you. Your tip is waiting for approval." Open the app again after Play
+      approves it: nothing more is asked of you.
+
 **Calendar**
 - [ ] The permission prompt appears; the calendar list loads.
 - [ ] The hand-over dialog counts the other events correctly; "Choose another" changes nothing; "Use this calendar"

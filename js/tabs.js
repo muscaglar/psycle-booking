@@ -234,6 +234,13 @@
         '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
         '<div class="tier-list" id="tierListSearch" style="display:none"></div>' +
       '</div>' +
+      // Support Psync: optional tips through the store's own in-app purchase. Hidden until renderSupportPsync()
+      // finds the native plugin AND the store returns at least one of the three products: never in the web app.
+      '<div class="ms-section ms-support" id="supportPsync" style="display:none">' +
+        '<div class="ms-section-title">Support Psync</div>' +
+        '<div class="ms-support-note">Psync is free. A tip is a thank-you, and unlocks nothing.</div>' +
+        '<div class="ms-list" id="supportPsyncTips"></div>' +
+      '</div>' +
       '<div class="about-block">' +
         '<div class="about-mark">PSYNC</div>' +
         '<div class="about-text">An independent companion for Psycle London members.<br>Not affiliated with, or endorsed by, Psycle.</div>' +
@@ -2861,6 +2868,114 @@
 
   // ── Membership Info ────────────────────────────────────────────
 
+
+  // ── Support Psync: optional tips ─────────────────────────────────────
+  // Psync is free. Both stores have an app take a tip to its developer through
+  // their OWN in-app purchase and nothing else (App Review 3.1.1; Play's
+  // payments policy), and outside the US an app may not even link to another
+  // way of paying — so there is no payment link anywhere in the app. The
+  // native plugin (PsycleTipJar: StoreKit 2 on iPhone, Play Billing on
+  // Android) is reached by existence; the section shows only when the store
+  // returns a product, so it is dormant until the products exist there.
+  // A tip unlocks nothing and nothing is stored: the store's own payment
+  // sheet is the confirmation, and the only thing the app does is say thanks.
+
+  // ── pure:tips:start ── (DOM-free; tests/suites/24-tip-jar.js evaluates this block)
+  // The allow-list, cheapest first: the same three ids as TipJarPlugin.swift
+  // and PsyncTips.java. Nothing else is ever asked for or sent.
+  var TIP_PRODUCTS = [
+    { id: 'com.psyclefinder.app.tip.small', label: 'Small tip' },
+    { id: 'com.psyclefinder.app.tip.medium', label: 'Tip' },
+    { id: 'com.psyclefinder.app.tip.large', label: 'Large tip' }
+  ];
+
+  // What the store answered → the rows to draw, in OUR order. A product we do
+  // not sell, or one with no price, is dropped; the price is the store's own
+  // localized text and is printed as text, never as markup.
+  function _tipRows(answer) {
+    var found = answer && Array.isArray(answer.products) ? answer.products : [];
+    var rows = [];
+    TIP_PRODUCTS.forEach(function (t) {
+      var hit = null;
+      found.forEach(function (p) { if (!hit && p && p.id === t.id) hit = p; });
+      var price = hit && typeof hit.displayPrice === 'string' ? hit.displayPrice.trim() : '';
+      if (price && price.length <= 24) rows.push({ id: t.id, label: t.label, price: price });
+    });
+    return rows;
+  }
+
+  // The plugin's status → what to say. "cancelled" says nothing: the member
+  // closed the store's sheet themselves.
+  function _tipOutcome(status) {
+    if (status === 'purchased') return { text: 'Thank you. Your tip went through.', kind: 'success' };
+    if (status === 'pending') return { text: 'Thank you. Your tip is waiting for approval.', kind: 'info' };
+    if (status === 'cancelled') return null;
+    return { text: 'Couldn\'t complete that tip. Try again later.', kind: 'error' };
+  }
+
+  function _isTipId(id) {
+    return TIP_PRODUCTS.some(function (t) { return t.id === id; });
+  }
+  // ── pure:tips:end ──
+
+  function _tipJar() {
+    var C = window.Capacitor;
+    if (!C || typeof C.isNativePlatform !== 'function' || !C.isNativePlatform()) return null;
+    var P = C.Plugins && C.Plugins.PsycleTipJar;
+    return P && typeof P.products === 'function' && typeof P.purchase === 'function' ? P : null;
+  }
+
+  var _tipAnswer = null;      // the store's products, asked for once per launch
+  var _tipAsking = null;
+  var _tipBusy = false;
+
+  function renderSupportPsync() {
+    var box = document.getElementById('supportPsync');
+    var list = document.getElementById('supportPsyncTips');
+    if (!box || !list) return;
+    var jar = _tipJar();
+    if (!jar) { box.style.display = 'none'; return; }
+    var draw = function () {
+      var rows = _tipRows(_tipAnswer);
+      if (!rows.length) { box.style.display = 'none'; list.innerHTML = ''; return; }
+      list.innerHTML = rows.map(function (r) {
+        return '<button type="button" class="ms-row" data-tip-id="' + escapeHTML(r.id) + '"' + (_tipBusy ? ' disabled' : '') + '>' +
+          '<span class="ms-row-text"><span class="ms-row-label">' + escapeHTML(r.label) + '</span></span>' +
+          '<span class="ms-row-price">' + escapeHTML(r.price) + '</span></button>';
+      }).join('');
+      box.style.display = '';
+    };
+    if (_tipAnswer) { draw(); return; }
+    if (_tipAsking) return;
+    _tipAsking = Promise.resolve().then(function () { return jar.products(); }).then(function (answer) {
+      _tipAnswer = answer || { products: [] };
+    }, function () {
+      _tipAnswer = { products: [] };
+    }).then(function () { _tipAsking = null; draw(); });
+  }
+
+  async function _leaveTip(id) {
+    var jar = _tipJar();
+    if (!jar || _tipBusy || !_isTipId(id)) return;
+    _tipBusy = true;
+    renderSupportPsync();
+    var status = 'failed';
+    try {
+      var res = await jar.purchase({ productId: id });
+      status = res && typeof res.status === 'string' ? res.status : 'failed';
+    } catch (e) { status = 'failed'; }
+    _tipBusy = false;
+    renderSupportPsync();
+    var say = _tipOutcome(status);
+    if (say && typeof toast === 'function') toast(say.text, say.kind);
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    var row = t && typeof t.closest === 'function' ? t.closest('#supportPsyncTips [data-tip-id]') : null;
+    if (row && !row.disabled) _leaveTip(row.getAttribute('data-tip-id'));
+  });
+
   function renderMembershipInfo() {
     var container = document.getElementById('membershipInfo');
     if (!container) return;
@@ -2883,6 +2998,7 @@
     if (_rowReminders) _rowReminders.style.display = window._nativeReminder ? '' : 'none';
     var _rowCalendar = document.getElementById('msRowCalendar');
     if (_rowCalendar) _rowCalendar.style.display = (typeof window.psycleListCalendars === 'function') ? '' : 'none';
+    renderSupportPsync();
 
     var sub = (typeof _activeSubscription !== 'undefined') ? _activeSubscription : null;
     var user = (typeof currentUser !== 'undefined') ? currentUser : null;

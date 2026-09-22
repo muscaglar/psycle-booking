@@ -35,8 +35,9 @@ Find, book and keep track of your Psycle London classes. Independent companion.
 - Tags: fitness classes, booking (pick from Play Console's own list)
 
 ### Price
-- Free. No in-app purchases, no subscriptions, no ads. (A class credit is spent with Psycle, on the member's own
-  Psycle account; nothing is bought through the app.)
+- Free. No subscriptions, no ads. In-app products: three optional tips to the developer, which unlock nothing
+  (`PLAY_STORE_DEPLOY.md`, step 5.11). (A class credit is spent with Psycle, on the member's own Psycle account;
+  no class is bought through the app.)
 
 ### Contact details
 - Email: [YOUR EMAIL] (Play shows it publicly). Website: optional.
@@ -215,7 +216,8 @@ or endorsed by, Psycle. It requires an existing Psycle account and connects to P
 Test account: [EMAIL] / [PASSWORD]. The timetable opens without signing in. Booking a class needs credits on the
 account; the seat map, My Bookings, Stats and Settings do not.
 
-The app contains no in-app purchases, no subscriptions, no ads and no analytics.
+The app contains no subscriptions, no ads and no analytics. Its only in-app products are three optional tips to the
+developer (Membership, Support Psync), which unlock no content and no feature.
 ```
 
 ## Copyright

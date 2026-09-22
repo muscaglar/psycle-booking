@@ -54,6 +54,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppGroupPreferencesPlugin.class);
         registerPlugin(WidgetCenterPlugin.class);
         registerPlugin(PsycleDeepLinkPlugin.class);
+        // Not a twin of a widget plugin but of the iPhone's tip jar: optional tips, through Google Play Billing.
+        registerPlugin(PsycleTipJarPlugin.class);
 
         Intent launch = getIntent();
         relaunchOfAnOldIntent = savedInstanceState != null

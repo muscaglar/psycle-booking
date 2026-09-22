@@ -69,6 +69,33 @@ device yet** (checklist in IMPROVEMENTS-2026-09.md):
   both through the Swift interpreter, because a Mac with binary authorization kills a locally built binary.
 Any Swift edit must be re-proved with the App-scheme simulator build before it ships (main → TestFlight).
 
+## Support Psync: the tip jar (2026-09-22)
+Optional tips through each store's own in-app purchase; the reasoning and Apple's wording are in
+[../decisions.md](../decisions.md) section 3 ("Money"). A tip unlocks NOTHING, so there is no entitlement, no
+restore, no receipt validation and no server, and nothing about a tip is stored.
+- **One plugin name, two platforms**: `Capacitor.Plugins.PsycleTipJar` — App/TipJarPlugin.swift (StoreKit 2; a new
+  file, so it has FOUR entries in the Xcode project: build file, file reference, the App group, the app target's
+  Sources) and android/…/PsycleTipJarPlugin.java (Play Billing 8) — with the same two methods: `products()` →
+  `{ products: [{ id, displayPrice }] }`, any failure an empty list; `purchase({ productId })` →
+  `{ status: 'purchased' | 'cancelled' | 'pending' | 'failed' | 'unavailable' }`.
+- **ONE allow-list of three ids**, identical in js/tabs.js (`TIP_PRODUCTS`, inside `pure:tips`), the Swift
+  (`PsycleTipProducts.ids`) and the Java (`tips/PsyncTips.IDS`, PURE, JVM-tested), each between
+  `// ── tip-products:start` / `:end` markers that 24-tip-jar.js cuts by. Each native side checks the id it is
+  handed against its OWN list first. Changing an id means all three, and new products in both stores.
+- **iPhone**: only a VERIFIED transaction is thanked, and it is finished before `purchased` is answered; a
+  `Transaction.updates` task started in `load()` finishes a tip that completes later (Ask to Buy). One purchase at
+  a time, kept on the main actor.
+- **The web layer** (js/tabs.js, above `renderMembershipInfo`): `renderSupportPsync()` runs on every Membership
+  render, asks the store ONCE per launch, and shows `#supportPsync` only in a native app whose store returned a
+  product — so the code is dormant until the products exist in App Store Connect / Play Console, and absent from
+  the web app. The store's price is printed as text; rows are disabled while the store's sheet is up; the outcome
+  is one of three fixed sentences (`_tipOutcome`), and "cancelled" says nothing.
+- **No other way of paying is named anywhere in the shipped files** (24-tip-jar.js scans for the services' names):
+  outside the US storefront an app and its metadata may not point to one, and `support.html` is the listings'
+  Support URL.
+- Proved: the simulator BUILD, and the web layer on fakes. Never seen: a real purchase sheet. The owner's steps
+  (agreements, products, a sandbox purchase) are in ../../ios-app/APP_STORE_LISTING.md → "In-app purchases".
+
 ## iOS App
 - Capacitor 6 wrapper in `ios-app/` (CLI pinned to 6 — must match core's major). The Xcode project under `ios-app/ios` is committed; see SETUP.md.
 - Sync web assets: `cd ios-app && npm run sync`

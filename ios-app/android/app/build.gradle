@@ -90,6 +90,9 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // "Support Psync": optional tips. Play's payments policy has them go through Play's own billing system. The one
+    // runtime dependency this app adds to what Capacitor brings (PsycleTipJarPlugin.java; tests/suites/24-tip-jar.js).
+    implementation "com.android.billingclient:billing:8.0.0"
     testImplementation "junit:junit:$junitVersion"
     // The widget's snapshot reader (widget/PsyncSnapshot.java) parses JSON with org.json and is run by
     // plain JVM tests (app/src/test); android.jar's org.json is a stub there that throws "not mocked".

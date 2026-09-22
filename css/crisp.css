@@ -3912,6 +3912,8 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 .ms-row { min-height: var(--tap-lg); border-bottom: var(--hairline) solid var(--line); }
 .ms-row-sub { font-size: var(--type-caption); color: var(--text-muted); }
 .ms-row-chev { color: var(--text-ghost); }
+.ms-support-note { font-size: var(--type-caption); color: var(--text-muted); }
+.ms-row-price { color: var(--text); }
 .ms-row:focus-visible, .ms-signout:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -2); }
 /* Destructive, calm: a danger outline on the surface — never a red fill. */
 .ms-signout {

@@ -26,7 +26,12 @@ Find, book and track classes
 Primary: **Health & Fitness**. Secondary: **Lifestyle**.
 
 ### Price
-Free. No in-app purchases.
+Free, with three optional in-app purchases: tips (see "In-app purchases" below).
+
+### Availability
+**United Kingdom only.** Psycle's studios are in London, so no other storefront has a use for the app, and a UK-only
+release keeps the submission simple: the EU's trader declaration (a name, address and phone number shown publicly
+on the store page) is asked of apps distributed in the EU, not of a UK-only one.
 
 ### Age rating
 4+. Every answer in the questionnaire is "None" / "No": no user-generated content, no web access outside the
@@ -39,7 +44,7 @@ sign-in host, no gambling, contests, medical information or mature themes.
 Your next class on the Lock Screen, a countdown before it starts, and your usual week rebooked in a couple of taps. For members of the Psycle London studios.
 ```
 
-### Description (4,000 characters: 1961)
+### Description (4,000 characters: 2056)
 ```
 Psync is an independent companion app for members of the Psycle London studios. Sign in with your Psycle account to find classes, book the spot you want and keep track of what you hold.
 
@@ -79,6 +84,8 @@ YOUR TRAINING
 PRIVATE BY DESIGN
 • No analytics, no ads, no tracking
 • Your history and preferences stay on your device; sign-in and bookings go to Psycle and nowhere else
+
+Psync is free. If it is useful to you, you can leave a tip in the app. A tip unlocks nothing.
 
 Psync needs a Psycle account. Booking uses the credits or membership on that account. Psync is an independent app and is not affiliated with, or endorsed by, Psycle.
 ```
@@ -123,10 +130,46 @@ private window before submitting: Apple's reviewer opens it.
 ```
 © 2026 Ajar.dev Ltd
 ```
-The App Store shows the SELLER as the legal name on the Apple Developer account. If that account is an individual
-one, the store page will carry a person's name while the privacy policy says Ajar.dev Ltd: either is allowed, but
-they should agree. Publishing under the company means enrolling (or converting) the account as an organisation,
-which needs the company's D-U-N-S number.
+The Apple Developer account is an INDIVIDUAL one, in the United Kingdom (the owner, 2026-09-22), so the App Store
+shows the owner's own legal name as the seller: Apple takes that from the account, and it cannot be set to a
+company's name. That is fine. `privacy.html` and `support.html` say that the app is made and supported by Ajar.dev
+Ltd and is listed under its developer's own name, so a reviewer who compares the two finds them in agreement.
+(Showing the company as the seller would mean converting the account to an organisation, which needs the company's
+D-U-N-S number. It is not needed for release.)
+
+## In-app purchases
+
+Three **consumable** products: optional tips to the developer. App Review Guideline 3.1.1 allows a tip ONLY through
+in-app purchase, and outside the United States storefront neither the app nor this listing may point to any other
+way of paying — so nothing here, in the app or on `support.html` mentions one. A tip unlocks nothing.
+
+| Product ID (exact) | Reference name | Display name | Description | Suggested UK price |
+|---|---|---|---|---|
+| `com.psyclefinder.app.tip.small` | Tip, small | Small tip | A small thank-you. Unlocks nothing. | £1.99 |
+| `com.psyclefinder.app.tip.medium` | Tip | Tip | A thank-you. Unlocks nothing. | £4.99 |
+| `com.psyclefinder.app.tip.large` | Tip, large | Large tip | A generous thank-you. Unlocks nothing. | £9.99 |
+
+The three ids are fixed in the code (`ios/App/App/TipJarPlugin.swift`, `js/tabs.js`, and the Android twin):
+create the products with exactly these ids, or the app will not find them. The prices are yours: the app prints
+whatever price the store returns. In the app they appear under Membership → **Support Psync**, and only when the
+store returns them: with no products configured, or the agreement below unsigned, the section is simply absent.
+
+Before a product can be bought:
+1. App Store Connect → Business: accept the **Paid Apps agreement**, and add bank and tax details (an individual
+   in the UK fills in a W-8BEN for the US tax question). Nothing can be sold until its status is Active.
+2. Enrol in the **App Store Small Business Program** (developer.apple.com → Programs): Apple's commission is then
+   15% and not 30%. It is not automatic.
+3. App Store Connect → the app → In-App Purchases → create the three consumables above. Each needs a review
+   screenshot (Membership with the Support Psync section showing: take it on a TestFlight build signed in as a
+   sandbox tester) and a review note: "An optional tip to the developer. It unlocks no content or feature."
+4. **The first in-app purchases are submitted WITH an app version**: on the version's page, add them under "In-App
+   Purchases and Subscriptions" before you submit. They can go in with version 1.0 or with a later one; the code
+   is already in the app either way.
+5. Try one as a sandbox tester (Settings → App Store → Sandbox Account on the phone): the payment sheet says
+   "[Environment: Sandbox]", nothing is charged, and the app says "Thank you. Your tip went through."
+
+What you receive is income to you as an individual, since the account is yours: keep a record for your tax return
+(HMRC's trading allowance covers small amounts; your accountant will know how it sits beside the company).
 
 ## Screenshots
 
@@ -169,7 +212,14 @@ That is accurate: the app uses HTTPS and the operating system's own encryption, 
 ## App Review information
 
 ### Sign-in required
-Yes. **A demo account is mandatory.** Signed out, the app shows a sign-in prompt and nothing else, so a reviewer
+Yes. **A demo account is mandatory**, and it exists (the owner confirmed it on 2026-09-22). **Its user name and
+password are typed into App Store Connect → App Review Information → Sign-in information, and nowhere else: this
+repository is public, so they are never written into this file, a commit message or an issue.** Recommended, as the
+Play runbook says too: a review-only Psycle account with no class credits and no payment card. If you would rather
+the reviewer completes a booking, give it one credit and change the note below to say that a booking is real and
+should be cancelled afterwards.
+
+Signed out, the app shows a sign-in prompt and nothing else, so a reviewer
 without one cannot test anything and the submission is rejected under Guideline 2.1.
 
 ### Notes
@@ -179,11 +229,11 @@ not affiliated with or endorsed by Psycle. Members sign in with their existing P
 only to Psycle's own customer booking system, over HTTPS.
 
 DEMO ACCOUNT
-E-mail: <demo account e-mail>
-Password: <demo account password>
-This is a real Psycle member account on a real booking system. Booking a class uses a real class credit. Please
-cancel any test booking afterwards (Bookings, then Cancel on the class): cancelling is free until the time shown
-on the card.
+The user name and password are in the Sign-in information fields of this submission.
+It is a real Psycle member account on a live booking system, so it holds no class credits on purpose: a test
+booking would take a real member's place in a real class. Everything can be used with it — the timetable, the
+seat map, My Bookings, Stats, the widgets, calendar sync and reminders — and a booking can be followed to its final
+confirmation, where Psycle answers that the account has no credits.
 
 ACCOUNTS (Guideline 5.1.1(v))
 Psync cannot create an account. It has no sign-up and no password reset; the only account request it makes is
@@ -197,10 +247,13 @@ bookings written to a calendar the member chooses, and kept in step with their b
 notifications 90 minutes before a class and on Mondays at 12:00, when new dates open; haptics; the share sheet; a
 saved copy of bookings that can be read without signal.
 
+IN-APP PURCHASES
+Three optional tips to the developer (consumable), under Membership, Support Psync. They unlock no content and no
+feature; the app is fully usable without them.
+
 PERMISSIONS
 Calendar access is asked for only when the member switches on calendar sync in Settings. Notification permission
-is asked for only when the member switches on reminders. The app has no push server, no analytics, no tracking
-and no in-app purchases.
+is asked for only when the member switches on reminders. The app has no push server, no analytics and no tracking.
 ```
 
 ### Contact
@@ -214,10 +267,13 @@ everything). Do not paste a second version anywhere.
 
 ## Only the owner can do these
 
-- [ ] Open the published `privacy.html` and `support.html` in a private window (both name Ajar.dev Ltd and
-      support@ajar.dev), and check that support@ajar.dev really receives mail.
-- [ ] Decide whose name the store shows as the seller: the Apple Developer account's legal name (see Copyright).
-- [ ] Provide a demo Psycle account for App Review, with at least one class credit, and paste it into the notes.
+- [x] The published `privacy.html` and `support.html` are live and name Ajar.dev Ltd and support@ajar.dev, and the
+      owner confirmed that the address receives mail (2026-09-22).
+- [ ] In App Store Connect → Pricing and Availability, select the United Kingdom only.
+- [ ] For the tips: the Paid Apps agreement, bank and tax details, the Small Business Program, and the three
+      products — all in "In-app purchases" above. Until they exist the app simply shows no Support Psync section.
+- [ ] Type the demo account's user name and password into App Store Connect's Sign-in information fields (never
+      into this repository), and sign in with it once on the TestFlight build to see what a reviewer will see.
 - [ ] Fill the App Review contact fields and the copyright line.
 - [ ] Rename the App Store Connect record from "PsycleBookingBuddy" to the name above.
 - [ ] Answer the App Privacy questions and the age-rating questionnaire (recommended answers above).

@@ -95,13 +95,21 @@ Chosen by the owner from several rounds of concepts, with a product designer adv
   was proposed; "Booked!" keeps its own. On who publishes Psync and where to write: "Use support@ajar.dev as part of"
   the company at Companies House number 14071311 — AJAR.DEV LTD, written "Ajar.dev Ltd" in prose. It is named in
   privacy.html (the ONE address there), support.html, and both store listings. CLOSED.
-- **Money, 2026-09-22.** The owner: "This app will be free. I want to allow people to give me money." Advice given,
-  nothing built: no payment link inside either native app (App Review 3.1.1 and Play's billing policy treat a tip
-  to the developer as a digital purchase; the UK storefront had no link-out exemption when this was written — read
-  the current text first); a "Support Psync" link on the WEB app and the support page instead, to a Stripe Payment
-  Link under the company (Ko-fi or Buy Me a Coffee if nothing is to be set up); an in-app-purchase tip jar is the
-  compliant route inside the iPhone app, best after the first approval. Taking money makes Psycle's written
-  permission matter more. OPEN: the owner has not chosen.
+- **Money, 2026-09-22.** The owner: "This app will be free. I want to allow people to give me money.", then, on being
+  told that a link to Buy Me a Coffee (or any other way of paying) is not allowed inside the apps: "I am an
+  individual though. And I'm in the UK", and finally: **"Lets do in-app and equiv for Play Store."** So: a TIP JAR
+  through each store's own in-app purchase, and nothing else. Apple's text, read that day: "Apps may use in-app
+  purchase currencies to enable customers to 'tip' the developer" (3.1.1); outside the United States storefront
+  "apps and their metadata may not include buttons, external links, or other calls to action that direct customers
+  to purchasing mechanisms other than in-app purchase"; and the "monetary gift to another individual" allowance
+  (3.2.1(vii)) is for gifts between an app's users, not a tip to the app's own developer — being an individual does
+  not change that, and nothing in the text exempts the UK. Play's payments policy says the same of Play Billing.
+  Held by tests/suites/24-tip-jar.js: three consumable tips that unlock NOTHING, ONE allow-list of ids on all three
+  sides, the section only where the store returns a product (never on the web), and no donation or payment
+  service named anywhere in the shipped files — `support.html` and `privacy.html` included, since the store listings
+  point at them. A web donation link is NOT wanted unless the owner asks again. The Apple developer account is an
+  individual one, so the seller shown on the store and the recipient of the money is the owner in person, not
+  Ajar.dev Ltd. CLOSED.
 
 ## 4. Time zones
 
