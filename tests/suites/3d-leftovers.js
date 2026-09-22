@@ -155,12 +155,12 @@ module.exports = async function (t) {
 
     // £140, capped at 12, 10 made, 2 days left: projected 11 → £12.73.
     const capped = f._forecastVerdict(10, 12, 140, 140 / 12, 11, 140 / 11, 2);
-    eq(capped, "On pace for £12.73/class — this plan's best is £11.67/class", 'a plan that tops out above £10: said plainly (it read "Book 2 more to beat £10.00/class")');
+    eq(capped, "On pace for £12.73/class. This plan's best is £11.67/class.", 'a plan that tops out above £10: said plainly (it read "Book 2 more to beat £10.00/class")');
     eq(f._forecastVerdict(10, 20, 140, 7, 12, 140 / 12, 10), 'Book 4 more to beat £10.00/class', 'reachable inside the plan and the days: the advice stands');
-    eq(f._forecastVerdict(10, 20, 140, 7, 10, 14, 0), 'On pace for £14.00/class — too few days left to beat £10.00/class', 'four more on the last day is not advice');
+    eq(f._forecastVerdict(10, 20, 140, 7, 10, 14, 0), 'On pace for £14.00/class. Too few days left to beat £10.00/class.', 'four more on the last day is not advice');
     eq(f._forecastVerdict(10, 20, 140, 7, 11, 140 / 11, 1), 'Book 4 more to beat £10.00/class', '…four in two days (today + 1) still is');
     eq(f._forecastVerdict(3, 0, 140, 0, 6, 140 / 6, 20), 'Book 11 more to beat £10.00/class', 'unlimited plan: no cap to clamp to');
-    eq(f._forecastVerdict(3, 0, 140, 0, 4, 35, 2), 'On pace for £35.00/class — too few days left to beat £10.00/class', '…but the days still count');
+    eq(f._forecastVerdict(3, 0, 140, 0, 4, 35, 2), 'On pace for £35.00/class. Too few days left to beat £10.00/class.', '…but the days still count');
     eq(f._forecastVerdict(11, 12, 140, 140 / 12, 12, 140 / 12, 3), 'On pace to use all 12 classes — top value at £11.67/class', 'on pace for the whole plan: unchanged');
     eq(f._forecastVerdict(15, 0, 140, 0, 16, 8.75, 3), 'On pace for £8.75/class — great value', 'already under the target: unchanged');
 
@@ -198,12 +198,12 @@ module.exports = async function (t) {
     let el = tracker(plan({ max_bookings: 12, bookings_made: 10 }));
     ok(/Left this period/.test(el.innerHTML) && /2 days to go/.test(el.innerHTML), 'capped 12, 10 made, 2 days left: the pace card says 2 left');
     eq(asks(el.innerHTML), [2], '…and the only "Book N more" on the tab is the 2 that are left (to hit £11.67)');
-    ok(/this plan&#39;s best is £11\.67\/class|this plan's best is £11\.67\/class/.test(el.innerHTML) && !/to beat/.test(el.innerHTML), '…the forecast agrees: no "to beat £10.00/class" on a plan whose best is £11.67');
+    ok(/This plan&#39;s best is £11\.67\/class|This plan's best is £11\.67\/class/.test(el.innerHTML) && !/to beat/.test(el.innerHTML), '…the forecast agrees: no "to beat £10.00/class" on a plan whose best is £11.67');
     el = tracker(plan({ max_bookings: 12, bookings_made: 2, period_start: daysFromNow(-29), period_end: daysFromNow(1) }));
     eq(asks(el.innerHTML), [], '10 left with a day to go: no "Book 10 more" anywhere — the pace card says what is left');
     ok(/1 day left</.test(el.innerHTML), '"1 day left", not "1 days left"');
     el = tracker(plan({ max_bookings: 0, bookings_made: 5 }));
-    ok(el.style.display === '' && !/Infinity|NaN/.test(el.innerHTML) && /too few days left/.test(el.innerHTML), 'unlimited plan: no Infinity / NaN, and the days still bound the advice');
+    ok(el.style.display === '' && !/Infinity|NaN/.test(el.innerHTML) && /Too few days left/.test(el.innerHTML), 'unlimited plan: no Infinity / NaN, and the days still bound the advice');
     eq([tracker(plan({ price: 0, max_bookings: 12, bookings_made: 3 })).style.display, tracker(plan({ price: 'abc', max_bookings: 12, bookings_made: 3 })).style.display,
       tracker(plan({ price: undefined, max_bookings: 12, bookings_made: 3 })).style.display], ['none', 'none', 'none'], 'no usable price: the tracker hides (a non-numeric one read "£NaN")');
   }
@@ -459,7 +459,7 @@ module.exports = async function (t) {
     const b = btn();
     await w.ctx.bookClass(77, b, 4);
     eq([w.log.confirms, w.log.posts, w.log.pickers.length], [[], [], 0], 'no layout to be had: NO count-body confirm, nothing posted (Psycle would answer "Booking slot required")');
-    eq(w.log.toasts, [["Couldn't load the studio map — try again", 'error']], '…the member is told');
+    eq(w.log.toasts, [["Couldn't load the studio map. Try again.", 'error']], '…the member is told');
     eq([b.disabled, b.textContent, b.dataset.busy], [false, 'Book', undefined], '…and the button is usable again');
 
     w = bookWorld({ studio: Object.assign({}, bare), bookings: { 77: { bookingId: 'A', slots: [7], slotBookings: { 7: 'A' }, waitlisted: false } } });

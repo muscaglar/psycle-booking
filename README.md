@@ -1,4 +1,4 @@
-# Psync — Psycle Class Finder
+# Psync
 
 A fast, independent companion app for Psycle London members: find classes across every studio, book and cancel,
 manage waitlist places, and keep an eye on your plan and your habits. It is a vanilla-JS progressive web app

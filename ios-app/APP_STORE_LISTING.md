@@ -1,127 +1,133 @@
-# App Store Listing — Psync
+# App Store listing — Psync
 
-## App Store Connect Fields
+Everything App Store Connect asks for, in the order it asks. Text inside a code block is pasted as it is; every
+character limit below was counted by script. **Fields only the owner can fill are collected at the end** — the
+listing cannot be submitted until each is done.
 
-### App Name (30 chars max)
+Psync is an independent app for members of the Psycle London studios. That shapes this whole file: "Psycle" is
+someone else's trademark, so it never appears in the app's name, subtitle or keywords, and the description says
+plainly that the app is not affiliated with Psycle (App Review Guidelines 4.1 and 5.2.1).
+
+## App information
+
+### Name (30 characters: 30)
 ```
 Psync: Class Booking Companion
 ```
-(exactly 30 chars — ASC hard-enforces the limit)
-> Deliberately NOT "Psycle ..." — using the studio's trademark in the app
-> NAME risks an App Review 4.1/5.2.1 (IP) flag. "Psycle" can appear in the
-> description as a factual compatibility statement ("companion for Psycle
-> studios"), which is standard practice. The ASC record was auto-created as
-> "PsycleBookingBuddy" (the Xcode product name) — rename it under App Store
-> Connect → App Information before submission.
+The App Store Connect record was created by Xcode as "PsycleBookingBuddy" (the Xcode target's name). Rename it
+under App Information before submitting.
 
-### Subtitle (30 chars max)
+### Subtitle (30 characters: 28)
 ```
-Book, Track & Discover Classes
+Find, book and track classes
 ```
 
 ### Category
-- Primary: **Health & Fitness**
-- Secondary: **Lifestyle**
+Primary: **Health & Fitness**. Secondary: **Lifestyle**.
 
 ### Price
-- Paid or Free with your own decision
+Free. No in-app purchases.
 
----
+### Age rating
+4+. Every answer in the questionnaire is "None" / "No": no user-generated content, no web access outside the
+sign-in host, no gambling, contests, medical information or mature themes.
 
-## Description (4000 chars max)
+## Version information
 
+### Promotional text (170 characters: 157; can change without review)
 ```
-The smarter way to book Psycle classes. Search, filter, and book across all London studios — then track your fitness journey with detailed insights and instructor discovery.
-
-SMART SEARCH & BOOKING
-• Search classes by instructor, studio, class type (Ride, Strength, Yoga, HIIT, Pilates, Barre, Reformer), and date range
-• Visual bike/bench/bed picker — see the studio layout and choose your exact spot
-• Mark preferred and avoided spots per studio — highlighted automatically when booking
-• Book up to 2 spots per class for you and a friend
-• One-tap rebook for next week's recurring classes
-
-INSTRUCTOR DISCOVERY
-• Explore tab shows instructors you've never tried
-• Personalised recommendations based on your favourites and top-rated instructors
-• Instructor tier ranking system (S through F) — your personal ratings
-• Tap any instructor to see their upcoming schedule
-• Lapsed favourites: instructors you used to love but haven't booked recently
-
-DETAILED INSIGHTS
-• All-time stats: total classes, unique instructors, solo vs. social bookings
-• Activity heatmap showing your busiest days and times
-• Class type distribution with colour-coded breakdown
-• Weekly calendar view with booking history
-• Routine detection: your most consistent time slots and instructors
-• Instructor variety trend: are you exploring or narrowing down?
-• Share your stats as a beautifully designed image card
-
-FULL BOOKING HISTORY
-• One-tap sync imports your entire Psycle booking history
-• Powers accurate insights across every class you've ever taken
-• Export and import all settings, history, and preferences
-
-BUILT FOR PSYCLE
-• Native iOS calendar integration — bookings auto-sync with reminders
-• Monday noon notification when new booking week opens
-• Dark mode, light mode, or auto (follows system)
-• Offline support — browse your bookings without signal
-• Fast, private, and lightweight — your data stays on your device
-
-Note: Requires an active Psycle (psyclelondon.com) account and subscription to book classes.
+Your next class on the Lock Screen, a countdown before it starts, and your usual week rebooked in a couple of taps. For members of the Psycle London studios.
 ```
 
----
-
-## Promotional Text (170 chars max, can be updated without review)
-
+### Description (4,000 characters: 1961)
 ```
-Now with full booking history sync, instructor discovery, and shareable stats cards. Find your next favourite instructor.
+Psync is an independent companion app for members of the Psycle London studios. Sign in with your Psycle account to find classes, book the spot you want and keep track of what you hold.
+
+FIND A CLASS
+• One day at a time, with a day strip that shows how many classes match and which days you already hold
+• Filter by instructor, studio, class type and time of day; results update as you choose
+• Each class type has its own colour, and you choose the colours
+
+BOOK THE SPOT YOU WANT
+• The studio's own layout: pick your bike, bench, bed or machine
+• Your usual spot is suggested first, and spots you prefer or avoid are marked
+• Up to two spots in a class
+• Nothing is booked until you confirm it
+• Full class? Join the waitlist, and claim the spot when one comes up
+
+KEEP TRACK
+• Everything you hold in one list: spots, waitlist places and how long each can still be cancelled for free
+• A warning when two of your classes overlap
+• Your bookings stay readable without signal
+
+YOUR USUAL WEEK
+• Save the classes you take every week
+• When new dates open, review the whole week, change any spot, and book it together
+
+ON YOUR IPHONE
+• Home Screen and Lock Screen widgets for your next class
+• A countdown on the Lock Screen and in the Dynamic Island from 90 minutes before class
+• Ask Siri "What's my next class in Psync"
+• Bookings added to a calendar you choose, and kept up to date
+• A reminder 90 minutes before each class, and on Mondays at 12:00 when new dates open
+
+YOUR TRAINING
+• Streaks, your busiest days and times, and the instructors and class types you book most
+• Rank instructors your own way
+• A stats card you can share
+
+PRIVATE BY DESIGN
+• No analytics, no ads, no tracking
+• Your history and preferences stay on your device; sign-in and bookings go to Psycle and nowhere else
+
+Psync needs a Psycle account. Booking uses the credits or membership on that account. Psync is an independent app and is not affiliated with, or endorsed by, Psycle.
 ```
 
----
-
-## Keywords (100 chars max, comma-separated)
-
+### Keywords (100 characters: 97)
 ```
-psycle,cycling,spin,fitness,booking,class,studio,london,ride,strength,yoga,reformer,workout,schedule
+spin,cycling,indoor cycling,studio,london,ride,strength,yoga,reformer,barre,pilates,hiit,waitlist
 ```
+No spaces after the commas, and no word that is already in the name ("class", "booking"): Apple indexes those
+anyway. "psycle" is left out on purpose. It is the word members would search for, and it is also the most common
+reason an unofficial app is rejected or taken down (2.3.7, 5.2.1). Add it only with Psycle's written permission.
 
----
-
-## What's New (for version 1.0)
-
+### What's New (version 1.0: 354 characters)
 ```
-Introducing Psycle Class Finder — the companion app for Psycle London members.
+The first release of Psync, an independent companion app for members of the Psycle London studios.
 
-• Search and book across all studios
-• Visual spot picker with preferences
-• Full booking history sync
-• Insights dashboard with heatmaps and stats
-• Instructor discovery and recommendations
-• Shareable stats card
-• Native calendar sync with reminders
-• Monday booking reminder notification
-• Dark/light/auto theme
+• Find and book classes, with the studio's own layout for choosing a spot
+• Waitlists, overlapping-class warnings and free-cancel times in one list
+• Your usual week, reviewed and booked together
+• Widgets, a Lock Screen countdown, Siri and calendar sync
 ```
 
----
-
-## Support URL
+### Support URL
 ```
-https://github.com/yourusername/psycle-booking/issues
+https://github.com/muscaglar/psycle-booking/issues
 ```
 
-## Privacy Policy URL
-*(Required — you'll need to host one. Template below.)*
+### Marketing URL (optional)
+Leave empty, or use the hosted web app's address.
 
----
+### Privacy Policy URL
+```
+https://muscaglar.github.io/psycle-booking/privacy.html
+```
+The page is `privacy.html` at the root of this repository, published with the web app. **It still carries one
+placeholder — the publisher's name and a contact e-mail address. Fill it in, push, and open the address above
+before submitting**: Apple's reviewer opens it.
+
+### Copyright
+```
+© 2026 <the owner's name>
+```
 
 ## Screenshots
 
-Files in `ios-app/appstore-assets/` at 1290x2796 (6.7" iPhone). Each is the real app on a fake Psycle server, framed
-with a caption in the app's own typeface. Rebuild all six with one command — serve the repo on :8080, then
-`node tests/tools/appstore-shots.mjs` (captions and the list of screens live in that file).
+Six files in `ios-app/appstore-assets/`, 1290 × 2796 (the 6.9" / 6.7" iPhone size, which App Store Connect scales
+for the smaller ones). Each is the real app running against the repository's fake Psycle server, under a caption in
+the app's own typeface: the names and studios in them are made up, and no member's data appears. Rebuild all six
+with `node tests/tools/appstore-shots.mjs` (the repository served on port 8080; captions live in that file).
 
 | Order | File | Caption |
 |-------|------|---------|
@@ -132,87 +138,82 @@ with a caption in the app's own typeface. Rebuild all six with one command — s
 | 5 | `05-class-colours.png` | Colour by class type — Choose the colours, and how strong they are. |
 | 6 | `06-light-and-dark.png` | Light and dark — Follows your phone, or pick your own. |
 
-The names and studios in them are the fake server's; no member data is shown.
+The app is iPhone-only, so no iPad screenshots are needed.
 
-## App Icon
+## App icon
 
-File: `ios-app/appstore-assets/AppIcon-1024.png` (1024x1024, opaque)
-Two slipped half-discs with growing arcs engraved in them — ink over graphite on a near-white tile. The app ships a
-dark and a tinted appearance of the same drawing (Xcode asset catalogue). Sources: `assets/psync-logo*.svg`;
-`sh assets/render-icons.sh` rebuilds every size here and in the asset catalogue.
+`ios-app/appstore-assets/AppIcon-1024.png`: 1024 × 1024, no alpha channel. The asset catalogue also carries a dark
+and a tinted appearance of the same drawing. Sources: `assets/psync-logo*.svg`; `sh assets/render-icons.sh`
+rebuilds every size.
 
-Other sizes kept in `ios-app/appstore-assets/` (the Xcode project itself needs only the 1024px files):
-- AppIcon-180.png (60@3x — iPhone)
-- AppIcon-120.png (60@2x — iPhone, 40@3x)
-- AppIcon-167.png (83.5@2x — iPad Pro)
-- AppIcon-152.png (76@2x — iPad)
-- AppIcon-87.png (29@3x — Settings)
-- AppIcon-80.png (40@2x)
-- AppIcon-76.png (76@1x)
-- AppIcon-58.png (29@2x)
-- AppIcon-40.png (20@2x)
-- AppIcon-29.png (29@1x)
-- AppIcon-20.png (20@1x)
+## App Privacy ("nutrition label")
 
----
+Recommended answer: **Data Not Collected.** Apple counts data as collected when it is sent off the device to the
+developer or the developer's partners. Psync has no server: the e-mail address, the password and the bookings go
+from the phone to Psycle's own booking system, which the member already has an account with, and to nobody else.
+There are no analytics, no advertising and no crash-reporting kits. The privacy manifests in the app and the widget
+extension declare no collected data types and no tracking, which matches. This is the owner's legal declaration:
+read Apple's definition once before ticking it.
 
-## Privacy Policy Template
+## Export compliance
 
+The app's Info.plist sets `ITSAppUsesNonExemptEncryption` to false, so App Store Connect does not ask at upload.
+That is accurate: the app uses HTTPS and the operating system's own encryption, and nothing else.
+
+## App Review information
+
+### Sign-in required
+Yes. **A demo account is mandatory.** Signed out, the app shows a sign-in prompt and nothing else, so a reviewer
+without one cannot test anything and the submission is rejected under Guideline 2.1.
+
+### Notes
 ```
-PRIVACY POLICY — Psycle Class Finder
+Psync is an independent, unofficial companion app for members of Psycle London, a chain of fitness studios. It is
+not affiliated with or endorsed by Psycle. Members sign in with their existing Psycle account, and the app talks
+only to Psycle's own customer booking system, over HTTPS.
 
-Last updated: [DATE]
+DEMO ACCOUNT
+E-mail: <demo account e-mail>
+Password: <demo account password>
+This is a real Psycle member account on a real booking system. Booking a class uses a real class credit. Please
+cancel any test booking afterwards (Bookings, then Cancel on the class): cancelling is free until the time shown
+on the card.
 
-Psycle Class Finder is a client-side application. We do not operate servers,
-collect analytics, or store any of your data outside your device.
+ACCOUNTS (Guideline 5.1.1(v))
+Psync cannot create an account. It has no sign-up and no password reset; the only account request it makes is
+signing in to an existing Psycle account. Accounts are created and deleted with Psycle. Signing out of Psync
+removes the session and the member's data from the device.
 
-DATA STORAGE
-All data (booking history, preferences, authentication tokens) is stored
-locally on your device using browser localStorage and iOS Keychain/Preferences.
-No data is transmitted to any server other than the official Psycle API
-(psycle.codexfit.com) which is operated by Psycle London / CodexFit.
+WHAT THE APP ADDS TO THE PHONE (Guideline 4.2)
+Home Screen and Lock Screen widgets for the next class; a Live Activity with a countdown on the Lock Screen and in
+the Dynamic Island from 90 minutes before a class; an App Shortcut for Siri ("What's my next class in Psync");
+bookings written to a calendar the member chooses, and kept in step with their bookings (EventKit); local
+notifications 90 minutes before a class and on Mondays at 12:00, when new dates open; haptics; the share sheet; a
+saved copy of bookings that can be read without signal.
 
-AUTHENTICATION
-Your Psycle account credentials are sent directly to the Psycle API. We do
-not intercept, store, or relay your password. A bearer token issued by
-Psycle is stored encrypted on your device for session persistence.
-
-THIRD-PARTY SERVICES
-This app communicates only with:
-- psycle.codexfit.com (Psycle's booking API, operated by CodexFit)
-
-No analytics, advertising, or tracking SDKs are included.
-
-CALENDAR & NOTIFICATIONS
-Calendar events are created locally on your device. Notification scheduling
-is handled entirely on-device. No push notification server is involved.
-
-CONTACT
-For questions about this privacy policy, contact: [YOUR EMAIL]
-```
-
----
-
-## App Review Notes (for Apple reviewers)
-
-```
-This app requires an active Psycle London (psyclelondon.com) membership
-to function. It connects to the Psycle API (psycle.codexfit.com) using
-the member's existing account credentials.
-
-For testing, you may create a free account at psyclelondon.com, though
-booking functionality requires an active class subscription.
-
-The app does not include any in-app purchases, subscriptions, or
-monetisation. It is a companion utility for existing Psycle members.
+PERMISSIONS
+Calendar access is asked for only when the member switches on calendar sync in Settings. Notification permission
+is asked for only when the member switches on reminders. The app has no push server, no analytics, no tracking
+and no in-app purchases.
 ```
 
----
+### Contact
+The reviewer's contact fields (first name, last name, phone, e-mail) are the owner's.
 
-## Age Rating
-- **4+** (no objectionable content)
+## Privacy policy
 
-## Copyright
-```
-© 2026 [Your Name]
-```
+The policy is `privacy.html` at the root of this repository, and it is the only copy: it describes what the code
+does (what is kept on the device, what is sent to Psycle, the calendar and notification permissions, how to remove
+everything). Do not paste a second version anywhere.
+
+## Only the owner can do these
+
+- [ ] Put a name and a contact e-mail address into the one placeholder in `privacy.html`, push, and open the
+      published page.
+- [ ] Provide a demo Psycle account for App Review, with at least one class credit, and paste it into the notes.
+- [ ] Fill the App Review contact fields and the copyright line.
+- [ ] Rename the App Store Connect record from "PsycleBookingBuddy" to the name above.
+- [ ] Answer the App Privacy questions and the age-rating questionnaire (recommended answers above).
+- [ ] Decide whether to ask Psycle for written permission. It is the one real answer to a trademark or
+      third-party-service question from App Review (5.2.1, 5.2.2), and to a later complaint.
+- [ ] Walk the on-device checklist in `NATIVE_FEATURES.md` on a real iPhone before submitting.

@@ -39,8 +39,8 @@ module.exports = async function (t) {
     const dl = london._cancelDeadline(START, new Date(NOW).getTime());
     const left = london._hoursMinsLeft(dl.hoursUntil);
     eq([left.hrs, left.mins, dl.insideWindow], [5, 0, true], '…the same 5h the cancel dialog warns about, inside the late-cancel window');
-    eq(chip(london, START, '2026-09-17T12:59:40'), 'Starting now', 'the last 30 seconds read "Starting now", never "In 0min"');
-    eq(chip(london, START, '2026-09-17T12:15:00'), 'In 45min', 'minutes as before');
+    eq(chip(london, START, '2026-09-17T12:59:40'), 'Starting now', 'the last 30 seconds read "Starting now", never "In 0 min"');
+    eq(chip(london, START, '2026-09-17T12:15:00'), 'In 45 min', 'minutes as before');
     eq(chip(london, START, '2026-09-17T14:00:00'), null, 'already running by the real clock → no chip (device-local it still read "In 4h")');
   }
 

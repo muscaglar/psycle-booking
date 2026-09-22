@@ -384,7 +384,7 @@
       } catch (err) {
         // 4. Revert on failure
         revertOptimistic();
-        toast('Booking failed \u2014 please try again', 'error');
+        toast('Couldn\'t confirm that booking with Psycle. Check My Bookings before trying again.', 'error');
       }
     };
   }
@@ -856,12 +856,12 @@
       toast(cancelOk + ' queued cancel' + (cancelOk !== 1 ? 's' : '') + ' sent', 'success');
     }
     if (unsure > 0) {
-      toast("Couldn't confirm whether a queued booking went through — check My Bookings before booking it again", 'info');
+      toast("Couldn't confirm whether a queued booking went through. Check My Bookings before booking it again.", 'info');
     }
     if (skipped > 0) {
       toast(skipped === 1
-        ? 'Skipped a queued booking — the class already started or was cancelled.'
-        : 'Skipped ' + skipped + ' queued bookings — they already started or were cancelled.', 'info');
+        ? 'Skipped a queued booking. The class already started or was cancelled.'
+        : 'Skipped ' + skipped + ' queued bookings. They already started or were cancelled.', 'info');
     }
     // Always reconcile with the server after a replay — failed or skipped ones
     // would otherwise leave the optimistic local state out of sync. (Nothing
@@ -887,8 +887,8 @@
     // to act on (they believed this class was taken care of).
     if (taken > 0) {
       toast(taken === 1
-        ? "A queued booking couldn't be made — that spot was taken while you were offline"
-        : taken + " queued bookings couldn't be made — those spots were taken while you were offline", 'error');
+        ? "A queued booking couldn't be made. That spot was taken while you were offline."
+        : taken + " queued bookings couldn't be made. Those spots were taken while you were offline.", 'error');
     }
     return attempted;
   }
@@ -978,7 +978,7 @@
     var ok = await confirmModal({
       title: 'Offline booking',
       body: 'You tried to book ' + label + (seat ? ' (' + seat + ')' : '') +
-        ' while offline — it never reached Psycle. Book it now? This uses a class credit, as usual.',
+        ' while offline. It never reached Psycle. Book it now? This uses a class credit, as usual.',
       warn: (clashLine ? clashLine + '. ' : '') + "Psycle's normal 12-hour cancellation policy applies.",
       confirmText: 'Book it',
       cancelText: 'Discard',
@@ -996,7 +996,7 @@
     // elsewhere meanwhile, or the class has started): there is nothing left to
     // send, so say so rather than just closing.
     if (!stillQueued()) {
-      toast('That offline booking is no longer waiting — nothing was sent. Check My Bookings.', 'info');
+      toast('That offline booking is no longer waiting. Nothing was sent. Check My Bookings.', 'info');
       return 'next';
     }
     _queueApproved[item.qid] = owner;
@@ -1040,7 +1040,7 @@
         btn.textContent = 'Queued';
         btn.className = 'book-btn booked';
         btn.disabled = true;
-        toast("You're offline \u2014 booking queued", 'info');
+        toast("You're offline. Booking queued.", 'info');
         return;
       }
 

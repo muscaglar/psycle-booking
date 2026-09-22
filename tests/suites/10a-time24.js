@@ -122,7 +122,7 @@ module.exports = function (t) {
     t.vm.runInContext(lines.slice(from, to + 1).join('\n'), ctx, { filename: 'js/app.js[getCountdownText]' });
     const chip = (start, now) => ctx.getCountdownText(new Date(start), new Date(now));
     eq([chip('2026-09-22T07:00:00', '2026-09-21T20:00:00'), chip('2026-09-22T18:30:00', '2026-09-21T09:00:00')], ['Tomorrow 07:00', 'Tomorrow 18:30'], 'tomorrow: the class\'s own time, 24-hour');
-    eq([chip('2026-09-21T20:05:00', '2026-09-21T18:00:00'), chip('2026-09-21T18:40:00', '2026-09-21T18:00:00')], ['In 2h 5m', 'In 40min'], 'today: the countdown reads as before');
+    eq([chip('2026-09-21T20:05:00', '2026-09-21T18:00:00'), chip('2026-09-21T18:40:00', '2026-09-21T18:00:00')], ['In 2h 5m', 'In 40 min'], 'today: the countdown reads as before');
   }
 
   t.section('10a: the clash line, the day strip\'s spoken dot, the Time row');
@@ -142,8 +142,8 @@ module.exports = function (t) {
 
     const D = t.loadPure('js/app.js', 'discover');
     eq(t.vm.runInContext('TIME_BANDS.map(function (b) { return [b.key, b.label, b.from, b.to]; })', D),
-      [['early', 'Before 9:00', 0, 9], ['day', '9:00–17:00', 9, 17], ['evening', 'After 17:00', 17, 24]],
-      'the Time row reads "Before 9:00 · 9:00–17:00 · After 17:00"; the band keys and hours — what is saved and what filters — are unchanged');
+      [['early', 'Before 09:00', 0, 9], ['day', '09:00–17:00', 9, 17], ['evening', 'After 17:00', 17, 24]],
+      'the Time row reads "Before 09:00 · 09:00–17:00 · After 17:00"; the band keys and hours — what is saved and what filters — are unchanged');
     eq([D._timeBandOf('2026-09-21T08:59:00'), D._timeBandOf('2026-09-21 09:00:00'), D._timeBandOf('2026-09-21T17:00:00')], ['early', 'day', 'evening'], '…and the bands cut where they did');
     const chips = t.loadPure('js/app.js', 'filter-summary');
     eq(chips._filterSummaryChips({ timeBands: ['evening'] }, { timeBands: t.vm.runInContext('TIME_BANDS', D) }).map((x) => x.label), ['After 17:00'], 'the collapsed Filters bar\'s chip follows the label');

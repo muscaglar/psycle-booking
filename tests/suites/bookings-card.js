@@ -233,8 +233,8 @@ module.exports = async function (t) {
     t.vm.runInContext(countdownSrc, chipCtx);
     const chip = (startAt, nowAt) => chipCtx.getCountdownText(new Date(startAt), new Date(nowAt));
     t.eq(chip('2026-09-17T18:00:00', '2026-09-17T08:00:20'), 'In 10h', 'chip, 9h59m40s to go: "In 10h" (was "In 9h 60m")');
-    t.eq(chip('2026-09-17T18:00:00', '2026-09-17T17:00:20'), 'In 1h', 'chip, 59m40s to go: "In 1h" (was "In 60min")');
-    t.eq([chip('2026-09-17T18:00:00', '2026-09-17T15:45:00'), chip('2026-09-17T18:00:00', '2026-09-17T17:15:00')], ['In 2h 15m', 'In 45min'], 'chip: ordinary times unchanged');
+    t.eq(chip('2026-09-17T18:00:00', '2026-09-17T17:00:20'), 'In 1h', 'chip, 59m40s to go: "In 1h" (was "In 60 min")');
+    t.eq([chip('2026-09-17T18:00:00', '2026-09-17T15:45:00'), chip('2026-09-17T18:00:00', '2026-09-17T17:15:00')], ['In 2h 15m', 'In 45 min'], 'chip: ordinary times unchanged');
     t.eq([chip('2026-09-18T07:00:00', '2026-09-17T20:00:00'), chip('2026-09-19T07:00:00', '2026-09-17T20:00:00'), chip('2026-09-17T07:00:00', '2026-09-17T20:00:00')],
       ['Tomorrow 07:00', null, null], 'chip: tomorrow, later and past classes unchanged');
 
@@ -558,9 +558,9 @@ module.exports = async function (t) {
     const iTab = w.log.calls.indexOf('tab:discover'), iSearch = w.log.calls.indexOf('search');
     t.ok(iTab !== -1 && iTab < iSearch, 'switches to Discover BEFORE searching (the results used to fill a hidden tab)');
     t.ok(w.log.calls.indexOf('syncUI') !== -1 && w.log.calls.indexOf('syncUI') < iSearch, 'chips, pills and summary are re-synced first');
-    t.ok(/showing alternatives/.test(w.log.toasts.join('|')), 'and only then says so');
+    t.ok(/Showing alternatives/.test(w.log.toasts.join('|')), 'and only then says so');
     // The day is said the way the date pill says it, not as the raw search value.
-    t.ok(/alternatives for Tue,? 29 Sept?$/.test(w.log.toasts.join('|')) && !/\d{4}-\d{2}-\d{2}/.test(w.log.toasts.join('|')),
+    t.ok(/alternatives for Tue,? 29 Sept?\.$/.test(w.log.toasts.join('|')) && !/\d{4}-\d{2}-\d{2}/.test(w.log.toasts.join('|')),
       'the toast names the day as "Tue 29 Sep(t)", never "2026-09-29" (got: ' + w.log.toasts.join('|') + ')');
 
     const none = similarWorld({ locations: [] , events: [{ id: 9003, event_type_id: 7, instructor_id: 99, studio_id: 4, start_at: '2026-09-29 08:00:00' }] });

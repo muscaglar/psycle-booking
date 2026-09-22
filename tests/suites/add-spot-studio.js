@@ -134,7 +134,7 @@ module.exports = async function (t) {
       const b = addSpot();
       await w.ctx.bookClass(77, b, 4);
       eq([w.log.confirms, w.log.posts, w.log.pickers], [[], [], []], what + ': no confirm, no POST, no picker');
-      eq(w.log.toasts, [["Couldn't load the studio map — try again", 'error']], what + ': the member is told, once');
+      eq(w.log.toasts, [["Couldn't load the studio map. Try again.", 'error']], what + ': the member is told, once');
       eq([b.textContent, b.className, b.disabled, b.dataset.busy, w.log.booked], ['+ Add spot', 'booking-action-btn', false, undefined, []],
         what + ': "+ Add spot" is usable again — and never restyled as the card\'s "Bike 7 ✓" button');
     }

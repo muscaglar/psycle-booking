@@ -358,13 +358,13 @@ module.exports = async function (t) {
     const note = (o) => U._uwPlanNote(Object.assign({ state: 'book', seats: 1, heldSeats: 0 }, o));
     eq([note({}).pickable, note({}).on], [true, true], 'a plain class, inside what is open, starts ticked');
     const closed = note({ beyondOpen: true });
-    eq([closed.pickable, closed.on, closed.warn, closed.text], [true, false, true, 'May not be open yet — Psycle opens new dates on Mondays at 12:00'],
+    eq([closed.pickable, closed.on, closed.warn, closed.text], [true, false, true, 'May not be open yet. Psycle opens new dates on Mondays at 12:00.'],
       'a class past what Psycle has opened starts UNTICKED with the advisory note — and stays tickable (advisory, never a block)');
     eq([note({ instructorChanged: true }).on, note({ state: 'waitlist' }).on], [false, false], 'a cover instructor and a waitlist row still start unticked');
-    eq(note({ instructorChanged: true, beyondOpen: true }).text, 'Different instructor this week — tick to book it anyway. May not be open yet — Psycle opens new dates on Mondays at 12:00', 'both reasons are said');
+    eq(note({ instructorChanged: true, beyondOpen: true }).text, 'Different instructor this week. Tick to book it anyway.. May not be open yet. Psycle opens new dates on Mondays at 12:00.', 'both reasons are said');
     const topUp = note({ state: 'booked', seats: 2, heldSeats: 1, canAdd: true });
-    eq([topUp.pickable, topUp.on, topUp.topUp, topUp.text], [true, false, true, '1 of 2 seats held — tick to add 1 more'], '"1 of 2 seats held": offered, unticked — one more seat in a class already held is the member\'s call');
-    eq(note({ state: 'booked', seats: 3, heldSeats: 1, canAdd: true, count: true }).text, '1 of 3 spaces held — tick to add 2 more', 'a studio with no spot map counts spaces');
+    eq([topUp.pickable, topUp.on, topUp.topUp, topUp.text], [true, false, true, '1 of 2 seats held. Tick to add 1 more.'], '"1 of 2 seats held": offered, unticked — one more seat in a class already held is the member\'s call');
+    eq(note({ state: 'booked', seats: 3, heldSeats: 1, canAdd: true, count: true }).text, '1 of 3 spaces held. Tick to add 2 more.', 'a studio with no spot map counts spaces');
     eq([note({ state: 'booked', seats: 2, heldSeats: 2 }), note({ state: 'booked', seats: 2, heldSeats: 1, canAdd: false }), note({ state: 'booked', heldSeats: 1 })],
       [{ text: 'Already booked · 2 seats' }, { text: 'Already booked' }, { text: 'Already booked' }], 'held in full, or no room to add: not pickable');
     eq(note({ state: 'nolayout' }).pickable, undefined, 'a studio nobody knows the kind of is listed, never bookable from here');
@@ -384,7 +384,7 @@ module.exports = async function (t) {
 
     const res = U._uwResultNote;
     eq([res('taken', { gone: 'Bike 9' }).text, res('taken', { gone: 'Bikes 9 & 10', goneMany: true }).text, res('taken').text, res('taken').again],
-      ['Bike 9 was just taken — not booked. Choose again', 'Bikes 9 & 10 were just taken — not booked. Choose again', 'That spot was just taken — not booked. Choose again', true], 'a gone spot is named, nothing was booked for it, and "Choose again" is offered');
+      ['Bike 9 was just taken. Not booked. Choose again.', 'Bikes 9 & 10 were just taken. Not booked. Choose again.', 'That spot was just taken. Not booked. Choose again.', true], 'a gone spot is named, nothing was booked for it, and "Choose again" is offered');
     eq([res('refused', { said: 'Booking is not open yet' }).text, res('refused').text, res('refused', { said: 'x' }).again], ['Psycle said: Booking is not open yet', 'Psycle didn\'t take this booking', undefined], 'a refusal is shown in Psycle\'s own words');
     eq([res('opened').again, res('stale').again, res('partial').warn, res('booked').ok, res('notrun').text], [true, true, true, true, 'Not attempted'], 'opened / stale offer "Choose again"; a partial booking is a warning');
     ok(['running', 'booked', 'waitlisted', 'already', 'clash', 'full', 'opened', 'nolayout', 'stale', 'taken', 'refused', 'partial', 'queued', 'unconfirmed', 'joinfailed', 'failed'].every((r) => res(r).text && res(r).text !== 'Not attempted'),
@@ -426,7 +426,7 @@ module.exports = async function (t) {
     eq([sheets._pickerConfirmLabel('Bike', [12], 'Use'), sheets._pickerConfirmLabel('Bench', [3, 4], 'Use'), sheets._pickerConfirmLabel('Bike', [], 'Use'), sheets._pickerConfirmLabel('Bike', [12]), sheets._pickerConfirmLabel('Bike', [12], 'Delete')],
       ['Use bike 12', 'Use benches 3 & 4', 'Use', 'Book bike 12', 'Book bike 12'], 'the confirm reads "Use bike 12" — and any other verb is "Book"');
     eq([sheets._chooseSpotHint('Bike', 1, []), sheets._chooseSpotHint('Bike', 2, []), sheets._chooseSpotHint('Bike', 2, [12]), sheets._chooseSpotHint('Bike', 2, [12, 13]), sheets._chooseSpotHint('Bench', 3, [1]), sheets._chooseSpotHint('Bike', 1, [12])],
-      ['Tap the bike you want', 'Pick 2 bikes', 'Bike 12 selected — pick 1 more', 'Bikes 12 & 13 selected — tap another to switch', 'Bench 1 selected — pick 2 more', 'Bike 12 selected — tap another to switch'],
+      ['Tap the bike you want', 'Pick 2 bikes', 'Bike 12 selected. Pick 1 more.', 'Bikes 12 & 13 selected. Tap another to switch.', 'Bench 1 selected. Pick 2 more.', 'Bike 12 selected. Tap another to switch.'],
       'its hint counts up to exactly the seats the sheet\'s row asks for');
 
     const classType = t.loadPure('js/app.js', 'class-type', { getCategory: (n) => ({ key: /ride/i.test(n) ? 'RIDE' : 'OTHER' }) });
@@ -475,7 +475,7 @@ module.exports = async function (t) {
     w.open();
     const bySlot = (n) => w.seats().filter((s) => s.attrs['data-slot'] === String(n))[0];
     eq([w.els.modalTitle.textContent, w.els.confirmBookBtn.textContent, w.els.confirmBookBtn.disabled, w.dismiss.textContent, w.els.modalHint.textContent],
-      ['Choose your bike', 'Use bike 3', false, 'Back', 'Bike 3 selected — tap another to switch'], 'it opens on the sheet\'s suggestion: "Choose your bike", "Use bike 3", Back — not "Book"');
+      ['Choose your bike', 'Use bike 3', false, 'Back', 'Bike 3 selected. Tap another to switch.'], 'it opens on the sheet\'s suggestion: "Choose your bike", "Use bike 3", Back — not "Book"');
     eq([w.sel(), bySlot(3).classes, bySlot(4).classes, w.els.bikeModal.style.display], [[3], ['selected'], ['available', 'usual'], 'flex'],
       'the SUGGESTION is what starts selected — the usual bike keeps its ring but is not auto-selected over it');
     ok(w.els.confirmBookBtn.onclick === w.ctx.confirmSpotChoice && w.els.confirmBookBtn.onclick !== w.ctx.confirmBikeBooking, 'its confirm is confirmSpotChoice — not the booking handler');
@@ -501,7 +501,7 @@ module.exports = async function (t) {
       'a seat already held is shown but is NO cancel button here (its handler is gone) — and only free seats can start selected');
     w = pickerWorld();
     w.open({ count: 2, preselect: [3] });
-    eq([w.els.modalTitle.textContent, w.els.confirmBookBtn.disabled, w.els.modalHint.textContent], ['Choose your bikes', true, 'Bike 3 selected — pick 1 more'], 'two seats asked for, one picked: "Use" waits for exactly two');
+    eq([w.els.modalTitle.textContent, w.els.confirmBookBtn.disabled, w.els.modalHint.textContent], ['Choose your bikes', true, 'Bike 3 selected. Pick 1 more.'], 'two seats asked for, one picked: "Use" waits for exactly two');
     w.els.confirmBookBtn.onclick();
     eq([w.log.done, w.win._chooseSpotContext === null], [[], false], '…and a tap on it then does nothing');
     w = pickerWorld();
@@ -540,8 +540,8 @@ module.exports = async function (t) {
     eq(keep(ranAs({}, 1), {}), { on: true, same: true, seats: 1 }, 'the same class, still bookable: ticked again — at the ONE seat the member chose, not the saved two');
     // (a) the shown seat went while the class filled: the same index is now a waitlist join.
     eq(keep(ranAs({}, 1), { state: 'waitlist' }), { on: false, same: false, seats: null },
-      'ticked to BOOK a seat, re-planned as "Full — tick to join the waitlist": UNTICKED — a join is a place Psycle turns into a charge, and nobody ticked that');
-    // (b) booked at one seat of a saved two: the same index is now "1 of 2 seats held — tick to add 1 more".
+      'ticked to BOOK a seat, re-planned as "Full. Tick to join the waitlist.": UNTICKED — a join is a place Psycle turns into a charge, and nobody ticked that');
+    // (b) booked at one seat of a saved two: the same index is now "1 of 2 seats held. Tick to add 1 more.".
     eq(keep(ranAs({}, 1), { state: 'booked', heldSeats: 1, canAdd: true }), { on: false, same: false, seats: null },
       'just booked at 1 seat, re-planned as the top-up to the saved 2: UNTICKED — the extra seat is one the member declined a minute ago');
     // (d) the re-plan matched another class for that index, or a cover instructor.
@@ -637,7 +637,7 @@ module.exports = async function (t) {
     const seats = (slots) => ({ bookingId: 'A', bookingIds: slots.map((x, i) => 'ABCD'[i]), slots, slotBookings: Object.fromEntries(slots.map((x, i) => [x, 'ABCD'[i]])), waitlisted: false });
     const timeout = () => new Error('timeout');
 
-    // "1 of 2 spaces held — tick to add 1 more", a studio with no spot map: POST { slots: 1 }.
+    // "1 of 2 spaces held. Tick to add 1 more", a studio with no spot map: POST { slots: 1 }.
     let w = topUpWorld({ studio: 9, held: space(['A']), post: timeout(), reads: [space(['A'])] });
     eq([await w.run(), w.log.posts, w.pending()], ['unconfirmed', [{ event_id: 10, slots: 1 }], true],
       'the top-up\'s POST got NO answer and /bookings still shows the one space: "unconfirmed" — the run stops (it read "booked" off the ✓ of the space held before, and carried on)');
@@ -679,7 +679,7 @@ module.exports = async function (t) {
   t.section('14a plan: a usual class on a day Psycle has not LISTED yet says so — not "No matching class that day"');
   {
     const U = t.loadPure('js/tabs.js', 'usual-week-sheet');
-    eq(U._uwPlanNote({ state: 'nomatch', beyondListed: true }), { text: 'Not on the timetable yet — Psycle adds new dates on Mondays at 12:00' },
+    eq(U._uwPlanNote({ state: 'nomatch', beyondListed: true }), { text: 'Not on the timetable yet. Psycle adds new dates on Mondays at 12:00.' },
       'Monday before 12:00, the Fri–Sun of the third week: the day is simply not on the timetable yet (advisory — the row was never tickable)');
     eq([U._uwPlanNote({ state: 'nomatch' }).text, U._uwPlanNote({ state: 'nomatch', beyondListed: false }).text], ['No matching class that day', 'No matching class that day'], 'a LISTED day with no match keeps the old reason');
     eq([U._uwPlanNote({ state: 'error', beyondListed: true }).text, U._uwPlanNote({ state: 'book', beyondListed: true, beyondOpen: true }).on, U._uwPlanNote({ state: 'full', beyondListed: true }).text],
@@ -724,7 +724,7 @@ module.exports = async function (t) {
 
     // Copy: what a run and a suggestion say.
     eq([U._uwResultNote('failed', { told: 'Not enough credits' }).text, U._uwResultNote('failed').text, U._uwResultNote('failed', { told: 'x' }).warn],
-      ['Not enough credits', 'Couldn\'t book this class — check My Bookings before trying again', true], 'a "failed" row prints what was toasted (the toast has faded by the time the summary is read) — never "see its message"');
+      ['Not enough credits', 'Couldn\'t book this class. Check My Bookings before trying again.', true], 'a "failed" row prints what was toasted (the toast has faded by the time the summary is read) — never "see its message"');
     ok(!/see its message/.test(tabs) && /see the note on that class/.test(tabs), '…and the summary points at the row\'s own note');
     const slots = [1, 2, 3, 4, 5, 6].map((n) => ({ id: n, x: n * 10, y: 0 }));
     const first = S._spotSuggestion({ slots, free: [4, 5, 6], avoid: [4], count: 2 });
@@ -733,7 +733,7 @@ module.exports = async function (t) {
     eq(S._spotWhyText({ why: 'usual', lost: [4, 5, 6], filled: 0 }), '4, 5 & 6 were just taken — your usual', 'three lost picks read as a list');
     ok(/if \(labels\.length > 2 && labels\.every\(function \(l\) \{ return isFinite\(Number\(l\)\); \}\)\) labels\.sort\(/.test(tabs), 'three or four suggested seats are listed in seat order ("Benches 5, 6, 10 & 11"); a pair keeps the order its reason is about');
     const sheets = t.loadPure('js/app.js', 'sheets');
-    eq([sheets._pickerConfirmLabel('Bench', [5, 6, 10, 11], 'Use'), sheets._chooseSpotHint('Bike', 4, [1, 2, 3])], ['Use benches 5, 6, 10 & 11', 'Bikes 1, 2 & 3 selected — pick 1 more'], 'the seat map words the same seats the same way');
+    eq([sheets._pickerConfirmLabel('Bench', [5, 6, 10, 11], 'Use'), sheets._chooseSpotHint('Bike', 4, [1, 2, 3])], ['Use benches 5, 6, 10 & 11', 'Bikes 1, 2 & 3 selected. Pick 1 more.'], 'the seat map words the same seats the same way');
   }
 
   // ── 15. The Monday reminder's tap, with the sheet already up ─────────────

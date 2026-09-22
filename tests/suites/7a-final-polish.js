@@ -129,7 +129,7 @@ module.exports = async function (t) {
     await w.ctx._explore_syncHistory();
     eq([w.note(), w.ctx._topUpTooBig().count, JSON.parse(w.store.getItem('psycle_class_history')).length], [null, 0, 60],
       'a manual sync that could not fetch one class still clears the note: every class it counted was tried, so "61" is stale however it ended');
-    eq([w.store.getItem('psycle_history_synced'), /^Synced 60 bookings — 1 could not be fetched/.test((w.log.toasts[0] || [])[0] || '')], [iso(NOW - 8 * DAY), true],
+    eq([w.store.getItem('psycle_history_synced'), /^Synced 60 bookings\. 1 couldn't be fetched/.test((w.log.toasts[0] || [])[0] || '')], [iso(NOW - 8 * DAY), true],
       '…while the sync stamp does NOT move (the rest stays retryable) and the toast says what happened');
     // The quiet top-up's own bail is untouched by that: it never gets as far.
     w = topUpWorld({ synced: iso(NOW - 8 * DAY), previous: 61, skipped: JSON.stringify({ at: iso(NOW - 8 * DAY), count: 70 }) });
@@ -141,7 +141,7 @@ module.exports = async function (t) {
     eq([bad('{not json'), bad('"61"'), bad(JSON.stringify({ at: iso(NOW), count: '<img src=x>' })), bad(JSON.stringify({ at: 'soon', count: 61 })), bad(JSON.stringify({ at: iso(NOW), count: -4 })), bad(JSON.stringify({ at: iso(NOW), count: 61.9 }))],
       [0, 0, 0, 0, 0, 61], 'a note that is not {at: a date, count: a positive number} offers nothing; the count is always a whole number');
     const banner = exploreSrc.slice(exploreSrc.indexOf('  function renderSyncBanner('), exploreSrc.indexOf('  window._explore_openSettingsForInstructor = function'));
-    ok(/var missing = _topUpTooBig\(\)\.count;/.test(banner) && /\(missing \? '<br><span>' \+ missing \+ ' past classes are not in it yet — tap Re-sync to import them\.<\/span>' : ''\)/.test(banner),
+    ok(/var missing = _topUpTooBig\(\)\.count;/.test(banner) && /\(missing \? '<br><span>' \+ missing \+ ' past classes are not in it yet\. Tap Re-sync to import them\.<\/span>' : ''\)/.test(banner),
       'the synced banner says how many are missing, next to its existing Re-sync button (no new control, no API text in the line)');
   }
 
@@ -248,7 +248,7 @@ module.exports = async function (t) {
 
     w = sheetWorld({});
     await w.ctx._classDetailBookAction(77);
-    eq([w.log.bookClass, w.log.unbook, w.log.toasts.map((x) => x.msg)], [[], 0, ['Loading class…', "Couldn't load this class — try again in a moment"]],
+    eq([w.log.bookClass, w.log.unbook, w.log.toasts.map((x) => x.msg)], [[], 0, ['Loading class…', "Couldn't load this class. Try again in a moment."]],
       'Psycle cannot be reached: said plainly, and NEITHER dialog opens off details nobody confirmed');
 
     w = sheetWorld({ globals: { getBearerToken: () => '' } });
@@ -289,12 +289,12 @@ module.exports = async function (t) {
 
     w = swapWorld({});
     await w.ctx.window.changeSpot(77);
-    eq([w.log.pickers, w.log.gets, w.log.toasts.map((x) => x.msg)], [[], [], ['Loading class…', "Couldn't load this class — nothing was changed. Try again in a moment."]],
+    eq([w.log.pickers, w.log.gets, w.log.toasts.map((x) => x.msg)], [[], [], ['Loading class…', "Couldn't load this class. Nothing was changed. Try again in a moment."]],
       'the re-read fails: nothing is opened, nothing else is requested, and the member is told nothing changed');
 
     w = swapWorld({ globals: { _studioMap: { 4: room(30, 'Studio 1') }, _eventCache: { 77: Object.assign({}, FRESH) } } });
     await w.ctx.window.changeSpot(77);
-    eq([w.log.hydrates, w.log.pickers.length, w.log.toasts[0].msg], [[], 1, 'Loading available spots...'], 'an ordinary booking (real details, known studio) is not slowed down at all');
+    eq([w.log.hydrates, w.log.pickers.length, w.log.toasts[0].msg], [[], 1, 'Loading available spots…'], 'an ordinary booking (real details, known studio) is not slowed down at all');
   }
 
   // ── …and the tap that came AFTER it ──────────────────────────────────────

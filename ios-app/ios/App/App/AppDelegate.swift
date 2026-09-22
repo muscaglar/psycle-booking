@@ -7,9 +7,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
-    /// Background task that ends the Live Activity shortly after class
-    /// start when the app isn't opened (layer 2 of the cleanup design —
-    /// see PsycleLiveActivityController.refreshFromSnapshot).
+    /// Background task that retires the Live Activity once its class has
+    /// started when the app isn't opened (layer 2 of the cleanup design —
+    /// see PsycleLiveActivityController.refreshFromSnapshot): inside the
+    /// first five minutes it hands the removal to the system for start + 5,
+    /// after that it removes the card at once.
     static let liveActivityEndTaskId = "com.psyclefinder.app.la-end"
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -20,7 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             // card up: the exact failure this task exists to prevent.
             if #available(iOS 16.1, *) {
                 let work = Task {
-                    await PsycleLiveActivityController.shared.endAllAndWait()
+                    await PsycleLiveActivityController.shared.retireStartedAndWait()
                     task.setTaskCompleted(success: true)
                 }
                 task.expirationHandler = {
@@ -47,11 +49,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         try? BGTaskScheduler.shared.submit(request)
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {
-        // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-        // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
-    }
-
     func applicationDidEnterBackground(_ application: UIApplication) {
         // Not called under the scene life cycle — SceneDelegate calls
         // appDidEnterBackground() instead. Kept for completeness.
@@ -64,10 +61,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         scheduleLiveActivityEndTask()
     }
 
-    func applicationWillEnterForeground(_ application: UIApplication) {
-        // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
-    }
-
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Not called under the scene life cycle — SceneDelegate calls
         // appDidBecomeActive() instead. Kept for completeness.
@@ -78,10 +71,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         #if DEBUG
         // Test hook: `simctl launch <dev> com.psyclefinder.app -PSYCLE_LA_TEST 1`
         // seeds a class 30 minutes out so the Live Activity path can be
-        // exercised in the simulator without a signed-in session.
+        // exercised in the simulator without a signed-in session. Add
+        // `-PSYCLE_LA_TEST_LEAD <seconds>` to seed one that starts sooner —
+        // a minute, say — and watch the card being retired after the start.
         if UserDefaults.standard.bool(forKey: "PSYCLE_LA_TEST") {
             let d = UserDefaults(suiteName: PsycleAppGroup.id)
-            let start = Date().addingTimeInterval(30 * 60)
+            let lead = UserDefaults.standard.double(forKey: "PSYCLE_LA_TEST_LEAD")
+            let start = Date().addingTimeInterval(lead > 0 ? lead : 30 * 60)
             let iso = ISO8601DateFormatter().string(from: start)
             d?.set("{\"eventId\":\"999\",\"startAt\":\"\(iso)\",\"instrName\":\"Test Instructor\",\"typeName\":\"RIDE 45\",\"studioName\":\"Studio 1\",\"locName\":\"Bank\",\"slots\":[7]}",
                    forKey: PsycleSnapshotKey.nextClass)
@@ -98,20 +94,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         scheduleLiveActivityEndTask()
     }
 
-    func applicationWillTerminate(_ application: UIApplication) {
-        // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
-    }
-
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        // Called when the app was launched with a url. Feel free to add additional processing here,
-        // but if you want the App API to support tracking app url opens, make sure to keep this call
+        // Capacitor's App plugin reports URL opens through this proxy.
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        // Called when the app was launched with an activity, including Universal Links.
-        // Feel free to add additional processing here, but if you want the App API to support
-        // tracking app url opens, make sure to keep this call
+        // User activities (Universal Links included) go to Capacitor the same way.
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 

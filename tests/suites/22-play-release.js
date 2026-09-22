@@ -226,7 +226,7 @@ module.exports = function (t) {
   const page = read('privacy.html');
   const pageNoComments = page.replace(/<!--[\s\S]*?-->/g, '');
   const visible = pageNoComments.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;|&#\d+;/g, ' ').replace(/\s+/g, ' ');
-  ok(/<html lang="en"/.test(page) && /<title>Privacy policy[^<]*Psync<\/title>/.test(page) && /<meta name="viewport"/.test(page), 'it is a titled page in English with a viewport');
+  ok(/<html lang="en-GB"/.test(page) && /<title>Privacy policy[^<]*Psync<\/title>/.test(page) && /<meta name="viewport"/.test(page), 'it is a titled page in English with a viewport');
 
   // No analytics, no script but the theme boot, no way to talk to a host.
   ok(!ANALYTICS.test(pageNoComments), 'it names no analytics, crash-reporting or advertising product');
@@ -296,8 +296,9 @@ module.exports = function (t) {
   eq(['login.html', 'ios-app/www/login.html'].map((f) => directive(cspOf(read(f)), 'connect-src')), [[API_ORIGIN], [API_ORIGIN]], '…the sign-in page to that origin alone');
   eq(['psycle-finder.html', 'login.html'].map((f) => (directive(cspOf(read(f)), 'default-src') || []).join(' ')), ["'self'", "'none'"], '…and neither falls back to anything wider (default-src \'self\' / \'none\')');
   // Every host a js/ file or the bridge names. A request can only go to the first; the rest are links a member
-  // taps (a map, Google Calendar, Psycle's own site, an instructor's page), a namespace, and that ONE proxy.
-  const KNOWN_HOSTS = ['calendar.google.com', 'corsproxy.io', 'instagram.com', 'maps.apple.com', 'psycle.codexfit.com', 'psyclelondon.com', 'www.google.com', 'www.w3.org'];
+  // taps (a map, Google Calendar, Psycle's own site, an instructor's page, this policy on the web app's own host —
+  // js/settings.js openPrivacyPolicy, for the native apps, which do not bundle the page), a namespace, and that ONE proxy.
+  const KNOWN_HOSTS = ['calendar.google.com', 'corsproxy.io', 'instagram.com', 'maps.apple.com', 'muscaglar.github.io', 'psycle.codexfit.com', 'psyclelondon.com', 'www.google.com', 'www.w3.org'];
   const jsFiles = fs.readdirSync(abs('js')).filter((f) => /\.js$/.test(f)).map((f) => 'js/' + f).concat(['ios-app/www/native-bridge.js', 'sw.js']);
   const hostsNamed = Array.from(new Set(jsFiles.reduce((out, f) => out.concat((read(f).match(/https?:\/\/[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}/g) || []).map((u) => u.replace(/^https?:\/\//, '').toLowerCase())), []))).sort();
   eq(hostsNamed.filter((h) => KNOWN_HOSTS.indexOf(h) === -1), [], 'js/, the bridge and sw.js name no host beyond the ones this policy accounts for — a new one is a change to privacy.html ("What is sent, and to whom") FIRST, then to this list');

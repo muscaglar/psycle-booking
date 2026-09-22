@@ -226,7 +226,7 @@ module.exports = async function (t) {
     const cache = (startAt) => ({ 600: { start_at: startAt } });
     let w = fetchWorld({ now: NOW, cache: cache('2026-08-12 18:00:00') }); // 20 min to go
     w.ctx._noteEndedPlaces(['600']);
-    eq(w.toasts, [['Your waitlist place for Class 600 ended without a booking — that waitlist has closed', 'info']], 'class 20 min away, place gone with no seat: one info toast naming the class');
+    eq(w.toasts, [['Your waitlist place for Class 600 ended without a booking. That waitlist has closed.', 'info']], 'class 20 min away, place gone with no seat: one info toast naming the class');
     w.ctx._noteEndedPlaces(['600']);
     eq(w.toasts.length, 1, '…and never twice in a session');
 
@@ -260,14 +260,14 @@ module.exports = async function (t) {
     const snapshot = { owner: '7', items: [{ id: '600', start_at: '2026-08-12 18:00:00', type: 'Ride 45', instructor: 'Alex', waitlisted: true }] };
     w = fetchWorld({ now: NOW, snapshot });
     w.ctx._noteEndedPlaces(['600']);
-    eq(w.toasts.map((x) => x[0]), ['Your waitlist place for Ride 45 · Alex ended without a booking — that waitlist has closed'], 'cold cache: start and label come from the saved copy');
+    eq(w.toasts.map((x) => x[0]), ['Your waitlist place for Ride 45 · Alex ended without a booking. That waitlist has closed.'], 'cold cache: start and label come from the saved copy');
     w = fetchWorld({ now: NOW, snapshot: Object.assign({}, snapshot, { owner: '8' }) });
     w.ctx._noteEndedPlaces(['600']);
     eq(w.toasts, [], "another account's saved copy is never read");
 
     w = fetchWorld({ now: NOW, cache: { 600: { start_at: '2026-08-12 18:00:00' }, 601: { start_at: '2026-08-12 17:45:00' } } });
     w.ctx._noteEndedPlaces(['600', '601']);
-    eq(w.toasts.map((x) => x[0]), ['Your waitlist places for Class 600 (+1 more) ended without a booking — those waitlists have closed'], 'two at once: one toast, not one overwriting the other');
+    eq(w.toasts.map((x) => x[0]), ['Your waitlist places for Class 600 (+1 more) ended without a booking. Those waitlists have closed.'], 'two at once: one toast, not one overwriting the other');
     w = fetchWorld({ now: NOW });
     w.ctx._noteEndedPlaces(undefined);
     eq(w.toasts, [], 'a diff without `ended` (the stubs bookings-load.js / session.js pass) is tolerated');
@@ -334,13 +334,13 @@ module.exports = async function (t) {
     eq([c.badge, c.primary, c.secondary], ['Waitlisted', { booked: true, fn: 'leaveWaitlist', label: 'Leave waitlist' }, ['claimWaitlistSpot', 'Check for a spot']], '…Leave leads, Check for a spot is the secondary action — unchanged');
 
     c = cardWorld('2026-09-21T16:30:00', placeOnly()); // 90 min before
-    ok(/usually emails an offer instead of booking you in — tap Check for a spot \(keep a credit free\)/.test(c.status) && !/books you in automatically/.test(c.status),
+    ok(/usually emails an offer instead of booking you in\. Tap Check for a spot \(keep a credit free\)/.test(c.status) && !/books you in automatically/.test(c.status),
       '90 min out: no more "books you in automatically" — it says offers, hedged ("usually"), and what to tap');
     eq([c.badge, c.primary, c.secondary], ['Waitlisted', { booked: false, fn: 'claimWaitlistSpot', label: 'Check for a spot' }, ['leaveWaitlist', 'Leave waitlist']],
       '…and "Check for a spot" leads (the one non-.booked primary button, relabelled); Leave drops to the actions row');
 
     c = cardWorld('2026-09-21T17:40:00', placeOnly()); // 20 min before
-    ok(/^Waitlist closed — it shuts 30 minutes before class/.test(c.status) && !/books you in|emails an offer/.test(c.status), '20 min out: "Waitlist closed…" — no promise left standing');
+    ok(/^Waitlist closed. It shuts 30 minutes before class/.test(c.status) && !/books you in|emails an offer/.test(c.status), '20 min out: "Waitlist closed…" — no promise left standing');
     eq([c.badge, c.primary.fn], ['Waitlist closed', 'leaveWaitlist'], '…badge says so too; the buttons go back to Leave / Check');
 
     c = cardWorld('2026-09-21T16:30:00', placeOnly({ offer: { available: true, checkedAt: 0 } }));
@@ -358,9 +358,9 @@ module.exports = async function (t) {
     // 18:45" under its 18:30 class. 16:00Z: the offer is open, class not begun.
     const abroad = { window: gym.window };
     c = cardWorld('2026-09-21T16:00:00Z', placeOnly({ status: 'offered', expiresAt: '2026-09-21 17:45:00' }), abroad);
-    eq([c.status, c.badge], ['A spot has opened up — accept by 17:45', 'Spot offered'], 'a naive (London) accept-by time prints its own digits, whatever zone the device is in (it read 12:45 here)');
+    eq([c.status, c.badge], ['A spot has opened up, accept by 17:45', 'Spot offered'], 'a naive (London) accept-by time prints its own digits, whatever zone the device is in (it read 12:45 here)');
     c = cardWorld('2026-09-21T16:00:00Z', placeOnly({ status: 'offered', expiresAt: '2026-09-21T16:45:00Z', offer: { available: true, checkedAt: 0 } }), abroad);
-    ok(/^A spot is free right now — accept by 17:45 — /.test(c.status), 'an expiry that carries its own offset is an instant: said as London reads it (16:45Z = 17:45 BST)');
+    ok(/^A spot is free right now, accept by 17:45\. /.test(c.status), 'an expiry that carries its own offset is an instant: said as London reads it (16:45Z = 17:45 BST)');
     const lc = t.loadPure('js/app.js', 'bookings-card');
     eq([lc._londonClock(utc(2026, 9, 21, 16, 45)), lc._londonClock(utc(2026, 12, 7, 17, 45)), lc._londonClock(utc(2026, 9, 20, 23, 5)), lc._londonClock(NaN)], ['17:45', '17:45', '00:05', ''],
       '_londonClock: an instant as London wall clock — BST, GMT (London IS UTC in winter), across midnight; an unreadable instant prints nothing');
@@ -394,7 +394,7 @@ module.exports = async function (t) {
       'default unchanged: a place is ignored (the headless sweep and the join dialog stay on seats)');
     const c = p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld() }, cacheOf(), WITH);
     eq([c && c.kind, c && c.place, c && c.eventId], ['overlap', true, '10'], 'opted in: the overlapping place is reported, flagged place:true');
-    eq(p._clashLabel(c), "You're also on the waitlist for the 07:00 Ride at Oxford Circus — if Psycle books you in, you'd hold both", 'said as a possibility ("also on the waitlist for the…"), never "Clashes with your…"');
+    eq(p._clashLabel(c), "You're also on the waitlist for the 07:00 Ride at Oxford Circus. If Psycle books you in, you'd hold both.", 'said as a possibility ("also on the waitlist for the…"), never "Clashes with your…"');
     eq(p._findClash(evt('2026-09-21 08:00:00'), { 10: placeHeld() }, cacheOf(), WITH), null, 'a travel squeeze with a mere place is not worth a word');
     eq(p._findClash(evt('2026-09-21 07:00:00', { id: 10 }), { 10: placeHeld() }, cacheOf(), WITH), null, "the place's own class never clashes with itself");
 
@@ -471,18 +471,18 @@ module.exports = async function (t) {
     let w = claimWorld(fallback);
     eq(await w.ctx.claimWaitlistSpot(77, null), false, 'declined → resolves false');
     eq(w.log.confirms.map((c) => c.title), ['Claim this spot?'], 'still the one explicit confirm');
-    eq(w.log.confirms[0].warn, 'Clashes with your 17:45 Ride 45 at Oxford Circus. This class starts in 1h 45m — once claimed, cancelling is usually charged by Psycle.',
+    eq(w.log.confirms[0].warn, 'Clashes with your 17:45 Ride 45 at Oxford Circus. This class starts in 1h 45m. Once claimed, cancelling is usually charged by Psycle.',
       'warn: the held seat it overlaps, then "starts in 1h 45m — once claimed, cancelling is usually charged" (was: a generic "12-hour policy applies once you\'re booked")');
     eq(w.log.calls, [['GET', '/waitlist/900']], 'nothing but the GET went out: a declined confirm books nothing');
 
     w = claimWorld();
     await w.ctx.claimWaitlistSpot(77, null);
-    eq(w.log.confirms[0].warn, 'This class starts in 1h 45m — once claimed, cancelling is usually charged by Psycle.', 'no fallback held → no clash line');
+    eq(w.log.confirms[0].warn, 'This class starts in 1h 45m. Once claimed, cancelling is usually charged by Psycle.', 'no fallback held → no clash line');
 
     // The entry's own (fresh) class time wins over the cache: Psycle says it moved to tomorrow 18:00 → a free-cancel deadline exists.
     w = claimWorld({ event: { start_at: '2026-09-22 18:00:00' } });
     await w.ctx.claimWaitlistSpot(77, null);
-    eq(w.log.confirms[0].warn, "Free cancel until Tue 06:00 — after that Psycle's 12-hour cancellation policy applies.", 'outside 12h (fresh time from the entry): the actual deadline');
+    eq(w.log.confirms[0].warn, "Free cancel until Tue 06:00. After that Psycle's 12-hour cancellation policy applies.", 'outside 12h (fresh time from the entry): the actual deadline');
     w = claimWorld({ event: { start_at: 'TBC' }, cache: { 77: { id: 77, start_at: 'TBC', duration: 45 } } });
     await w.ctx.claimWaitlistSpot(77, null);
     eq(w.log.confirms[0].warn, "Psycle's normal 12-hour cancellation policy applies once you're booked.", "a time that can't be read keeps today's sentence");
@@ -526,7 +526,7 @@ module.exports = async function (t) {
     eq([w.log.confirms.length, w.log.timers.length], [0, 2], '…and again, for as long as it stays up');
     delete w.els.onboardOverlay;
     w.log.timers[1][0]();
-    eq([w.log.confirms.length, w.log.confirms[0] && w.log.confirms[0].title, w.log.events], [1, "You're in — Psycle gave you a spot", ['waitlist:allocated']],
+    eq([w.log.confirms.length, w.log.confirms[0] && w.log.confirms[0].title, w.log.events], [1, "Psycle gave you a spot", ['waitlist:allocated']],
       'welcome closed: the announcement goes up, to be acknowledged for real');
     ok(!/onboardOverlay/.test(grab('function _dialogOpen(')), '_dialogOpen() itself does not know the welcome: launch rendering underneath must not wait for it');
   }
@@ -534,13 +534,13 @@ module.exports = async function (t) {
     const fallback = { bookings: { 10: seat() }, cache: { 10: { id: 10, start_at: '2026-09-21T17:45:00', duration: 45, _typeName: 'Ride 45', _locName: 'Oxford Circus' } } };
     let w = announceWorld(fallback);
     w.ctx._announceAllocations([77]);
-    eq(w.log.confirms[0].warn, 'Clashes with your 17:45 Ride 45 at Oxford Circus. This class starts in 9h — cancelling it now is usually charged by Psycle.',
+    eq(w.log.confirms[0].warn, 'Clashes with your 17:45 Ride 45 at Oxford Circus. This class starts in 9h. Cancelling it now is usually charged by Psycle.',
       'found 9h out, fallback held: both said (was: "the 12-hour policy applies to it from now on" — read as time to decide)');
-    eq([w.log.confirms[0].title, w.log.events], ["You're in — Psycle gave you a spot", ['waitlist:allocated']], 'same dialog, same event');
+    eq([w.log.confirms[0].title, w.log.events], ["Psycle gave you a spot", ['waitlist:allocated']], 'same dialog, same event');
 
     w = announceWorld({ now: '2026-09-20T09:00:00' }); // 33h out
     w.ctx._announceAllocations([77]);
-    eq(w.log.confirms[0].warn, "Free cancel until Mon 06:00 — after that Psycle's 12-hour cancellation policy applies.", 'outside 12h: the actual deadline');
+    eq(w.log.confirms[0].warn, "Free cancel until Mon 06:00. After that Psycle's 12-hour cancellation policy applies.", 'outside 12h: the actual deadline');
     w = announceWorld({ now: '2026-09-21T18:10:00' }); // already started
     w.ctx._announceAllocations([77]);
     eq(w.log.confirms[0].warn, "Psycle's normal 12-hour cancellation policy applies to it from now on.", "a class that has started keeps today's sentence");
@@ -577,17 +577,17 @@ module.exports = async function (t) {
     ok(/<button class="cds-book-btn pill-btn pill-primary[^"]*" onclick="[^"]*_classDetailClaimAction\(77\);">Claim spot<\/button>/.test(html) && !/cds-book-btn booked[^"]*"[^>]*>Claim spot/.test(html),
       'offer showing: the primary sheet button is "Claim spot" → _classDetailClaimAction');
     ok(/<button class="cds-view-instr pill-btn pill-quiet[^"]*" onclick="[^"]*leaveWaitlist\(77, null\);">Leave waitlist<\/button>/.test(html) && !/Waitlisted ✓/.test(html), '…Leave is the secondary action; the ticked "Waitlisted ✓" is gone');
-    ok(/A spot is free right now/.test(html) && !/waitlist open/.test(html), '…and the availability row says "A spot is free right now", not "Full — waitlist open"');
+    ok(/A spot is free right now/.test(html) && !/waitlist open/.test(html), '…and the availability row says "A spot is free right now", not "Full · waitlist open"');
     html = sheetWorld(placeOnly({ status: 'notified' }));
     ok(/Claim spot/.test(html) && /A spot has opened up/.test(html), "Psycle's own offered status (no probe yet) counts too");
 
     html = sheetWorld(placeOnly());
     ok(/leaveWaitlist\(77, null\);">Waitlisted ✓<\/button>/.test(html) && !/Claim spot/.test(html), 'no offer: the ticked "Waitlisted ✓" → Leave button, as before');
-    ok(/You’re on the waitlist/.test(html) && !/waitlist open/.test(html), '…with "You’re on the waitlist" instead of "Full — waitlist open"');
+    ok(/You’re on the waitlist/.test(html) && !/waitlist open/.test(html), '…with "You’re on the waitlist" instead of "Full · waitlist open"');
     html = sheetWorld(placeOnly({ offer: { available: true, checkedAt: 0 } }), { now: '2026-09-21T18:30:00' });
     ok(!/Claim spot/.test(html) && !/A spot is free/.test(html), 'a class that has started never offers Claim');
     html = sheetWorld(null);
-    ok(/Full — waitlist open/.test(html) && /Join Waitlist/.test(html), 'not on the waitlist: "Full — waitlist open" + Join Waitlist — unchanged');
+    ok(/Full · waitlist open/.test(html) && /Join waitlist/.test(html), 'not on the waitlist: "Full · waitlist open" + Join waitlist — unchanged');
 
     // Opening a class that overlaps a held PLACE: amber, worded as a possibility.
     html = sheetWorld(null, { bookings: { 10: placeHeld() }, cache: { 10: { id: 10, start_at: '2026-09-21T17:45:00', duration: 45, _typeName: 'Ride 45', _locName: 'Oxford Circus' } } });
@@ -645,7 +645,7 @@ module.exports = async function (t) {
       'offer showing: ONE dialog, its warning opens with the free spot and keeps the existing sentence');
     w = leaveWorld(placeOnly());
     await w.ctx.leaveWaitlist(77, null);
-    eq(w.log.confirms[0].warn, 'If Psycle has only just given you a spot, that booking stays — it will show in My Bookings.', 'no offer: the warning reads exactly as before');
+    eq(w.log.confirms[0].warn, 'If Psycle has only just given you a spot, that booking stays. It will show in My Bookings.', 'no offer: the warning reads exactly as before');
   }
 
   // ── R2-20: "Same class next week" over a place ────────────────────────────
@@ -671,7 +671,7 @@ module.exports = async function (t) {
     };
     let w = world({ 88: placeHeld() });
     await w.ctx.rebookNextWeek(77);
-    eq([w.log.toasts, w.log.fetches], [[["You're on the waitlist for next week's class — it isn't booked yet", 'info']], 0],
+    eq([w.log.toasts, w.log.fetches], [[["You're on the waitlist for next week's class. It isn't booked yet.", 'info']], 0],
       'only a place held for next week: says so (was "Already booked for next week"), and still stops — carrying on would reach bookClass\'s "Leave the waitlist?" branch');
     w = world({ 88: seat() });
     await w.ctx.rebookNextWeek(77);

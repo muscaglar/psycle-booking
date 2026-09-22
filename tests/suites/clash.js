@@ -80,11 +80,11 @@ module.exports = async function (t) {
     const at = (start, loc, o) => p._findClash(evt(start, Object.assign({ _locName: loc }, o || {})), held, cache());
     const after = at('2026-09-21 08:00:00', 'Bank');
     eq([kind(after), after && after.gapMin, after && after.heldIsFirst], ['travel', 15, true], 'held ends 7:45 at Oxford Circus, new 8:00 at Bank → 15 min to change location');
-    eq(p._clashLabel(after), 'Starts only 15 min after your 07:00 Ride at Oxford Circus ends — a different location', 'said as a squeeze, not as a clash');
+    eq(p._clashLabel(after), 'Starts only 15 min after your 07:00 Ride at Oxford Circus ends, at a different location', 'said as a squeeze, not as a clash');
     const before = at('2026-09-21 06:00:00', 'Bank');
     eq([kind(before), before && before.gapMin, before && before.heldIsFirst], ['travel', 15, false], 'new ends 6:45 at Bank, held starts 7:00 elsewhere → the same, the other way round');
-    eq(p._clashLabel(before), 'Ends only 15 min before your 07:00 Ride at Oxford Circus starts — a different location', '…and worded for that order');
-    eq(p._clashLabel(at('2026-09-21 07:45:00', 'Bank')), 'Starts as your 07:00 Ride at Oxford Circus ends — a different location', 'touching at two locations: no "0 min"');
+    eq(p._clashLabel(before), 'Ends only 15 min before your 07:00 Ride at Oxford Circus starts, at a different location', '…and worded for that order');
+    eq(p._clashLabel(at('2026-09-21 07:45:00', 'Bank')), 'Starts as your 07:00 Ride at Oxford Circus ends, at a different location', 'touching at two locations: no "0 min"');
     eq(at('2026-09-21 08:15:00', 'Bank'), null, 'a full 30 minutes between locations is fine');
     eq(at('2026-09-21 08:00:00', 'Oxford Circus'), null, 'the same location needs no travel time');
     eq(at('2026-09-21 08:00:00', ''), null, 'an unknown location never invents a travel warning');

@@ -858,7 +858,7 @@
     // onto a button afterwards: a bookings event mid-sync re-rendered this
     // section, the progress kept going to the detached button, and a fresh,
     // enabled "Sync now" that did nothing (_syncing) sat in its place.
-    var btnState = _syncing ? ' disabled>' + escapeHtml(_syncLabel || 'Syncing...') : null;
+    var btnState = _syncing ? ' disabled>' + escapeHtml(_syncLabel || 'Syncing…') : null;
 
     if (synced) {
       setHtml(container,
@@ -867,7 +867,7 @@
             '<strong>' + _plural(historyCount, 'booking') + ' in history</strong>' +
             (dateLabel ? '<br><span>Last synced ' + dateLabel + '</span>' : '') +
             // A quiet top-up found more than it may fetch by itself (a number of ours, never API text).
-            (missing ? '<br><span>' + missing + ' past classes are not in it yet — tap Re-sync to import them.</span>' : '') +
+            (missing ? '<br><span>' + missing + ' past classes are not in it yet. Tap Re-sync to import them.</span>' : '') +
           '</div>' +
           '<button class="explore-sync-btn explore-sync-btn-secondary" id="syncHistoryBtn" onclick="window._explore_syncHistory()"' + (btnState || '>Re-sync') + '</button>' +
         '</div>');
@@ -903,7 +903,7 @@
     localStorage.removeItem(SYNC_KEY);
     _exploreDirty = true;
     window.renderExplore();
-    if (typeof toast === 'function') toast('Sync flag cleared — you can sync again', 'info');
+    if (typeof toast === 'function') toast('Sync flag cleared. You can sync again.', 'info');
   };
 
   // opts.silent — the weekly top-up below: the same sync, with nothing said and
@@ -933,7 +933,7 @@
     // did not start. (A section rebuilt mid-top-up still draws busy, _syncing
     // being true; every way out below repaints it idle.)
     var paintBanner = function () { renderSyncBanner(document.getElementById('exploreSyncSection')); };
-    _syncLabel = 'Syncing...';
+    _syncLabel = 'Syncing…';
     if (!silent) paintBanner();
 
     // The first-run welcome prompt (app.js) has its own button — progress goes
@@ -974,7 +974,7 @@
               var baseUrl = strategies[s];
               for (var pg = currentPage + 1; pg <= totalPages && pg <= 100; pg++) {
                 var sep = baseUrl.includes('?') ? '&' : '?';
-                setLabel('Fetching page ' + pg + ' of ' + totalPages + '...');
+                setLabel('Loading page ' + pg + ' of ' + totalPages + '…');
                 var pgRes = await apiFetch(baseUrl + sep + 'page=' + pg);
                 if (!pgRes.ok) { _syncIncomplete = true; break; } // partial sync — don't mark as fully synced
                 var pgData = await pgRes.json();
@@ -1020,17 +1020,17 @@
         if (_confirmedEmpty) {
           localStorage.setItem(SYNC_KEY, new Date().toISOString());
           _clearTopUpTooBig();
-          if (!silent && typeof toast === 'function') toast('No past bookings on your Psycle account yet — your history is up to date.', 'info');
+          if (!silent && typeof toast === 'function') toast('No past bookings on your Psycle account yet. Your history is up to date.', 'info');
           markDirtyAndMaybeRender(); // the banner flips to its "synced" state
         } else if (!silent && typeof toast === 'function') {
-          toast("Couldn't reach Psycle to sync your history — try again in a moment.", 'error');
+          toast("Couldn't reach Psycle to sync your history. Try again in a moment.", 'error');
         }
         paintBanner(); // idle again ("Sync now" / "Re-sync"), whichever tab is up
         return;
       }
 
       // Update button with progress
-      setLabel('Fetching details (' + _plural(allBookings.length, 'booking') + ')...');
+      setLabel('Loading details (' + _plural(allBookings.length, 'booking') + ')…');
 
       // Fetch event details for each booking to get instructor/type/location
       var existing = getHistory();
@@ -1063,7 +1063,7 @@
       // Fetch event details in batches
       for (var i = 0; i < uniqueBookings.length; i += batchSize) {
         var batch = uniqueBookings.slice(i, i + batchSize);
-        setLabel('Fetching details (' + (i + 1) + '/' + uniqueBookings.length + ')...');
+        setLabel('Loading details (' + (i + 1) + ' of ' + uniqueBookings.length + ')…');
 
         await Promise.all(batch.map(async function (booking) {
           var evtId = String(booking.event_id);
@@ -1158,7 +1158,7 @@
       if (!silent && typeof toast === 'function') {
         if (partial) {
           toast('Synced ' + newEntries.length + ' booking' + (newEntries.length !== 1 ? 's' : '') +
-            ' — ' + (_syncFailedDetails || 'some') + ' could not be fetched. Tap Sync again to retry the rest.', 'info');
+            '. ' + (_syncFailedDetails || 'Some') + ' couldn\'t be fetched. Tap Sync again for the rest.', 'info');
         } else {
           toast('Synced ' + newEntries.length + ' past booking' + (newEntries.length !== 1 ? 's' : '') + ' (' + merged.length + ' total in history)', 'success');
         }
@@ -1180,7 +1180,7 @@
 
     } catch (e) {
       console.error('[explore] sync failed:', e);
-      if (!silent && typeof toast === 'function') toast('Sync failed: ' + e.message, 'error');
+      if (!silent && typeof toast === 'function') toast('Couldn\'t sync your history. Try again in a moment.', 'error');
     }
 
     _syncing = false;

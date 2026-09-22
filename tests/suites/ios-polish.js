@@ -366,7 +366,7 @@ module.exports = async function (t) {
 
     const plist = t.readSource('ios-app/ios/App/App/Info.plist');
     t.ok(!/Psycle Finder/.test(plist), 'the calendar permission prompt no longer names an app ("Psycle Finder") that appears nowhere else');
-    t.eq((plist.match(/<string>Psync keeps the calendar you choose in step/g) || []).length, 2, '…both usage descriptions name Psync and the owned-calendar behaviour');
+    t.eq((plist.match(/<string>Psync adds your Psycle classes to the calendar you choose/g) || []).length, 2, '…both usage descriptions name Psync and the owned-calendar behaviour');
     t.ok(!/<string>[^<]*[&<>][^<]*<\/string>/.test(plist.slice(plist.indexOf('NSCalendarsFullAccessUsageDescription'), plist.indexOf('NSSupportsLiveActivities'))), '…with nothing XML would choke on');
   }
 

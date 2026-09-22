@@ -250,7 +250,7 @@ module.exports = async function (t) {
     await w.settle();
     eq([w.log.opened, w.watch()], [[], []], '"Not now" → answered: not opened, no longer watched');
     eq(w.log.toasts.map((x) => x[1]), ['info'], '…and told so: a stray tap on the backdrop lands here too, and the bell switching off is otherwise invisible');
-    ok(/tap its bell/.test(w.log.toasts[0][0]), 'the toast says how to watch again');
+    ok(/Tap its bell/.test(w.log.toasts[0][0]), 'the toast says how to watch again');
   }
   {
     // Storage full: the un-watch cannot be saved — "View class" must still open the class.
@@ -396,7 +396,7 @@ module.exports = async function (t) {
   }
 
   t.section('Notify: the bell says what it really does');
-  ok(src.indexOf('checked whenever Psync is open') !== -1, 'the toast says checks only run while the app is open (there is no server or background fetch behind the bell)');
+  ok(src.indexOf('Checked whenever Psync is open') !== -1, 'the toast says checks only run while the app is open (there is no server or background fetch behind the bell)');
   ok(src.indexOf('You will be notified when a spot opens') === -1 && src.indexOf('enable browser notifications for push') === -1, 'the old promises are gone');
   ok(src.indexOf('not supported in this browser') === -1, "no red \"not supported\" toast on every bell tap in the iOS app (its WebView has no Notification API)");
 
@@ -419,13 +419,13 @@ module.exports = async function (t) {
     // Chrome / Safari on the web, never asked: the prompt is left UNANSWERED.
     let w = bellWorld('default');
     w.tap(555); // not awaited — nor does the handler wait
-    eq([w.watch(), w.classes, w.btn.title, w.log.toasts], [['555'], ['+watching'], 'Stop watching for openings', [['Watching this class — checked whenever Psync is open', 'success']]],
+    eq([w.watch(), w.classes, w.btn.title, w.log.toasts], [['555'], ['+watching'], 'Stop watching for openings', [['Watching this class. Checked whenever Psync is open.', 'success']]],
       'saved, the bell flipped and the toast shown straight away (the tap used to hang on the prompt: nothing saved, no toast — a dead tap)');
     eq(w.asked.count, 1, '…and the browser is still asked, once, after all of that');
     eq(w.attrs, { 'aria-label': 'Stop notifying me', 'aria-pressed': 'true' }, 'the bell has a NAME (its glyph is a CSS emoji — that is what was read out) and says it is on');
     w.asked.answer('granted');
     await w.settle();
-    eq([w.watch(), w.log.toasts.map((x) => x[0])], [['555'], ['Watching this class — checked whenever Psync is open', 'Notifications enabled']], 'answering later changes nothing about the watch');
+    eq([w.watch(), w.log.toasts.map((x) => x[0])], [['555'], ['Watching this class. Checked whenever Psync is open.', 'Notifications enabled']], 'answering later changes nothing about the watch');
 
     w = bellWorld('default');
     w.ctx.Notification.requestPermission = () => Promise.reject(new Error('prompt dismissed'));
@@ -449,6 +449,6 @@ module.exports = async function (t) {
     eq([w.attrs, w.btn.title], [{ 'aria-label': 'Notify me when a spot opens', 'aria-pressed': 'false' }, 'Notify me when a spot opens'], '…and the name and pressed state flip back with it');
     w = bellWorld('granted', { token: null });
     await w.tap(562);
-    eq(w.log.toasts[0][0], 'Watching this class — sign in so Psync can check it', 'signed out: the toast says why nothing will be checked yet');
+    eq(w.log.toasts[0][0], 'Watching this class. Sign in so Psync can check it.', 'signed out: the toast says why nothing will be checked yet');
   }
 };

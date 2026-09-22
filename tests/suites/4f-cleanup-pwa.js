@@ -239,7 +239,7 @@ module.exports = async function (t) {
     t.eq((head.match(/<meta name="theme-color"/g) || []).length, 1, 'exactly one theme-color meta (theme.js updates the first it finds)');
     t.ok(head.indexOf('<script id="themeBoot">') < head.indexOf('<link rel="stylesheet"'), 'it runs before the stylesheets are even requested');
     t.ok(!/js\/|css\/|fonts\//.test(finderBoot), 'nothing in it would be rewritten by build.js\'s path flattening');
-    t.ok(/<html lang="en" data-theme="cloud">/.test(finder) && /<html lang="en" data-theme="cloud">/.test(login), 'both pages still start as Cloud if the script cannot run');
+    t.ok(/<html lang="en-GB" data-theme="cloud">/.test(finder) && /<html lang="en-GB" data-theme="cloud">/.test(login), 'both pages still start as Cloud if the script cannot run');
     // tests/suites/offline.js runs login.html's FIRST bare <script> as the login logic.
     t.ok(/function doLogin\(/.test((/<script>([\s\S]*?)<\/script>/.exec(login) || [])[1] || ''), 'login.html: the first attribute-less <script> is still the login logic');
 

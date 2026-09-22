@@ -72,7 +72,7 @@
     pullIndicator.style.transform = 'translateX(-50%) translateY(10px)';
     pullIndicator.style.opacity = '1';
     const text = pullIndicator.querySelector('.pull-text');
-    if (text) text.textContent = 'Refreshing...';
+    if (text) text.textContent = 'Refreshing…';
     const spinner = pullIndicator.querySelector('.pull-spinner');
     if (spinner) spinner.style.transform = '';
   }

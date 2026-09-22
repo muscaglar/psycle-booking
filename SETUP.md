@@ -1,4 +1,4 @@
-# Psycle Class Finder — Development Setup
+# Psync — development setup
 
 ## Prerequisites
 

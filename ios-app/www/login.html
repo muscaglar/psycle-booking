@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="cloud">
+<html lang="en-GB" data-theme="cloud">
 <head>
 <meta charset="UTF-8">
 <!-- The one page that sees the Psycle password gets the tightest policy in the
@@ -190,7 +190,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
 
   <div id="sDone" style="display:none" class="done-wrap">
     <div class="ok-mark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></div>
-    <h1>Connected</h1>
+    <h1>Signed in</h1>
     <p class="sub">Returning to Psync&hellip;</p>
     <a href="./psycle-finder.html" class="btn" style="text-decoration:none;margin-top:0">Open Psync</a>
   </div>
@@ -269,8 +269,8 @@ function onLoginSuccess() {
 // or Laravel-style `errors` ({field: [msg, …]}), which used to be shown as raw
 // JSON. Always a plain string: it goes into textContent.
 function firstErrorMessage(data, status) {
-  if (status === 429) return 'Too many attempts — give it a minute, then try again.';
-  if (status >= 500) return 'Psycle is having trouble right now — try again shortly.';
+  if (status === 429) return 'Too many attempts. Give it a minute, then try again.';
+  if (status >= 500) return 'Psycle is having trouble right now. Try again shortly.';
   var pick = function(v) {
     if (typeof v === 'string') return v;
     if (Array.isArray(v)) return v.length ? pick(v[0]) : '';
@@ -284,7 +284,7 @@ function firstErrorMessage(data, status) {
   var msg = typeof data === 'string' ? data
     : (data ? (pick(data.message) || pick(data.error) || pick(data.errors)) : '');
   msg = String(msg || '').trim().slice(0, 200);
-  return msg || 'Sign in failed (' + status + ')';
+  return msg || 'Couldn\'t sign in. Check your email and password, then try again.';
 }
 
 function showError(msg) {
@@ -323,7 +323,7 @@ async function doLogin() {
   var btn = document.getElementById('loginBtn');
 
   if (!email || !password) {
-    showError('Please enter your email and password.');
+    showError('Enter your email and password.');
     return;
   }
   _loginInFlight = true;
@@ -382,7 +382,7 @@ async function doLogin() {
         // With an opener the app already holds the token (postMessage above)
         // and saves it itself; without one this page's copy is the only one.
         if (!saved && !window.opener) {
-          showError('Psycle accepted your details, but this device could not save the sign-in — its storage is full. Free up some space, then sign in again.');
+          showError('Psycle accepted your details, but this device could not save the sign-in because its storage is full. Free up some space, then sign in again.');
           btn.disabled = false;
           btn.textContent = 'Sign in';
           _loginInFlight = false;
@@ -402,7 +402,7 @@ async function doLogin() {
         // that gets pasted into a bug report.
         var inner = (data && typeof data.data === 'object' && data.data) ? Object.keys(data.data) : [];
         console.log('[psync-login] response fields:', typeof data === 'object' ? Object.keys(data) : typeof data, inner);
-        showError('Signed in but no token was returned. Check the console and report the field names.');
+        showError('Psycle accepted your details, but Psync couldn\'t finish signing you in. Try again.');
         btn.disabled = false;
         btn.textContent = 'Sign in';
         _loginInFlight = false;
@@ -423,7 +423,7 @@ async function doLogin() {
     clearTimeout(timer);
     showError(e && e.name === 'AbortError'
       ? 'Psycle took too long to answer. Check your connection and try again.'
-      : 'Network error. Check your connection and try again.');
+      : 'Couldn\'t reach Psycle. Check your connection and try again.');
     if (Date.now() >= _lockedUntil) {
       btn.disabled = false;
       btn.textContent = 'Sign in';

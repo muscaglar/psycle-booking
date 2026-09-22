@@ -53,9 +53,14 @@ public final class PsycleLiveActivityController {
     ///  1. staleDate = classStart — at T0 the SYSTEM re-renders the card in
     ///     its stale state ("In class", see PsycleLiveActivityView) with no
     ///     process running;
-    ///  2. a BGAppRefreshTask scheduled for classStart calls this method to
-    ///     actually end/remove it (best-effort timing, usually minutes);
-    ///  3. any app foreground past start ends it immediately.
+    ///  2. the card then goes about five minutes after the start
+    ///     (PsycleLiveActivityRetirement, in PsycleLiveActivityAttributes.swift
+    ///     — the owner's rule). Whoever runs first once the class has started
+    ///     applies it: the BGAppRefreshTask scheduled for classStart, the
+    ///     widget extension's timeline reload, or this method on a foreground.
+    ///     A run inside the five minutes ENDS the activity with
+    ///     dismissalPolicy .after(start + 5 min), so the system removes it on
+    ///     time by itself; a later run removes it at once.
     @discardableResult
     public func refreshFromSnapshot() -> Bool {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
@@ -71,7 +76,7 @@ public final class PsycleLiveActivityController {
         // would wrongly clear the card instead of showing the real next one.
         guard let (next, start) = PsycleSnapshotStore.firstClass(startingAfter: now) else {
             NSLog("[PsycleLiveActivity] declined: no future class in snapshot")
-            endAll() // cancelled / none upcoming — retract anything showing
+            retireAll(now: now) // cancelled / none upcoming — a class that has just started keeps its five minutes
             return false
         }
 
@@ -80,7 +85,7 @@ public final class PsycleLiveActivityController {
         // Too far out — nothing should be showing yet.
         if secondsUntil > leadWindow {
             NSLog("[PsycleLiveActivity] declined: next class in %.0f min (window 90)", secondsUntil / 60)
-            endAll()
+            retireAll(now: now)
             return false
         }
 
@@ -164,17 +169,18 @@ public final class PsycleLiveActivityController {
         }
     }
 
-    /// Awaitable variant for the background end-task: the BGTask must not
-    /// be marked complete until the end IPC has actually landed, or iOS
-    /// suspends the process first and the card stays up.
-    public func endAllAndWait() async {
-        for activity in Activity<PsycleClassActivityAttributes>.activities {
-            if #available(iOS 16.2, *) {
-                await activity.end(nil, dismissalPolicy: .immediate)
-            } else {
-                await activity.end(dismissalPolicy: .immediate)
-            }
-        }
+    /// For the background end-task: retire the cards whose class has started
+    /// (never one still counting down), and return only once the end IPC has
+    /// landed — a BGTask marked complete first is suspended mid-flight and
+    /// the card stays up.
+    public func retireStartedAndWait() async {
+        await PsycleLiveActivityRetirement.retire(now: Date(), endUnstarted: false)
+    }
+
+    /// Nothing should be showing: a card whose class has not started goes at
+    /// once; one whose class has just started keeps its five minutes.
+    private func retireAll(now: Date) {
+        Task { await PsycleLiveActivityRetirement.retire(now: now, endUnstarted: true) }
     }
 
     /// End every running Psycle activity immediately.
@@ -199,6 +205,7 @@ public final class PsycleLiveActivityController {
     public static let shared = PsycleLiveActivityController()
     private init() {}
     @discardableResult public func refreshFromSnapshot() -> Bool { false }
+    public func retireStartedAndWait() async {}
     public func endAll() {}
 }
 

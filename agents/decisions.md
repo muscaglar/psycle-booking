@@ -76,6 +76,19 @@ Chosen by the owner from several rounds of concepts, with a product designer adv
 - **Disliked:** beige; flat lifeless colour; square edges; an accent that clashes with its ground; distracting
   styling; concept metaphors leaking into the product (pegs, trains).
 
+- **Release polish, 2026-09-22.** The owner, before the App Store submission: "We don't want this to come across as
+  unprofessional or as AI slop." What that was taken to mean, and is now held by tests/suites/23-release-polish.js:
+  a message a member reads is SENTENCES — never "problem — instruction" — and never carries an HTTP status, an
+  exception's own words, or a developer's word ("token", "console", "API", "safe mode", "template", "layout").
+  The words of money and safety copy did not change, only their punctuation (8e-declutter.js still pins them).
+  Left exactly as they were, because they are contracts or the owner's open questions: the button labels
+  'Failed — retry' / 'Unconfirmed — retry' (section 2), the one "Booked!", the usual-week invitation and its
+  "seats" wording, "On the waitlist!". Choices made on the owner's behalf, all reversible: **Diagnostics is no
+  longer a Settings section** (it is the owner's tool, in engineering words: five quick taps on the PSYNC mark at
+  the foot of Membership open it; a member's route to the same facts is Settings → Data → Bug report);
+  **Settings → Data has a "Privacy policy" button** (both stores expect the policy inside the app; the native
+  apps open the hosted copy, since the page is not bundled); exported files are named `psync-…`, not `psycle-…`.
+
 ## 4. Time zones
 
 | Decision | Why | Held by |
@@ -117,6 +130,14 @@ From IMPROVEMENTS-2026-09.md → "Deliberately NOT changed — owner decisions".
 - `icons/` is web-only: ios-app/build.js does not copy it into the iOS bundle.
 - Terminal defines no `--accent-ink`, so labels on its accent fill are white at about 3.3:1. Part of that
   theme's look.
+
+- **The Live Activity goes about five minutes after the class's scheduled start** (2026-09-22). The owner: "The
+  live activity is great but it should dissapear autoamtically ~5 mins after the scheduled class start time
+  please". Held by `PsycleLiveActivityRetirement` (ios-app/ios/App/PsycleLiveActivity/PsycleLiveActivityAttributes.swift)
+  and its checks in ios-app/native-checks/decode/main.swift. iOS cannot schedule the removal up front, so the
+  background task, the widget's timeline reload and a foreground each apply it (ios-app/NATIVE_FEATURES.md, the
+  status block). The Android countdown still ends AT the start, where the system's own timeout removes it to the
+  second; its chronometer would read negative if it were kept longer. CLOSED unless the owner says otherwise.
 
 ## 7. Release and process
 

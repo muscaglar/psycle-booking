@@ -352,7 +352,7 @@ module.exports = async function (t) {
     await flush(); await flush();
     t.eq([b.calls.requested, b.ls.getItem('psycle_weekly_reminder'), b.ls.getItem('psycle_weekly_reminder_asked')], [1, 'on', '1'], 'yes → the iOS permission prompt, the reminder on, the answer remembered');
     t.eq([b.lastWeekly().length, b.lastWeekly()[0].body], [8, BODY_WEEK], '…and the eight Mondays armed, with the usual-week sentence');
-    t.eq(b.calls.toasts, [['Reminder set — Mondays at 12:00', 'success']], 'the same toast the Settings switch gives');
+    t.eq(b.calls.toasts, [['Monday reminder on', 'success']], 'the same toast the Settings switch gives');
     t.ok(b.calls.rowRenders >= 1 && b.calls.prefSet.includes('psycle_weekly_reminder_asked'), 'the Settings switch is repainted, and the answer is mirrored to Preferences (a storage purge must not ask again)');
     t.eq(b.calls.actions, ['weekly-reminder:offer yes after=usual-week-saved'], 'one action-log line: a name, no free text');
     b.ctx._offerWeeklyReminder('usual-week-saved');
@@ -710,7 +710,7 @@ module.exports = async function (t) {
   {
     const tabs = t.readSource('js/tabs.js');
     t.ok(/<span class="app-row-label">Monday booking reminder<\/span>' \+\s*'<span class="app-row-detail">Mondays at 12:00 — when Psycle opens new dates<\/span>/.test(tabs), 'the Settings row: "Mondays at 12:00 — when Psycle opens new dates"');
-    t.ok(/'Reminder set — Mondays at 12:00'/.test(tabs) && /'Reminder set — Mondays at 12:00'/.test(BRIDGE_SRC), 'the switch and the in-app offer give the same toast');
+    t.ok(/'Monday reminder on'/.test(tabs) && /'Monday reminder on'/.test(BRIDGE_SRC), 'the switch and the in-app offer give the same toast');
     t.ok(!/11:59|1159/.test(tabs + BRIDGE_SRC), 'no 11:59 left in the reminder\'s code or copy');
     const settings = t.readSource('js/settings.js');
     t.ok(/\(window\._nativeReminder \?\s*'<div class="settings-section" id="settingsSecReminders">/.test(settings), 'on the web the Reminders section is not built at all (js/settings.js) — unchanged');

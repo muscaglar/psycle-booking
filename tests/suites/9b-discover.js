@@ -199,7 +199,7 @@ module.exports = function (t) {
     ok(/class="class-card ct-card is-waitlisted"/.test(html) && /<button class="book-btn booked" [^>]*onclick="event\.stopPropagation\(\);leaveWaitlist\(501, this\)">Waitlisted ✓<\/button>/.test(html),
       'a waitlist place: .is-waitlisted (dashed), and the tap still manages the place — never the picker');
     ctx = mk();
-    ok(/<button class="book-btn waitlist" [^>]*>Join Waitlist<\/button>/.test(card(ctx, { is_fully_booked: true, is_waitlistable: true })), 'full + waitlistable: className exactly "book-btn waitlist"');
+    ok(/<button class="book-btn waitlist" [^>]*>Join waitlist<\/button>/.test(card(ctx, { is_fully_booked: true, is_waitlistable: true })), 'full + waitlistable: className exactly "book-btn waitlist"');
     html = card(ctx, { is_fully_booked: true, is_waitlistable: false });
     ok(/(<button class="book-btn"[^>]*>Full<\/button>)/.test(html) && /<button class="book-btn" disabled /.test(html), "Full still matches features.js's notify-bell regex (the wrapper contract), and is disabled");
     ok(/html\.replace\(\s*\/\(<button class="book-btn"\[\^>\]\*>Full<\\\/button>\)\/,/.test(t.readSource('js/features.js')), '…which is still the regex features.js ships');
@@ -353,8 +353,8 @@ module.exports = function (t) {
       /min-width:\s*2\.4em;/.test(rule(mine, '.class-card[data-ct] .cc-time')) && /#tab-discover \{ padding: var\(--space-1\) var\(--space-7\) /.test(mine), 'the card is still the wrapping flex row this arithmetic is about');
     const line = (vw) => vw - 2 * rootTok['--space-7'] - rootTok['--space-5'] - rootTok['--space-6'];
     const inline = (vw, action) => 2.4 * rootTok['--type-time'] + basis + action + 2 * rootTok['--space-4'] <= line(vw);
-    eq([inline(390, 114), inline(390, 126)], [false, false], 'at 390px "Full" + the bell (114px) and a mono "Join Waitlist" (126px) take a row of their own — the text gets the card\'s width');
-    eq([inline(390, 64), inline(390, 78), inline(390, 91), inline(375, 64)], [true, true, true, true], '"Book" (64px), "Bike 7 ✓" (78px) and "Join Waitlist" (91px) stay beside the text at 390px; "Book" at 375px too');
+    eq([inline(390, 114), inline(390, 126)], [false, false], 'at 390px "Full" + the bell (114px) and a mono "Join waitlist" (126px) take a row of their own — the text gets the card\'s width');
+    eq([inline(390, 64), inline(390, 78), inline(390, 91), inline(375, 64)], [true, true, true, true], '"Book" (64px), "Bike 7 ✓" (78px) and "Join waitlist" (91px) stay beside the text at 390px; "Book" at 375px too');
     ok(100 + 114 + 2.4 * rootTok['--type-time'] + 2 * rootTok['--space-4'] <= line(390), '…where the old 100px basis kept "Full" + the bell inline, in a 116px column');
   }
 

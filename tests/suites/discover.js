@@ -493,7 +493,7 @@ module.exports = async function (t) {
   }
 
   // ── The in-place button sync keeps the line beside it in step ─────────────
-  t.section('Discover: a card re-synced in place never reads "Only N left" beside "Join Waitlist"');
+  t.section('Discover: a card re-synced in place never reads "Only N left" beside "Join waitlist"');
   {
     eq([D._spotsHtml({ capacity: 21, occupancy: 19 }, null, true), D._spotsHtml({ capacity: 21, occupancy: 19 }, null, false), D._spotsHtml({ capacity: 21, occupancy: 19 }, { slots: [4] }, true)],
       ['<span class="cc-spots low" data-count>Only 2 left</span>', '', ''], '_spotsHtml: a count only from recent data, and never on a class the member holds');
@@ -532,7 +532,7 @@ module.exports = async function (t) {
     };
     const count = '<span class="cc-spots low" data-count>Only 2 left</span>';
     let r = sync(count, { is_fully_booked: true, is_waitlistable: true });
-    eq([r.btn.textContent, r.card.line], ['Join Waitlist', '<span class="cc-spots">Waitlist open</span>'], 'bookClass learned the class filled: the button AND the line say so ("Only 2 left" stayed beside Join Waitlist)');
+    eq([r.btn.textContent, r.card.line], ['Join waitlist', '<span class="cc-spots">Waitlist open</span>'], 'bookClass learned the class filled: the button AND the line say so ("Only 2 left" stayed beside Join waitlist)');
     r = sync(count, { is_fully_booked: true, is_waitlistable: false });
     eq([r.btn.textContent, r.btn.disabled, r.card.line], ['Full', true, '<span class="cc-spots">Fully booked</span>'], 'full with the waitlist closed: the line is rewritten BEFORE the Full branch returns');
     r = sync(null, { is_fully_booked: true, is_waitlistable: true });
@@ -559,7 +559,7 @@ module.exports = async function (t) {
     const avail = sheet.slice(sheet.indexOf('// Availability info'), sheet.indexOf('// My Bookings can open the sheet'));
     ok(avail.indexOf('capacity_remaining != null') === -1 && !/duration/.test(avail.replace(/\/\/[^\n]*/g, '')), 'no capacity_remaining gate and no duplicate "45 min" fallback');
     ok(/_countsFresh\(evt\._countsAt, Date\.now\(\)\) \? _spotsLeft\(evt\) : null/.test(avail), 'the count comes from _spotsLeft, only while the cache entry is recent');
-    ok(/Full — waitlist open/.test(avail) && />Full</.test(avail), 'full classes say which kind of full');
+    ok(/Full · waitlist open/.test(avail) && />Full</.test(avail), 'full classes say which kind of full');
     ok(sheet.indexOf('&#9898;') === -1, 'the blank pale circle icon is gone');
     ok(/_countsAt: dataAt,/.test(renderSrc), 'render() stamps each cache entry with the age of the numbers it just wrote');
   }

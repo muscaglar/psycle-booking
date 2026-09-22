@@ -272,8 +272,8 @@ module.exports = function (t) {
     ok(/<button class="cds-book-btn booked is-place pill-btn pill-ct-outline is-block is-lg" onclick="[^"]*leaveWaitlist\(77, null\);">Waitlisted ✓<\/button>/.test(html) && !/glow-mine/.test(html) && !/Free cancel/.test(html) && !/cds-note/.test(html),
       'a waitlist place: the dashed class outline, no glow, no free-cancel row (nothing to late-cancel yet), no note');
     html = sheetWorld({ evt: { is_fully_booked: true, is_waitlistable: true } });
-    ok(/<button class="cds-book-btn waitlist pill-btn pill-ct-outline is-block is-lg" onclick="[^"]*_classDetailBookAction\(77\);">Join Waitlist<\/button>/.test(html) && !/glow-mine/.test(html) && !/cds-note/.test(html) && !/Free cancel/.test(html),
-      'Join Waitlist: the class outline — no glow, no note, no free-cancel promise');
+    ok(/<button class="cds-book-btn waitlist pill-btn pill-ct-outline is-block is-lg" onclick="[^"]*_classDetailBookAction\(77\);">Join waitlist<\/button>/.test(html) && !/glow-mine/.test(html) && !/cds-note/.test(html) && !/Free cancel/.test(html),
+      'Join waitlist: the class outline — no glow, no note, no free-cancel promise');
     html = sheetWorld({ evt: { is_fully_booked: true, is_waitlistable: false } });
     ok(/<button class="cds-book-btn pill-btn pill-primary is-block is-lg" disabled>Full<\/button>/.test(html) && !/glow-mine/.test(html), 'Full: disabled, and a disabled pill never glows');
     html = sheetWorld({ bookings: { 77: seat() }, evt: { start_at: '2020-01-06T07:00:00' } });

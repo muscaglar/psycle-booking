@@ -200,7 +200,7 @@
         '<div class="ncp-countdown">' + countdown + '</div>' +
         '<div class="ncp-info">' +
           '<div class="ncp-class">' + escapeHTML(next._typeName || 'Class') +
-            (next._instrName ? ' — ' + escapeHTML(next._instrName) : '') + '</div>' +
+            (next._instrName ? ' · ' + escapeHTML(next._instrName) : '') + '</div>' +
           '<div class="ncp-detail">' + escapeHTML(next._locName || '') +
             (next._studioName ? ' · ' + escapeHTML(next._studioName) : '') + '</div>' +
         '</div>' +
@@ -564,7 +564,7 @@
               '<div id="reminderRow"></div>' +
             '</div>' : '') +
           '<div class="settings-section" id="settingsSecBike">' +
-            '<div class="settings-section-title">Bike / Spot Preferences</div>' +
+            '<div class="settings-section-title">Bike / spot preferences</div>' +
             '<select class="bike-pref-studio-select" id="bikePrefStudio" onchange="renderBikePrefGrid()">' +
               '<option value="">Select a studio…</option>' +
             '</select>' +
@@ -579,7 +579,7 @@
           '</div>' +
           (typeof window.psycleListCalendars === 'function' ?
             '<div class="settings-section" id="settingsSecCalendar">' +
-              '<div class="settings-section-title">Calendar Sync</div>' +
+              '<div class="settings-section-title">Calendar sync</div>' +
               '<div id="calendarSyncPanel" class="cal-sync-panel">Loading calendars…</div>' +
             '</div>' : '') +
           '<div class="settings-section" id="settingsSecData">' +
@@ -589,12 +589,7 @@
               '<button class="app-advanced-btn" onclick="document.getElementById(\'settingsImportFile\')?.click()">Import settings</button>' +
               '<input type="file" id="settingsImportFile" accept=".json,.txt,application/json,text/plain" style="display:none" onchange="importSettings(this)">' +
               '<button class="app-advanced-btn" onclick="downloadBugReport()">Bug report</button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="settings-section">' +
-            '<div class="settings-section-title">Diagnostics</div>' +
-            '<div class="app-advanced">' +
-              '<button class="app-advanced-btn" onclick="openDiagnostics()">Open diagnostics</button>' +
+              '<button class="app-advanced-btn" onclick="openPrivacyPolicy()">Privacy policy</button>' +
             '</div>' +
           '</div>' +
           // The first-run welcome again (app.js replayOnboarding). It opens
@@ -774,7 +769,7 @@
 
 
   // ═══════════════════════════════════════════════════════════════════
-  // Calendar Sync UI (the native apps only: iPhone and Android)
+  // Calendar sync UI (the native apps only: iPhone and Android)
   // ═══════════════════════════════════════════════════════════════════
 
   // ── pure:calendar-sync:start
@@ -811,7 +806,7 @@
         '</select>' +
       '</label>' +
       (enabled && !chosen ?
-        '<div class="cal-sync-hint" style="color:var(--accent,#1f6f5c)">Choose a calendar to start syncing — nothing is added until you pick one.</div>' : '') +
+        '<div class="cal-sync-hint" style="color:var(--accent,#1f6f5c)">Choose a calendar to start syncing. Nothing is added until you pick one.</div>' : '') +
       '<div class="cal-sync-actions">' +
         '<button class="cal-sync-resync" onclick="onCalendarResync(this)">Re-sync now</button>' +
         (typeof window.psycleCleanupDuplicates === 'function' ?
@@ -820,7 +815,7 @@
       '<div class="cal-sync-hint">' +
         'The calendar you pick becomes fully managed by Psync: upcoming events in it are ' +
         'kept in lockstep with your bookings, so cancelled classes, slot changes and any ' +
-        'duplicates are cleaned up automatically — and anything else in that calendar will ' +
+        'duplicates are cleaned up automatically, and anything else in that calendar will ' +
         'be removed. Use a dedicated calendar (e.g. create a "Psycle" calendar in the ' +
         'Calendar app), not your personal one. Past events are never touched. Switching ' +
         'calendars moves your bookings across.' +
@@ -858,7 +853,7 @@
       body = 'Psync will delete anything in ' + q + ' that is not one of your Psycle bookings, on every sync. ' +
         'It has no other upcoming events right now. Past events are untouched.';
     } else {
-      body = 'Psync will delete every upcoming event in ' + q + ' that is not one of your Psycle bookings — ' +
+      body = 'Psync will delete every upcoming event in ' + q + ' that is not one of your Psycle bookings, ' +
         'now and on every sync. Past events are untouched.';
     }
     return !!(await window.confirmModal({
@@ -908,7 +903,7 @@
       // fills the new calendar — nothing the member needs to act on.
       var problem = r && r.skipped !== 'busy' ? _calSyncProblem(r) : '';
       if (problem) {
-        if (typeof toast === 'function') toast('Calendar saved, not synced yet — ' + problem, 'info');
+        if (typeof toast === 'function') toast('Calendar saved, not synced yet: ' + problem, 'info');
       } else if (result && result.movedFromOld > 0 && typeof toast === 'function') {
         toast('Moved ' + result.movedFromOld + ' event' +
           (result.movedFromOld !== 1 ? 's' : '') + ' to new calendar', 'info');
@@ -1069,7 +1064,7 @@
         currentBranch = s.branch;
         html += '<optgroup label="' + escapeHTML(s.branch || 'Unknown') + '">';
       }
-      html += '<option value="' + s.id + '">' + escapeHTML(s.branch ? s.branch + ' — ' + s.name : s.name) + '</option>';
+      html += '<option value="' + s.id + '">' + escapeHTML(s.branch ? s.branch + ' · ' + s.name : s.name) + '</option>';
     });
     if (currentBranch) html += '</optgroup>';
 
@@ -1086,7 +1081,7 @@
 
     var studio = (_studioMap || {})[Number(studioId)];
     if (!studio || !studio.layout || !studio.layout.slots) {
-      grid.innerHTML = '<div style="color:var(--text-dim);font-size:13px">No layout available for this studio</div>';
+      grid.innerHTML = '<div style="color:var(--text-dim);font-size:13px">This studio has no spot map</div>';
       return;
     }
 
@@ -1281,7 +1276,7 @@
     data._version = 1;
 
     var json = JSON.stringify(data, null, 2);
-    var fileName = 'psycle-settings-' + new Date().toISOString().split('T')[0] + '.json';
+    var fileName = 'psync-settings-' + new Date().toISOString().split('T')[0] + '.json';
     // Logged here: reliability.js's export hook looks for this function
     // before this file has loaded, so it never installs.
     if (typeof window.pushAction === 'function') window.pushAction('settings:export');
@@ -1560,10 +1555,10 @@
       if (!ok) failed++;
     });
     if (failed) {
-      toast("Some of that backup couldn't be saved — this device's storage is full", 'error');
+      toast("Some of that backup couldn't be saved. This device's storage is full.", 'error');
       return;
     }
-    toast('Imported ' + _importSummary(plan.added) + ' — reloading', 'success');
+    toast('Imported ' + _importSummary(plan.added) + '. Reloading…', 'success');
     setTimeout(function () { location.reload(); }, 1200);
   }
 
@@ -1595,8 +1590,8 @@
         var summary = _importSummary(plan.added);
         if (!summary) {
           // Nothing usable in it at all — or nothing this device lacks.
-          if (!plan.accepted) toast("That doesn't look like a Psync backup — nothing was imported", 'error');
-          else toast('Nothing new in that backup — everything in it is already on this device', 'info');
+          if (!plan.accepted) toast("That doesn't look like a Psync backup. Nothing was imported.", 'error');
+          else toast('Nothing new in that backup. Everything in it is already on this device.', 'info');
         } else if (!plan.deviceHasData) {
           _applySettingsImport(plan); // an empty device: nothing to weigh the file against
         } else {
@@ -1605,16 +1600,16 @@
             title: 'Import this backup?',
             // (body, not warn: that slot is the red ⚠ box, and this is a reassurance.)
             body: (when ? 'This backup was saved on ' + when + '. ' : '') + 'Importing adds ' + summary +
-              '. Nothing already on this device is replaced — where both have something, this device\'s is kept.',
+              '. Nothing already on this device is replaced. Where both have something, this device\'s is kept.',
             confirmText: 'Import',
             cancelText: 'Cancel',
           }).then(function (ok) {
             if (ok) _applySettingsImport(plan);
-            else toast('Import cancelled — nothing was changed', 'info');
+            else toast('Import cancelled. Nothing was changed.', 'info');
           });
         }
       } catch (err) {
-        toast('Import failed — that file isn\'t a readable Psync backup', 'error');
+        toast('Import failed. That file isn\'t a readable Psync backup.', 'error');
       }
       input.value = '';
     };
@@ -1704,7 +1699,7 @@
     var sections = [];
 
     // Header
-    sections.push('=== Psycle Bug Report ===');
+    sections.push('=== Psync bug report ===');
     sections.push('Generated: ' + new Date().toISOString());
     sections.push('Build: ' + (window.APP_VERSION || 'unknown'));
     sections.push('');
@@ -1775,7 +1770,7 @@
       // false usually means the user CANCELLED the share sheet — don't
       // clobber their clipboard or claim success. (The old copy pointed at a
       // "Copy" button this panel never had; the share sheet has its own.)
-      toast('Share cancelled — the report was not sent', 'info');
+      toast('Share cancelled. The report was not sent.', 'info');
       return;
     }
 
@@ -1783,7 +1778,7 @@
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'psycle-bug-report-' + date + '.txt';
+    a.download = 'psync-bug-report-' + date + '.txt';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1836,9 +1831,9 @@
       if (status) {
         status.style.display = '';
         status.style.color = '#e94560';
-        status.textContent = 'Copy failed — try the download button instead';
+        status.textContent = 'Copy failed. Try the download button instead.';
       }
-      toast('Copy failed', 'error');
+      toast('Couldn\'t copy', 'error');
     }
     document.body.removeChild(ta);
     return ok;
@@ -1999,6 +1994,33 @@
   // to stay synchronous: awaiting inside the tap spends WebKit's user gesture
   // before clipboard.writeText runs. So the panel fetches the report when it
   // opens (and again after "Clear logs") and the tap embeds what has landed.
+  // The privacy policy, reachable from inside the app (both stores expect that).
+  // The page ships with the WEB app only — ios-app/build.js does not copy it
+  // into the native bundle — so the iPhone and Android apps open the hosted copy.
+  var PRIVACY_POLICY_URL = 'https://muscaglar.github.io/psycle-booking/privacy.html';
+  window.openPrivacyPolicy = function () {
+    var native = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    window.open(native ? PRIVACY_POLICY_URL : 'privacy.html', '_blank', 'noopener');
+  };
+
+  // Diagnostics is the owner's tool, in engineering words, so nothing in
+  // Settings advertises it: five quick taps on the PSYNC mark at the foot of
+  // Membership open it. (The banner js/diagnostic.js raises when Psycle's data
+  // changes shape opens it too; a member's route to the same facts is
+  // Settings → Data → Bug report.)
+  var _diagTaps = 0;
+  var _diagTapAt = 0;
+  // (Above `_diagReportText` on purpose: owner-tools.js and 18-android.js slice
+  // from that line to the opener and run it in a vm with no `document`.)
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || typeof t.closest !== 'function' || !t.closest('.about-mark')) return;
+    var now = Date.now();
+    _diagTaps = (now - _diagTapAt < 1500) ? _diagTaps + 1 : 1;
+    _diagTapAt = now;
+    if (_diagTaps >= 5) { _diagTaps = 0; window.openDiagnostics(); }
+  });
+
   var _diagReportText = null;
   var _diagReportSeq = 0;
 
@@ -2181,7 +2203,7 @@
   // The status line used to say "copied" whatever the fallback did.
   function copyDiagnosticsFallback(blob) {
     var ok = _fallbackCopy(blob, null, 'Diagnostics');
-    diagStatus(ok ? 'Diagnostics copied to clipboard' : 'Copy failed — try again', ok);
+    diagStatus(ok ? 'Diagnostics copied to clipboard' : 'Copy failed. Try again.', ok);
   }
 
   function clearDiagnosticLogs() {

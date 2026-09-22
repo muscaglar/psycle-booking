@@ -337,7 +337,7 @@ module.exports = async function (t) {
     // Copy: the iPhone's sentences are literals that did not move.
     const ios = await android.launch(h, 'ios');
     const reminder = ios.b.calls.scheduled.reduce((a, s) => a.concat(s.notifications), []).filter((x) => x.extra && x.extra.eventId)[0] || {};
-    eq([reminder.title, reminder.body], ['RIDE: 45 starts in 90 minutes', 'Ann · Bank — open Psync for the live countdown.'], 'the iPhone class reminder: its title and body, to the letter');
+    eq([reminder.title, reminder.body], ['RIDE: 45 starts in 90 minutes', 'Ann · Bank · Open Psync for the live countdown'], 'the iPhone class reminder: its title and body, to the letter');
 
     const ask = async (platform) => {
       const b = h.boot({ platform: platform, perm: 'prompt', deny: true });
@@ -348,14 +348,14 @@ module.exports = async function (t) {
       if (m) { m.answer(false); await h.flush(); }
       return m ? [m.opts.title, m.opts.body, m.opts.confirmText, m.opts.cancelText] : [];
     };
-    const iphoneAsk = ['Remind you 90 min before class?', 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.', 'Remind me', 'Not now'];
+    const iphoneAsk = ['Remind you 90 minutes before class?', 'Psync can send a notification 90 minutes before each class you book. Tap it for the live countdown.', 'Remind me', 'Not now'];
     eq([await ask('ios'), await ask(undefined)], [iphoneAsk, iphoneAsk], 'the iPhone first-booking ask: title, body and both buttons, to the letter');
     const droidAsk = await ask('android');
     eq([droidAsk[0], droidAsk[2], droidAsk[3]], [iphoneAsk[0], iphoneAsk[2], iphoneAsk[3]], 'the Android ask differs in its body ALONE (18-android.js holds the sentence)');
 
     const row = t.loadPure('js/tabs.js', 'reminder-row');
     eq([row._classReminderSwitch(true, true).detail, row._classReminderSwitch(true, true, false).detail, row._classReminderSwitch(false, null).detail, row._classReminderSwitch(true, false).detail],
-      ['90 minutes before each class — opens the live countdown', '90 minutes before each class — opens the live countdown', '90 minutes before each class — opens the live countdown', 'Tap to allow notifications'],
+      ['90 minutes before each class. Opens the live countdown.', '90 minutes before each class. Opens the live countdown.', '90 minutes before each class. Opens the live countdown.', 'Tap to allow notifications'],
       'the iPhone Settings row: "opens the live countdown", and a refused permission as before');
     const welcome = t.loadPure('js/app.js', 'welcome');
     eq(welcome._welcomePages(true, true, 'ios')[3].body, 'Everything you hold in one place, with widgets and reminders on iPhone.', 'the iPhone welcome\'s last page, to the letter');

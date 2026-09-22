@@ -225,10 +225,10 @@
       // Sign out (signed-in only — toggled in renderMembershipInfo)
       '<button id="signOutRow" class="ms-signout" onclick="if(typeof confirmSignOut===\'function\')confirmSignOut();else if(typeof clearToken===\'function\')clearToken()" style="display:none">Sign out</button>' +
       '<div class="insights-section">' +
-        '<div class="insights-title">Instructor Rankings & Favourites</div>' +
+        '<div class="insights-title">Instructor rankings and favourites</div>' +
         '<div class="tier-group-label">Ranked</div>' +
         '<div class="tier-list tier-list-short" id="tierListRanked"></div>' +
-        '<div class="tier-group-label" style="margin-top:16px">Taken a class with — not yet ranked</div>' +
+        '<div class="tier-group-label" style="margin-top:16px">Not yet ranked</div>' +
         '<div class="tier-list tier-list-short" id="tierListUnranked"></div>' +
         '<div class="tier-group-label" style="margin-top:16px">Search all instructors</div>' +
         '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
@@ -1217,7 +1217,7 @@
 
   window.saveWeekAsTemplate = async function () {
     if (typeof window.saveWeeklyTemplate !== 'function') {
-      toast('Template saving isn\'t available yet', 'info');
+      toast('Your usual week can\'t be saved right now', 'info');
       return;
     }
     var entries = _collectDisplayedWeekTemplate();
@@ -1247,14 +1247,14 @@
       window.saveWeeklyTemplate(entries);
       _uwLog('usual-week:save');
       toast(fromHistory
-        ? 'Saved ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' from your history — remove any you no longer take'
+        ? 'Saved ' + _uwPlural(entries.length, 'regular class', 'regular classes') + ' from your history. Remove any you no longer take.'
         : 'Saved ' + _uwPlural(entries.length, 'class', 'classes') + ' as your usual week', 'success');
       renderUsualWeekCard();
       // [13c] iOS app only (native-bridge.js defines it): offer the Monday 12:00 reminder, once.
       if (typeof window._offerWeeklyReminder === 'function') window._offerWeeklyReminder('usual-week-saved');
     } catch (e) {
       console.error('[template] save failed:', e);
-      toast('Couldn\'t save template', 'error');
+      toast('Couldn\'t save your usual week', 'error');
     }
   };
 
@@ -1507,32 +1507,32 @@
   // Psycle has opened, starts ticked — a waitlist join, a cover instructor, a
   // class that may not be open yet and one more seat in a class already held
   // (`topUp`) are the member's call, every time.
-  var UW_NOT_OPEN = 'May not be open yet — Psycle opens new dates on Mondays at 12:00';
-  var UW_NOT_LISTED = 'Not on the timetable yet — Psycle adds new dates on Mondays at 12:00';
+  var UW_NOT_OPEN = 'May not be open yet. Psycle opens new dates on Mondays at 12:00.';
+  var UW_NOT_LISTED = 'Not on the timetable yet. Psycle adds new dates on Mondays at 12:00.';
   // What joining a waitlist from here means (it leads with a space: it follows
   // the sheet's money sentence). On screen only while a waitlist row is ticked.
-  var UW_WAITLIST_NOTE = ' A ticked waitlist class joins the waitlist only while it is still full — Psycle then books you in by itself when a spot frees up, chargeable, same policy. If a spot has opened up by then, nothing is joined and it is left for you to choose.';
+  var UW_WAITLIST_NOTE = ' A ticked waitlist class joins the waitlist only while it is still full. Psycle then books you in by itself when a spot frees up, chargeable, same policy. If a spot has opened up by then, nothing is joined and it is left for you to choose.';
   function _uwPlanNote(row) {
     var join = function (parts) { return parts.filter(Boolean).join('. '); };
     if (row.state === 'book') {
-      if (row.instructorChanged) return { pickable: true, on: false, warn: true, text: join(['Different instructor this week — tick to book it anyway', row.beyondOpen ? UW_NOT_OPEN : '']) };
+      if (row.instructorChanged) return { pickable: true, on: false, warn: true, text: join(['Different instructor this week. Tick to book it anyway.', row.beyondOpen ? UW_NOT_OPEN : '']) };
       // ADVISORY (app.js pure:horizon — an observed model, not Psycle's word):
       // the row stays tickable, and Psycle's own answer is what counts.
       if (row.beyondOpen) return { pickable: true, on: false, warn: true, text: join([UW_NOT_OPEN, row.clashLine]) };
       return { pickable: true, on: true, warn: !!row.clashLine, text: row.clashLine || '' };
     }
-    if (row.state === 'waitlist') return { pickable: true, on: false, warn: true, text: join(['Full — tick to join the waitlist', row.clashLine]) };
+    if (row.state === 'waitlist') return { pickable: true, on: false, warn: true, text: join(['Full. Tick to join the waitlist.', row.clashLine]) };
     if (row.state === 'booked') {
       var held = Number(row.heldSeats) || 0, asked = Number(row.seats) || 1;
       var unit = row.count ? 'space' : 'seat';
       // Fewer seats than the usual week asks for, and room left: the missing
       // one(s) can be added — those and no more.
-      if (row.canAdd && held > 0 && held < asked) return { pickable: true, on: false, topUp: true, text: held + ' of ' + asked + ' ' + unit + 's held — tick to add ' + (asked - held) + ' more' };
+      if (row.canAdd && held > 0 && held < asked) return { pickable: true, on: false, topUp: true, text: held + ' of ' + asked + ' ' + unit + 's held. Tick to add ' + (asked - held) + ' more.' };
       return { text: held > 1 ? 'Already booked · ' + held + ' ' + unit + 's' : 'Already booked' };
     }
     if (row.state === 'waitlisted') return { text: 'Already on the waitlist' };
-    if (row.state === 'clash') return { warn: true, text: (row.clashLine || 'Clashes with a class you hold') + ' — left out' };
-    if (row.state === 'nolayout') return { text: 'Couldn\'t tell how this studio is booked — book it from Discover' };
+    if (row.state === 'clash') return { warn: true, text: (row.clashLine || 'Clashes with a class you hold') + '. Left out.' };
+    if (row.state === 'nolayout') return { text: 'Couldn\'t tell how this studio is booked. Book it from Discover.' };
     if (row.state === 'full') return { text: 'Full, and no waitlist' };
     if (row.state === 'error') return { warn: true, text: 'Couldn\'t load that day\'s timetable' };
     // An empty day past what the timetable lists (app.js pure:horizon, advisory)
@@ -1586,19 +1586,19 @@
     if (result === 'running') return { text: 'Booking…' };
     if (result === 'booked') return { ok: true, text: 'Booked ✓' };
     if (result === 'waitlisted') return { ok: true, text: 'On the waitlist ✓' };
-    if (result === 'already') return { text: 'Your booking there changed — left as it is' };
-    if (result === 'clash') return { warn: true, text: 'Clashes with a class you hold — not booked' };
-    if (result === 'full') return { warn: true, text: 'Filled up before we got there — not booked' };
-    if (result === 'opened') return { warn: true, again: true, text: 'A spot has opened up — nothing was joined. Choose again to book it' };
-    if (result === 'nolayout') return { warn: true, text: 'Couldn\'t load the studio map — not booked. Book it from Discover' };
-    if (result === 'stale') return { warn: true, again: true, text: 'This class changed since it was listed — not booked' };
-    if (result === 'taken') return { warn: true, again: true, text: (info.gone ? info.gone + (info.goneMany ? ' were' : ' was') : 'That spot was') + ' just taken — not booked. Choose again' };
+    if (result === 'already') return { text: 'Your booking there changed. Left as it is.' };
+    if (result === 'clash') return { warn: true, text: 'Clashes with a class you hold. Not booked.' };
+    if (result === 'full') return { warn: true, text: 'Filled up before we got there. Not booked.' };
+    if (result === 'opened') return { warn: true, again: true, text: 'A spot has opened up. Nothing was joined. Choose again to book it.' };
+    if (result === 'nolayout') return { warn: true, text: 'Couldn\'t load the studio map. Not booked. Book it from Discover.' };
+    if (result === 'stale') return { warn: true, again: true, text: 'This class changed since it was listed. Not booked.' };
+    if (result === 'taken') return { warn: true, again: true, text: (info.gone ? info.gone + (info.goneMany ? ' were' : ' was') : 'That spot was') + ' just taken. Not booked. Choose again.' };
     if (result === 'refused') return { warn: true, text: info.said ? 'Psycle said: ' + info.said : 'Psycle didn\'t take this booking' };
-    if (result === 'partial') return { warn: true, text: 'Only part of this was booked — check My Bookings before trying again' };
-    if (result === 'queued') return { warn: true, text: 'You went offline — queued to book when you\'re back online' };
-    if (result === 'unconfirmed') return { warn: true, text: 'Couldn\'t confirm with Psycle — check My Bookings before trying again' };
-    if (result === 'joinfailed') return { warn: true, text: 'Still full, and the waitlist couldn\'t be joined — see Psycle\'s message' };
-    if (result === 'failed') return { warn: true, text: info.told || 'Couldn\'t book this class — check My Bookings before trying again' };
+    if (result === 'partial') return { warn: true, text: 'Only part of this was booked. Check My Bookings before trying again.' };
+    if (result === 'queued') return { warn: true, text: 'You went offline. Queued to book when you\'re back online.' };
+    if (result === 'unconfirmed') return { warn: true, text: 'Couldn\'t confirm with Psycle. Check My Bookings before trying again.' };
+    if (result === 'joinfailed') return { warn: true, text: 'Still full, and the waitlist couldn\'t be joined. See Psycle\'s message.' };
+    if (result === 'failed') return { warn: true, text: info.told || 'Couldn\'t book this class. Check My Bookings before trying again.' };
     return { text: 'Not attempted' };
   }
 
@@ -1851,7 +1851,7 @@
         }, function (e) {
           console.error('[template] plan failed:', e);
           if (st.closed || seq !== st.seq) return;
-          message('Couldn\'t load the timetable — try again.');
+          message('Couldn\'t load the timetable. Try again.');
         });
       }
 
@@ -2025,14 +2025,14 @@
           line = '<span class="usual-week-spot-why">Checking the spots…</span>';
         } else if (sp.status === 'ready') {
           var why = typeof _spotWhyText === 'function' ? _spotWhyText(sp.sugg, spotLabeller(sp.info)) : '';
-          if (sp.sugg.short > 0) why = (why ? why + ' — ' : '') + 'only ' + sp.sugg.slots.length + ' free';
+          if (sp.sugg.short > 0) why = (why ? why + ', ' : '') + 'only ' + sp.sugg.slots.length + ' free';
           line = '<strong>' + escapeHTML(spotNames(r, sp.sugg.slots, sp.info)) + '</strong>' +
             (why ? '<span class="usual-week-spot-why"> · ' + escapeHTML(why) + '</span>' : '');
           change = '<button type="button" class="pill-btn pill-quiet usual-week-change" data-uw-key="change" data-uw-change="' + r.index + '" aria-label="Change spot' + forClass + '">Change spot</button>';
         } else if (sp.status === 'full') {
-          line = '<span class="usual-week-spot-why">Just filled up — left out</span>';
+          line = '<span class="usual-week-spot-why">Just filled up. Left out.</span>';
         } else {
-          line = '<span class="usual-week-spot-why">Couldn\'t check the spots — left out</span>';
+          line = '<span class="usual-week-spot-why">Couldn\'t check the spots. Left out.</span>';
           change = '<button type="button" class="pill-btn pill-quiet usual-week-change" data-uw-key="retry" data-uw-retry="' + r.index + '" aria-label="Try again: check the spots' + forClass + '">Try again</button>';
         }
         var seats = '';
@@ -2124,11 +2124,11 @@
       function paintPlan() {
         var plan = st.plan;
         if (!plan.ok) {
-          message(plan.reason === 'offline' ? 'You\'re offline — connect to book your usual week.'
+          message(plan.reason === 'offline' ? 'You\'re offline. Connect to book your usual week.'
             : plan.reason === 'signedout' ? 'Sign in to book your usual week.'
-            : plan.reason === 'bookings' ? 'Couldn\'t load your bookings, so nothing can be checked against them — try again.'
-            : plan.reason === 'empty' ? 'Your usual week is empty — save it from My Bookings first.'
-            : 'Couldn\'t load the timetable — try again.');
+            : plan.reason === 'bookings' ? 'Couldn\'t load your bookings, so nothing can be checked against them. Try again.'
+            : plan.reason === 'empty' ? 'Your usual week is empty. Save it from My Bookings first.'
+            : 'Couldn\'t load the timetable. Try again.');
           return;
         }
         var keep = st.keep;
@@ -2176,7 +2176,7 @@
           '<div class="confirm-body">' +
             '<strong class="usual-week-range">' + escapeHTML(_uwDateLabel(plan.weekStart) + ' – ' + _uwDateLabel(plan.weekEnd)) + '</strong>' +
             '<span>Nothing is booked until you press the button below.' +
-            (anyFound ? '' : unlisted ? ' None of your classes were found — Psycle adds new dates on Mondays at 12:00, so these may not be on the timetable yet.'
+            (anyFound ? '' : unlisted ? ' None of your classes were found. Psycle adds new dates on Mondays at 12:00, so these may not be on the timetable yet.'
               : ' None of your classes were found on these dates.') +
           '</span></div>' +
           '<div class="seg usual-week-switch" role="group" aria-label="Which week">' + ranges.map(sw).join('') + '</div>' +
@@ -2318,11 +2318,11 @@
           if (counts.waitlisted) parts.push(counts.waitlisted + ' on the waitlist');
           var rest = rows.length - (counts.booked || 0) - (counts.waitlisted || 0);
           if (rest > 0) parts.push(rest + ' not booked');
-          var why = counts.stopped === 'auth' ? ' Your session expired, so the run stopped — sign in and open this again (classes already booked are skipped).'
-            : counts.stopped === 'failed' ? ' Stopped there, so nothing else was attempted: see the note on that class, then open this again — classes already booked are skipped.'
+          var why = counts.stopped === 'auth' ? ' Your session expired, so the run stopped. Sign in and open this again (classes already booked are skipped).'
+            : counts.stopped === 'failed' ? ' Stopped there, so nothing else was attempted: see the note on that class, then open this again. Classes already booked are skipped.'
             : counts.stopped === 'offline' ? ' You went offline, so the run stopped.'
-            : counts.stopped === 'bookings' ? ' Couldn\'t load your bookings, so nothing was attempted — try again.'
-            : counts.stopped === 'user' ? ' Stopped — the rest were not attempted.' : '';
+            : counts.stopped === 'bookings' ? ' Couldn\'t load your bookings, so nothing was attempted. Try again.'
+            : counts.stopped === 'user' ? ' Stopped. The rest were not attempted.' : '';
           var progress = body.querySelector('[data-uw-progress]');
           if (progress) progress.textContent = (parts.join(' · ') || 'Nothing was booked') + '.' + why;
           var actions = body.querySelector('.confirm-actions');
@@ -2366,7 +2366,7 @@
     // An onclick hands over its event, not options: only a plain { range } counts.
     var range = (opts && typeof opts === 'object' && opts.range === 'newest') ? 'newest' : '';
     if (typeof window.bookWeeklyTemplate !== 'function' || typeof window.planWeeklyTemplate !== 'function') {
-      toast('Template booking isn\'t available yet', 'info');
+      toast('Your usual week can\'t be booked right now', 'info');
       return;
     }
     // Double-tap guard — one sheet, and with it one run: a second concurrent
@@ -2849,7 +2849,7 @@
       html += '<span class="hm-hour-label">' + HEAT_BANDS[b].label + '</span>';
       for (var dd = 0; dd < 7; dd++) {
         var count = model.counts[b][dd];
-        var title = count > 0 ? _plural(count, 'class', 'classes') + ' — ' + HEAT_DAYS[dd] + ' ' + HEAT_BANDS[b].name : '';
+        var title = count > 0 ? _plural(count, 'class', 'classes') + ' · ' + HEAT_DAYS[dd] + ' ' + HEAT_BANDS[b].name : '';
         html += '<span class="hm-cell hm-level-' + model.levels[b][dd] + '"' + (title ? ' title="' + title + '"' : '') + '></span>';
       }
     }
@@ -2934,7 +2934,7 @@
         return fmtD(prev);
       };
       var periodFrom = fmtD(sub.period_start), periodTo = fmtEnd(sub.period_end);
-      var periodLabel = periodFrom && periodTo ? periodFrom + ' — ' + periodTo : '';
+      var periodLabel = periodFrom && periodTo ? periodFrom + ' – ' + periodTo : '';
 
       html += '<div class="membership-card">';
       html += '<div class="membership-plan">' + escapeHTML(planName) + '</div>';
@@ -2944,7 +2944,7 @@
       }
       if (max > 0) {
         var pct = Math.round((made / max) * 100);
-        var remaining = max - made;
+        var remaining = Math.max(0, max - made);   // Psycle can report more made than allowed: never "-1 remaining"
         html += '<div class="membership-usage">' + made + ' of ' + max + ' classes used (' + remaining + ' remaining)</div>';
         html += '<div class="sub-progress" style="margin-top:8px"><div class="sub-progress-fill" style="width:' + Math.min(pct, 100) + '%"></div></div>';
       }
@@ -2953,7 +2953,7 @@
       var periods = sub.upcoming_billing_periods || [];
       // A period whose dates can't be read gets no row (never " — ").
       var periodRows = periods.slice(0, 3).map(function (p) {
-        var span = [fmtD(p && p.start), fmtD(p && p.end)].filter(Boolean).join(' — ');
+        var span = [fmtD(p && p.start), fmtD(p && p.end)].filter(Boolean).join(' – ');
         return span ? '<div class="membership-period-item">' + span +
           (p.pausable ? ' <span class="membership-pausable">Pausable</span>' : '') + '</div>' : '';
       }).filter(Boolean);
@@ -2980,12 +2980,12 @@
       }, 0);
 
       html += '<div class="membership-card">';
-      html += '<div class="membership-plan">Credit Pack</div>';
+      html += '<div class="membership-plan">Credit pack</div>';
       html += '<div class="membership-status">Pay as you go</div>';
       if (totalCredits > 0) {
         html += '<div class="membership-usage">' + totalCredits + ' credit' + (totalCredits !== 1 ? 's' : '') + ' remaining</div>';
       } else {
-        html += '<div class="membership-usage">No credits remaining — top up on psyclelondon.com to book</div>';
+        html += '<div class="membership-usage">No credits remaining. Top up on psyclelondon.com to book.</div>';
       }
       // Per-pack breakdown with expiry when the API provides it (fields are
       // read defensively — pack shapes vary).
@@ -3154,10 +3154,10 @@
     if (!(needed > 0) || !isFinite(needed)) return onPace;
     // More than the plan holds: every class used still lands above the target.
     if (max > 0 && needed > max - made) {
-      return onPace + ' — this plan\'s best is ' + _formatGbp(costAtMax) + '/class';
+      return onPace + '. This plan\'s best is ' + _formatGbp(costAtMax) + '/class.';
     }
     if (needed > _bookableMore(made, max, daysLeft)) {
-      return onPace + ' — too few days left to beat ' + _formatGbp(FORECAST_TARGET_GBP) + '/class';
+      return onPace + '. Too few days left to beat ' + _formatGbp(FORECAST_TARGET_GBP) + '/class.';
     }
     return 'Book ' + needed + ' more to beat ' + _formatGbp(FORECAST_TARGET_GBP) + '/class';
   }
@@ -3511,9 +3511,9 @@
     var blocked = !!prefOn && granted === false;
     var row = {
       on: !!prefOn && !blocked,
-      detail: blocked ? 'Tap to allow notifications' : '90 minutes before each class — opens the live countdown',
+      detail: blocked ? 'Tap to allow notifications' : '90 minutes before each class. Opens the live countdown.',
     };
-    if (android && !blocked) row.detail = '90 minutes before each class — with a countdown notification';
+    if (android && !blocked) row.detail = '90 minutes before each class. With a countdown notification.';
     return row;
   }
   // ── pure:reminder-row:end
@@ -3594,7 +3594,7 @@
       if (!hasPerm || _classReminderGranted === false) {
         var granted = await window._nativeClassReminders.enable();
         _classReminderGranted = !!granted; // known now — don't repaint from the stale answer
-        toast(granted ? 'Class reminders on — 90 minutes before each class' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), granted ? 'success' : 'error');
+        toast(granted ? 'Class reminders on' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), granted ? 'success' : 'error');
       } else {
         await window._nativeClassReminders.disable();
         toast('Class reminders off', 'info');
@@ -3602,7 +3602,7 @@
     } else {
       var ok = await window._nativeClassReminders.enable();
       if (ok) _classReminderGranted = true; // enable() only succeeds once permission is granted
-      toast(ok ? 'Class reminders on — 90 minutes before each class' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), ok ? 'success' : 'error');
+      toast(ok ? 'Class reminders on' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), ok ? 'success' : 'error');
     }
     renderReminderRow();
   };
@@ -3611,10 +3611,10 @@
     if (!window._nativeReminder) return;
     if (window._nativeReminder.isOn()) {
       await window._nativeReminder.disable();
-      toast('Weekly reminder off', 'info');
+      toast('Monday reminder off', 'info');
     } else {
       var ok = await window._nativeReminder.enable();
-      toast(ok ? 'Reminder set — Mondays at 12:00' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), ok ? 'success' : 'error');
+      toast(ok ? 'Monday reminder on' : _osSettingsWords('Enable notifications for Psync in iOS Settings first'), ok ? 'success' : 'error');
     }
     renderReminderRow();
   };
@@ -4180,7 +4180,7 @@
       var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || !!window.Capacitor;
       if (isMobile && navigator.share) {
         try {
-          var file = new File([blob], 'psycle-' + year + '-wrap.png', { type: 'image/png' });
+          var file = new File([blob], 'psync-' + year + '-review.png', { type: 'image/png' });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: 'My ' + year + ' on Psycle',
@@ -4197,15 +4197,15 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'psycle-' + year + '-wrap.png';
+      a.download = 'psync-' + year + '-review.png';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast('Image saved — share it from your downloads', 'success');
+      toast('Image saved. Share it from your downloads.', 'success');
     } catch (e) {
       console.error('[year-review] share failed:', e);
-      toast('Share failed: ' + e.message, 'error');
+      toast('Couldn\'t share that image. Try again.', 'error');
     }
   };
 
@@ -4305,7 +4305,7 @@
       ctx.font = '500 13px ' + SHARE_BODY;
       var fd = new Date(firstDate);
       ctx.fillText(
-        fd.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) + ' — ' +
+        fd.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) + ' – ' +
         now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
         32, y
       );
@@ -4428,7 +4428,7 @@
       var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || !!window.Capacitor;
       if (isMobile && navigator.share) {
         try {
-          var file = new File([blob], 'psycle-stats.png', { type: 'image/png' });
+          var file = new File([blob], 'psync-stats.png', { type: 'image/png' });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: 'My Psycle Stats',
@@ -4449,15 +4449,15 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'psycle-stats.png';
+      a.download = 'psync-stats.png';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast('Image saved — share it from your downloads', 'success');
+      toast('Image saved. Share it from your downloads.', 'success');
     } catch (e) {
       console.error('[share] failed:', e);
-      toast('Share failed: ' + e.message, 'error');
+      toast('Couldn\'t share that image. Try again.', 'error');
     }
   };
 

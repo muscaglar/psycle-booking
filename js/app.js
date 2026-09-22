@@ -779,8 +779,8 @@ function _announceAllocations(eventIds, diffToPersist) {
       const dl = ids.length === 1 && _eventCache[ids[0]] ? _cancelDeadline(_eventCache[ids[0]].start_at) : null;
       if (dl && dl.hoursUntil > 0) {
         warn = dl.insideWindow
-          ? `This class ${_startsInPhrase(_hoursMinsLeft(dl.hoursUntil))} — cancelling it now is usually charged by Psycle.`
-          : `Free cancel until ${dl.label} — after that Psycle's 12-hour cancellation policy applies.`;
+          ? `This class ${_startsInPhrase(_hoursMinsLeft(dl.hoursUntil))}. Cancelling it now is usually charged by Psycle.`
+          : `Free cancel until ${dl.label}. After that Psycle's 12-hour cancellation policy applies.`;
       }
     } catch (e) {}
     // The usual pattern is a fallback booked for the same time: the member now
@@ -792,7 +792,7 @@ function _announceAllocations(eventIds, diffToPersist) {
     let replaced = false;
     _announceShowing = true;
     confirmModal({
-      title: "You're in — Psycle gave you a spot",
+      title: "Psycle gave you a spot",
       body: `Your waitlist place for ${line}${more} is now a confirmed booking. It's in My Bookings (and your calendar/widget if you sync).`,
       warn,
       confirmText: 'View my bookings',
@@ -849,8 +849,8 @@ function _noteEndedPlaces(ids) {
   });
   if (!told.length) return;
   toast(told.length === 1
-    ? `Your waitlist place for ${told[0]} ended without a booking — that waitlist has closed`
-    : `Your waitlist places for ${told[0]} (+${told.length - 1} more) ended without a booking — those waitlists have closed`, 'info');
+    ? `Your waitlist place for ${told[0]} ended without a booking. That waitlist has closed.`
+    : `Your waitlist places for ${told[0]} (+${told.length - 1} more) ended without a booking. Those waitlists have closed.`, 'info');
 }
 
 const WAITLISTS_DEADLINE_MS = 5000; // don't let a slow /waitlists stall the bookings pipeline
@@ -1058,7 +1058,7 @@ async function retryBookingsLoad(btn) {
     mySeq = _bookingsSeq; // the number that call just took (synchronously)
     applied = await attempt;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
   }
   // Superseded is not failed: the newer call may be about to succeed.
   const stillFailed = !applied && mySeq === _bookingsSeq && _bookingsLoadState === 'failed';
@@ -1066,7 +1066,7 @@ async function retryBookingsLoad(btn) {
   // same hero is back up under a 'loaded' state, and a silent Retry looks dead.
   const held = Object.keys(_myBookings);
   const stillUndrawn = applied && held.length > 0 && !held.some(id => _eventCache[id]);
-  if (stillFailed || stillUndrawn) toast("Still can't load your bookings — check your connection", 'error');
+  if (stillFailed || stillUndrawn) toast("Still can't load your bookings. Check your connection.", 'error');
 }
 
 // Refresh bookings when the page becomes visible after being hidden
@@ -1609,7 +1609,7 @@ async function _checkAuthOnce(token) {
     _activeSubscription = null;
     _authUnverified = true;
     if (gear && _gearIconHTML !== null) gear.innerHTML = _gearIconHTML; // not a previous account's initials
-    if (firstFailure && status) toast(`Psycle is unreachable right now (${status}) — your session has been kept`, 'info');
+    if (firstFailure && status) toast('Can\'t reach Psycle right now. You\'re still signed in.', 'info');
     updateDiscoverEmptyState();
     // As showSessionExpired: an empty tab now shows the "Can't reach Psycle"
     // hero, which only a repaint takes down once the check heals.
@@ -1714,8 +1714,8 @@ function authGateHTML() {
   }
   return `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10.5 10.5 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0M12 20h.01M3 3l18 18"/></svg></div>
            <div class="tab-empty-title">Can't reach<br>Psycle</div>
-           <div class="tab-empty-sub">You're still signed in — we just couldn't confirm your account. Check your connection and try again.</div>
-           <button class="tab-empty-btn" onclick="retryAuth(this)">Retry</button>`;
+           <div class="tab-empty-sub">You're still signed in. We just couldn't confirm your account. Check your connection and try again.</div>
+           <button class="tab-empty-btn" onclick="retryAuth(this)">Try again</button>`;
 }
 
 // The Retry button on that hero. A settled check re-renders the hero, so the
@@ -1725,9 +1725,9 @@ async function retryAuth(btn) {
   try {
     await checkAuth();
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
   }
-  if (!currentUser && getBearerToken()) toast("Still can't reach Psycle — check your connection", 'error');
+  if (!currentUser && getBearerToken()) toast("Still can't reach Psycle. Check your connection.", 'error');
 }
 
 // Skip / × / backdrop all mean "not now, and don't ask again". Without a
@@ -1818,7 +1818,7 @@ function showHistorySyncPrompt() {
 
 async function startSyncFromPrompt() {
   var btn = document.getElementById('syncPromptBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Syncing...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
   // explore.js writes its page / detail progress into this button too, so a
   // long sync isn't a static "Syncing...".
   try {
@@ -1880,8 +1880,8 @@ async function saveToken() {
   } else if (getBearerToken()) {
     // Still stored = Psycle couldn't be reached, not a rejected token (a 401
     // clears it). It's re-checked on Retry / when the connection returns.
-    toast("Can't reach Psycle to check that token — it's been kept", 'error');
-  } else toast('Token not recognised — try again', 'error');
+    toast("Can't reach Psycle to check that token. It's been kept.", 'error');
+  } else toast('Token not recognised. Try again.', 'error');
 }
 
 function clearToken() {
@@ -3214,7 +3214,7 @@ function revalidateWindow(opts) {
   if (navigator.onLine === false) {
     // GETs retry with backoff: offline that is ~7s of failures per studio,
     // and an error-log entry for each.
-    if (!silent) toast("You're offline — showing the last timetable we loaded", 'info');
+    if (!silent) toast("You're offline. Showing the last timetable we loaded.", 'info');
     return Promise.resolve(false);
   }
   if (silent && Date.now() - _revalFailedAt < REVAL_RETRY_MS) return Promise.resolve(false);
@@ -3289,7 +3289,7 @@ async function _runRevalidate(run, range) {
     } else if (!run.silent && !gone() && getBearerToken()) {
       // Read at failure time: a manual Refresh may have joined a background run.
       // A dead session already has its own banner (apiFetch → showSessionExpired).
-      let msg = "Couldn't refresh the timetable — check your connection and try again";
+      let msg = "Couldn't refresh the timetable. Check your connection and try again.";
       if (cat && cat.type !== 'unknown') msg = cat.userMessage; // "Psycle's servers are having trouble…" is not a connection problem
       toast(msg, 'error');
     }
@@ -3298,7 +3298,7 @@ async function _runRevalidate(run, range) {
     // above — an empty 200 must not wipe a timetable (and the day's cache)
     // that was real a minute ago — and the "Updated" stamp stays as old as
     // the list is. Whoever tapped Refresh is told: it looked like a dead tap.
-    toast('Psycle sent back an empty timetable — still showing the last one we loaded', 'info');
+    toast('Psycle sent back an empty timetable. Still showing the last one we loaded.', 'info');
   }
   // A provisional window showed "Checking…" in place of an empty list (see
   // _discoverEmptyContext): nothing more is coming, so say what we know —
@@ -3747,7 +3747,7 @@ async function search(opts) {
         // only fall back to the last results for an error it can classify, and
         // the generic message below classified as nothing.
         if (failedStudios.length === total) throw firstErr || new Error('All studios failed to load');
-        toast(`Couldn't load ${failedStudios.join(', ')} — showing the other studios`, 'info');
+        toast(`Couldn't load ${failedStudios.join(', ')}. Showing the other studios.`, 'info');
       }
       studiosFailed = failedStudios.length;
     }
@@ -3799,7 +3799,7 @@ async function search(opts) {
 // fall back to the last cached results (if any) with a small banner, rather
 // than wiping the screen with a bare error. Defensive — never throws.
 function showSearchError(e) {
-  let cat = { type: 'unknown', userMessage: 'Something went wrong — please try again.' };
+  let cat = { type: 'unknown', userMessage: 'Couldn\'t load classes. Try again.' };
   try {
     if (window.PsycleAPI && typeof window.PsycleAPI.categorizeError === 'function') {
       cat = window.PsycleAPI.categorizeError(e) || cat;
@@ -3825,7 +3825,7 @@ function showSearchError(e) {
     if (container && !container.querySelector('.stale-results-banner')) {
       const banner = document.createElement('div');
       banner.className = 'stale-results-banner';
-      banner.textContent = "Showing your last results — couldn't reach Psycle ";
+      banner.textContent = "Showing your last results. Couldn't reach Psycle. ";
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'refresh-link';
@@ -3846,7 +3846,7 @@ function showSearchError(e) {
     return;
   }
 
-  setStatus(_errorStatusHTML(cat.userMessage || ('Error: ' + (e && e.message || 'Unknown error')), 'Try again', 'search({ force: true })'));
+  setStatus(_errorStatusHTML(cat.userMessage || 'Couldn\'t load classes. Try again.', 'Try again', 'search({ force: true })'));
 }
 
 // An error line with its one way out — the old copy said "retry" with nothing
@@ -3864,7 +3864,7 @@ function _errorStatusHTML(message, label, onclick) {
 let _refDataFailed = null; // the launch failure's message, once there was one
 function showInitError(err) {
   if (err || !_refDataFailed) {
-    let cat = { userMessage: 'Something went wrong — please try again.' };
+    let cat = { userMessage: 'Try again.' };
     try {
       if (err && window.PsycleAPI && typeof window.PsycleAPI.categorizeError === 'function') {
         cat = window.PsycleAPI.categorizeError(err) || cat;
@@ -3895,7 +3895,7 @@ function _discoverEmptyContext() {
   if (window._windowPartial && window._windowHeldEnd && sel.endDateStr > window._windowHeldEnd) {
     // The server's own reason when the load did fail; the connection copy is
     // for a fetch that never ran (offline) or failed in a way nobody can name.
-    return { title: "Couldn't check these dates", sub: window._windowLoadError || "The latest timetable didn't load — check your connection and try again.", actions: ['retry'] };
+    return { title: "Couldn't check these dates", sub: window._windowLoadError || "The latest timetable didn't load. Check your connection and try again.", actions: ['retry'] };
   }
   // Dates Psycle has not put on the timetable yet: empty because of that — not
   // for lack of classes, and whatever the filters say. By the OBSERVED release
@@ -3964,7 +3964,7 @@ function _recheckAuthForBooking() {
 }
 
 // The '…' busy label. A Discover card wraps its action by WIDTH (.cc-action in
-// css/redesign.css), so swapping "Join Waitlist" for '…' and back un-wraps and
+// css/redesign.css), so swapping "Join waitlist" for '…' and back un-wraps and
 // re-wraps the card — every card below it jumps, up to four times per join.
 // Hold the pill at the width it has until some other label is written. The
 // exits that write one are many (and spread over the wrappers), so an observer
@@ -4103,12 +4103,12 @@ function _clashLabel(clash) {
   const what = ['your', _clockOf(clash.start_at), type].filter(Boolean).join(' ') +
     (clash.locName ? ` at ${clash.locName}` : '');
   // A waitlist place is a possible seat, never a hard clash — and not "your" class yet.
-  if (clash.place) return `You're also on the waitlist for ${what.replace(/^your /, 'the ')} — if Psycle books you in, you'd hold both`;
+  if (clash.place) return `You're also on the waitlist for ${what.replace(/^your /, 'the ')}. If Psycle books you in, you'd hold both.`;
   if (clash.kind === 'overlap') return `Clashes with ${what}`;
   const squeeze = clash.heldIsFirst
     ? (clash.gapMin > 0 ? `Starts only ${clash.gapMin} min after ${what} ends` : `Starts as ${what} ends`)
     : (clash.gapMin > 0 ? `Ends only ${clash.gapMin} min before ${what} starts` : `Ends as ${what} starts`);
-  return `${squeeze} — a different location`;
+  return `${squeeze}, at a different location`;
 }
 // ── pure:clash:end ──
 
@@ -4216,11 +4216,11 @@ async function bookClass(eventId, btn, studioId) {
     } finally { delete btn.dataset.busy; btn.disabled = false; btn.textContent = idleLabel; }
     if (!currentUser) {
       // No token left = checkAuth just expired the session and said so itself.
-      if (getBearerToken()) toast("Can't reach Psycle right now — try again", 'error');
+      if (getBearerToken()) toast("Can't reach Psycle right now. Try again.", 'error');
       return;
     }
     if (!bookingsLoaded) {
-      if (getBearerToken()) toast("Couldn't load your bookings — try again", 'error');
+      if (getBearerToken()) toast("Couldn't load your bookings. Try again.", 'error');
       return;
     }
     // The tap was on a card that didn't know about this booking: show it rather
@@ -4357,7 +4357,7 @@ async function bookClass(eventId, btn, studioId) {
         toast('This class is full', 'info');
         return;
       }
-      btn.textContent = 'Join Waitlist';
+      btn.textContent = 'Join waitlist';
       await confirmJoinWaitlist(eventId, btn, clashLine);
       return;
     }
@@ -4374,7 +4374,7 @@ async function bookClass(eventId, btn, studioId) {
       const slotN = onlySlot ? (onlySlot.label ?? onlySlot.id) : onlySlotId;
       const ok = await confirmModal({
         title: 'Book this spot?',
-        body: `Only ${SL} ${slotN} is left — book it?`,
+        body: `Only ${SL} ${slotN} is left.`,
         warn: (bookClashLine ? bookClashLine + '. ' : '') + "Psycle's normal 12-hour cancellation policy applies.",
         confirmText: 'Book it',
         cancelText: 'Not now',
@@ -4401,7 +4401,7 @@ async function bookClass(eventId, btn, studioId) {
       if (btn.classList && !btn.classList.contains('book-btn')) btn.textContent = tapLabel;
       else if (myBooking && (myBooking.bookingId || (myBooking.slots || []).length)) applyBookedState(btn, eventId, myBooking);
       else btn.textContent = 'Book';
-      toast("Couldn't load the studio map — try again", 'error');
+      toast("Couldn't load the studio map. Try again.", 'error');
       return;
     }
 
@@ -4441,7 +4441,7 @@ async function bookClass(eventId, btn, studioId) {
       const ok = await confirmModal({
         title: heldAlready ? 'Book another space?' : 'Book this class?',
         body: heldAlready
-          ? `${line ? line + '. ' : ''}You already hold a space in this class — this books (and pays for) one more.`
+          ? `${line ? line + '. ' : ''}You already hold a space in this class. This books (and pays for) one more.`
           : (line ? `${line}. This uses one class credit.` : 'This uses one class credit.'),
         warn: (bookClashLine ? bookClashLine + '. ' : '') + "Psycle's normal 12-hour cancellation policy applies.",
         confirmText: heldAlready ? 'Book one more' : 'Book it',
@@ -4462,7 +4462,7 @@ async function bookClass(eventId, btn, studioId) {
     putBack();
     // Never the raw "Load failed" / "HTTP 503". An overtaken tap fails quietly:
     // its toast would land on the class the member has moved on to.
-    if (!overtaken()) toast(_friendlyError(e, "Couldn't open this class — try again"), 'error');
+    if (!overtaken()) toast(_friendlyError(e, "Couldn't open this class. Try again."), 'error');
   } finally {
     delete btn.dataset.busy;
   }
@@ -4556,8 +4556,8 @@ function _chooseSpotHint(slotWord, count, selected) {
   var one = word.toLowerCase();
   if (!list.length) return n === 1 ? 'Tap the ' + one + ' you want' : 'Pick ' + n + ' ' + plural(one);
   var picked = (list.length === 1 ? word : plural(word)) + ' ' + _seatList(list) + ' selected';
-  if (list.length < n) return picked + ' — pick ' + (n - list.length) + ' more';
-  return picked + ' — tap another to switch';
+  if (list.length < n) return picked + '. Pick ' + (n - list.length) + ' more.';
+  return picked + '. Tap another to switch.';
 }
 // ── pure:sheets:end ──
 
@@ -4650,7 +4650,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
   _policyEl.className = 'modal-policy' + (_deadline && _deadline.insideWindow ? ' is-late late-cancel-note' : '');
   _policyEl.textContent = !_deadline ? ''
     : (_deadline.insideWindow
-      ? 'Inside the 12-hour late-cancel window — cancelling is usually charged'
+      ? 'Inside the 12-hour late-cancel window. Cancelling is usually charged.'
       : `Cancel by ${_deadline.label} to avoid a late-cancel charge`);
   _policyEl.style.display = _deadline ? '' : 'none';
   // Fully reset the confirm button on every open — changeSpot() overrides the
@@ -4764,7 +4764,7 @@ function showBikePicker(eventId, btn, layout, availableSlotIds, mySlotIds, studi
     _usualPreselected = Number(usualSlot);
     const _slU = slotLabelForEvent(eventId);
     document.getElementById('modalHint').textContent =
-      `${_slU} ${usualSlot} is your usual — tap another to switch, or confirm.`;
+      `${_slU} ${usualSlot} is your usual. Tap another to switch.`;
     document.getElementById('confirmBookBtn').disabled = false;
   }
   // Choose-only mode, over the normal picker drawn above: the sheet's
@@ -4908,7 +4908,7 @@ function selectBike(slotId) {
   const _sl2 = _bookingContext ? slotLabelForEvent(_bookingContext.eventId) : 'Spot';
   document.getElementById('modalHint').textContent =
     count === 0 ? `Select up to ${MAX_SEATS} ${pluralizeSlotLabel(_sl2.toLowerCase())}`
-    : count === 1 ? `${_sl2} ${_selectedSlots[0]} selected — pick a second or confirm`
+    : count === 1 ? `${_sl2} ${_selectedSlots[0]} selected. Pick a second or confirm.`
     : `${formatSlots(_sl2, _selectedSlots)} selected`;
   document.getElementById('confirmBookBtn').disabled = count === 0;
   if (typeof _syncPickerConfirmLabel === 'function') _syncPickerConfirmLabel();
@@ -5416,7 +5416,7 @@ function _dropBookingKeepPlace(eventId) {
   _markSeatFreed(eventId);
 }
 // The user just gave a seat back, so the search-time "full" flag is stale —
-// let the Discover card offer Book again instead of Join Waitlist / Full.
+// let the Discover card offer Book again instead of Join waitlist / Full.
 // Every copy, not the cache alone: render() tests the WINDOW's event under
 // "Available only" (and spreads it back over the cache), and the class is no
 // longer the member's own — still "full" there, it left the list on the next
@@ -5426,7 +5426,7 @@ function _markSeatFreed(eventId) {
 }
 
 // After a Discover-card cancel: resync every card button for the event from
-// state (a kept place → "Waitlisted ✓", full → "Join Waitlist"/"Full", else
+// state (a kept place → "Waitlisted ✓", full → "Join waitlist"/"Full", else
 // "Book"), and put a non-card button (detail sheet proxy, headless) back to Book.
 function _afterCardCancel(btn, eventId) {
   if (btn && !btn.closest('.class-card')) {
@@ -5577,7 +5577,7 @@ function _syncCardButtonsForEvent(eventId) {
       else card?.querySelector('.cc-sub')?.insertAdjacentHTML('afterend', line);
     } else if (spots && !spots.hasAttribute('data-count')) spots.remove();
     if (evt.is_fully_booked && evt.is_waitlistable) {
-      btn.textContent = 'Join Waitlist';
+      btn.textContent = 'Join waitlist';
       btn.className = 'book-btn waitlist';
     } else if (evt.is_fully_booked) {
       // Full and the waitlist is closed (e.g. inside the last 30 min): as eventCard.
@@ -5596,7 +5596,7 @@ function _syncCardButtonsForEvent(eventId) {
 
 // bookClass found no free seat in a class Psycle has not called full: no flag
 // changed, so nothing re-synced the card — and "Only 2 left" must not stay
-// beside the "Full" / "Join Waitlist" that tap is about to write.
+// beside the "Full" / "Join waitlist" that tap is about to write.
 function _dropCardCounts(eventId) {
   document.querySelectorAll(`.class-card[data-id="${Number(eventId)}"]:not(.my-booking-card) .cc-spots[data-count]`).forEach(el => el.remove());
 }
@@ -5631,7 +5631,7 @@ async function confirmJoinWaitlist(eventId, btn, clashLine) {
   const ok = await confirmModal({
     title: 'Join the waitlist?',
     body: (line ? line + ' is full. ' : 'This class is full. ') +
-      'Psycle fills freed-up spots from the waitlist automatically, first come first served — keep a credit free so you can be booked in. Close to class time they email an offer instead, which you can also accept here in My Bookings.',
+      'Psycle fills freed-up spots from the waitlist automatically, first come, first served. Keep a credit free so you can be booked in. Close to class time they email an offer instead, which you can also accept here in My Bookings.',
     warn: (clashLine ? clashLine + '. ' : '') +
       'One waitlist place per person. Once you’re given a spot the normal 12-hour cancellation policy applies; the waitlist closes 30 minutes before class.',
     confirmText: 'Join waitlist',
@@ -5648,8 +5648,8 @@ async function joinWaitlist(eventId, btn, opts = {}) {
   btn = btn || document.createElement('button');
   if (!navigator.onLine) {
     btn.disabled = false;
-    btn.textContent = 'Join Waitlist';
-    toast("You're offline — join the waitlist once you're back online", 'info');
+    btn.textContent = 'Join waitlist';
+    toast("You're offline. Join the waitlist once you're back online.", 'info');
     return false;
   }
   const origText = btn.textContent;
@@ -5678,7 +5678,7 @@ async function joinWaitlist(eventId, btn, opts = {}) {
     // caller's opts: the usual-week run has to tell it from a refusal.
     const unsure = () => {
       opts.unsure = true;
-      fail('Join Waitlist', "Couldn't confirm with Psycle whether you joined — check My Bookings in a moment", 'info');
+      fail('Join waitlist', "Couldn't confirm with Psycle whether you joined. Check My Bookings in a moment.", 'info');
       // Token gone by then (the session expired meanwhile): fetchMyBookings'
       // no-token branch would empty the list an expiry keeps on purpose — and
       // the next foreground would blank the widget and cancel every reminder.
@@ -5712,7 +5712,7 @@ async function joinWaitlist(eventId, btn, opts = {}) {
       return fail('Failed — retry', _friendlyError(e, "Couldn't join the waitlist"));
     } else {
       opts.unsure = true; // as unsure() above
-      fail('Join Waitlist', "Couldn't confirm with Psycle whether you joined — check My Bookings in a moment", 'info');
+      fail('Join waitlist', "Couldn't confirm with Psycle whether you joined. Check My Bookings in a moment.", 'info');
       setTimeout(() => { try { if (getBearerToken()) fetchMyBookings(); } catch (err) {} }, 3000); // token check: as unsure() above
       return false;
     }
@@ -5724,8 +5724,8 @@ async function joinWaitlist(eventId, btn, opts = {}) {
       if (chk.entry) entry = chk.entry;
       // A 2xx, yet the server positively lists no place: say so rather than
       // fabricating one the next refresh would silently remove.
-      else if (chk.known && !already) return fail('Failed — retry', "Psycle didn't record a waitlist place — try again");
-      else if (chk.known && already) return fail('Join Waitlist', "Psycle says you were on this waitlist, but no active place is listed — try joining again", 'info');
+      else if (chk.known && !already) return fail('Failed — retry', "Psycle didn't record a waitlist place. Try again.");
+      else if (chk.known && already) return fail('Join waitlist', "Psycle says you were on this waitlist, but no active place is listed. Try joining again.", 'info');
     }
     const place = entry
       ? { id: entry.id, status: entry.status || 'waiting', addedAt: entry.addedAt, expiresAt: entry.expiresAt }
@@ -5773,8 +5773,8 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
     const ok = await confirmModal({
       title: 'Leave the waitlist?',
       body: line ? `${line}. You'll lose your place in the queue.` : "You'll lose your place in the queue.",
-      warn: hasSeat ? '' : (spotOpen ? 'A spot looks free to claim right now — “Claim spot” in My Bookings takes it; leaving gives it up. ' : '') +
-        'If Psycle has only just given you a spot, that booking stays — it will show in My Bookings.',
+      warn: hasSeat ? '' : (spotOpen ? 'A spot looks free to claim right now. Claim spot in My Bookings takes it; leaving gives it up. ' : '') +
+        'If Psycle has only just given you a spot, that booking stays. It will show in My Bookings.',
       confirmText: 'Leave waitlist',
       cancelText: 'Stay on it',
       danger: true,
@@ -5782,7 +5782,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
     if (!ok) return false;
   }
   if (!navigator.onLine) {
-    toast("You're offline — leave the waitlist once you're back online", 'info');
+    toast("You're offline. Leave the waitlist once you're back online.", 'info');
     return false;
   }
   const origText = btn.textContent;
@@ -5796,7 +5796,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
         // Unknown ≠ gone: keep the place, let the user retry.
         btn.disabled = false;
         btn.textContent = origText;
-        toast("Couldn't reach Psycle to find your waitlist place — try again in a moment", 'error');
+        toast("Couldn't reach Psycle to find your waitlist place. Try again in a moment.", 'error');
         return false;
       }
       entryId = chk.entry?.id || null;
@@ -5814,7 +5814,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
       if (/allocat|already (been )?booked|is now a booking/i.test(serverMsg)) {
         btn.disabled = false;
         btn.textContent = origText;
-        toast('Psycle already booked you into this class from the waitlist — loading your bookings…', 'info');
+        toast('Psycle already booked you into this class from the waitlist. Loading your bookings…', 'info');
         fetchMyBookings();
         return false;
       }
@@ -5825,7 +5825,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
         if (res.status !== 401) {
           toast(serverMsg || (res.status === 403
             ? "Psycle wouldn't change this waitlist right now (it closes 30 minutes before class)"
-            : `Couldn't leave the waitlist (${res.status})`), 'error');
+            : 'Couldn\'t leave the waitlist. Try again in a moment.'), 'error');
         }
         return false;
       }
@@ -5857,7 +5857,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
     refreshUpcomingPanel();
     if (typeof haptic === 'function') { try { haptic('tap'); } catch {} }
     toast(alreadyGone
-      ? 'That place was already gone — checking whether Psycle booked you in…'
+      ? 'That place was already gone. Checking whether Psycle booked you in…'
       : 'Left the waitlist', 'info');
     PsycleEvents.emit('waitlist:left', eventId);
     // Always re-read the truth: leaving is "state unknown until confirmed"
@@ -5871,7 +5871,7 @@ async function leaveWaitlist(eventId, btn, opts = {}) {
     // in case the DELETE actually landed before the connection dropped.
     const net = !navigator.onLine || /network|failed to fetch|load failed|timed out/i.test((e && e.message) || '');
     toast(net
-      ? "Couldn't reach Psycle — you may still be on the waitlist. Check My Bookings and try again when you're back online."
+      ? "Couldn't reach Psycle. You may still be on the waitlist. Check My Bookings and try again when you're back online."
       : _friendlyError(e, "Couldn't leave the waitlist"), 'error');
     // (Only with a token: signed out, that read would empty the kept list — see joinWaitlist's unsure().)
     setTimeout(() => { try { if (getBearerToken()) fetchMyBookings(); } catch (err) {} }, 1500);
@@ -5887,7 +5887,7 @@ async function claimWaitlistSpot(eventId, btn) {
   btn = btn || document.createElement('button');
   const booking = _myBookings[key];
   let entryId = booking?.waitlist?.id || null;
-  if (!navigator.onLine) { toast("You're offline — try again once you're back online", 'info'); return false; }
+  if (!navigator.onLine) { toast("You're offline. Try again once you're back online.", 'info'); return false; }
   const origText = btn.textContent;
   btn.disabled = true;
   _busyLabel(btn);
@@ -5895,12 +5895,12 @@ async function claimWaitlistSpot(eventId, btn) {
   try {
     if (!entryId) {
       const chk = await _fetchWaitlistEntryForEvent(eventId);
-      if (!chk.known) { restore(); toast("Couldn't reach Psycle — try again in a moment", 'error'); return false; }
+      if (!chk.known) { restore(); toast("Couldn't reach Psycle. Try again in a moment.", 'error'); return false; }
       entryId = chk.entry?.id || null;
     }
     if (!entryId) {
       restore();
-      toast("You're no longer on this waitlist — refreshing your bookings", 'info');
+      toast("You're no longer on this waitlist. Refreshing your bookings.", 'info');
       fetchMyBookings();
       return false;
     }
@@ -5908,14 +5908,14 @@ async function claimWaitlistSpot(eventId, btn) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       restore();
-      if (res.status !== 401) toast(data.message || data.error || `Couldn't check the waitlist (${res.status})`, 'error');
+      if (res.status !== 401) toast(data.message || data.error || 'Couldn\'t check the waitlist. Try again in a moment.', 'error');
       return false;
     }
     const entry = _normaliseWaitlistEntry(data.data || data.waitlist || data, eventId);
     _recordShape('waitlist-offer', data.data || null);
     if (entry && (entry.allocatedAt || /^(allocated|booked)$/.test(entry.status))) {
       restore();
-      toast("Good news — Psycle already booked you into this class", 'success');
+      toast("Psycle already booked you into this class", 'success');
       await fetchMyBookings();
       return true;
     }
@@ -5938,8 +5938,8 @@ async function claimWaitlistSpot(eventId, btn) {
       restore();
       refreshUpcomingPanel();
       toast(_waitlistOfferPending(entry)
-        ? 'Sorry — someone else took that spot. You’re still on the waitlist.'
-        : "No spot free yet — you're still on the waitlist", 'info');
+        ? 'Someone else took that spot. You\'re still on the waitlist.'
+        : "No spot free yet. You're still on the waitlist.", 'info');
       return false;
     }
     const credits = Number(ev.required_credits);
@@ -5954,8 +5954,8 @@ async function claimWaitlistSpot(eventId, btn) {
       const dl = _cancelDeadline(ev.start_at || _eventCache[key]?.start_at);
       if (dl && dl.hoursUntil > 0) {
         policyLine = dl.insideWindow
-          ? `This class ${_startsInPhrase(_hoursMinsLeft(dl.hoursUntil))} — once claimed, cancelling is usually charged by Psycle.`
-          : `Free cancel until ${dl.label} — after that Psycle's 12-hour cancellation policy applies.`;
+          ? `This class ${_startsInPhrase(_hoursMinsLeft(dl.hoursUntil))}. Once claimed, cancelling is usually charged by Psycle.`
+          : `Free cancel until ${dl.label}. After that Psycle's 12-hour cancellation policy applies.`;
       }
     } catch (e) {}
     // The fallback booked for the same time is a seat already held: claiming
@@ -5965,7 +5965,7 @@ async function claimWaitlistSpot(eventId, btn) {
     const ok = await confirmModal({
       title: 'Claim this spot?',
       body: (line ? line + '. ' : '') +
-        (free ? `${_plural(free, 'spot')} free right now — it isn't held for you. ` : 'A spot is free right now — it isn’t held for you. ') +
+        (free ? `${_plural(free, 'spot')} free right now. It isn't held for you. ` : 'A spot is free right now. It isn’t held for you. ') +
         'This books you into the class' +
         (credits > 0 ? ` and uses ${credits} credit${credits === 1 ? '' : 's'}` + (have > 0 ? ` (you have ${have})` : '') + '.' : '.'),
       warn: (clashLine ? clashLine + '. ' : '') + policyLine,
@@ -5993,7 +5993,7 @@ async function claimWaitlistSpot(eventId, btn) {
       const now = _myBookings[key];
       if (now && !now.waitlisted && (now.bookingId || (now.slots || []).length)) {
         if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
-        toast("Spot claimed — you're booked in!", 'success');
+        toast("Spot claimed. You're booked in.", 'success');
         PsycleEvents.emit('booking:complete', eventId, now.slots || [], btn);
         showBookingConfirmation(eventId, now.slots || []);
         return true;
@@ -6001,8 +6001,8 @@ async function claimWaitlistSpot(eventId, btn) {
       _writeWaitlistPlaces(memBefore0);
       restore();
       toast(applied === false
-        ? "Couldn't confirm with Psycle whether the spot was claimed — pull to refresh My Bookings before trying again"
-        : "Couldn't confirm with Psycle whether the spot was claimed — it isn't showing as booked; try again", 'error');
+        ? "Couldn't confirm with Psycle whether the spot was claimed. Pull to refresh My Bookings before trying again."
+        : "Couldn't confirm with Psycle whether the spot was claimed. It isn't showing as booked. Try again.", 'error');
       return false;
     }
     const pdata = await post.json().catch(() => ({}));
@@ -6028,7 +6028,7 @@ async function claimWaitlistSpot(eventId, btn) {
     const nowBooked = _myBookings[key];
     if (nowBooked && !nowBooked.waitlisted) {
       if (typeof haptic === 'function') { try { haptic('success'); } catch {} }
-      toast("Spot claimed — you're booked in!", 'success');
+      toast("Spot claimed. You're booked in.", 'success');
       if ((nowBooked.slots || []).length) _recordBikeHistory(eventId, nowBooked.slots);
       PsycleEvents.emit('booking:complete', eventId, nowBooked.slots || [], btn);
       showBookingConfirmation(eventId, nowBooked.slots || []);
@@ -6037,8 +6037,8 @@ async function claimWaitlistSpot(eventId, btn) {
       _writeWaitlistPlaces(memBefore);
       restore();
       toast(applied === false
-        ? "Psycle responded OK but the booking isn't showing yet — pull to refresh My Bookings"
-        : "Psycle responded OK but no booking is showing yet — check My Bookings shortly", 'info');
+        ? "Psycle accepted the claim, but the booking isn't showing yet. Pull to refresh My Bookings."
+        : "Psycle accepted the claim, but no booking is showing yet. Check My Bookings shortly.", 'info');
     }
     return true;
   } catch (e) {
@@ -6313,8 +6313,8 @@ async function _settleUnverifiedBooking(eventId, slots, btn, idsBefore, conflict
       const said = (!conflict && !outcome.landed.length && reason && !/already/i.test(reason)) ? reason : '';
       const notShowing = `${what} ${many ? "aren't" : "isn't"} showing as booked`;
       toast(conflict
-        ? (requested.length ? `${what} ${many ? 'were' : 'was'} just taken — pick another` : "Psycle didn't add another space — you already hold one in this class")
-        : (said ? `${notShowing} — Psycle said: ${said}` : `${notShowing} — check My Bookings before trying again`),
+        ? (requested.length ? `${what} ${many ? 'were' : 'was'} just taken. Pick another.` : "Psycle didn't add another space. You already hold one in this class.")
+        : (said ? `${notShowing}. Psycle said: ${said}` : `${notShowing}. Check My Bookings before trying again.`),
         conflict ? 'info' : 'error');
       return;
     }
@@ -6324,12 +6324,12 @@ async function _settleUnverifiedBooking(eventId, slots, btn, idsBefore, conflict
       const said = (reason && !/already/i.test(reason)) ? reason : '';
       btn.textContent = conflict ? 'Book' : 'Failed — retry';
       toast(said || (conflict
-        ? (requested.length ? `That ${SL.toLowerCase()} was just taken — pick another` : "Psycle wouldn't take that booking — the class may have just filled up")
-        : "Psycle didn't confirm that booking and it isn't showing in My Bookings — try again"),
+        ? (requested.length ? `That ${SL.toLowerCase()} was just taken. Pick another.` : "Psycle wouldn't take that booking. The class may have just filled up.")
+        : "Psycle didn't confirm that booking and it isn't showing in My Bookings. Try again."),
         conflict ? 'info' : 'error');
     } else {
       btn.textContent = 'Unconfirmed — retry';
-      toast("Couldn't confirm that booking with Psycle — check My Bookings before trying again", 'error');
+      toast("Couldn't confirm that booking with Psycle. Check My Bookings before trying again.", 'error');
     }
   } catch (e) { console.warn('[psycle] settling an unverified booking failed:', e); }
 }
@@ -6353,10 +6353,10 @@ async function _clearUnverifiedBooking(eventId, btn) {
       btn.className = 'book-btn';
       btn.disabled = false;
       btn.textContent = 'Unconfirmed — retry';
-      toast("Still can't confirm your last booking attempt with Psycle — check My Bookings before booking again", 'error');
+      toast("Still can't confirm your last booking attempt with Psycle. Check My Bookings before booking again.", 'error');
     } else {
       _announceVerifiedSeats(eventId, btn, entry, landed);
-      toast("Your earlier booking went through — you're in", 'success');
+      toast("Your earlier booking went through. You're in.", 'success');
     }
   } catch (e) { console.warn('[psycle] settling an earlier booking failed:', e); }
   return false;
@@ -6443,7 +6443,7 @@ async function submitBooking(eventId, slots, btn, opts = {}) {
       // cover the class, no credits left) — surfaces the server's reason.
       btn.textContent = 'Failed — retry';
       btn.disabled = false;
-      toast(data.message || data.error || `Error ${res.status}`, 'error');
+      toast(data.message || data.error || 'Psycle didn\'t take this booking', 'error');
     } else {
       btn.textContent = 'Book';
       btn.disabled = false;
@@ -6489,8 +6489,8 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   // same clock, same words as the Waitlisted card in My Bookings.
   const waitlistLine = !opts.waitlist ? ''
     : (evt?.start_at && _waitlistPhase(evt.start_at) === 'offers'
-      ? 'This close to class Psycle usually emails an offer instead of booking you in — check for a spot in My Bookings (keep a credit free)'
-      : 'Psycle books you in automatically if a spot frees up — keep a credit free');
+      ? 'This close to class Psycle usually emails an offer instead of booking you in. Check for a spot in My Bookings (keep a credit free).'
+      : 'Psycle books you in automatically if a spot frees up. Keep a credit free.');
 
   // Build slot label
   const slotStr = formatSlots(_SL, slotsArr);
@@ -6944,12 +6944,12 @@ function describeCancelError(failedResponse, data, err, sentOnline) {
     // per-seat callers): the phone was online when the DELETE went OUT — being
     // offline by the time it failed (wifi lost, the tube) says nothing about
     // whether it landed, so that is hedged too.
-    if (!navigator.onLine && !sentOnline) return "You're offline — nothing was cancelled. Try again once you're back online.";
-    return "Couldn't reach Psycle — this may not have been cancelled. Check My Bookings and try again.";
+    if (!navigator.onLine && !sentOnline) return "You're offline. Nothing was cancelled. Try again once you're back online.";
+    return "Couldn't reach Psycle. This may not have been cancelled. Check My Bookings and try again.";
   }
   if (failedResponse) {
     if (failedResponse.status === 401) {
-      return 'Session expired — sign in and try again.';
+      return 'Session expired. Sign in and try again.';
     }
     // A refusal's own text (a 403/422's "Too late to cancel") is the reason. A
     // 5xx's is not: Psycle's 500 answers {"message":"Server Error"} — a
@@ -6966,7 +6966,7 @@ function describeCancelError(failedResponse, data, err, sentOnline) {
     // No "(500)": a bare status code means nothing to a member. It is in the
     // error log all the same — reliability.js's apiFetch records the verb, the
     // path and the status of every failed answer.
-    return "Psycle couldn't cancel this just now — check My Bookings.";
+    return "Psycle couldn't cancel this just now. Check My Bookings.";
   }
   return 'Cancel failed';
 }
@@ -7141,7 +7141,7 @@ function confirmCancelWithPolicy(eventId, base) {
 async function _readyForWholeCancel(eventId) {
   if (!_recordIdsIncomplete(_myBookings[String(eventId)])) return true;
   if (navigator.onLine && (await _rereadBookingsForVerify())) return true;
-  toast("Couldn't load this booking's spots from Psycle — nothing was cancelled. Try again in a moment.", 'error');
+  toast("Couldn't load this booking's spots from Psycle. Nothing was cancelled. Try again in a moment.", 'error');
   return false;
 }
 
@@ -7166,8 +7166,8 @@ async function cancelBikeSlot(slotId, eventId) {
       resolvedId = _seatCancelId(booking, slotId);
     }
     if (!resolvedId) {
-      document.getElementById('modalHint').textContent = 'Nothing was cancelled — try again';
-      toast(`Couldn't match ${_sl3} ${slotId} to a booking — nothing was cancelled. Pull to refresh and try again.`, 'error');
+      document.getElementById('modalHint').textContent = 'Nothing was cancelled. Try again.';
+      toast(`Couldn't match ${_sl3} ${slotId} to a booking. Nothing was cancelled. Pull to refresh and try again.`, 'error');
       return;
     }
     sentOnline = navigator.onLine !== false;
@@ -7243,7 +7243,7 @@ async function confirmUnbook(bookingId, eventId, btn) {
     _dropBookingKeepPlace(eventId);
     _afterCardCancel(btn, eventId);
     refreshUpcomingPanel();
-    toast("You're offline — cancel queued. We'll send it when you're back online.", 'info');
+    toast("You're offline. Cancel queued. We'll send it when you're back online.", 'info');
     PsycleEvents.emit('booking:cancelled', eventId);
     return;
   }
@@ -7289,7 +7289,7 @@ async function confirmUnbook(bookingId, eventId, btn) {
       _dropBookingKeepPlace(eventId);
       _afterCardCancel(btn, eventId);
       refreshUpcomingPanel();
-      toast("You're offline — cancel queued. We'll send it when you're back online.", 'info');
+      toast("You're offline. Cancel queued. We'll send it when you're back online.", 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
       return;
     }
@@ -7379,8 +7379,8 @@ function _spotsHtml(evt, held, fresh) {
 // The labels are 24-hour like every other time in the app ("After 17:00", never
 // "After 5"); the keys, the hours and everything that filters are unchanged.
 const TIME_BANDS = [
-  { key: 'early', label: 'Before 9:00', from: 0, to: 9 },
-  { key: 'day', label: '9:00–17:00', from: 9, to: 17 },
+  { key: 'early', label: 'Before 09:00', from: 0, to: 9 },
+  { key: 'day', label: '09:00–17:00', from: 9, to: 17 },
   { key: 'evening', label: 'After 17:00', from: 17, to: 24 },
 ];
 function _timeBandOf(startAt) {
@@ -7686,7 +7686,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   } else if (isFull) {
     bookLabel = 'Full'; bookCls = 'book-btn'; bookDisabled = 'disabled'; bookOnclick = '';
   } else if (isWaitlist) {
-    bookLabel = 'Join Waitlist'; bookCls = 'book-btn waitlist'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
+    bookLabel = 'Join waitlist'; bookCls = 'book-btn waitlist'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
   } else {
     bookLabel = 'Book'; bookCls = 'book-btn'; bookDisabled = ''; bookOnclick = `bookClass(${evt.id}, this, ${evt.studio_id})`;
   }
@@ -8642,7 +8642,7 @@ function toggleLocation(id) {
 function updateLocationHint() {
   const hint = document.getElementById('locationHint');
   if (!hint) return;
-  hint.textContent = selectedLocations.size === 0 ? '— all studios' : '';
+  hint.textContent = selectedLocations.size === 0 ? '· all studios' : '';
 }
 
 // Feature 7 removed — "Today at Psycle" auto-load was noisy.
@@ -8792,7 +8792,7 @@ function _saveSetting(key, json) {
     if (typeof window._psycleSafeSetItem === 'function') ok = window._psycleSafeSetItem(key, json);
     else { localStorage.setItem(key, json); ok = true; }
   } catch (e) {}
-  if (!ok && typeof toast === 'function') toast("Couldn't save that — this device's storage is full", 'error');
+  if (!ok && typeof toast === 'function') toast("Couldn't save that. This device's storage is full.", 'error');
   return ok;
 }
 
@@ -9220,7 +9220,7 @@ function getCountdownText(eventDate, now, startAt) {
   if (eventDayStr === todayStr) {
     const { hrs, mins } = _hoursMinsLeft(diffHours);
     // The last 30 seconds round to 0: never "In 0min" (the dialog says "1 min").
-    if (hrs === 0) return mins === 0 ? 'Starting now' : `In ${mins}min`;
+    if (hrs === 0) return mins === 0 ? 'Starting now' : `In ${mins} min`;
     if (mins === 0) return `In ${hrs}h`;
     return `In ${hrs}h ${mins}m`;
   } else if (eventDayStr === tomorrowStr) {
@@ -9337,7 +9337,7 @@ function _savedBookingsHTML(items, label, waiting) {
     <span class="mb-saved-text">${waiting
       ? 'Checking with Psycle for changes…'
       : "Can't reach Psycle right now, so this is your list as it was then. Booking, cancelling and changing spots need a connection."}</span>
-    ${waiting ? '' : '<button type="button" class="booking-action-btn" onclick="retrySavedBookings(this)">Retry</button>'}
+    ${waiting ? '' : '<button type="button" class="booking-action-btn" onclick="retrySavedBookings(this)">Try again</button>'}
   </div>`;
   const byDay = {};
   items.forEach(it => {
@@ -9673,10 +9673,10 @@ function renderMyBookings() {
         ? `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10.5 10.5 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0M12 20h.01M3 3l18 18"/></svg></div>
            <div class="tab-empty-title">Couldn't load<br>your bookings</div>
            <div class="tab-empty-sub">Psycle didn't answer just now. Anything you've booked is safe — check your connection and try again.</div>
-           <button class="tab-empty-btn" onclick="retryBookingsLoad(this)">Retry</button>`
+           <button class="tab-empty-btn" onclick="retryBookingsLoad(this)">Try again</button>`
         : currentUser
         ? `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
-           <div class="tab-empty-title">Nothing booked<br>— yet</div>
+           <div class="tab-empty-title">Nothing booked<br>yet</div>
            <button class="tab-empty-btn" onclick="switchTab('discover')">Find a class</button>`
         : `<div class="tab-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
            <div class="tab-empty-title">Your bookings<br>live here</div>
@@ -9701,7 +9701,7 @@ function renderMyBookings() {
 
   let html = '';
   if (_waitlistsUnavailable === 'failed' && currentUser) { // not while 'late': that request is still in flight
-    html += `<div class="mb-waitlist-status" style="margin:0 0 8px">Couldn't load your waitlist places from Psycle just now — pull to refresh. Anything shown as Waitlisted below is from earlier.</div>`;
+    html += `<div class="mb-waitlist-status" style="margin:0 0 8px">Couldn't load your waitlist places from Psycle just now. Pull to refresh. Anything shown as Waitlisted below is from earlier.</div>`;
   }
 
   // Membership / credits info bar + billing period
@@ -9914,23 +9914,23 @@ function renderMyBookings() {
         if (place.unverified) {
           statusText = _waitlistsUnavailable === 'late'
             ? 'On the waitlist (still checking with Psycle…)'
-            : "On the waitlist (couldn't re-check with Psycle just now — pull to refresh)";
+            : "On the waitlist (couldn't re-check with Psycle just now. Pull to refresh).";
         } else if (offerOpen) {
           let by = '';
           if (place.expiresAt) {
             // London wall clock, like the class time above it — never the
             // device zone (_londonClock says what that read abroad).
             const exMs = _waitlistTimeMs(place.expiresAt);
-            if (!isNaN(exMs)) by = ` — accept by ${_londonClock(exMs)}`;
+            if (!isNaN(exMs)) by = `, accept by ${_londonClock(exMs)}`;
           }
           statusText = spotFree
-            ? `A spot is free right now${by} — it isn't held for you, claim it before someone else does`
+            ? `A spot is free right now${by}. It isn't held for you.`
             : `A spot has opened up${by}`;
         } else if (isPlace) {
           statusText = phase === 'closed'
-            ? 'Waitlist closed — it shuts 30 minutes before class, so you won’t be booked in from it now'
+            ? 'Waitlist closed. It shuts 30 minutes before class, so you won\'t be booked in from it now.'
             : phase === 'offers'
-            ? 'On the waitlist · this close to class Psycle usually emails an offer instead of booking you in — tap Check for a spot (keep a credit free)'
+            ? 'On the waitlist · this close to class Psycle usually emails an offer instead of booking you in. Tap Check for a spot (keep a credit free).'
             : 'On the waitlist · Psycle books you in automatically if a spot frees up (keep a credit free)';
         } else {
           statusText = 'You also hold a waitlist place for this class';
@@ -10354,7 +10354,7 @@ document.addEventListener('focusin', e => {
 // ── Open a booking's studio in the maps app ──────────────────────
 window.openMapForBooking = function (eventId) {
   const evt = _eventCache[String(eventId)];
-  if (!evt) { toast('Location not available', 'error'); return; }
+  if (!evt) { toast('Couldn\'t find that studio. Pull to refresh and try again.', 'error'); return; }
   const query = [evt._locFullName || evt._locName, evt._locAddress].filter(Boolean).join(', ');
   if (!query) { toast('No address on file for this studio', 'error'); return; }
   const q = encodeURIComponent(query);
@@ -10394,7 +10394,7 @@ function _eventCacheEntry(e, relations, existing) {
 
 async function rebookNextWeek(eventId) {
   const evt = _eventCache[String(eventId)];
-  if (!evt) { toast('Event data not available', 'error'); return; }
+  if (!evt) { toast('Couldn\'t find that class. Pull to refresh and try again.', 'error'); return; }
 
   // Calculate same time one week later
   const origDate = new Date(evt.start_at);
@@ -10423,11 +10423,11 @@ async function rebookNextWeek(eventId) {
     // told otherwise stops the member looking for a fallback. Stop either way —
     // carrying on would walk bookClass into its "Leave the waitlist?" branch.
     const seatHeld = heldNextWeek.some(id => !_myBookings[id].waitlisted);
-    toast(seatHeld ? 'Already booked for next week' : "You're on the waitlist for next week's class — it isn't booked yet", 'info');
+    toast(seatHeld ? 'Already booked for next week' : "You're on the waitlist for next week's class. It isn't booked yet.", 'info');
     return;
   }
 
-  toast('Searching for next week...', 'info');
+  toast('Searching for next week…', 'info');
 
   // Search for events on that day at the same location
   const studio = _studioMap[evt.studio_id];
@@ -10446,7 +10446,7 @@ async function rebookNextWeek(eventId) {
   try {
     res = await apiFetch('/events?' + params);
   } catch (e) {
-    toast(_friendlyError(e, "Couldn't search next week's classes — try again"), 'error');
+    toast(_friendlyError(e, "Couldn't search next week's classes. Try again."), 'error');
     return;
   }
   if (!res.ok) { toast('Search failed', 'error'); return; }
@@ -10526,8 +10526,8 @@ async function rebookNextWeek(eventId) {
     if (typeof switchTab === 'function') switchTab('discover');
     search();
     // 'Wed 30 Sept', as the date pill now reads — not the raw '2026-09-30'.
-    toast('No exact match — showing alternatives for ' +
-      nextWeek.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), 'info');
+    toast('No exact match. Showing alternatives for ' +
+      nextWeek.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + '.', 'info');
   } else {
     toast('No matching class found next week at this location', 'info');
   }
@@ -10546,7 +10546,7 @@ window.changeSpot = async function(eventId) {
     toast('Loading class…', 'info');
     if (!(await _ensureStudioKnown(eventId))) {
       // (No token left = the session ended meanwhile, and said so itself.)
-      if (getBearerToken()) toast("Couldn't load this class — nothing was changed. Try again in a moment.", 'error');
+      if (getBearerToken()) toast("Couldn't load this class. Nothing was changed. Try again in a moment.", 'error');
       return;
     }
   }
@@ -10574,20 +10574,20 @@ window.changeSpot = async function(eventId) {
   // DELETE) can release a seat the member meant to keep.
   const slotToChange = (booking.slots || []).find(s => _seatCancelId(booking, s));
   if (slotToChange == null) {
-    toast("Couldn't load this booking's spots from Psycle — nothing was changed. Try again in a moment.", 'error');
+    toast("Couldn't load this booking's spots from Psycle. Nothing was changed. Try again in a moment.", 'error');
     return;
   }
 
   // Fetch fresh event detail to get availability
   try {
-    toast('Loading available spots...', 'info');
+    toast('Loading available spots…', 'info');
     const res = await apiFetch('/events/' + eventId);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const detail = await res.json();
     const availableSlotIds = new Set((detail.slots || []).map(Number));
 
     if (availableSlotIds.size === 0) {
-      toast('No other spots available — class is full', 'error');
+      toast('No other spots available. Class is full.', 'error');
       return;
     }
 
@@ -10601,7 +10601,7 @@ window.changeSpot = async function(eventId) {
       if (layout) studio.layout = layout;
     }
     if (!studio?.has_layout || !layout?.slots?.length) {
-      toast('No layout available for this studio', 'error');
+      toast('This studio has no spot map', 'error');
       return;
     }
 
@@ -10635,7 +10635,7 @@ window.changeSpot = async function(eventId) {
       confirmBtn.onclick = function () { executeSpotSwap(); };
     }
   } catch (e) {
-    toast(_friendlyError(e, "Couldn't load the available spots — try again"), 'error');
+    toast(_friendlyError(e, "Couldn't load the available spots. Try again."), 'error');
   }
 };
 
@@ -10652,7 +10652,7 @@ function renderChangeSpotHint() {
   const picked = _selectedSlots.length ? _selectedSlots[0] : null;
   const tail = picked != null
     ? ' &rarr; ' + label + ' ' + picked + '. Tap Swap to confirm.'
-    : ' — now pick a new ' + low + ' on the layout.';
+    : '. Now pick a new ' + low + ' on the map.';
   if (ctx.booking.slots.length > 1) {
     const chips = ctx.booking.slots.map(function (s) {
       const cls = 'change-chip' + (s === ctx.slotToChange ? ' is-active' : '');
@@ -10680,7 +10680,7 @@ window.setChangeSpotTarget = function (slot) {
   // id may be the other seat's. Otherwise the target stays where it was.
   const ownId = _seatCancelId(ctx.booking, slot);
   if (!ownId) {
-    toast(`Couldn't match ${slotLabelForEvent(ctx.eventId)} ${slot} to a booking — close this and try again in a moment`, 'error');
+    toast(`Couldn't match ${slotLabelForEvent(ctx.eventId)} ${slot} to a booking. Close this and try again in a moment.`, 'error');
     return;
   }
   ctx.slotToChange = slot;
@@ -10716,7 +10716,7 @@ async function executeSpotSwap() {
   const low = label.toLowerCase();
   const confirmBtn = document.getElementById('confirmBookBtn');
   _swapInFlight = true;
-  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Swapping...'; }
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Swapping…'; }
 
   // On failure the context is KEPT and the button restored, so the user can
   // simply tap Swap again — never a dead "Swapping..." button.
@@ -10729,7 +10729,7 @@ async function executeSpotSwap() {
     const key = String(ctx.eventId);
     // Can't tell which seat (if any) is held now — no blind retry from here.
     const closeUnconfirmed = (why) => {
-      toast('Swap failed: ' + why + " — couldn't confirm which " + low + ' you hold now. Check My Bookings.', 'error');
+      toast('Swap failed: ' + why + ". Couldn't confirm which " + low + ' you hold now. Check My Bookings.', 'error');
       closeBikePicker();
       _scheduleBookingsRefetch(3000);
     };
@@ -10739,7 +10739,7 @@ async function executeSpotSwap() {
       // Only ever the seat's own record — never an event-wide DELETE, which
       // would release every seat held in this class to move one of them.
       if (!ctx.bookingId) {
-        failRetryable("Swap failed: couldn't match your current " + low + ' to a booking — nothing was changed. Close this and try again.');
+        failRetryable("Swap failed: couldn't match your current " + low + ' to a booking. Nothing was changed. Close this and try again.');
         return;
       }
       let cancelRes;
@@ -10767,7 +10767,7 @@ async function executeSpotSwap() {
         const fresh = _isRealSeat(_myBookings[key]) ? (_myBookings[key].slots || []).map(Number) : [];
         const expected = (ctx.booking.slots || []).map(Number).filter(s => s !== Number(ctx.slotToChange));
         if (fresh.length !== expected.length || !expected.every(s => fresh.includes(s))) {
-          toast('This booking changed since you opened it — nothing more was changed. Check My Bookings and try again.', 'error');
+          toast('This booking changed since you opened it. Nothing more was changed. Check My Bookings and try again.', 'error');
           closeBikePicker();
           return;
         }
@@ -10861,13 +10861,13 @@ async function executeSpotSwap() {
       // Both seats are held now — a retry would release one and hit a 409 on
       // the other, for ever. The member picks which to keep.
       toast('Swap went wrong: you now hold both ' + label + ' ' + ctx.slotToChange + ' and ' + label + ' ' + newSlot +
-        " — cancel the one you don't want in My Bookings.", 'error');
+        ". Cancel the one you don't want in My Bookings.", 'error');
       closeBikePicker();
     } else if (recovered) {
-      failRetryable('Swap failed: ' + reason + ' — kept ' + label + ' ' + ctx.slotToChange + '. Tap Swap to retry.');
+      failRetryable('Swap failed: ' + reason + '. Kept ' + label + ' ' + ctx.slotToChange + '. Tap Swap to try again.');
     } else if (known) {
-      failRetryable('Swap failed: ' + reason + ' — and ' + label + ' ' + ctx.slotToChange +
-        ' could not be restored. Check My Bookings and rebook.');
+      failRetryable('Swap failed: ' + reason + '. ' + label + ' ' + ctx.slotToChange +
+        ' couldn\'t be restored either. Check My Bookings and rebook.');
     } else {
       closeUnconfirmed(reason);
     }
@@ -10879,7 +10879,7 @@ async function executeSpotSwap() {
 // ── Find Similar popup ──────────────────────────────────────────
 window.findSimilar = function(eventId) {
   const evt = _eventCache[String(eventId)];
-  if (!evt) { toast('Event data not available', 'error'); return; }
+  if (!evt) { toast('Couldn\'t find that class. Pull to refresh and try again.', 'error'); return; }
 
   // Remove any existing popup
   const existing = document.querySelector('.find-similar-popup');
@@ -11026,7 +11026,7 @@ window.findSimilar = function(eventId) {
       const studio = _studioMap[evt.studio_id];
       _focusSearch({ locationId: studio ? studio.location_id : '', typeName: evt._typeName, startDate: targetStr, daysAhead: 1, keepTimeRow: true });
       toast('Showing ' + targetDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
-        (evt._locName ? ' at ' + evt._locName : '') + ' — any instructor', 'info');
+        (evt._locName ? ' at ' + evt._locName : '') + ', any instructor', 'info');
     }
   });
 
@@ -11058,7 +11058,7 @@ window.findSimilar = function(eventId) {
 // ── Share a class ───────────────────────────────────────────────
 window.shareClass = function(eventId) {
   const evt = _eventCache[String(eventId)];
-  if (!evt) { toast('Event data not available', 'error'); return; }
+  if (!evt) { toast('Couldn\'t find that class. Pull to refresh and try again.', 'error'); return; }
 
   const dt = new Date(evt.start_at);
   const dayName = dt.toLocaleDateString('en-GB', { weekday: 'long' });
@@ -11073,7 +11073,7 @@ window.shareClass = function(eventId) {
   const instrPart = instrName ? (' with ' + instrName) : '';
   const locPart = locName ? (' at ' + locName) : '';
 
-  const message = `I'm going to ${typeName}${instrPart} on ${dayName} ${dayNum} ${monthName} at ${timeLabel}${locPart}. Book a spot! https://psyclelondon.com/pages/timetable`;
+  const message = `I'm going to ${typeName}${instrPart} on ${dayName} ${dayNum} ${monthName} at ${timeLabel}${locPart}. Book a spot: https://psyclelondon.com/pages/timetable`;
 
   // ONE share path, picked by capability. In the iOS app that is the native
   // sheet, and it resolves false when the user cancels — an answer, not a
@@ -11089,7 +11089,7 @@ window.shareClass = function(eventId) {
     navigator.clipboard.writeText(message).then(function() {
       toast('Copied to clipboard', 'success');
     }).catch(function() {
-      toast('Could not copy to clipboard', 'error');
+      toast('Couldn\'t copy to clipboard', 'error');
     });
   } else {
     // Fallback: select from a temporary textarea
@@ -11128,7 +11128,7 @@ async function upcomingCancel(eventId, btn) {
     if (ready) {
       // The seat went while the dialog was up (cancelled elsewhere).
       refreshUpcomingPanel();
-      toast("That booking isn't showing with Psycle any more — nothing was cancelled", 'info');
+      toast("That booking isn't showing with Psycle any more. Nothing was cancelled.", 'info');
     }
     return;
   }
@@ -11141,7 +11141,7 @@ async function upcomingCancel(eventId, btn) {
     _dropBookingKeepPlace(eventId);
     _syncCardButtonsForEvent(eventId);
     refreshUpcomingPanel();
-    toast("You're offline — cancel queued. We'll send it when you're back online.", 'info');
+    toast("You're offline. Cancel queued. We'll send it when you're back online.", 'info');
     PsycleEvents.emit('booking:cancelled', eventId);
     return;
   }
@@ -11183,7 +11183,7 @@ async function upcomingCancel(eventId, btn) {
       _dropBookingKeepPlace(eventId);
       _syncCardButtonsForEvent(eventId);
       refreshUpcomingPanel();
-      toast("You're offline — cancel queued. We'll send it when you're back online.", 'info');
+      toast("You're offline. Cancel queued. We'll send it when you're back online.", 'info');
       PsycleEvents.emit('booking:cancelled', eventId);
       return;
     }
@@ -11217,7 +11217,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
     if (!resolvedId) {
       btn.disabled = false;
       if (chip) chip.style.opacity = '';
-      toast(`Couldn't match ${_sl4} ${slotId} to a booking — nothing was cancelled. Pull to refresh and try again.`, 'error');
+      toast(`Couldn't match ${_sl4} ${slotId} to a booking. Nothing was cancelled. Pull to refresh and try again.`, 'error');
       return;
     }
     sentOnline = navigator.onLine !== false;
@@ -11265,7 +11265,7 @@ async function upcomingSeatCancel(eventId, slotId, btn) {
 // screen BEFORE GET /events/{id} has told _studioMap about its studio — and the
 // saved studio id can itself be out of date. (A waitlist place Psycle turned
 // into a seat is the same: its cache entry came from the place, not a detail
-// read.) "Change spot" then answered "No layout available for this studio", and
+// read.) "Change spot" then answered "This studio has no spot map", and
 // the sheet's booked button — it routes on has_layout — opened the cancel
 // dialog instead of the picker. Both wait here first.
 function _studioNeedsReread(eventId) {
@@ -11332,7 +11332,7 @@ async function _classDetailBookAction(eventId) {
     toast('Loading class…', 'info');
     if (!(await _ensureStudioKnown(id))) {
       // (No token left = the session ended meanwhile, and said so itself.)
-      if (getBearerToken()) toast("Couldn't load this class — try again in a moment", 'error');
+      if (getBearerToken()) toast("Couldn't load this class. Try again in a moment.", 'error');
       return;
     }
     // The member tapped another class while this one loaded: theirs, quietly.
@@ -11396,7 +11396,7 @@ window.openClassDetail = function (eventId) {
   const instrId = instr?.id || evt.instructor_id;
   const meta = instr?.metafields || {};
   const bio = meta.description || '';
-  const bioExcerpt = bio.length > 200 ? bio.substring(0, 200) + '...' : bio;
+  const bioExcerpt = bio.length > 200 ? bio.substring(0, 200) + '…' : bio;
   const keywords = (meta.keywords || '').split(/[,|]/).map(k => k.trim()).filter(Boolean);
   const tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
 
@@ -11426,7 +11426,7 @@ window.openClassDetail = function (eventId) {
   if (evt.is_fully_booked && !evt.is_waitlistable) {
     availHtml = '<span class="cds-avail cds-avail-full">Full</span>';
   } else if (evt.is_fully_booked && evt.is_waitlistable) {
-    availHtml = '<span class="cds-avail cds-avail-waitlist">Full — waitlist open</span>';
+    availHtml = '<span class="cds-avail cds-avail-waitlist">Full · waitlist open</span>';
   } else {
     const left = _countsFresh(evt._countsAt, Date.now()) ? _spotsLeft(evt) : null;
     if (left >= 1) {
@@ -11501,7 +11501,7 @@ window.openClassDetail = function (eventId) {
   } else if (evt.is_fully_booked && evt.is_waitlistable) {
     // Same routing as Book (card button if rendered, else a detached one) —
     // and the same per-class double-tap guard.
-    bookBtnHtml = '<button class="cds-book-btn waitlist' + pillPlace + '" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Join Waitlist</button>';
+    bookBtnHtml = '<button class="cds-book-btn waitlist' + pillPlace + '" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Join waitlist</button>';
   } else {
     canBook = !isPast;
     bookBtnHtml = '<button class="cds-book-btn' + pillMain + ' glow-mine" onclick="event.stopPropagation();document.getElementById(\'classDetailOverlay\').remove();_classDetailBookAction(' + safeEventId + ');">Book</button>';
@@ -13678,8 +13678,7 @@ function renderTravelNotice() {
   el.id = 'travelNotice';
   el.className = 'travel-notice';
   el.innerHTML =
-    '<span class="travel-notice-icon">✈︎</span>' +
-    '<span>You appear to be away — class times are shown in London time.</span>' +
+    '<span>Class times are shown in London time.</span>' +
     '<button class="travel-notice-close" data-travel-dismiss aria-label="Dismiss">&times;</button>';
   results.parentNode.insertBefore(el, results);
 }

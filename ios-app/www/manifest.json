@@ -1,7 +1,7 @@
 {
   "name": "Psync",
   "short_name": "Psync",
-  "description": "Find, book and sync your Psycle classes \u2014 a fast, independent companion for Psycle London riders.",
+  "description": "An independent companion for Psycle London members.",
   "start_url": "./psycle-finder.html",
   "display": "standalone",
   "background_color": "#e6e9ee",

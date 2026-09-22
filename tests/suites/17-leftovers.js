@@ -166,10 +166,10 @@ module.exports = async function (t) {
     t.vm.runInContext(lines.slice(from, to + 1).join('\n'), ctx, { filename: 'js/settings.js[updatePill]' });
 
     ctx.updatePill();
-    ok(!classes.has('hidden') && /Ride 45 — Alex/.test(pill.textContent) && /Bike 12/.test(pill.textContent), 'a class ahead: the pill shows it');
+    ok(!classes.has('hidden') && /Ride 45 · Alex/.test(pill.textContent) && /Bike 12/.test(pill.textContent), 'a class ahead: the pill shows it');
     ctx._myBookings = {}; // the last booking is cancelled, still signed in
     ctx.updatePill();
-    eq([classes.has('hidden'), pill.labels[pill.labels.length - 1], /Ride 45 — Alex/.test(pill.textContent)], [true, null, true],
+    eq([classes.has('hidden'), pill.labels[pill.labels.length - 1], /Ride 45 · Alex/.test(pill.textContent)], [true, null, true],
       'cancelled: hidden and un-named at once — and it fades out WITH its words (an emptied pill would be seen to collapse)');
     ctx.updatePill();
     eq([classes.has('hidden'), pill.textContent, pill.innerHTML], [true, '', ''], 'the next pass (the 30 s tick at the latest) empties it: the cancelled class is no longer in the page');

@@ -130,10 +130,10 @@ module.exports = function (t) {
   const action = ruleBody(redesign, '.cc-action');
   t.ok(!!action && /margin-left:\s*auto/.test(action) && /flex:\s*none/.test(action), 'a wrapped action row is right-aligned');
   // applyBookedState / reliability.js / features.js key off these exact labels.
-  t.ok(app.indexOf("bookLabel = 'Join Waitlist'") !== -1 && app.indexOf("'Waitlisted ✓'") !== -1,
+  t.ok(app.indexOf("bookLabel = 'Join waitlist'") !== -1 && app.indexOf("'Waitlisted ✓'") !== -1,
     'button labels untouched (the ✓ convention and the Full-button regex depend on them)');
 
-  // Wrapping by width has a cost: "Join Waitlist" → '…' → "Join Waitlist"
+  // Wrapping by width has a cost: "Join waitlist" → '…' → "Join waitlist"
   // un-wraps and re-wraps the card, so every card below jumps mid-request.
   // The real _busyLabel, against a fake button + MutationObserver.
   t.section('Class card: the busy label never re-flows the card');
@@ -147,7 +147,7 @@ module.exports = function (t) {
   FakeObserver.prototype.disconnect = function () { this.live = false; };
   const bctx = t.vm.createContext({ MutationObserver: FakeObserver });
   t.vm.runInContext(lines.slice(bFrom, bTo + 1).join('\n'), bctx);
-  const cardBtn = (inAction) => ({ textContent: 'Join Waitlist', offsetWidth: 103, style: {}, closest: (sel) => (inAction && sel === '.cc-action' ? {} : null) });
+  const cardBtn = (inAction) => ({ textContent: 'Join waitlist', offsetWidth: 103, style: {}, closest: (sel) => (inAction && sel === '.cc-action' ? {} : null) });
 
   let b = cardBtn(true);
   bctx._busyLabel(b);

@@ -76,10 +76,20 @@ module.exports = async function (t) {
     let seq = 0;
     const timers = [];
 
+    // Permission, as EventKit holds it: `opts.permissionGranted: false` starts
+    // un-asked; `perm.asked` records WHICH request the bridge made.
+    const perm = { granted: opts.permissionGranted !== false, asked: [] };
+    const permAnswer = () => (perm.granted
+      ? { readCalendar: 'granted', writeCalendar: 'granted' }
+      : { readCalendar: 'prompt', writeCalendar: 'prompt' });
     const Calendar = {
-      checkAllPermissions: () => Promise.resolve({ result: { readCalendar: 'granted', writeCalendar: 'granted' } }),
-      requestAllPermissions: () => Promise.resolve({ result: { readCalendar: 'granted', writeCalendar: 'granted' } }),
+      checkAllPermissions: () => Promise.resolve({ result: permAnswer() }),
+      // The real plugin's requestAllPermissions asks for Reminders after the
+      // calendar; with no Reminders purpose string that second request throws
+      // and the WHOLE call rejects — although the calendar was just granted.
+      requestAllPermissions: () => { perm.asked.push('all'); perm.granted = true; return Promise.reject(new Error('Could not authorize all permissions')); },
       listCalendars: () => Promise.resolve({ result: [{ id: 'home', title: 'Home' }, { id: 'work', title: 'Work' }, { id: 'psy', title: 'Psycle' }] }),
+      requestFullCalendarAccess: opts.noCalendarOnlyRequest ? undefined : () => { perm.asked.push('calendar'); perm.granted = true; return Promise.resolve({ result: 'granted' }); },
       listEventsInRange(q) {
         log.listed++;
         if (state.listThrows) return Promise.reject(new Error('eventkit'));
@@ -167,7 +177,7 @@ module.exports = async function (t) {
     t.vm.createContext(ctx);
     t.vm.runInContext('Date.now = __now;', ctx);
     t.vm.runInContext(BRIDGE_SRC, ctx, { filename: 'native-bridge.js[calendar-safety]' });
-    return { ctx, ls, events, log, state, titles: () => events.map((e) => e.title).sort() };
+    return { ctx, ls, events, log, state, perm, titles: () => events.map((e) => e.title).sort() };
   }
 
   const ACK = 'psycle_calendar_owned_ack';
@@ -175,6 +185,29 @@ module.exports = async function (t) {
   const rideIn = (calId, id) => ({ id: id || 'e-ride', calendarId: calId, title: 'Ride — Alex (Bike 7)', startDate: Date.UTC(2026, 8, 20, 6, 0, 0), notes: MARK(501) });
 
   // ════════════════════════════════════════════════════════════════════
+  t.section('Calendar permission: the calendar alone is asked for — never Reminders');
+  {
+    // A first-time member: nothing granted yet. The bridge must use the
+    // plugin's calendar-only request; requestAllPermissions() would also ask
+    // for Reminders (no feature uses them, no purpose string) and reject.
+    const b = boot({ permissionGranted: false });
+    await b.ctx.psycleSetCalendarConfig({ mode: 'custom', targetId: 'psy', ownedAck: true });
+    const r = await b.ctx.psycleResyncCalendar({ ownedAck: true });
+    t.eq(b.perm.asked.filter((x) => x === 'all').length, 0, 'requestAllPermissions is never called when the calendar-only request exists');
+    t.ok(b.perm.asked.indexOf('calendar') !== -1, 'requestFullCalendarAccess is what was asked');
+    t.ok(b.perm.granted && r !== false, 'and the FIRST attempt goes through: the grant is read back with checkAllPermissions, not taken from the request');
+
+    // An older plugin without the calendar-only method: the old request is the
+    // fallback, and a rejection after the grant no longer reads as "denied".
+    const old = boot({ permissionGranted: false, noCalendarOnlyRequest: true });
+    await old.ctx.psycleSetCalendarConfig({ mode: 'custom', targetId: 'psy', ownedAck: true });
+    await old.ctx.psycleResyncCalendar({ ownedAck: true });
+    t.eq(old.perm.asked, ['all'], 'without it the bridge falls back to requestAllPermissions, once');
+
+    const src = t.readSource('ios-app/www/native-bridge.js');
+    t.ok(/requestFullCalendarAccess/.test(src) && !/requestFullRemindersAccess|requestReadOnlyRemindersAccess/.test(src), 'the bridge names no Reminders request at all');
+  }
+
   t.section('Calendar safety: psycleCountForeignEvents is read-only and honest');
   {
     const b = boot({ events: [dentist(), birthday(), workEvent(), rideIn('home')] });
@@ -460,7 +493,7 @@ module.exports = async function (t) {
     first.log.modals[0].answer(true);
     await done;
     t.eq(first.log.setCfg.length, 1, 'a FIRST pick while signed out is still allowed (nothing to sweep)');
-    t.eq(first.log.toasts, [['Calendar saved, not synced yet — Sign in to sync', 'info']], '…and is honest that nothing was synced');
+    t.eq(first.log.toasts, [['Calendar saved, not synced yet: Sign in to sync', 'info']], '…and is honest that nothing was synced');
   }
 
   // ════════════════════════════════════════════════════════════════════

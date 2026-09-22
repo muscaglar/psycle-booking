@@ -401,8 +401,8 @@
         'display:flex;padding:10px 24px;font-size:13px;align-items:center;gap:12px';
 
       var msg = document.createElement('span');
-      msg.textContent = '⚠️ Heads up: Psycle’s data looks different than ' +
-        'expected — some features may misbehave. The app is running in safe mode.';
+      msg.textContent = 'Psycle has changed something, so parts of Psync may not work properly ' +
+        'until it is updated.';
       banner.appendChild(msg);
 
       var details = document.createElement('button');

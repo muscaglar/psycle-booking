@@ -172,7 +172,7 @@ module.exports = function (t) {
   ok(/<div class="explore-title">New to you<\/div>';\s*html \+= '<div class="explore-grid">';/.test(explore), '"New to you": heading, then the cards');
   ok(/<div class="insights-title">Lapsed favourites<\/div>';\s*html \+= '<div class="lapsed-list">';/.test(tabs), '"Lapsed favourites": heading, then the list');
   ok(/<div class="insights-title">Instructors per month<\/div>';\s*html \+= '<div class="variety-chart">';/.test(tabs), 'the variety chart\'s heading names its unit');
-  ok(/<div class="tab-empty-title">Nothing booked<br>— yet<\/div>\s*<button class="tab-empty-btn" onclick="switchTab\('discover'\)">Find a class<\/button>/.test(app),
+  ok(/<div class="tab-empty-title">Nothing booked<br>yet<\/div>\s*<button class="tab-empty-btn" onclick="switchTab\('discover'\)">Find a class<\/button>/.test(app),
     'My Bookings, confirmed empty: the title and the one action');
   ok(/<div class="tab-empty-title">Your stats<\/div>' \+\s*'<div class="tab-empty-sub">Sign in to see your streaks, habits and instructors\.<\/div>' \+\s*'<button class="tab-empty-btn" onclick="openLoginPopup\(\)">Sign in<\/button>/.test(tabs),
     'Stats, signed out: what is behind the sign-in, in one line');
@@ -182,31 +182,31 @@ module.exports = function (t) {
     'the history-sync prompt is headed by what it asks; "Sync my history" keeps its name');
   ok(/toast\('You can sync your history any time from the Stats tab', 'info'\)/.test(app), 'dismissing it still says where Sync lives');
   ok(/<strong>Sync your booking history<\/strong><br>' \+\s*'<span>Makes your Stats and suggestions accurate\.<\/span>/.test(explore), 'the Stats banner says it once');
-  ok(/tap Re-sync to import them/.test(explore), '…and the "N past classes are not in it yet" line (an action the member must take) is untouched');
+  ok(/Tap Re-sync to import them/.test(explore), '…and the "N past classes are not in it yet" line (an action the member must take) is untouched');
 
   // ── 4. What must stay ──────────────────────────────────────────────────
   t.section('Declutter: the lines a member would miss are still there, word for word');
   [
     [tabs, 'An independent companion for Psycle London members.<br>Not affiliated with, or endorsed by, Psycle.', 'the affiliation statement'],
-    [tabs, 'No credits remaining — top up on psyclelondon.com to book', 'credits'],
+    [tabs, 'No credits remaining. Top up on psyclelondon.com to book.', 'credits'],
     [tabs, "Psycle\\'s normal 12-hour cancellation policy applies to every one.", 'usual-week sheet: the cancellation policy'],
     [tabs, 'Nothing is booked until you press the button below.', 'usual-week sheet: nothing is spent by opening it'],
     [app, "Psycle's normal 12-hour cancellation policy applies.", 'booking confirms: the cancellation policy'],
-    [app, 'Inside the 12-hour late-cancel window — cancelling is usually charged', 'picker: the late-cancel window'],
+    [app, 'Inside the 12-hour late-cancel window. Cancelling is usually charged.', 'picker: the late-cancel window'],
     [app, 'Cancellations inside 12 hours are usually charged by Psycle.', 'cancel dialog: the charge'],
-    [app, 'keep a credit free so you can be booked in', 'waitlist: the credit rule'],
+    [app, 'Keep a credit free so you can be booked in', 'waitlist: the credit rule'],
     [app, 'the waitlist closes 30 minutes before class', 'waitlist: when it closes'],
-    [app, "You're offline — cancel queued. We'll send it when you're back online.", 'what a queued cancel will do'],
+    [app, "You're offline. Cancel queued. We'll send it when you're back online.", 'what a queued cancel will do'],
     [app, "You'll need your Psycle email and password to sign back in. Your bookings stay safe with Psycle.", 'sign-out consequences'],
-    [app, "You're still signed in — we just couldn't confirm your account. Check your connection and try again.", 'an error and its recovery'],
+    [app, "You're still signed in. We just couldn't confirm your account. Check your connection and try again.", 'an error and its recovery'],
     [settings, 'The calendar you pick becomes fully managed by Psync', 'calendar hand-over: what it means'],
-    [settings, "duplicates are cleaned up automatically — and anything else in that calendar will ' +\n        'be removed.", 'calendar hand-over: what it deletes'],
-    [settings, 'Choose a calendar to start syncing — nothing is added until you pick one.', 'calendar: nothing happens before a pick'],
+    [settings, "duplicates are cleaned up automatically, and anything else in that calendar will ' +\n        'be removed.", 'calendar hand-over: what it deletes'],
+    [settings, 'Choose a calendar to start syncing. Nothing is added until you pick one.', 'calendar: nothing happens before a pick'],
     [settings, 'Nothing already on this device is replaced', 'import consequences'],
-    [features, 'It is not held for you — book it before someone else does.', 'notify-me: a free spot is not a held one'],
+    [features, 'It is not held for you. Book it before someone else does.', 'notify-me: a free spot is not a held one'],
   ].forEach(([src, needle, what]) => ok(src.indexOf(needle) !== -1, 'kept — ' + what));
   ok(/title = opts\.waitlist \? \(opts\.already \? 'Already on the waitlist' : 'On the waitlist!'\) : 'Booked!';/.test(app),
     'the Booked! sheet keeps its title: it is also the line announce() speaks (tests/suites/a11y.js), and the one place a "!" is earned');
-  ok(/detail: blocked \? 'Tap to allow notifications' : '90 minutes before each class — opens the live countdown'/.test(tabs) &&
+  ok(/detail: blocked \? 'Tap to allow notifications' : '90 minutes before each class. Opens the live countdown.'/.test(tabs) &&
     /Mondays at 12:00 — when Psycle opens new dates/.test(tabs), 'reminder rows still say WHEN they fire');
 };

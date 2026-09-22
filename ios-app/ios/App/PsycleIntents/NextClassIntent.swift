@@ -25,7 +25,7 @@ import AppIntents
 @available(iOS 16.0, *)
 struct NextClassIntent: AppIntent {
     static var title: LocalizedStringResource = "What's my next class?"
-    static var description = IntentDescription("Tells you your next booked Psycle class and when it starts.")
+    static var description = IntentDescription("Tells you your next booked class and when it starts.")
 
     // Surface the spoken/return value; no app launch needed.
     static var openAppWhenRun: Bool = false

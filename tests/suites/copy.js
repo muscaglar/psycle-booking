@@ -53,7 +53,7 @@ module.exports = async function (t) {
 
   // ── Vocabulary ─────────────────────────────────────────────────────────
   t.section('Copy: one vocabulary');
-  ok(!/You usually ride|Ride the same classes|no longer ride|on the bike|CLASSES RIDDEN|London riders/.test(tabs) && /remove any you no longer take'/.test(tabs),
+  ok(!/You usually ride|Ride the same classes|no longer ride|on the bike|CLASSES RIDDEN|London riders/.test(tabs) && /Remove any you no longer take\.'/.test(tabs),
     'tabs.js: no ride-only wording over every class type (the usual-week save toast included: a Reformer-only member rides nothing)');
   // Wave 8 (declutter): the card leads with the slot itself — its heading already
   // says "Your usual slots" — and the button says what it does, so the subtitle
@@ -61,7 +61,7 @@ module.exports = async function (t) {
   ok(/<div class="habit-line"><strong>' \+ escapeHTML\(dayName\)/.test(tabs) && !/You usually (ride|book) </.test(tabs) && /Your year at Psycle/.test(tabs),
     'habit card names the slot with no ride-only verb in front of it; the year wrap says "Your year at Psycle"');
   ok(!/habit-subtitle/.test(tabs) && />Find this week<\/button>/.test(tabs), 'no habit subtitle: the button itself says what it does ("Find this week")');
-  ok(!/booking's seats/.test(app) && (app.match(/this booking's spots from Psycle — nothing was (cancelled|changed)/g) || []).length === 2,
+  ok(!/booking's seats/.test(app) && (app.match(/this booking's spots from Psycle\. Nothing was (cancelled|changed)/g) || []).length === 2,
     'app.js: "this booking\'s spots" (not seats) — and still says nothing was cancelled / changed');
   ok(/title: 'Claim this spot\?'/.test(app) && /_plural\(free, 'spot'\)\} free right now/.test(app) && /'A spot is free right now/.test(app),
     'the claim dialog uses one noun: spot');

@@ -1,5 +1,5 @@
 /**
- * features.js — Class History, Instructor Profiles, Push Notifications
+ * features.js — Class history, Instructor Profiles, Push Notifications
  *
  * Self-contained IIFE that hooks into app.js via monkey-patching.
  * Tracks booking history in localStorage, provides instructor profile
@@ -318,7 +318,7 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle" tabindex="-1">
         <div class="modal-header">
           <div>
-            <div class="modal-title" id="historyModalTitle">Class History</div>
+            <div class="modal-title" id="historyModalTitle">Class history</div>
             <div class="modal-subtitle">${history.length} booking${history.length !== 1 ? 's' : ''} recorded</div>
           </div>
           <button class="modal-close" onclick="document.getElementById('historyModalOverlay').remove()" aria-label="Close">&times;</button>
@@ -761,7 +761,7 @@
       // Say what this really is: there is no server or background fetch behind
       // the bell — the class is only looked at while the app is open, signed in.
       if (typeof toast === 'function') {
-        toast(_hasToken() ? 'Watching this class — checked whenever Psync is open' : 'Watching this class — sign in so Psync can check it', 'success');
+        toast(_hasToken() ? 'Watching this class. Checked whenever Psync is open.' : 'Watching this class. Sign in so Psync can check it.', 'success');
       }
       // Only while the answer is still open: 'granted' needs nothing, and a
       // 'denied' would put its "Notifications are blocked" over the toast above
@@ -903,7 +903,7 @@
     _watchDialogUp = true;
     window.confirmModal({
       title: 'Spot opened',
-      body: line + ' has a spot free. It is not held for you — book it before someone else does.',
+      body: line + ' has a spot free. It is not held for you. Book it before someone else does.',
       confirmText: 'View class',
       cancelText: 'Not now',
       onReplaced: () => { replaced = true; },
@@ -917,7 +917,7 @@
       if (view) { if (typeof window.openClassDetail === 'function') window.openClassDetail(eid); return; }
       // A stray tap on the backdrop lands here too, and the bell going off is
       // otherwise invisible — say so (watching on would re-alert every pass).
-      if (typeof toast === 'function') toast('No longer watching that class — tap its bell to watch again', 'info');
+      if (typeof toast === 'function') toast('No longer watching that class. Tap its bell to watch again.', 'info');
       // Others found in the same pass get their turn. After "View class" they
       // wait for the next check (still watched) rather than stacking on the sheet.
       if (_watchOpened.length) _watchDialogTimer = setTimeout(_showOpenedSpots, 400);

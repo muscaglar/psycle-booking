@@ -29,9 +29,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Psync keeps the calendar you choose in step with your Psycle bookings — adding classes and removing events that are not bookings.</string>
+	<string>Psync adds your Psycle classes to the calendar you choose, and removes events in it that are not bookings.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Psync keeps the calendar you choose in step with your Psycle bookings — adding classes and removing events that are not bookings.</string>
+	<string>Psync adds your Psycle classes to the calendar you choose, and removes events in it that are not bookings.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

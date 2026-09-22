@@ -390,7 +390,7 @@ module.exports = function (t) {
       'data-ct rides on an inner wrapper (the pill itself is only ever handed markup), with the small class tile');
     ok(/<div class="ncp-countdown">5h 0m<\/div>/.test(pill.innerHTML), 'the countdown keeps class="ncp-countdown" exactly (tests/suites/3d-leftovers.js reads it)');
     ok(/<div class="ct-badge is-seat ncp-seat">Bikes 12 &amp; 15<\/div>/.test(pill.innerHTML), 'the seat is the class-colour badge — and is escaped now (it went in raw)');
-    ok(pill.innerHTML.indexOf('RIDE: 45 &lt;x&gt; — Al &amp; Bo') !== -1, 'class and instructor escaped, as before');
+    ok(pill.innerHTML.indexOf('RIDE: 45 &lt;x&gt; · Al &amp; Bo') !== -1, 'class and instructor escaped, as before');
     eq(pill.label, 'Next class in 5h 0m: RIDE: 45 <x> with Al & Bo, Bikes 12 & 15. View my bookings', 'its spoken name is unchanged (an attribute: plain text)');
     const bare = run(false);
     ok(/^<div class="ncp-body" data-ct="other"><div class="ncp-countdown">/.test(bare.innerHTML), 'settings.js without app.js: neutral, no tile, no ReferenceError');

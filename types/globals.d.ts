@@ -1,5 +1,5 @@
 /**
- * types/globals.d.ts — Ambient declarations for the Psycle Class Finder PWA.
+ * types/globals.d.ts — Ambient declarations for the Psync web app.
  *
  * WHY THIS EXISTS
  * ---------------

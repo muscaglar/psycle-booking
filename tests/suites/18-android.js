@@ -102,7 +102,13 @@ const digest = (lines) => crypto.createHash('sha256').update(lines.join('\n')).d
 // the commit BEFORE the Android work (754fbb0) — sha256 of the lines above,
 // the restore's reads left out. If the iPhone path is ever changed ON PURPOSE,
 // the failing check prints the new digest to put here.
-const IPHONE_LAUNCH_DIGEST = '97bfb4f72ae94c22c927a95bdc54a0ac9796ee1a0f3163d660012cc5457800c5';
+// Re-recorded ONCE, on 2026-09-22, for a change of WORDS and nothing else: the
+// class reminder's body went from "Ann · Bank — open Psync for the live
+// countdown." to "Ann · Bank · Open Psync for the live countdown" (one list, so
+// a class with no instructor and no place never begins with a separator). It
+// was proved body-only: with the old sentence put back the digest was the old
+// one, 97bfb4f7…800c5. Re-record it the same way or not at all.
+const IPHONE_LAUNCH_DIGEST = '7fde060e152fe34f70ff94df494bad170d31b210e31fd47fa860fd5d828737e9';
 
 module.exports = async function (t) {
   const { ok, eq } = t;
@@ -543,12 +549,12 @@ module.exports = async function (t) {
     const r = t.loadPure('js/tabs.js', 'reminder-row');
     const androidRow = r._classReminderSwitch(true, true, true).detail, iphoneRow = r._classReminderSwitch(true, true).detail;
     eq([androidRow, r._classReminderSwitch(true, false, true).detail, r._classReminderSwitch(true, true, true).on],
-      ['90 minutes before each class — with a countdown notification', 'Tap to allow notifications', true],
+      ['90 minutes before each class. With a countdown notification.', 'Tap to allow notifications', true],
       'the class-reminder row on Android names its countdown — a NOTIFICATION, which this switch turns off with the reminders — and a refused permission reads as on the iPhone');
     eq(r._classReminderSwitch(false, true, true).detail, androidRow, '…the same line with the switch off: it says what turning it on brings');
     ok(!/Live Activity|Lock Screen|live countdown|iPhone|iOS/i.test(androidRow) && androidRow.split(' ').length <= iphoneRow.split(' ').length && androidRow.indexOf('!') === -1 && !/[<>&"']/.test(androidRow),
       '…never a "Live Activity", a "Lock Screen" or the iPhone\'s "live countdown"; no longer than the iPhone\'s line; safe to drop into innerHTML');
-    eq(iphoneRow, '90 minutes before each class — opens the live countdown', 'the iPhone app\'s line is what it was');
+    eq(iphoneRow, '90 minutes before each class. Opens the live countdown.', 'the iPhone app\'s line is what it was');
 
     // The shipped toggles, sliced as tests/suites/ios-bridge.js slices them.
     const from = tabsSrc.indexOf('  var _classReminderGranted = null;');
@@ -795,8 +801,8 @@ module.exports = async function (t) {
     b.events.emit('booking:complete');
     await b.clock.advance(2500);
     const askBody = b.calls.modals.length === 1 ? b.calls.modals[0].opts.body : '';
-    const iphoneAsk = 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.';
-    eq(askBody, 'Psync can send a notification 90 minutes before each class you book — and a countdown until it starts.',
+    const iphoneAsk = 'Psync can send a notification 90 minutes before each class you book. Tap it for the live countdown.';
+    eq(askBody, 'Psync can send a notification 90 minutes before each class you book, and a countdown until it starts.',
       'the first-booking ask on Android: the reminder AND the countdown — one yes allows both, so both are named');
     ok(!/Live Activity|Lock Screen|live countdown|tap it|iPhone|iOS/i.test(askBody) && askBody.indexOf('!') === -1 && askBody.split(' ').length <= iphoneAsk.split(' ').length,
       '…never a "Live Activity", a "Lock Screen" or a "live countdown" to tap for, and no longer than the iPhone\'s sentence');
@@ -825,7 +831,7 @@ module.exports = async function (t) {
     eq([ios.b.calls.channels, ios.b.calls.setBackgroundColor], [[], []], 'no channel is created and no status-bar colour is set (both methods exist on the iOS proxies: they are simply never called)');
     const all = ios.b.calls.scheduled.reduce((a, s) => a.concat(s.notifications), []);
     eq([all.length, all.filter((x) => 'channelId' in x || 'smallIcon' in x || 'iconColor' in x)], [9, []], 'none of the nine scheduled notifications has a channelId, a smallIcon or an iconColor');
-    ok(/ — open Psync for the live countdown\.$/.test(all.filter((x) => x.extra)[0].body), 'the class reminder still ends "open Psync for the live countdown."');
+    ok(/ · Open Psync for the live countdown$/.test(all.filter((x) => x.extra)[0].body), 'the class reminder still ends "Open Psync for the live countdown."');
     ok(names(ios.b).indexOf('PsycleDeepLink.addListener') !== -1 && names(ios.b).indexOf('WidgetCenter.reloadAllTimelines') !== -1 &&
       names(ios.b).indexOf('PsycleLiveActivity.refresh') !== -1 && names(ios.b).indexOf('AppGroupPreferences.set') !== -1, 'the widgets, the Live Activity and the widget link are served as before');
     ios.b.ctx.screen = { width: 390, height: 844 };
@@ -856,6 +862,7 @@ module.exports = async function (t) {
       const plugin = {
         checkAllPermissions: () => Promise.resolve({ readCalendar: 'granted', writeCalendar: 'granted', readWriteCalendar: 'granted' }),
         requestAllPermissions: () => Promise.resolve({ readCalendar: 'granted', writeCalendar: 'granted', readWriteCalendar: 'granted' }),
+        requestFullCalendarAccess: () => Promise.resolve({ result: 'granted' }),
         listCalendars: () => Promise.resolve({ result: [{ id: '3', title: 'Psync', color: '#1B2130' }, { id: '4', title: 'Personal', color: '#FF0000' }] }),
         listEventsInRange(q) {
           log.listed++;

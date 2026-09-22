@@ -294,13 +294,13 @@ module.exports = async function (t) {
     await tick();
     w.gets['/events/101'].resolve({ ok: false, status: 503, json: async () => ({}) });
     await pa;
-    ok(/servers are having trouble/.test(w.log.toasts[0].msg) && !RAW.test(w.log.toasts[0].msg), 'a 5xx reads as Psycle\'s trouble, not "HTTP 503" (got "' + w.log.toasts[0].msg + '")');
+    ok(/Psycle is having trouble/.test(w.log.toasts[0].msg) && !RAW.test(w.log.toasts[0].msg), 'a 5xx reads as Psycle\'s trouble, not "HTTP 503" (got "' + w.log.toasts[0].msg + '")');
     const w2 = raceWorld();
     const pa2 = w2.ctx.bookClass(101, btn(), 4);
     await tick();
     w2.gets['/events/101'].resolve({ ok: false, status: 403, json: async () => ({}) });
     await pa2;
-    eq(w2.log.toasts.map(x => x.msg), ["Couldn't open this class — try again"], 'a 403 is NOT "your session expired" (categorizeError says auth; a 403 here is a refusal inside a live session) → the plain fallback');
+    eq(w2.log.toasts.map(x => x.msg), ["Couldn't open this class. Try again."], 'a 403 is NOT "your session expired" (categorizeError says auth; a 403 here is a refusal inside a live session) → the plain fallback');
   }
 
   // ── Wording table: the REAL helpers over the REAL categorizeError ─────────
@@ -312,8 +312,8 @@ module.exports = async function (t) {
     t.vm.runInContext(grab(appSrc, 'function describeCancelError(') + '\n' + grab(appSrc, 'function _friendlyError('), ctx);
     return ctx;
   }
-  const OFFLINE = "You're offline — nothing was cancelled. Try again once you're back online.";
-  const UNSURE = "Couldn't reach Psycle — this may not have been cancelled. Check My Bookings and try again.";
+  const OFFLINE = "You're offline. Nothing was cancelled. Try again once you're back online.";
+  const UNSURE = "Couldn't reach Psycle. This may not have been cancelled. Check My Bookings and try again.";
 
   t.section('Cancel wording: never a retry nobody will make, never the raw error');
   {
@@ -334,21 +334,21 @@ module.exports = async function (t) {
       }
     }
     const res = status => ({ status });
-    eq(on.describeCancelError(res(401), {}), 'Session expired — sign in and try again.', '401 unchanged');
+    eq(on.describeCancelError(res(401), {}), 'Session expired. Sign in and try again.', '401 unchanged');
     eq(on.describeCancelError(res(403), { message: 'Too late to cancel' }), 'Too late to cancel', "Psycle's own reason still wins");
     eq(on.describeCancelError(res(403), {}), "Psycle wouldn't allow this cancellation (it may be inside the late-cancel window).", '403 with no reason unchanged (a policy refusal, not a dead session)');
-    eq(on.describeCancelError(res(500), {}), "Psycle couldn't cancel this just now — check My Bookings.", 'a bare status is a sentence now, not "Cancel failed (500)" — and carries no status code (that is the error log\'s)');
+    eq(on.describeCancelError(res(500), {}), "Psycle couldn't cancel this just now. Check My Bookings.", 'a bare status is a sentence now, not "Cancel failed (500)" — and carries no status code (that is the error log\'s)');
     // Psycle's 500 answers {"message":"Server Error"} — a framework's stock body,
     // and it was the whole toast. The POST side filtered it; the cancel side did not.
     for (const [status, message] of [[500, 'Server Error'], [500, 'server error.'], [500, ' Internal Server Error '], [503, 'Service Unavailable'],
       [502, 'Bad Gateway'], [504, 'Gateway Timeout'], [504, 'Gateway Time-out'], [500, 'Error']]) {
-      eq(on.describeCancelError(res(status), { message }), "Psycle couldn't cancel this just now — check My Bookings.", status + ' "' + message + '" → the stock body is not a reason: the hedged line, pointing at My Bookings');
+      eq(on.describeCancelError(res(status), { message }), "Psycle couldn't cancel this just now. Check My Bookings.", status + ' "' + message + '" → the stock body is not a reason: the hedged line, pointing at My Bookings');
     }
-    eq(on.describeCancelError(res(500), { message: 'SQLSTATE[23000]: Integrity constraint violation' }), "Psycle couldn't cancel this just now — check My Bookings.", "a 5xx's text is never the toast, stock or not — it says nothing of whether the DELETE landed");
+    eq(on.describeCancelError(res(500), { message: 'SQLSTATE[23000]: Integrity constraint violation' }), "Psycle couldn't cancel this just now. Check My Bookings.", "a 5xx's text is never the toast, stock or not — it says nothing of whether the DELETE landed");
     eq(on.describeCancelError(res(422), { message: 'This class has already started' }), 'This class has already started', "a refusal's own reason (422) still shows");
-    eq(on.describeCancelError(res(422), { message: 'Server Error' }), "Psycle couldn't cancel this just now — check My Bookings.", 'a stock body is no reason on a 4xx either');
+    eq(on.describeCancelError(res(422), { message: 'Server Error' }), "Psycle couldn't cancel this just now. Check My Bookings.", 'a stock body is no reason on a 4xx either');
     eq(on.describeCancelError(res(403), { message: 'Error.' }), "Psycle wouldn't allow this cancellation (it may be inside the late-cancel window).", '…and a 403 carrying one falls to the 403 wording');
-    eq(on.describeCancelError(res(422), { message: { code: 7 } }), "Psycle couldn't cancel this just now — check My Bookings.", 'a message that is not text is never toasted ("[object Object]")');
+    eq(on.describeCancelError(res(422), { message: { code: 7 } }), "Psycle couldn't cancel this just now. Check My Bookings.", 'a message that is not text is never toasted ("[object Object]")');
   }
 
   t.section('_friendlyError: follows categorizeError only where it can be trusted');
@@ -469,14 +469,14 @@ module.exports = async function (t) {
     // Offline, these two DO queue — and say so themselves; that stays.
     const off = cancelWorld({ bookings: seats57, error: new TypeError('Load failed'), online: false });
     await run(off, { textContent: 'Cancel all 2', disabled: false });
-    eq([off.log.queued, off.log.toasts.map(x => x.msg)], [[['A', 'B']], ["You're offline — cancel queued. We'll send it when you're back online."]], name + ', offline: still queued — the only path that may promise a retry, because reliability.js\'s queue really replays it');
+    eq([off.log.queued, off.log.toasts.map(x => x.msg)], [[['A', 'B']], ["You're offline. Cancel queued. We'll send it when you're back online."]], name + ', offline: still queued — the only path that may promise a retry, because reliability.js\'s queue really replays it');
   }
 
   // ── …and with a DELETE that is ANSWERED with a 5xx ───────────────────────
   // Psycle's 500 body is {"message":"Server Error"}: that was the whole toast.
   // A DELETE is re-sent up to three times, so a 5xx can follow one that landed.
   const answers = (status, body) => () => ({ ok: false, status, json: async () => body });
-  const SERVER_FAULT = "Psycle couldn't cancel this just now — check My Bookings.";
+  const SERVER_FAULT = "Psycle couldn't cancel this just now. Check My Bookings.";
   const cancelPaths = [
     ['the My Bookings seat ×', w => w.ctx.upcomingSeatCancel(77, 7, chip())],
     ['the picker\'s own seat', w => w.ctx.cancelBikeSlot(7, 77)],

@@ -1,7 +1,7 @@
 {
   "name": "psycle-class-finder-ios",
   "version": "1.0.0",
-  "description": "Psycle Class Finder — iOS app via Capacitor",
+  "description": "Psync — the iOS and Android apps, via Capacitor",
   "private": true,
   "scripts": {
     "postinstall": "node patch-plugins.js",

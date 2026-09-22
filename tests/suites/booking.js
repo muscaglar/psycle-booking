@@ -306,7 +306,7 @@ module.exports = async function (t) {
     const b = w.btn();
     await w.submit([7], b);
     eq(b.textContent, 'Unconfirmed — retry', '/bookings unreachable → unconfirmed (neither booked nor failed)');
-    ok(w.log.toasts.some(x => /Couldn't confirm/.test(x.msg) && /check My Bookings/.test(x.msg)), 'says to check before retrying');
+    ok(w.log.toasts.some(x => /Couldn't confirm/.test(x.msg) && /Check My Bookings/.test(x.msg)), 'says to check before retrying');
     ok(!w.ctx._myBookings[77], 'the optimistic entry is dropped');
     eq(w.log.complete, [], 'nothing is announced as booked');
     const b2 = w.btn();
@@ -339,7 +339,7 @@ module.exports = async function (t) {
     await w.submit([7], b);
     eq(b.textContent, 'Bike 5 ✓', 'lost the race for bike 7 → the button shows what IS held');
     eq(w.ctx._myBookings, seat5(), 'state is the server\'s (tick kept so the wrapper leaves it alone)');
-    ok(w.log.toasts.some(x => x.msg === 'Bike 7 was just taken — pick another'), 'says the bike was taken — not "already booked"');
+    ok(w.log.toasts.some(x => x.msg === 'Bike 7 was just taken. Pick another.'), 'says the bike was taken — not "already booked"');
     eq(w.log.complete, [], 'no booking:complete for a seat we did not get');
   }
   {
@@ -368,7 +368,7 @@ module.exports = async function (t) {
     const w = world({}, [{ status: 500, body: { message: stock } }], [{}]);
     const b = w.btn();
     await w.submit([7], b);
-    eq([w.log.toasts.map(x => x.msg), b.textContent], [["Psycle didn't confirm that booking and it isn't showing in My Bookings — try again"], 'Failed — retry'],
+    eq([w.log.toasts.map(x => x.msg), b.textContent], [["Psycle didn't confirm that booking and it isn't showing in My Bookings. Try again."], 'Failed — retry'],
       'a 500 saying only ' + JSON.stringify(stock) + ' → the member wording, as for an empty body');
   }
   {
@@ -423,14 +423,14 @@ module.exports = async function (t) {
     const b = w.btn('book-btn booked');
     await w.submit([7], b);
     eq(b.textContent, 'Bike 5 ✓', 'the seat already held still reads as booked');
-    eq(w.log.toasts.map(x => x.msg), ["Bike 7 isn't showing as booked — Psycle said: Not enough credits"], "the server's reason is shown, with its subject");
+    eq(w.log.toasts.map(x => x.msg), ["Bike 7 isn't showing as booked. Psycle said: Not enough credits"], "the server's reason is shown, with its subject");
     eq(w.ctx._myBookings, seat5(), 'state is what /bookings says');
     const w2 = world(seat5(), [{ status: 502, body: {} }], [seat5()]);
     await w2.submit([7], w2.btn());
-    ok(w2.log.toasts.some(x => /Bike 7 isn't showing as booked — check My Bookings/.test(x.msg)), 'no reason given → the hedge as before');
+    ok(w2.log.toasts.some(x => /Bike 7 isn't showing as booked\. Check My Bookings/.test(x.msg)), 'no reason given → the hedge as before');
     const w3 = world(seat5(), [{ status: 500, body: { message: 'Server Error' } }], [seat5()]);
     await w3.submit([7], w3.btn());
-    eq(w3.log.toasts.map(x => x.msg), ["Bike 7 isn't showing as booked — check My Bookings before trying again"], 'a stock "Server Error" is no reason either → the hedge, never "Psycle said: Server Error"');
+    eq(w3.log.toasts.map(x => x.msg), ["Bike 7 isn't showing as booked. Check My Bookings before trying again."], 'a stock "Server Error" is no reason either → the hedge, never "Psycle said: Server Error"');
   }
 
   t.section('Booking: a session that dies mid-verify is "unconfirmed", never a verified "no seat"');
@@ -546,7 +546,7 @@ module.exports = async function (t) {
     const c = w.chip();
     await w.ctx.upcomingSeatCancel(77, 7, c);
     eq(w.log.deletes, [], 're-read failed → NOTHING is sent (the old code sent DELETE /bookings/A — bike 5\'s record)');
-    ok(w.log.toasts.some(x => /nothing was cancelled/.test(x.msg)), 'says nothing was cancelled');
+    ok(w.log.toasts.some(x => /Nothing was cancelled/.test(x.msg)), 'says nothing was cancelled');
     ok(c.disabled === false, 'the × is live again');
     eq(w.ctx._myBookings, fresh57, 'state untouched');
   }
@@ -589,7 +589,7 @@ module.exports = async function (t) {
     await w.ctx.upcomingCancel(77, b);
     eq(ids(w), [], 're-read failed → nothing is sent');
     eq([b.textContent, b.disabled], ['Cancel all 2', false], 'the button is put back');
-    ok(w.log.toasts.some(x => /nothing was cancelled/.test(x.msg)) && !w.log.events.includes('booking:cancelled'), 'and nothing is announced as cancelled');
+    ok(w.log.toasts.some(x => /Nothing was cancelled/.test(x.msg)) && !w.log.events.includes('booking:cancelled'), 'and nothing is announced as cancelled');
     eq(w.ctx._myBookings, fresh57, 'state untouched');
 
     w = cancelWorld(idless57, [seats57]);
@@ -678,7 +678,7 @@ module.exports = async function (t) {
     let w = swapWorld(fresh57, []);
     await w.ctx.window.changeSpot(77);
     eq([w.log.pickers, !!w.ctx.window._changeSpotContext], [0, false], 'seats share a provisional id and /bookings can\'t be re-read → the picker never opens (the old code fell back to local state)');
-    ok(w.log.toasts.some(x => /nothing was changed/.test(x.msg)), 'and says why');
+    ok(w.log.toasts.some(x => /Nothing was changed/.test(x.msg)), 'and says why');
 
     w = swapWorld(fresh57, [seats57]);
     await w.ctx.window.changeSpot(77);
@@ -797,7 +797,7 @@ module.exports = async function (t) {
       ok(w.log.toasts.some(x => x.msg === 'Bike changed: 5 → 9' && x.type === 'success') && w.log.closed === 1, what + ' → announced as the swap it was');
       w = await run(answer, []);
       eq([w.log.calls, w.log.closed], [['DELETE /bookings/A', post9], 1], what + ' and /bookings unreadable → NO blind re-POST, the picker closes');
-      ok(w.log.toasts.some(x => /couldn't confirm which bike you hold now/.test(x.msg)) && w.log.timers.includes(3000), what + ' → "check My Bookings", refetch scheduled');
+      ok(w.log.toasts.some(x => /Couldn't confirm which bike you hold now/.test(x.msg)) && w.log.timers.includes(3000), what + ' → "check My Bookings", refetch scheduled');
       w = await run(answer, [{}, back5]);
       eq(w.log.calls, ['DELETE /bookings/A', post9, post5], what + ', verified NOT booked → the old seat is won back as before');
       eq([w.log.closed, w.ctx.window._changeSpotContext.bookingId], [0, 'C'], what + ' → retry stays possible, aimed at the new record');

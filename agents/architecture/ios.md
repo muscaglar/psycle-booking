@@ -28,6 +28,15 @@ device yet** (checklist in IMPROVEMENTS-2026-09.md):
   Java twin of this plugin emits the same `openURL` with the same string — [android.md](android.md) → "The home-screen widget".)
 - **Live Activity seat updates**: seats live in `ContentState.slotSummary` (dynamic), with `attributes.slotSummary`
   as the fallback so a card started by an older build still renders.
+- **Live Activity retirement (2026-09-22)**: the card goes about five minutes after the class's scheduled start.
+  `PsycleLiveActivityRetirement` (PsycleLiveActivityAttributes.swift — the one Live Activity source BOTH targets
+  compile; its pure `verdict(start:now:)` / `nextCheck(starts:now:)` run on a Mac in ios-app/native-checks) is applied
+  by three callers, none guaranteed to the minute: the `la-end` BGAppRefreshTask (`retireStartedAndWait`), the widget
+  extension's `getTimeline` (it asks to be reloaded just after start + 5 min, and retires BEFORE it completes), and
+  `refreshFromSnapshot` on a foreground. Inside the five minutes a caller ENDS the activity with
+  `dismissalPolicy: .after(start + 5 min)`, so the system removes it on time with nothing of ours running; later, at
+  once. Only `refreshFromSnapshot` passes `endUnstarted: true` (nothing should be showing): the other two must never
+  take down a countdown that is still due. Seen compiled, never seen on a phone.
 - **Crisp Colour widgets (2026-09-19)**: every family, the Live Activity (Lock Screen card + compact / minimal /
   expanded Dynamic Island) and the Siri answer wear the app's look — the TIME leads in a heavy condensed system face in
   **24-hour digits**, the class type's pictogram sits in a rounded tile, then class name, "Instructor · Studio", the

@@ -177,8 +177,8 @@ function injectThemeToggle() {
   const btn = document.createElement('button');
   btn.id = 'themeToggleBtn';
   btn.className = 'theme-toggle';
-  btn.setAttribute('aria-label', 'Toggle dark/light mode');
-  btn.setAttribute('title', 'Toggle dark/light mode');
+  btn.setAttribute('aria-label', 'Switch theme');
+  btn.setAttribute('title', 'Switch theme');
   // Looked up at tap time, not bound now: reliability.js (loaded later) wraps
   // window.toggleTheme to log the flip, and a handler holding THIS function
   // never went through that wrapper — no tap on the button was ever logged.
@@ -206,10 +206,12 @@ function updateThemeIcon() {
 
   if (isLight) {
     btn.innerHTML = sunSvg;
-    btn.title = 'Theme: light — click for dark';
+    btn.title = 'Switch to dark theme';
+    btn.setAttribute('aria-label', 'Switch to dark theme');
   } else {
     btn.innerHTML = moonSvg;
-    btn.title = 'Theme: dark — click for light';
+    btn.title = 'Switch to light theme';
+    btn.setAttribute('aria-label', 'Switch to light theme');
   }
 }
 

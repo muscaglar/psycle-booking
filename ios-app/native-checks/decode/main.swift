@@ -298,5 +298,23 @@ do {
           "stroke: 2 at 24, 2.2 at 18, 2.5 at 13 (the web mark's steps)")
 }
 
+section("Live Activity: the card goes five minutes after the class's scheduled start")
+do {
+    typealias R = PsycleLiveActivityRetirement
+    let start = Date(timeIntervalSince1970: 1_790_000_000)
+    let goes = start.addingTimeInterval(5 * 60)
+    check(R.graceAfterStart == 300, "the grace is 300 seconds")
+    check(R.verdict(start: start, now: start.addingTimeInterval(-1)) == .keep, "one second before the start: keep (a countdown still due is never touched)")
+    check(R.verdict(start: start, now: start) == .dismissAt(goes), "at the start: hand the removal to the system for start + 5 min")
+    check(R.verdict(start: start, now: start.addingTimeInterval(299)) == .dismissAt(goes), "4 min 59 s in: still the same dismissal date, never a later one")
+    check(R.verdict(start: start, now: goes) == .removeNow, "exactly five minutes in: remove now")
+    check(R.verdict(start: start, now: start.addingTimeInterval(3 * 3600)) == .removeNow, "hours later: remove now")
+    let later = start.addingTimeInterval(3600)
+    check(R.nextCheck(starts: [later, start], now: start.addingTimeInterval(-600)) == goes.addingTimeInterval(5), "next check: the EARLIEST start + 5 min, five seconds late, whatever the order")
+    check(R.nextCheck(starts: [start, later], now: start.addingTimeInterval(60)) == goes.addingTimeInterval(5), "a class that began a minute ago still has its check ahead")
+    check(R.nextCheck(starts: [start, later], now: goes.addingTimeInterval(6)) == later.addingTimeInterval(305), "once that has passed, the next class's")
+    check(R.nextCheck(starts: [start], now: goes.addingTimeInterval(6)) == nil && R.nextCheck(starts: [], now: start) == nil, "nothing ahead: nil")
+}
+
 print(failures == 0 ? "\nnative-checks/decode: all checks passed" : "\nnative-checks/decode: \(failures) FAILED")
 exit(Int32(min(failures, 100)))

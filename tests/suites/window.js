@@ -310,7 +310,7 @@ module.exports = async function (t) {
     ok = await w.ctx.revalidateWindow({ silent: true });
     t.eq([ok, w.searches, w.toasts.length], [false, [{ force: true }], 0], 'one studio 503s behind a provisional window: a forced search() takes over, quietly');
     t.eq(w.sets.length + w.persists.length, 0, '…and the refresh itself still commits nothing');
-    t.eq(w.globals.window._windowLoadError, "Psycle's servers are having trouble — try again shortly.", 'the classified reason is kept for the empty state behind it');
+    t.eq(w.globals.window._windowLoadError, "Psycle is having trouble right now. Try again shortly.", 'the classified reason is kept for the empty state behind it');
     await w.ctx.revalidateWindow(); // a manual Refresh; the studio is still down
     t.eq([w.searches.length, w.toasts.map((x) => x.type)], [1, ['error']], 'once per window: the next failure is reported, not handed over again (no spinner/error loop during an outage)');
     w = provisional({ failStudio: 3 });
@@ -598,9 +598,9 @@ module.exports = async function (t) {
     const unchecked = emptyCtx({ mode: null, start: '2026-09-24', partial: true, heldEnd: '2026-09-23' });
     t.eq([unchecked.title, unchecked.actions], ["Couldn't check these dates", ['retry']], 'a day the cache never held: "Couldn\'t check", with a retry — never "There are no classes"');
     t.eq(emptyCtx({ mode: 'week', end: '2026-09-24', partial: true, heldEnd: '2026-09-23', locations: ['3'] }).actions, ['retry'], '…filters or not: "nothing matches" would be a guess as well');
-    t.ok(/check your connection/.test(unchecked.sub), 'a fetch that never ran (offline) keeps the connection copy');
-    t.eq(emptyCtx({ mode: null, start: '2026-09-24', partial: true, heldEnd: '2026-09-23', loadError: "Psycle's servers are having trouble — try again shortly." }).sub,
-      "Psycle's servers are having trouble — try again shortly.", "a load that failed says the server's reason — a 503 is not the member's connection");
+    t.ok(/[Cc]heck your connection/.test(unchecked.sub), 'a fetch that never ran (offline) keeps the connection copy');
+    t.eq(emptyCtx({ mode: null, start: '2026-09-24', partial: true, heldEnd: '2026-09-23', loadError: "Psycle is having trouble right now. Try again shortly." }).sub,
+      "Psycle is having trouble right now. Try again shortly.", "a load that failed says the server's reason — a 503 is not the member's connection");
     t.eq(emptyCtx({ mode: 'today', partial: true, heldEnd: '2026-09-23' }).title, 'No more classes today', 'a day the cache DID hold keeps its copy (Today run dry)');
     t.eq(emptyCtx({ mode: null, start: '2026-09-24', partial: true, heldEnd: '2026-09-23', revalidating: true }), { loading: true }, 'while the fetch is still running it is "Checking…"');
     t.eq(emptyCtx({ mode: null, start: '2026-09-24', partial: true }).actions, ['week'], 'a search that lost a studio (partial, nothing adopted) makes no such claim');
@@ -730,7 +730,7 @@ module.exports = async function (t) {
     // and the 503 copy became "check your connection".
     t.ok(/onclick="search\(\{ force: true \}\)"/.test(html) && !/onclick="search\(\)"/.test(html), 'anything else: "Try again" is a FORCED search — it always sends the request again');
     t.ok(/retry\.onclick = \(\) => search\(\{ force: true \}\);/.test(appSrc.slice(seStart, seEnd)), "…and so is the one on the last-results banner");
-    t.eq(seen.window._windowLoadError, "Psycle's servers are having trouble — try again shortly.", 'the classified reason is kept for the "Couldn\'t check these dates" state');
+    t.eq(seen.window._windowLoadError, "Psycle is having trouble right now. Try again shortly.", 'the classified reason is kept for the "Couldn\'t check these dates" state');
     fail(new Error('HTTP 404'), 'tok', seen);
     t.eq(seen.window._windowLoadError, undefined, 'a failure nobody can name records nothing (the connection copy stands)');
     fail(new Error('HTTP 401'), '', seen);

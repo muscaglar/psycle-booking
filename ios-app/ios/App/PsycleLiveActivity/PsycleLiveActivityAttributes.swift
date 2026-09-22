@@ -78,3 +78,108 @@ public struct PsycleClassActivityAttributes: ActivityAttributes {
         self.slotSummary = slotSummary
     }
 }
+
+// MARK: - Retiring a card once its class has started
+
+/// When a countdown card leaves the Lock Screen. The owner's rule: it goes by
+/// itself about five minutes after the class's scheduled start.
+///
+/// iOS gives an app no way to say that up front: a Live Activity can only be
+/// ended by code that is running, or by a push from a server (there is none).
+/// So the rule is applied by WHOEVER next gets to run once the class has
+/// started — the app (foreground, or its background refresh task) or the
+/// widget extension (its timeline reload) — and what it does depends on when:
+///  - before the start: nothing (`keep`);
+///  - from the start until the grace is over: END the activity with
+///    `dismissalPolicy: .after(start + grace)`, which hands the removal to the
+///    SYSTEM — it takes the card down at that time with no process of ours
+///    running (`dismissAt`);
+///  - after that: remove it now (`removeNow`).
+/// Lives in this file because it is the one Live Activity source that BOTH
+/// targets compile. The verdict is pure so ios-app/native-checks can run it.
+public enum PsycleLiveActivityRetirement {
+
+    /// How long the card outlives the class's scheduled start.
+    public static let graceAfterStart: TimeInterval = 5 * 60
+
+    public enum Verdict: Equatable {
+        case keep
+        case dismissAt(Date)
+        case removeNow
+    }
+
+    public static func verdict(start: Date, now: Date) -> Verdict {
+        let goes = start.addingTimeInterval(graceAfterStart)
+        if now >= goes { return .removeNow }
+        if now >= start { return .dismissAt(goes) }
+        return .keep
+    }
+
+    /// When a process that can retire cards should next ask to run: the
+    /// earliest "start + grace" still ahead among `starts`, a few seconds late
+    /// so the verdict is `removeNow` by then. nil when there is none.
+    public static func nextCheck(starts: [Date], now: Date) -> Date? {
+        starts
+            .map { $0.addingTimeInterval(graceAfterStart + 5) }
+            .filter { $0 > now }
+            .min()
+    }
+}
+
+#if os(iOS)
+@available(iOS 16.1, *)
+extension PsycleLiveActivityRetirement {
+
+    /// Apply the verdict to every card that is up, and wait for the system to
+    /// take each end (a background task or a timeline reload that returns
+    /// first is suspended mid-flight and the card stays). Returns how many
+    /// cards it acted on.
+    ///
+    /// `endUnstarted`: true only where the caller has just established that
+    /// NOTHING should be showing (the app's own reconcile: the booking went,
+    /// or the class moved out of the lead window) — then a card whose class
+    /// has not started goes at once too. The background task and the widget
+    /// pass false: they must never take down a countdown that is still due.
+    @discardableResult
+    public static func retire(now: Date = Date(), endUnstarted: Bool) async -> Int {
+        var acted = 0
+        for activity in Activity<PsycleClassActivityAttributes>.activities {
+            let start: Date
+            if #available(iOS 16.2, *) {
+                start = activity.content.state.startAt
+            } else {
+                start = activity.contentState.startAt
+            }
+            let event = activity.attributes.eventId
+            switch verdict(start: start, now: now) {
+            case .keep:
+                guard endUnstarted else { continue }
+                NSLog("[PsycleLiveActivity] retire event=%@: nothing should be showing, removed", event)
+                await end(activity, policy: .immediate)
+            case .removeNow:
+                NSLog("[PsycleLiveActivity] retire event=%@: started over five minutes ago, removed", event)
+                await end(activity, policy: .immediate)
+            case .dismissAt(let date):
+                // Already handed to the system by an earlier run: ending it
+                // again could only move the date.
+                if activity.activityState == .ended || activity.activityState == .dismissed { continue }
+                NSLog("[PsycleLiveActivity] retire event=%@: started, the system removes it in %.0f s", event, date.timeIntervalSince(now))
+                await end(activity, policy: .after(date))
+            }
+            acted += 1
+        }
+        return acted
+    }
+
+    private static func end(_ activity: Activity<PsycleClassActivityAttributes>,
+                            policy: ActivityUIDismissalPolicy) async {
+        if #available(iOS 16.2, *) {
+            // The card keeps its last content while the system holds it (the
+            // "In class" look: staleDate is the start, which has passed).
+            await activity.end(activity.content, dismissalPolicy: policy)
+        } else {
+            await activity.end(using: activity.contentState, dismissalPolicy: policy)
+        }
+    }
+}
+#endif

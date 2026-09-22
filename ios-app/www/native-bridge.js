@@ -378,7 +378,9 @@
   // ANDROID — the same plugin (6.7.2), its Kotlin side read call by call
   // (android/src/main/java/dev/barooni/capacitor/calendar/). Every call this
   // file makes exists there under the same name, with the same parameter names:
-  //   checkAllPermissions / requestAllPermissions
+  //   checkAllPermissions / requestFullCalendarAccess (requestAllPermissions
+  //   only as the fallback for a plugin without it: on iPhone it ALSO asks for
+  //   Reminders, which nothing here uses — see _ensureCalendarPermission)
   //       handed straight to Capacitor's own checkPermissions /
   //       requestPermissions, which answer the plugin's aliases — readCalendar,
   //       writeCalendar, readWriteCalendar, the same three names as iOS — most
@@ -457,9 +459,20 @@
         _calPermissionGranted = true;
         return true;
       }
-      var req = await Calendar.requestAllPermissions();
-      var reqPerms = req.result || req;
-      _calPermissionGranted = reqPerms.readCalendar === 'granted' && reqPerms.writeCalendar === 'granted';
+      // Ask for the CALENDAR alone. The plugin's requestAllPermissions() also
+      // asks for full Reminders access on iPhone: the app has no use for it
+      // and no purpose string, so that second request failed, the whole call
+      // rejected, and the first attempt to switch sync on read as "denied"
+      // although Calendar had just been granted. The answer is then READ BACK
+      // rather than taken from the request, whose shape differs by platform.
+      if (typeof Calendar.requestFullCalendarAccess === 'function') {
+        await Calendar.requestFullCalendarAccess();
+      } else {
+        await Calendar.requestAllPermissions();
+      }
+      var after = await Calendar.checkAllPermissions();
+      var afterPerms = after.result || after;
+      _calPermissionGranted = afterPerms.readCalendar === 'granted' && afterPerms.writeCalendar === 'granted';
       return _calPermissionGranted;
     } catch (e) {
       console.warn('[native-cal] permission error:', e);
@@ -1439,7 +1452,7 @@
           LocalNotifications.schedule({
             notifications: [_forAndroid({
               id: Math.floor(Math.random() * 100000) + 1,
-              title: notification.notification.title || 'Psycle reminder',
+              title: notification.notification.title || 'Class reminder',
               body: notification.notification.body || '',
               schedule: { at: new Date(Date.now() + 60 * 60 * 1000) },
               actionTypeId: 'PSYCLE_CLASS',
@@ -1949,13 +1962,17 @@
   var CLASS_REMINDER_PREF = 'psycle_class_reminders'; // 'off' disables; default ON
   var CLASS_REMINDER_MAP = 'psycle_class_reminder_map'; // {eventId: {id, startAt}}
 
-  // How the reminder's body ends. "The live countdown" is the iPhone's Live
-  // Activity, which only a foreground app may start: the tap is what starts it,
-  // so the body asks for the tap. The Android app's countdown is a notification
-  // of its own that arrives by itself, beside this one — there is nothing to
-  // ask for, so there the body is the instructor and the studio and no more.
-  function _classReminderTail() {
-    return IS_ANDROID ? '' : ' — open Psync for the live countdown.';
+  // The reminder's body: the instructor, the place and — on the iPhone — what
+  // a tap is for. "The live countdown" is the iPhone's Live Activity, which only
+  // a foreground app may start: the tap is what starts it, so the body asks for
+  // the tap. The Android app's countdown is a notification of its own that
+  // arrives by itself, beside this one — there is nothing to ask for. Built as
+  // ONE list, so a class with no instructor and no place never begins with a
+  // separator.
+  function _classReminderBody(c) {
+    var parts = [c.instrName, c.locName || c.studioName];
+    if (!IS_ANDROID) parts.push('Open Psync for the live countdown');
+    return parts.filter(Boolean).join(' · ');
   }
 
   function _classRemindersEnabled() {
@@ -2074,8 +2091,7 @@
         toSchedule.push(_forAndroid({
           id: id,
           title: (c.typeName || 'Class') + ' starts in 90 minutes',
-          body: [c.instrName, c.locName || c.studioName].filter(Boolean).join(' · ') +
-            _classReminderTail(),
+          body: _classReminderBody(c),
           schedule: { at: new Date(fireAt), allowWhileIdle: true },
           sound: 'default',
           extra: { eventId: evtId },
@@ -2191,11 +2207,11 @@
 
       var displaced = false;
       var yes = await window.confirmModal({
-        title: 'Remind you 90 min before class?',
+        title: 'Remind you 90 minutes before class?',
         // (Android has no Live Activity to tap for: its countdown is a second,
         // silent notification, and one yes here allows both.)
-        body: IS_ANDROID ? 'Psync can send a notification 90 minutes before each class you book — and a countdown until it starts.'
-          : 'Psync can send a notification 90 minutes before each class you book — tap it for the live countdown.',
+        body: IS_ANDROID ? 'Psync can send a notification 90 minutes before each class you book, and a countdown until it starts.'
+          : 'Psync can send a notification 90 minutes before each class you book. Tap it for the live countdown.',
         confirmText: 'Remind me',
         cancelText: 'Not now',
         onReplaced: function () { displaced = true; },
@@ -2206,7 +2222,7 @@
       if (yes) {
         var armed = await window._nativeClassReminders.enable(); // the iOS prompt
         if (armed && typeof window.toast === 'function') {
-          window.toast('Class reminders on — 90 minutes before each class', 'success');
+          window.toast('Class reminders on', 'success');
         }
       }
       // Keep the Settings switch honest if the panel happens to be open.
@@ -2290,7 +2306,7 @@
       if (yes) {
         var armed = await window._nativeReminder.enable(); // the iOS prompt, when it is still owed
         if (typeof window.toast === 'function') {
-          window.toast(armed ? 'Reminder set — Mondays at 12:00' : 'Enable notifications for Psync in ' + (IS_ANDROID ? 'Android' : 'iOS') + ' Settings first', armed ? 'success' : 'error');
+          window.toast(armed ? 'Monday reminder on' : 'Enable notifications for Psync in ' + (IS_ANDROID ? 'Android' : 'iOS') + ' Settings first', armed ? 'success' : 'error');
         }
       }
       if (typeof window.pushAction === 'function') {

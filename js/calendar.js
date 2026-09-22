@@ -51,7 +51,7 @@ function syncCalendarData() {
     // Display name: "Psycle Oxford Circus — Ride Studio 1"
     let locationDisplay = locFullName;
     if (studioName && studioName !== locFullName) {
-      locationDisplay += ' — ' + studioName;
+      locationDisplay += ' · ' + studioName;
     }
     // Full address for calendar LOCATION field
     const fullAddress = apiAddress ? (locFullName + ', ' + apiAddress) : locationDisplay;
@@ -140,7 +140,7 @@ function generateICS(entriesArg) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Psycle Class Finder//EN',
+    'PRODID:-//Psync//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:Psycle Classes',

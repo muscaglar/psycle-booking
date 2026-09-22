@@ -76,7 +76,7 @@ module.exports = function (t) {
     'a class-type key the map does not know (stored filters) is still removable — and "constructor" finds nothing on a prototype');
 
   eq(chips({ timeBands: ['evening', 'early'], availableOnly: true }),
-    [{ kind: 'time', id: 'early', label: 'Before 9:00' }, { kind: 'time', id: 'evening', label: 'After 17:00' }, { kind: 'available', id: '', label: 'Available only' }],
+    [{ kind: 'time', id: 'early', label: 'Before 09:00' }, { kind: 'time', id: 'evening', label: 'After 17:00' }, { kind: 'available', id: '', label: 'Available only' }],
     'the Time row: one chip per band in the row\'s order, then "Available only" — the bands read in 24-hour time, like every time in the app');
   eq(labels({ availableOnly: 'yes' }), [], '"Available only" is on only when it is exactly true');
 
@@ -98,7 +98,7 @@ module.exports = function (t) {
   eq(labels({ instructorIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen'], 'no favourites / ranks passed (a single-instructor filter never asks): names');
 
   eq(chips({ instructorIds: ['2'], availableOnly: true, timeBands: ['day'], categories: ['RIDE'], locationIds: ['12'] }).map((c) => c.kind + ':' + c.label),
-    ['location:Oxford Circus', 'category:Ride', 'time:9:00–17:00', 'available:Available only', 'instructor:Blake Chen'],
+    ['location:Oxford Circus', 'category:Ride', 'time:09:00–17:00', 'available:Available only', 'instructor:Blake Chen'],
     'order: studios · class types · time bands · Available only · instructors');
   ok(chips({ locationIds: ['4', '30', '12'], categories: ['RIDE', 'STRENGTH'], timeBands: ['early'], instructorIds: ['1', '2'] })
     .every((c) => Object.keys(c).filter((k) => k !== 'name').join() === 'kind,id,label' && typeof c.label === 'string' && c.label),

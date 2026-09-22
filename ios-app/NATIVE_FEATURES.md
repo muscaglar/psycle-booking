@@ -50,10 +50,21 @@
 > Verified in the simulator: an ACTIVE request
 > presents on the Dynamic Island; the request-then-end(.after:) trick from
 > the previous design presents NOTHING and was removed. Cleanup at class
-> start is three-layered: staleDate flips the card to "In class" at T0
-> with no process running; a BGAppRefreshTask (com.psyclefinder.app.la-end,
-> registered in AppDelegate) ends it shortly after start; any app
-> foreground past start ends it immediately. The widget self-advances via
+> start: staleDate flips the card to "In class" at T0 with no process
+> running, and the card then goes about FIVE MINUTES after the scheduled
+> start (the owner's rule; `PsycleLiveActivityRetirement` in
+> PsycleLiveActivityAttributes.swift, the one Live Activity source both
+> targets compile). iOS cannot be told that up front — only running code, or
+> a push from a server this app does not have, can end an activity — so
+> whoever runs first once the class has started applies it: the
+> BGAppRefreshTask (com.psyclefinder.app.la-end, registered in AppDelegate),
+> the widget extension's timeline reload (it asks to be reloaded just after
+> start + 5 min), or the app coming to the foreground. A run inside the five
+> minutes ENDS the activity with `dismissalPolicy: .after(start + 5 min)`,
+> which hands the removal to the system; a later run removes it at once.
+> None of the three is guaranteed to the minute: with background refresh off
+> and no widget placed, the card stays "In class" until the app is opened
+> (iOS itself retires it after some hours). The widget self-advances via
 > a multi-entry timeline built from `widget_upcoming` (next 5 classes).
 >
 > **Verification honesty:** what has been OBSERVED working (simulator,
@@ -377,8 +388,8 @@ table). Just confirm:
 2. The App target has the **App Group** capability (added in step 1) so the
    intent can read the snapshot.
 3. Build & run once on a device/simulator. After first launch, ask Siri
-   *"What's my next class in Psycle Finder"* or open the **Shortcuts** app and
-   search "Next class". (Spoken app name = the display name "Psycle Finder".)
+   *"What's my next class in Psync"* or open the **Shortcuts** app and
+   search "Next class". (Spoken app name = the display name "Psync".)
 
 If you prefer isolation, create an **App Intents Extension** target instead, add
 `NextClassIntent.swift`, `AppShortcuts.swift`, and `PsycleSnapshot.swift` to it,
@@ -494,12 +505,12 @@ code — pick one path.
    bookings — `native-bridge.js` writes the snapshot (look for no errors; you
    can confirm via `getDiagnosticReport()` localStorage summary, though the
    widget keys live in Preferences, not localStorage).
-3. Long-press the Home Screen ▸ **+** ▸ search **"Next Psycle Class"** ▸ add the
+3. Long-press the Home Screen ▸ **+** ▸ search **"Psync"**, then choose **Next class** ▸ add the
    small or medium widget. It should show your next class + a live countdown,
    or "No upcoming class".
 4. Within ~2h of a class, the Live Activity appears on the Lock Screen /
    Dynamic Island once `refreshFromSnapshot()` is called (step 4.3).
-5. Siri: *"What's my next class in Psycle Finder."*
+5. Siri: *"What's my next class in Psync."*
 
 ### Troubleshooting
 
@@ -564,7 +575,9 @@ is not WidgetKit. On a signed build, with at least one class booked:
    Studio", seat chip, on the class tint. Dynamic Island: compact (tile left,
    countdown right), minimal (tile), expanded (tile, class, 18:30 + countdown,
    instructor · studio, seat chip). Add or cancel a seat while it is up: the
-   chip follows. At class start it reads "In class", then goes.
+   chip follows. At class start it reads "In class"; about five minutes later it
+   goes by itself, phone untouched (if it is still there after ten, note whether a
+   Psync widget is on the Home or Lock Screen and whether Background App Refresh is on).
 8. **Live Activity, light ↔ dark while it is up** — with the card on the Lock
    Screen, toggle Dark / Light from Control Centre twice. The text must stay
    readable after EACH flip (ground and ink change together). Pale text on a

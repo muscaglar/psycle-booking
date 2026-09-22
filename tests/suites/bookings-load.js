@@ -58,7 +58,7 @@ module.exports = async function (t) {
   await p;
   t.eq(w.state(), 'failed', 'Retry: a thrown request (timeout / offline) is a failed load too');
   t.eq(w.toasts.length, 1, 'Retry: a second failure says so');
-  t.eq([btn.disabled, btn.textContent], [false, 'Retry'], 'Retry: the button is usable again');
+  t.eq([btn.disabled, btn.textContent], [false, 'Try again'], 'Retry: the button is usable again');
   p = w.ctx.retryBookingsLoad(btn);
   w.calls[2].resolve(jsonRes(200, { data: [] }));
   await p;
@@ -183,7 +183,7 @@ module.exports = async function (t) {
     const btn = { disabled: false, textContent: 'Retry' };
     w.events503 = false; // now the detail requests time out instead
     await ctx.retryBookingsLoad(btn);
-    t.eq(w.toasts, ["Still can't load your bookings — check your connection"], 'Retry that still cannot draw a single class says so (the state is "loaded", so it used to be silent)');
+    t.eq(w.toasts, ["Still can't load your bookings. Check your connection."], 'Retry that still cannot draw a single class says so (the state is "loaded", so it used to be silent)');
     t.ok(/retryBookingsLoad\(this\)/.test(hero()), '…and the Retry hero stays up');
 
     // Signed out / not verified: the gate or Sign-in hero owns the tab.

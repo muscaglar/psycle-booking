@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="cloud">
+<html lang="en-GB" data-theme="cloud">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
@@ -230,7 +230,7 @@ catch (e) { document.documentElement.style.display = 'none'; }
     <div class="modal-header">
       <span class="ct-tile is-lg" id="modalTile" aria-hidden="true"></span>
       <div>
-        <div class="modal-title" id="modalTitle">Select your bike</div>
+        <div class="modal-title" id="modalTitle">Choose your spot</div>
         <div class="modal-subtitle" id="modalSubtitle"></div>
       </div>
       <button class="modal-close" onclick="closeBikePicker()" aria-label="Close">×</button>
@@ -243,9 +243,9 @@ catch (e) { document.documentElement.style.display = 'none'; }
       <span class="seat-key-usual"><i class="seat-key is-usual"></i> Your usual</span>
     </div>
     <div class="bike-map-wrap">
-      <svg id="bikeSvg" width="600" height="300" role="group" aria-label="Studio layout"></svg>
+      <svg id="bikeSvg" width="600" height="300" role="group" aria-label="Studio map"></svg>
     </div>
-    <div class="modal-hint" id="modalHint" aria-live="polite">Click a bike to select it</div>
+    <div class="modal-hint" id="modalHint" aria-live="polite">Choose a spot</div>
     <div class="modal-actions">
       <button class="btn btn-ghost pill-btn pill-quiet" onclick="closeBikePicker()">Cancel</button>
       <button class="btn pill-btn pill-primary is-lg" id="confirmBookBtn" disabled onclick="confirmBikeBooking()">Book</button>

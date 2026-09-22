@@ -264,7 +264,7 @@
     console.warn('[security] Token NOT saved — localStorage is full. Signed in for this session only.');
     _logSecurityError('Token not saved — storage full; signed in for this session only');
     try {
-      if (typeof toast === 'function') toast("You're signed in — but this device's storage is full, so you'll be asked again next time", 'info');
+      if (typeof toast === 'function') toast("You're signed in, but this device's storage is full, so you'll be asked again next time.", 'info');
     } catch (e) {}
   }
 
@@ -452,7 +452,7 @@
       if (typeof PsycleState !== 'undefined') PsycleState._tokenExpiringSoon = true;
       if (typeof PsycleEvents !== 'undefined') PsycleEvents.emit('token:expiring-soon');
     } catch (e) {}
-    if (typeof toast === 'function') toast('Session expiring soon — sign in again to keep booking', 'info');
+    if (typeof toast === 'function') toast('Session expiring soon. Sign in again to keep booking.', 'info');
   }
 
   // Cancel BOTH expiry timers (warning + final). Called on sign-out and on

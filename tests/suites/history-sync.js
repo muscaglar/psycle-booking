@@ -207,7 +207,7 @@ module.exports = async function (t) {
     const w = world({ history: [entry(100)], previous: past(2) });
     await w.ctx._explore_syncHistory();
     eq([w.log.toasts.map((x) => x[1]), w.log.insights, w.log.dirty], [['success'], 1, 1], 'no arguments (every existing caller) → the result toast and the repaint, as always');
-    eq([w.log.paints[0], w.log.paints[w.log.paints.length - 1], w.btn.textContent], ['Syncing...', 'idle', 'Re-sync'],
+    eq([w.log.paints[0], w.log.paints[w.log.paints.length - 1], w.btn.textContent], ['Syncing…', 'idle', 'Re-sync'],
       '…and the banner is drawn busy, then idle again — from state, never by writing to a captured button');
     const quiet = world({ history: [entry(100), entry(101)], previous: past(2) });
     await quiet.ctx._explore_syncHistory();

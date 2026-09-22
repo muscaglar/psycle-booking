@@ -71,8 +71,31 @@ struct PsycleProvider: TimelineProvider {
             PsycleEntry(date: step.date, nextClass: step.index.map { upcoming[$0].0 }, weekCount: week)
         }
 
-        // Periodic refresh keeps the data honest even without app nudges.
-        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(30 * 60))))
+        // Periodic refresh keeps the data honest even without app nudges —
+        // and a reload is also this extension's chance to retire the Live
+        // Activity card of a class that has started (the owner's rule: it goes
+        // about five minutes after the start). So ask to be reloaded just
+        // after the next "start + 5 min" when that comes sooner. The started
+        // classes are read from the unfiltered list: the one that began a
+        // minute ago is exactly the one whose card is still up.
+        let allStarts = PsycleSnapshotStore.upcoming().compactMap { $0.startDate }
+        var reload = now.addingTimeInterval(30 * 60)
+        if let check = PsycleLiveActivityRetirement.nextCheck(starts: allStarts, now: now), check < reload {
+            reload = check
+        }
+        let timeline = Timeline(entries: entries, policy: .after(reload))
+
+        // Retire BEFORE completing: the extension may be suspended as soon as
+        // the timeline is handed over, and an end that has not landed leaves
+        // the card up. Never touches a card that is still counting down.
+        if #available(iOS 16.1, *) {
+            Task {
+                await PsycleLiveActivityRetirement.retire(now: now, endUnstarted: false)
+                completion(timeline)
+            }
+        } else {
+            completion(timeline)
+        }
     }
 
     private func currentEntry() -> PsycleEntry {
@@ -203,7 +226,7 @@ struct PsycleWidget: Widget {
         StaticConfiguration(kind: kind, provider: PsycleProvider()) { entry in
             PsycleWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Next Psycle Class")
+        .configurationDisplayName("Next class")
         .description("Shows your next booked class and a countdown.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryInline])
     }
@@ -228,7 +251,7 @@ extension PsycleNextClass {
     static let preview = PsycleNextClass(
         eventId: "0",
         startAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600)),
-        instrName: "Sample Instructor",
+        instrName: "Maya",
         typeName: "Ride",
         studioName: "Studio 1",
         locName: "Shoreditch",

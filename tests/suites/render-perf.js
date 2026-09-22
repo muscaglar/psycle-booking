@@ -41,8 +41,8 @@ module.exports = function (t) {
     const at = (msBefore) => new Date(START).getTime() - msBefore;
     eq(w._countdownChipText(START, at(61 * 60000)), 'In 1h 1m', '61 minutes out');
     eq(w._countdownChipText(START, at(60 * 60000)), 'In 1h', '60 minutes out: "In 1h", never "In 1h 0m"');
-    eq(w._countdownChipText(START, at(59 * 1000)), 'In 1min', '59 seconds out: "In 1min"');
-    eq(w._countdownChipText(START, at(29 * 1000)), 'Starting now', 'the last half minute: "Starting now", never "In 0min"');
+    eq(w._countdownChipText(START, at(59 * 1000)), 'In 1 min', '59 seconds out: "In 1 min"');
+    eq(w._countdownChipText(START, at(29 * 1000)), 'Starting now', 'the last half minute: "Starting now", never "In 0 min"');
     eq(w._countdownChipText(START, at(-1000)), null, 'started: no text (that card is the flip re-render\'s job)');
     eq(w._countdownChipText('2026-09-17 18:00:00', at(61 * 60000)), 'In 1h 1m', 'the space form of start_at reads the same');
     eq(w._countdownChipText('not a date', at(0)), null, 'an unreadable data-start is left alone');
@@ -50,13 +50,13 @@ module.exports = function (t) {
 
     const chips = [
       { textContent: 'In 1h 10m', getAttribute: () => START },
-      { textContent: 'In 40min', getAttribute: () => START },
-      { textContent: 'In 5min', getAttribute: () => '2026-09-17T12:00:00' },
+      { textContent: 'In 40 min', getAttribute: () => START },
+      { textContent: 'In 5 min', getAttribute: () => '2026-09-17T12:00:00' },
     ];
     const writes = [];
     chips.forEach((c, i) => { let v = c.textContent; Object.defineProperty(c, 'textContent', { get: () => v, set: (x) => { v = x; writes.push(i); } }); });
     w._tickCountdownChips({ querySelectorAll: (sel) => (sel === '.mb-countdown[data-start]' ? chips : []) }, at(40 * 60000));
-    eq([chips[0].textContent, chips[1].textContent, chips[2].textContent], ['In 40min', 'In 40min', 'In 5min'], 'a stale chip is corrected in place; a started class keeps its last text until its card is rebuilt');
+    eq([chips[0].textContent, chips[1].textContent, chips[2].textContent], ['In 40 min', 'In 40 min', 'In 5 min'], 'a stale chip is corrected in place; a started class keeps its last text until its card is rebuilt');
     eq(writes, [0], 'a chip that already reads right is not written to (no DOM churn every minute)');
   }
 
@@ -172,7 +172,7 @@ module.exports = function (t) {
     eq(w._commitBookingsHtml(list, A, NOW + 2000), false, '…and once the flow has restored it, the list is still intact');
 
     list = fresh();
-    list.nodes.button[1].dataset.busy = '1'; list.nodes.button[1].textContent = 'Join Waitlist';
+    list.nodes.button[1].dataset.busy = '1'; list.nodes.button[1].textContent = 'Join waitlist';
     eq(w._commitBookingsHtml(list, A, NOW + 1000), false, 'data-busy counts as busy too (bookClass holds the button through its dialog)');
 
     list = fresh();

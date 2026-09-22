@@ -224,13 +224,13 @@
   // 4. categorizeError(responseOrError) → {type, userMessage}
   // ═══════════════════════════════════════════════════════════════════
   var USER_MESSAGES = {
-    'auth': 'Your Psycle session expired — please sign in again.',
-    'rate-limit': 'Psycle is rate-limiting us — wait a moment and retry.',
-    'server': "Psycle's servers are having trouble — try again shortly.",
-    'schema': 'Psycle changed something on their end — this may need an update.',
-    'network': "You appear to be offline — check your connection and retry.",
-    'timeout': 'The request took too long — try again.',
-    'unknown': 'Something went wrong — please try again.',
+    'auth': 'Your session has expired. Sign in again.',
+    'rate-limit': 'Too many requests to Psycle. Wait a moment, then try again.',
+    'server': 'Psycle is having trouble right now. Try again shortly.',
+    'schema': 'Psycle has changed something, so Psync may need an update.',
+    'network': "You're offline. Check your connection and try again.",
+    'timeout': 'Psycle took too long to answer. Try again.',
+    'unknown': 'Couldn\'t load that. Try again.',
   };
 
   /**

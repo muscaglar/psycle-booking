@@ -486,13 +486,13 @@ module.exports = async function (t) {
     t.eq(lw.ctx.firstErrorMessage({ errors: { email: ['The email field is required.', 'x'], password: ['y'] } }, 422), 'The email field is required.', 'Laravel-style errors → the first message, not raw JSON');
     t.eq(lw.ctx.firstErrorMessage({ message: 'These credentials do not match our records.' }, 401), 'These credentials do not match our records.', 'message wins');
     t.eq(lw.ctx.firstErrorMessage({ errors: [{ message: 'Nope' }] }, 400), 'Nope', 'an array of error objects → its first message');
-    t.eq(lw.ctx.firstErrorMessage({}, 418), 'Sign in failed (418)', 'nothing usable → the status');
+    t.eq(lw.ctx.firstErrorMessage({}, 418), "Couldn't sign in. Check your email and password, then try again.", 'nothing usable → a plain sentence, never a bare status code');
     t.eq(lw.ctx.firstErrorMessage({ message: { deep: { deeper: ['x'.repeat(500)] } } }, 400).length, 200, 'always a plain, capped string');
     t.ok(/wait|minute/i.test(lw.ctx.firstErrorMessage({ message: 'Too Many Attempts.' }, 429)) && /trouble/i.test(lw.ctx.firstErrorMessage({ message: 'Server Error' }, 503)), '429 and 5xx get friendly copy');
 
     // Three dropped connections must not lock anyone out.
     for (let i = 0; i < 4; i++) { lw.responses.push(() => Promise.reject(new TypeError('Failed to fetch'))); await lw.ctx.doLogin(); }
-    t.eq([lw.posts, lw.els.loginBtn.disabled, lw.els.loginBtn.textContent, /Network error/.test(lw.err())], [4, false, 'Sign in', true], 'four network failures in a row: still no lockout');
+    t.eq([lw.posts, lw.els.loginBtn.disabled, lw.els.loginBtn.textContent, /Couldn't reach Psycle/.test(lw.err())], [4, false, 'Sign in', true], 'four network failures in a row: still no lockout');
     for (let i = 0; i < 3; i++) { lw.responses.push(lw.res(503, { message: 'Server Error' })); await lw.ctx.doLogin(); }
     t.eq([lw.posts, lw.els.loginBtn.disabled], [7, false], 'three 5xx answers: no lockout either');
     // Three real refusals do.
