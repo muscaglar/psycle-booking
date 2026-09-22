@@ -172,6 +172,7 @@ module.exports = function (t) {
       getCountdownText: () => 'In 5h',
       _myBookings: o.bookings,
       _eventCache: o.events,
+      renderCalendarActions: o.cal, // js/calendar.js's row (loads after app.js): absent unless a test hands it in
     });
     t.vm.runInContext('var _activeSubscription = ' + JSON.stringify(o.sub || null) + ', _showPastBookings = ' + (o.showPast ? 'true' : 'false') +
       ", _bookingsLoadState = 'loaded', _waitlistsUnavailable = false;\n" +
@@ -187,7 +188,7 @@ module.exports = function (t) {
       const id = (/ data-id="(\d+)"/.exec(chunk) || [])[1];
       if (id) cards[id] = '<div class="class-card ' + chunk;
     });
-    return { ctx, html, cards, count: el('upcomingCount').textContent };
+    return { ctx, html, cards, count: el('upcomingCount').textContent, el };
   }
   const BOOKINGS = { 70: place(900), 77: seat([7], ['A']), 78: seat([21, 22], ['B', 'C']), 79: { bookingId: 'E', bookingIds: ['E', 'F'], slots: [], slotBookings: {}, waitlisted: false }, 80: place(901) };
   const EVENTS = {
@@ -669,5 +670,30 @@ module.exports = function (t) {
     const cal = t.readSource('js/calendar.js');
     const rowSrc = cal.slice(cal.indexOf('function renderCalendarActions()'), cal.indexOf('// Inject styles'));
     ok(/>Add to Calendar<\/button>/.test(rowSrc) && />Calendar sync settings<\/button>/.test(rowSrc) && !/[\u{1F300}-\u{1FAFF}]/u.test(rowSrc), '"Add to Calendar" / "Calendar sync settings", in words');
+
+    // The owner's screenshot (iPhone): "Calendar sync settings" alone on the left, "View full history" centred on a
+    // row of its own under the panel — two stray pills. They are ONE footer row now, in the app and on the web.
+    t.section('9d: the list ends in ONE footer row — the calendar action(s), then "View full history"');
+    const realRow = (native) => {
+      const ctx = t.vm.createContext({ window: { Capacitor: native ? { isNativePlatform: () => true } : undefined } });
+      t.vm.runInContext(rowSrc + '\nthis.row = renderCalendarActions();', ctx, { filename: 'js/calendar.js[renderCalendarActions]' });
+      return ctx.row;
+    };
+    const footer = (html) => (/<div class="mb-list-footer">([\s\S]*?)<\/div>\s*$/.exec(html.slice(html.lastIndexOf('<div class="mb-list-footer">'))) || [])[0] || '';
+    const names = (f) => (f.match(/<button[^>]*>([^<]*)<\/button>/g) || []).map((b) => />([^<]*)</.exec(b)[1]);
+    const app = world({ bookings: BOOKINGS, events: EVENTS, cal: () => realRow(true) });
+    eq((app.html.match(/class="mb-list-footer"/g) || []).length, 1, 'one footer');
+    ok(app.html.trim().endsWith(footer(app.html).trim()) && footer(app.html).length > 0, '…and it is the LAST thing in the list: under both billing periods, folded or not');
+    eq(names(footer(app.html)), ['Calendar sync settings', 'View full history'], 'in the app: the one calendar button and the way into history, side by side');
+    eq(names(footer(world({ bookings: BOOKINGS, events: EVENTS, cal: () => realRow(false) }).html)), ['Add to Calendar', 'Google Cal', 'Download', 'View full history'], 'on the web: the three calendar buttons, then history');
+    ok(/<button type="button" class="cal-btn mb-history-btn" onclick="event\.stopPropagation\(\);openHistoryModal\(\)">View full history<\/button>/.test(footer(app.html)),
+      'the history button wears the calendar buttons\' own pill (.cal-btn) and opens the same modal');
+    eq(names(footer(world({ bookings: { 70: place(900) }, events: EVENTS, cal: () => realRow(true) }).html)), ['View full history'], 'a waitlist place alone: nothing to export, so the row is history by itself');
+    eq(app.el('historyInBookingsBtn').style.display, 'none', 'with cards up, the standalone button under the panel is hidden: never two "View full history" on one screen');
+    const empty = world({ bookings: {}, events: EVENTS });
+    ok(!/mb-list-footer/.test(empty.html), 'an empty tab has no list and no footer (the standalone button under the hero is its own)');
+    const crisp = t.readSource('css/crisp.css');
+    ok(/#tab-bookings \.mb-list-footer \{[^}]*display: flex;[^}]*flex-wrap: wrap;[^}]*gap: var\(--space-3\);/.test(crisp) && /#tab-bookings \.mb-list-footer \.cal-actions \{ display: contents; \}/.test(crisp),
+      'the row is one wrapping flex line, and calendar.js\'s own wrapper is flattened into it (display: contents): one gap, one baseline, one left edge');
   }
 };

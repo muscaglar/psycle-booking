@@ -12,6 +12,12 @@ Newest on top. **Add an entry when you finish a stretch of work; keep the ten mo
 - **Left:** what is unfinished or now the owner's; anything the owner decided → decisions.md, in their words.
 ```
 
+### 2026-09-22 — My Bookings ends in one footer row
+- **State:** `main` at "My Bookings: the calendar action and View full history share one footer row"; pushed yes — the owner's screenshot from the iPhone; branch ahead of `origin/main` by 0.
+- **Changed:** the owner: "Weird UI button glitches there though, with 'View Full History' and 'Sync settings'". In the apps the calendar row is ONE button, left-aligned inside the list, and "View full history" was a centred button under the panel: two stray pills on two alignments. `renderMyBookings` now ends the list in `.mb-list-footer` (calendar action(s), then history; calendar.js's `.cal-actions` wrapper is flattened by css/crisp.css); the standalone `#historyInBookingsBtn` shows only on the empty tab.
+- **Verified:** `npm run ci` (8,968 → 8,977 checks); in a desktop browser at 390 px on the fake server, as the app (a fake `Capacitor`) with both periods folded: the two pills side by side on the bars' left edge, one visible "View full history", which opens the history sheet; as the web: three calendar buttons, history wrapping under them, no sideways scroll. **Not verified:** on the phone.
+- **Left:** nothing.
+
 ### 2026-09-22 — "next month" counts spots, not classes
 - **State:** `main` at "My Bookings: next month's count is in spots, the unit Psycle counts in"; pushed yes — a bug the owner reported from the iPhone; branch ahead of `origin/main` by 0.
 - **Changed:** the owner: "Its stuck on 15 for the next month… counting the bookings, there are 30/30". /profile counts only the CURRENT period, so `renderMyBookings` counts the next one itself — and counted held CLASSES, while Psycle counts a booking per SPOT: fifteen two-spot classes read "15 of 30". Now `_mbSpotsHeld` (pure:bookings-crisp; the rule of `_templateSeatsHeld`), summed over the classes from `period_end` on; one test (`inNextPeriod`) now serves the split and the buckets ([learnings.md](learnings.md) I5).

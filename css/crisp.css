@@ -2749,7 +2749,20 @@ html[data-ct-intensity="off"] .instructor-class-item { background: var(--sunken)
   border-radius: var(--radius-card);
   background: var(--surface);
 }
-/* (calendar.js injects its own .cal-btn styles after every sheet: the id wins.) */
+/* The list's footer: ONE wrapping row of quiet pills on the cards' left edge —
+   the calendar action(s), then "View full history". .cal-actions is calendar.js's
+   own wrapper: flattened (display: contents), so its buttons and the history
+   button share this row's gap and baseline whether it holds one button (the
+   app) or three (the web).
+   (calendar.js injects its own .cal-btn styles after every sheet: the id wins.) */
+#tab-bookings .mb-list-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+}
+#tab-bookings .mb-list-footer .cal-actions { display: contents; }
 #tab-bookings .cal-actions {
   gap: var(--space-3);
   margin: var(--space-5) 0 0;

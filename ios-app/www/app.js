@@ -9650,7 +9650,9 @@ function renderMyBookings() {
   }
 
   if (emptyEl) emptyEl.style.display = 'none';
-  if (histBtn) histBtn.style.display = '';
+  // With cards up, "View full history" is in the list's footer row (below):
+  // the standalone button under the panel is the EMPTY tab's.
+  if (histBtn) histBtn.style.display = 'none';
   panel.style.display = '';
   const items = _showPastBookings ? [...upcoming, ...past] : upcoming;
 
@@ -10007,10 +10009,15 @@ function renderMyBookings() {
     html += `</div></div>`; // close mb-period-body + mb-period-section
   }
 
-  // Calendar sync actions (only when real seats exist — places aren't exported)
-  if (upcomingSeats > 0 && typeof renderCalendarActions === 'function') {
-    html += renderCalendarActions();
-  }
+  // The list's footer: ONE row. The calendar actions (only when real seats
+  // exist — places aren't exported), then the way into history. They were two
+  // blocks — a flex row inside the list and a centred button under the panel —
+  // and in the app, where the calendar row is a single button, that read as
+  // two stray pills on two alignments. (.cal-actions is flattened into this
+  // row by css/crisp.css; calendar.js still owns its buttons.)
+  html += '<div class="mb-list-footer">' +
+    ((upcomingSeats > 0 && typeof renderCalendarActions === 'function') ? renderCalendarActions() : '') +
+    '<button type="button" class="cal-btn mb-history-btn" onclick="event.stopPropagation();openHistoryModal()">View full history</button></div>';
 
   // What the waitlist cards show as of THIS paint — the re-check ticker's
   // baseline. Stamped here because every painter ends up here: the fetch's own
