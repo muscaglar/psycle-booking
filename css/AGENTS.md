@@ -25,7 +25,7 @@ In link order. CSS has no per-file symbols index: [agents/index/css-sections.md]
 | theme.css | `@font-face`, `:root` scales, the theme blocks, light-base overrides, `--ct-<key>-*` defaults |
 | features.css | Class history, instructor profile, notify button |
 | tabs.css | Tab bar, Stats, Membership, theme picker |
-| settings.css | Settings panel, tiers, bike preferences, next-class pill, Diagnostics |
+| settings.css | Settings panel, the favourite-instructors list, bike preferences, next-class pill, Diagnostics |
 | explore.css | Instructor cards, instructor map |
 | redesign.css | Top bar, Discover, Filters bar, day strip + pager, the Membership tab's layout (`#tab-membership`, `.ms-*`), waitlist places: layout and type only |
 | discover-layout-fix.css | Discover's filter rows; stays the last OLDER sheet (2e-css-layout.js) |

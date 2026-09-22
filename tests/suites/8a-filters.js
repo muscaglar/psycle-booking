@@ -92,10 +92,9 @@ module.exports = function (t) {
   eq(labels({ instructorIds: ['1', '2'], favouriteIds: ['1', '2', '3'] }), ['Alex Morgan', 'Blake Chen'], 'a subset of the stars is not "Favourites" (one was removed by hand): names');
   eq(labels({ instructorIds: ['1', '2', '4'], favouriteIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen', 'Dev Patel'], 'stars plus someone else: names');
   eq(labels({ instructorIds: ['1'], favouriteIds: ['1'] }), ['Alex Morgan'], 'one instructor is always a name, starred or not');
-  eq(chips({ instructorIds: ['3', '4'], favouriteIds: ['1'], topTierIds: ['4', '3'] }), [{ kind: 'tier', id: '', label: 'S/A', name: 'instructors ranked S or A' }],
-    'S/A on: one chip, with a spoken name that says what "S/A" is');
-  eq(chips({ instructorIds: ['1', '2'], favouriteIds: ['1', '2'], topTierIds: ['1', '2'] }).map((c) => c.kind), ['favs'], 'both sets identical: the stars name it');
-  eq(labels({ instructorIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen'], 'no favourites / ranks passed (a single-instructor filter never asks): names');
+  eq(chips({ instructorIds: ['3', '4'], favouriteIds: ['1'], topTierIds: ['4', '3'] }).map((c) => c.kind), ['instructor', 'instructor'],
+    'Favourites is the ONLY set that becomes one chip: a grade set handed in by an older caller is ignored, and the two are named');
+  eq(labels({ instructorIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen'], 'no favourites passed (a single-instructor filter never asks): names');
 
   eq(chips({ instructorIds: ['2'], availableOnly: true, timeBands: ['day'], categories: ['RIDE'], locationIds: ['12'] }).map((c) => c.kind + ':' + c.label),
     ['location:Oxford Circus', 'category:Ride', 'time:09:00–17:00', 'available:Available only', 'instructor:Blake Chen'],
@@ -137,7 +136,6 @@ module.exports = function (t) {
       favouriteInstructors: new Set(), _availableOnly: false,
       locations: MAPS.locations, instructors: MAPS.instructors.map((i) => ({ id: i.id, full_name: i.name })),
       CATEGORY_MAP, STRENGTH_SUBS, REFORMER_SUBS, TIME_BANDS,
-      _topTierInstructorIds: () => { w.calls.push('tiers?'); return o.topTier || []; },
       _mirrorDatePillAria: () => w.calls.push('aria'),
       escapeHTML: esc,
       announce: (text) => w.announced.push(text),
@@ -186,12 +184,12 @@ module.exports = function (t) {
     eq((w.summary.innerHTML.match(/</g) || []).length, 8, 'a hostile id / name (stored filters, an imported file) adds no element: two buttons, two spans each way');
     ok(w.summary.innerHTML.indexOf('&lt;b&gt;Eve&lt;/b&gt;') !== -1 && w.summary.innerHTML.indexOf('<img') === -1, '…label, spoken name and data-id are all escaped');
 
-    w = world({ topTier: ['3', '4'] });
+    w = world();
     ['3', '4'].forEach((id) => w.ctx.selectedInstructors.add(id));
     w.ctx.updateFiltersSummary();
-    ok(w.calls.indexOf('tiers?') !== -1 && /aria-label="Remove filter: instructors ranked S or A"[^>]*><span class="filter-chip-label">S\/A</.test(w.summary.innerHTML),
-      'two or more instructors: the ranks are read, and the S/A set is one chip');
-    eq(w.bar.attrs['aria-label'], 'Filters, 1 active', '…counted once');
+    ok(!/S\/A|ranked/.test(w.summary.innerHTML) && (w.summary.innerHTML.match(/filter-chip-label/g) || []).length === 2,
+      'two instructors who are not the favourites: two named chips — there is no grade set to stand for them');
+    eq(w.bar.attrs['aria-label'], 'Filters, 2 active', '…counted as two');
 
     w = world({ noSummary: true });
     w.ctx.updateFiltersSummary();
@@ -248,7 +246,7 @@ module.exports = function (t) {
     eq([w.ctx._removeFilter('location', 4), w.calls], [true, ['toggleLocation:4']], 'a numeric id is matched as its string');
     eq([w.ctx._removeFilter('date', 'today'), w.ctx._removeFilter(undefined, undefined), w.calls.length], [false, false, 1], 'an unknown kind does nothing');
 
-    ['favs', 'tier'].forEach((kind) => {
+    ['favs'].forEach((kind) => {
       w = world();
       ['1', '2', '3'].forEach((id) => w.ctx.selectedInstructors.add(id));
       eq([w.ctx._removeFilter(kind, ''), w.calls, [...w.ctx.selectedInstructors]], [true, ['removeInstructor:3 (left: )'], []],
@@ -329,7 +327,7 @@ module.exports = function (t) {
       ok(at('id="' + id + '"') !== -1 && at('id="' + id + '"') < at('id="controlsBar"') && bodyHtml.indexOf('id="' + id + '"') === -1, '#' + id + ' is outside the collapsible body (always on screen)');
     });
     ok(!/<label>Date<\/label>/.test(panel) && /<div class="control-group controls-dates" role="group" aria-label="Date">/.test(panel), 'no visible "Date" label — the group carries the name');
-    ['timePills', 'locationChips', 'locationHint', 'categoryPills', 'strengthSubPills', 'reformerSubPills', 'favBtn', 'tierBtn', 'instrBox', 'instrChips', 'instrSearch', 'instrDropdown'].forEach((id) => {
+    ['timePills', 'locationChips', 'locationHint', 'categoryPills', 'strengthSubPills', 'reformerSubPills', 'favBtn', 'instrBox', 'instrChips', 'instrSearch', 'instrDropdown'].forEach((id) => {
       eq((bodyHtml.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1, '#' + id + ' is still in the panel');
     });
     eq((bodyHtml.match(/<label>[^<]+/g) || []).map((m) => m.slice('<label>'.length).trim()),

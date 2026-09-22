@@ -1325,9 +1325,15 @@ const ACCOUNT_STASH_KEY = 'psycle_account_stash';
 const ACCOUNT_STASH_MAX_OWNERS = 2;
 const ACCOUNT_STASH_MAX_VALUE = 262144; // chars per stashed value — these are small lists
 const ACCOUNT_STASH_KEYS = [
-  'psycle_instructor_tiers', 'psycle_fav_instructors', 'psycle_bike_prefs', 'psycle_bike_history',
+  'psycle_fav_instructors', 'psycle_bike_prefs', 'psycle_bike_history',
   'psycle_weekly_template', 'psycle_recent_searches', 'psycle_notify_watchlist',
 ];
+// Storage keys this app once wrote and no longer reads. Removed at every launch, so nothing of a retired
+// feature stays on the device (the iPhone and Android apps drop their mirrored copy too: native-bridge.js
+// RETIRED_KEYS). Instructor grades were retired in September 2026: favourites are the only mark on a person.
+const RETIRED_STORAGE_KEYS = ['psycle_instructor_tiers'];
+try { RETIRED_STORAGE_KEYS.forEach(k => localStorage.removeItem(k)); } catch {}
+
 const ACCOUNT_CLEAR_KEYS = [
   'psycle_class_history', 'psycle_history_synced', 'psycle_history_prompt_dismissed',
   'psycle_calendar_data', 'psycle_offline_queue',
@@ -2184,7 +2190,7 @@ function triggerAutoSearch() {
 // chip each — [{kind, id, label}] (+ `name` where the spoken name needs more
 // than the label). Plain arrays in, plain objects out.
 //   state: { locationIds, categories, strengthSubs, reformerSubs, timeBands,
-//            availableOnly, instructorIds, favouriteIds, topTierIds }
+//            availableOnly, instructorIds, favouriteIds }
 //   maps:  { locations: [{id, name}], instructors: [{id, name}],
 //            categories / strengthSubs / reformerSubs / timeBands: [{key, label}] }
 // Lists, not objects: studios, class types and time bands read in the panel's
@@ -2245,7 +2251,6 @@ function _filterSummaryChips(state, maps) {
       g.every(id => instrs.indexOf(id) !== -1 || !knownInstrs.some(i => String(i.id) === id));
   };
   if (isSet(s.favouriteIds)) chips.push({ kind: 'favs', id: '', label: 'Favourites' });
-  else if (isSet(s.topTierIds)) chips.push({ kind: 'tier', id: '', label: 'S/A', name: 'instructors ranked S or A' });
   else {
     instrs.forEach(id => {
       const i = knownInstrs.find(x => String(x.id) === id);
@@ -2279,7 +2284,6 @@ function updateFiltersSummary() {
     timeBands: [...selectedTimeBands], availableOnly: _availableOnly === true,
     instructorIds: [...selectedInstructors],
     favouriteIds: many ? [...favouriteInstructors] : [],
-    topTierIds: many ? _topTierInstructorIds() : [],
   }, {
     locations: locations, instructors: instructors.map(i => ({ id: i.id, name: i.full_name })),
     categories: CATEGORY_MAP, strengthSubs: STRENGTH_SUBS, reformerSubs: REFORMER_SUBS, timeBands: TIME_BANDS,
@@ -2349,7 +2353,7 @@ function _removeFilter(kind, id) {
   else if (kind === 'time') { if (!selectedTimeBands.has(sid)) return false; toggleTimeBand(sid); }
   else if (kind === 'available') { if (!_availableOnly) return false; toggleAvailableOnly(); }
   else if (kind === 'instructor') { if (!selectedInstructors.has(sid)) return false; removeInstructor(sid); }
-  else if (kind === 'favs' || kind === 'tier') {
+  else if (kind === 'favs') {
     // One chip for the whole set: all but the last leave quietly, and the last
     // goes through removeInstructor — ONE repaint, search and save, and its
     // "last chip" rule (a shortcut's set-aside filters come back) still runs.
@@ -7712,7 +7716,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   // The "·" between instructor and studio is drawn by CSS inside .cc-loc's own
   // no-wrap unit, so a line that wraps never ends — or starts — on a bare dot.
   const ct = classTypeKey(type?.name);
-  const who = instrLink(instr?.full_name, instr?.id) + (window.tierBadgeHTML ? window.tierBadgeHTML(instr?.id) : '');
+  const who = instrLink(instr?.full_name, instr?.id);
 
   return `<div class="class-card ct-card${myBooking ? (myBooking.waitlisted ? ' is-waitlisted' : ' is-booked') : ''}" data-ct="${ct}" data-id="${evt.id}" data-studio-id="${evt.studio_id}"
     onclick="openClassDetail(${evt.id})" style="cursor:pointer">
@@ -8747,18 +8751,6 @@ function _cleanStoredHistory(v) {
   return out;
 }
 
-// psycle_instructor_tiers: { id: 'S'…'F' } and nothing else.
-function _cleanStoredTiers(v) {
-  const out = {};
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
-  Object.keys(v).forEach(k => {
-    const id = _cleanStoredId(k);
-    if (id && id !== '__proto__' && id !== 'constructor' && id !== 'prototype' &&
-        typeof v[k] === 'string' && /^[SABCDF]$/.test(v[k])) out[id] = v[k];
-  });
-  return out;
-}
-
 // psycle_bike_prefs: { studioId: { avoid: [n…], prefer: [n…] } } — seat numbers.
 function _cleanStoredBikePrefs(v) {
   const out = {};
@@ -8841,44 +8833,6 @@ function applyFavouritesAsFilter() {
   triggerAutoSearch();
 }
 
-// ── pure:tier-filter:start ── (tests/suites/owner-tools.js evaluates this block against stub globals)
-// Ids of the LOADED instructors the member ranked S or A. The tier map is
-// parsed once per call (settings.js's getInstructorTier re-parses it for every
-// id) and only ever compared — it can come from an imported settings file.
-// Ids are taken from `instructors`, so a rank for someone who has left Psycle
-// never becomes a chip that matches nothing.
-function _topTierInstructorIds() {
-  let tiers = null;
-  try { tiers = JSON.parse(localStorage.getItem('psycle_instructor_tiers') || '{}'); } catch {}
-  // An array is an object too, and ["S","A"]["1"] would rank instructor 1.
-  if (!tiers || typeof tiers !== 'object' || Array.isArray(tiers)) return [];
-  return instructors
-    .filter(i => tiers[String(i.id)] === 'S' || tiers[String(i.id)] === 'A')
-    .map(i => String(i.id));
-}
-
-// "S/A" beside "★ Favs": the same one-tap filter, from the tier ranking
-// instead of the stars. interactions.js wraps it with saveFilters, like Favs.
-function applyTierFilter() {
-  const ids = _topTierInstructorIds();
-  // Nothing ranked S/A (any more): the button is stale — take it away rather
-  // than clear the member's current instructors for an empty result.
-  if (ids.length === 0) { _syncTierFilterBtn(ids); return; }
-  selectedInstructors.clear();
-  ids.forEach(id => selectedInstructors.add(id));
-  renderInstrChips();
-  refreshFacetCounts();
-  triggerAutoSearch();
-}
-
-// Shown only while at least one loaded instructor is ranked S or A — "any tier
-// exists" would offer a filter that selects nobody to a member with B–F only.
-function _syncTierFilterBtn(ids) {
-  const btn = document.getElementById('tierBtn');
-  if (btn) btn.style.display = (ids || _topTierInstructorIds()).length ? '' : 'none';
-}
-// ── pure:tier-filter:end ──
-
 function getFilteredInstructors() {
   const q = (document.getElementById('instrSearch')?.value || '').toLowerCase().trim();
   return q ? instructors.filter(i => i.full_name.toLowerCase().includes(q)) : instructors;
@@ -8897,9 +8851,6 @@ function renderInstrChips() {
       <button type="button" onmousedown="event.preventDefault();removeInstructor('${safeId}')" onclick="if(event.detail===0)removeInstructor('${safeId}')" aria-label="Remove ${escapeHTML(name)}" title="Remove">×</button>
     </span>`;
   }).join('');
-  // Every instructor-filter repaint passes through here (launch, chips,
-  // restore, clear), so this is where the S/A button learns about new ranks.
-  _syncTierFilterBtn();
 }
 
 function renderInstrDropdown() {
@@ -10009,7 +9960,7 @@ function renderMyBookings() {
       }
 
       const whereHtml = escapeHTML(locName) + (studioName ? ' · ' + escapeHTML(studioName) : '');
-      const instrHtml = instrLink(instrName, evt.instructor_id) + (window.tierBadgeHTML ? window.tierBadgeHTML(evt.instructor_id) : '');
+      const instrHtml = instrLink(instrName, evt.instructor_id);
       const cardCls = (isPlace ? ' is-dashed is-waitlisted' : ' is-booked') + (isNext ? ' glow-mine-card' : '') +
         ((deadline && deadline.insideWindow) ? ' is-late' : '');
       // More comes LAST in the markup: on a phone the stylesheet pins its button
@@ -11398,7 +11349,6 @@ window.openClassDetail = function (eventId) {
   const bio = meta.description || '';
   const bioExcerpt = bio.length > 200 ? bio.substring(0, 200) + '…' : bio;
   const keywords = (meta.keywords || '').split(/[,|]/).map(k => k.trim()).filter(Boolean);
-  const tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
 
   // Format date/time
   const dt = new Date(evt.start_at);
@@ -11589,7 +11539,7 @@ window.openClassDetail = function (eventId) {
         '<h2 class="cds-type">' + escapeHTML(typeName) + '</h2>' +
         ((instrName || whereText) ? '<div class="cds-who">' +
           (photo ? '<img class="cds-photo" src="' + escapeHTML(photo) + '" alt="' + escapeHTML(instrName) + '">' : '') +
-          (instrName ? '<span class="cds-instr-name">' + escapeHTML(instrName) + ' ' + tierBadge + '</span>' : '') +
+          (instrName ? '<span class="cds-instr-name">' + escapeHTML(instrName) + '</span>' : '') +
           (whereText ? '<span class="cds-where">' + (instrName ? '&middot; ' : '') + escapeHTML(whereText) + '</span>' : '') +
         '</div>' : '') +
       '</div>' +

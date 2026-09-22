@@ -634,7 +634,7 @@ module.exports = function (t) {
         selectedStrengthSubs: new Set(constList('STRENGTH_SUBS').map((s) => s.key)), selectedReformerSubs: new Set(constList('REFORMER_SUBS').map((s) => s.key)),
         favouriteInstructors: new Set(), _availableOnly: false, locations: [{ id: 4, name: 'Psycle Bank' }], instructors: [{ id: 1, full_name: 'Alex Morgan' }],
         CATEGORY_MAP: constList('CATEGORY_MAP'), STRENGTH_SUBS: constList('STRENGTH_SUBS'), REFORMER_SUBS: constList('REFORMER_SUBS'), TIME_BANDS: constList('TIME_BANDS'),
-        _topTierInstructorIds: () => [], _mirrorDatePillAria: () => {}, escapeHTML, announce: () => {}, PsycleState: { subscribe: () => {} },
+        _mirrorDatePillAria: () => {}, escapeHTML, announce: () => {}, PsycleState: { subscribe: () => {} },
       });
       t.vm.runInContext(repaint + '\n' + chrome, ctx, { filename: 'js/app.js[filter summary]' });
       return { ctx, clear, summary, doc, focused };

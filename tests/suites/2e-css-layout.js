@@ -255,30 +255,19 @@ module.exports = function (t) {
   // The six buttons are the Crisp rank tiles (css/crisp.css, 9e — the control's
   // LOOK is held by tests/suites/9f-one-card.js). They were settings.css's
   // 28×24px boxes in a ~131px column beside the photo, wrapping 4 + 2.
-  t.section('Instructor modal: the rank row is one line of fingertip-sized tiles on a 375px phone');
+  t.section('Instructor modal: the favourite star sits on its own line under the profile header');
   const features = t.readSource('css/features.css');
-  const settingsCss = t.readSource('css/settings.css');
   const crispCss = t.readSource('css/crisp.css');
   const featuresJs = t.readSource('js/features.js');
   const rankRow = ruleBody(features, '.instructor-rank') || '';
-  const rankBtns = ruleBody(features, '.instructor-rank .tier-btns') || '';
-  t.ok(/display:\s*flex/.test(rankRow) && !/flex-wrap/.test(rankRow) && /gap:\s*var\(--space-4\)/.test(rankRow), 'the star and the six tiles share ONE line');
-  t.ok(/flex:\s*1 1 0/.test(rankBtns) && /min-width:\s*0/.test(rankBtns), 'the tiles take what the star leaves and may shrink — the modal never pans sideways');
-  t.ok(/flex-shrink:\s*0/.test(ruleBody(settingsCss, '.tier-btns') || ''), "settings.css's own .tier-btns may not shrink: the modal rule outranks it by one class, whatever the file order");
+  t.ok(/display:\s*flex/.test(rankRow) && !/flex-wrap/.test(rankRow), 'the star\'s row is one line');
   // The row sits UNDER the profile header, the width of the modal — not in the column beside the photo.
   const headerEnd = featuresJs.indexOf("profileHtml += '</div></div>';");
   const rankAt = featuresJs.indexOf('profileHtml += `<div class="instructor-rank">');
   t.ok(headerEnd !== -1 && rankAt > headerEnd && rankAt < featuresJs.indexOf('    // Bio\n'), 'js/features.js prints .instructor-rank after the profile header closes, before the bio');
-  // 375 − the phone's overlay padding − the panel's padding (crisp §7), then: − star − gap + the star's
-  // optical pull-back, in six columns with five gaps. The hit area adds half a gap on either side.
-  const phoneOverlay = (/\.history-modal, \.instructor-modal \{ padding: var\((--space-\d+)\); \}/.exec(crispCss) || [])[1];
-  const phonePanel = (/\.history-modal \.modal, \.instructor-modal \.modal \{ padding: var\(--space-\d+\) var\((--space-\d+)\); \}/.exec(crispCss) || [])[1];
-  t.ok(!!phoneOverlay && !!phonePanel, 'the phone paddings of the modal were found (' + phoneOverlay + ', ' + phonePanel + ')');
-  const rowW = 375 - 2 * px(phoneOverlay) - 2 * px(phonePanel);
-  const favRule = ruleBody(crispCss, '\n.tier-fav') || '';
+  const favRule = ruleBody(crispCss, '\n.favs-star') || '';
   t.ok(/width:\s*var\(--tap-min\)/.test(favRule) && /margin-left:\s*calc\(var\(--space-4\) \* -1\)/.test(favRule), 'the star is a --tap-min box pulled back by the row gap (its glyph lines up with the text above)');
-  const tileW = (rowW + px('--space-4') - px('--tap-min') - px('--space-4') - 5 * px('--space-2')) / 6;
-  t.ok(tileW >= 40 && tileW + px('--space-2') >= px('--tap-min'), 'at 375px a tile is ' + tileW.toFixed(1) + 'px wide, and its hit area (' + (tileW + px('--space-2')).toFixed(1) + 'px) is at least --tap-min');
+  t.ok(!/tier-btn/.test(features + crispCss + featuresJs), 'and it is alone there: no grade buttons beside it');
 
   // ── The one colour exception ──────────────────────────────────────────────
   t.section('Light bases: "Cancel booking" label contrast');

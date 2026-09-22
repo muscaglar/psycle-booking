@@ -264,21 +264,14 @@
 .instructor-class-item[data-event-id]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .instructor-class-item .badge { flex-shrink: 0; }
 
-/* ★ + S–F: the Membership tab's own controls (.tier-fav / .tier-btn — their
-   look is the one rank control of css/crisp.css, 9e) — only their row is laid
-   out here. ONE line under the profile header, the width of the modal: the
-   star, then six equal tiles sharing the rest. (The row used to sit in the
-   column beside the photo — ~240px on a phone, where six fingertip-sized tiles
-   cannot fit.) The extra class outranks settings.css's ".tier-btns" (which may
-   not shrink), and Membership's own .tier-row is untouched. */
+/* ★ under the profile header: the Membership tab's own control (.favs-star — its look is
+   css/crisp.css, 9e). Only its row is laid out here. */
 .instructor-rank {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   margin-bottom: var(--space-5);
 }
-.instructor-rank .tier-btns { flex: 1 1 0; min-width: 0; }
-.instructor-tier-slot:empty { display: none; }
 
 .instructor-class-day {
   font-size: var(--text-xs);

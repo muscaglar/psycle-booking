@@ -389,15 +389,15 @@ module.exports = async function (t) {
       ok([gb['--text'], gb['--text-heading'], gb['--text-muted'], gb['--accent']].indexOf(gb['--fav']) !== -1, 'Handheld\'s star is one of its own four shades');
       // Everywhere a favourite star is drawn.
       const settingsCss = noComments(t.readSource('css/settings.css')), stylesCss = noComments(t.readSource('css/styles.css'));
-      ok(/\.tier-fav\.is-fav::before \{ color: var\(--fav, #[0-9a-f]{6}\); \}/.test(settingsCss), 'Membership rows + the instructor profile (.tier-fav.is-fav) read --fav');
+      ok(/\.favs-star\.is-fav::before \{ color: var\(--fav, #[0-9a-f]{6}\); \}/.test(settingsCss), 'Membership rows + the instructor profile (.favs-star.is-fav) read --fav');
       ok(/\.fav-star:hover, \.fav-star\.fav-on \{ color: var\(--fav, #[0-9a-f]{6}\); \}/.test(stylesCss), 'the instructor dropdown\'s star (.fav-star.fav-on) reads --fav');
       const starRules = [];
       CSS_FILES.forEach((f) => noComments(t.readSource('css/' + f)).replace(/([^{}]*)\{([^{}]*)\}/g, (m, sel, body) => {
-        if (/\.tier-fav\.is-fav|\.fav-star\.fav-on|\.fav-star:hover/.test(sel) && /(^|[;\s])color\s*:/.test(body)) starRules.push([f, sel.trim().replace(/\s+/g, ' '), (/(^|[;\s])color\s*:\s*([^;]+)/.exec(body) || [])[2].trim()]);
+        if (/\.favs-star\.is-fav|\.fav-star\.fav-on|\.fav-star:hover/.test(sel) && /(^|[;\s])color\s*:/.test(body)) starRules.push([f, sel.trim().replace(/\s+/g, ' '), (/(^|[;\s])color\s*:\s*([^;]+)/.exec(body) || [])[2].trim()]);
         return m;
       }));
       eq(starRules.filter((r) => r[2].indexOf('var(--fav') !== 0), [], 'no rule colours a lit star with anything but --fav (' + starRules.length + ' rules)');
-      ok(/class="tier-fav' \+ \(isFav \? ' is-fav' : ''\)/.test(settingsJs) && /class="tier-fav\$\{isFav \? ' is-fav' : ''\}"/.test(t.readSource('js/features.js')) && /class="fav-star\$\{fav \? ' fav-on' : ''\}"/.test(t.readSource('js/app.js')),
+      ok(/class="favs-star' \+ \(isFav \? ' is-fav' : ''\)/.test(settingsJs) && /class="favs-star\$\{isFav \? ' is-fav' : ''\}"/.test(t.readSource('js/features.js')) && /class="fav-star\$\{fav \? ' fav-on' : ''\}"/.test(t.readSource('js/app.js')),
         'the three places that print a star still print those classes');
     }
   }

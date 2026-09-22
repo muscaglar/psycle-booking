@@ -108,7 +108,12 @@ const digest = (lines) => crypto.createHash('sha256').update(lines.join('\n')).d
 // a class with no instructor and no place never begins with a separator). It
 // was proved body-only: with the old sentence put back the digest was the old
 // one, 97bfb4f7…800c5. Re-record it the same way or not at all.
-const IPHONE_LAUNCH_DIGEST = '7fde060e152fe34f70ff94df494bad170d31b210e31fd47fa860fd5d828737e9';
+// Re-recorded a second time the same day, for ONE added call and nothing else:
+// the bridge now removes a retired key's mirrored copy at launch
+// (Preferences.remove, RETIRED_KEYS in native-bridge.js — the instructor grades,
+// retired in favour of favourites alone). Proved the same way: with that one
+// line switched off the digest was the previous one, 7fde060e…737e9.
+const IPHONE_LAUNCH_DIGEST = '2896eb67fd09c3c39fdbe848f140f9a79247ca6a0ada323eb0ed7d789ea74928';
 
 module.exports = async function (t) {
   const { ok, eq } = t;

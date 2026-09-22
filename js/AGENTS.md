@@ -27,12 +27,12 @@ In LOAD order. Symbol index of `<file>`: `agents/index/symbols/<file>.md` — [s
 | facets.js | `PsycleFacets.run`: faceted counts |
 | app.js | the core (~14,000 lines): never read it whole |
 | reliability.js | REPLACES `apiFetch` (rule 2); wraps `submitBooking` twice (optimistic UI, offline queue) |
-| interactions.js | pull-to-refresh, swipes, `wrapGlobal` → `saveFilters` over 14 filter functions |
+| interactions.js | pull-to-refresh, swipes, `wrapGlobal` → `saveFilters` over 13 filter functions |
 | performance.js | wraps `apiFetch` again (24 h reference cache) |
 | calendar.js | `generateICS`, calendar links |
 | features.js | history, instructor profiles, notify bell; wraps `eventCard`, `submitBooking`, `fetchMyBookings`, the four cancels |
 | tabs.js | tabs, Stats, Membership, the usual-week card and sheet; wraps `renderMyBookings` |
-| settings.js | Settings, `tierBadgeHTML`, `importSettings`; wraps `showBikePicker` |
+| settings.js | Settings, the favourite-instructors list, `importSettings`; wraps `showBikePicker` |
 | explore.js | instructor suggestions, history sync |
 | api-client.js | `PsycleAPI`: typed getters, schemas |
 | diagnostic.js | `PsycleDiag`: API drift, safe mode |

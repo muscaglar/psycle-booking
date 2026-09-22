@@ -13,9 +13,8 @@ Window accessors mean you can read/write `instructors`, `_myBookings`, `_eventCa
 
 **Monkey-patching**: reliability.js wraps `apiFetch` for retries and logging; performance.js wraps `apiFetch` again
 for the 24h reference-data cache. features.js wraps `eventCard` for the notify bell (the only `eventCard` wrapper).
-Tier badges are NOT a wrap: settings.js defines `window.tierBadgeHTML(instructorId)`, which app.js's `eventCard` and
-`renderMyBookings` call directly next to the instructor name (the tile says what it is — `role="img"`
-`aria-label="Ranked S"`; a bare letter after a name told a screen reader nothing). settings.js's one monkey-patch is `showBikePicker`
+Nothing marks an instructor on a card: a star (favourites) is the only mark a member can put on a person, and it
+lives in Membership and the instructor profile (agents/decisions.md section 3). settings.js's one monkey-patch is `showBikePicker`
 (bike-preference markers). `submitBooking` is wrapped by theme.js (haptics), features.js (history), and
 reliability.js twice (optimistic UI, offline queue) — every wrapper must forward all four arguments.
 

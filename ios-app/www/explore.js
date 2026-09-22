@@ -4,14 +4,13 @@
  * Self-contained IIFE that provides the Explore tab content:
  *   - "New to you" instructor recommendations
  *   - "You might like" similarity-based suggestions
- *   - Instructor map (tier distribution, most booked, unranked)
+ *   - Instructor map (how many instructors, most booked)
  *   - Full booking history sync from the Psycle API
  *
  * Depends on: app.js (instructors, _eventCache, _myBookings, getCategory, instrLink),
- *             settings.js (tierBadgeHTML), state.js (PsycleState, PsycleEvents)
+ *             state.js (PsycleState, PsycleEvents)
  * Exposes on window:
  *   renderExplore, _explore_syncHistory, _explore_resetSync,
- *   _explore_openSettingsForInstructor
  */
 (function () {
   'use strict';
@@ -19,7 +18,6 @@
   var escapeHtml = function (s) { return (window.escapeHTML || function (x) { return x; })(s); };
 
   var HISTORY_KEY = 'psycle_class_history';
-  var TIER_KEY = 'psycle_instructor_tiers';
   var SYNC_KEY = 'psycle_history_synced';
   var _exploreDirty = true;
   var _syncing = false;
@@ -261,15 +259,13 @@
   function computeNewToYou(profiles) {
     var booked = getBookedInstructorIds(profiles);
     var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
-    var tiers = {};
-    try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
 
     var results = [];
     var ids = Object.keys(profiles);
     for (var i = 0; i < ids.length; i++) {
       var p = profiles[ids[i]];
-      // Exclude: previously booked, ranked, or favourited
-      if (booked.has(p.id) || favs.has(p.id) || tiers[p.id]) continue;
+      // Exclude: previously booked or favourited
+      if (booked.has(p.id) || favs.has(p.id)) continue;
       results.push(p);
     }
     // Sort: most bookable-this-week first (more actionable), then alphabetical
@@ -299,7 +295,7 @@
         setHtml(container, '<div class="explore-title">New to you</div>' +
           '<div class="explore-empty">You\'ve booked with every instructor.</div>');
       } else {
-        // Everyone left is already ranked or starred (every instructor has a
+        // Everyone left is already starred (every instructor has a
         // profile, so an empty list never means "nothing booked yet").
         setHtml(container, '<div class="explore-title">New to you</div>' +
           '<div class="explore-empty">No one new right now.</div>');
@@ -335,7 +331,7 @@
 
   /**
    * (a) TALENT/AFFINITY — how similar a candidate is to the reference set
-   * (favourites + highly-tiered + frequently-booked instructors) by the class
+   * (favourites + frequently-booked instructors) by the class
    * types and locations they share. Returns { score (0..1), typeMatches, locMatches }.
    */
   function scoreAffinity(p, refClassTypes, refLocations, maxTypeMatch, maxLocMatch) {
@@ -415,18 +411,10 @@
 
   function computeYouMightLike(profiles) {
     var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
-    var tiers = {};
-    try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
 
-    // Build reference set: favourites + S/A tier instructors + frequently booked
+    // Build reference set: favourites + frequently booked
     var refIds = new Set();
     favs.forEach(function (id) { refIds.add(String(id)); });
-    var tierKeys = Object.keys(tiers);
-    for (var t = 0; t < tierKeys.length; t++) {
-      if (tiers[tierKeys[t]] === 'S' || tiers[tierKeys[t]] === 'A') {
-        refIds.add(String(tierKeys[t]));
-      }
-    }
     // Treat anyone booked 3+ times as a de-facto favourite for affinity.
     var pIds = Object.keys(profiles);
     for (var pi = 0; pi < pIds.length; pi++) {
@@ -454,16 +442,16 @@
     var maxUpcoming = 0;
     for (var mi = 0; mi < pIds.length; mi++) {
       var mp = profiles[pIds[mi]];
-      if (refIds.has(mp.id) || favs.has(mp.id) || tiers[mp.id]) continue;
+      if (refIds.has(mp.id) || favs.has(mp.id)) continue;
       if (mp.upcomingCount > maxUpcoming) maxUpcoming = mp.upcomingCount;
     }
 
-    // Score every non-reference, non-ranked, non-favourite instructor.
+    // Score every non-reference, non-favourite instructor.
     var booked = getBookedInstructorIds(profiles);
     var candidates = [];
     for (var i = 0; i < pIds.length; i++) {
       var p = profiles[pIds[i]];
-      if (refIds.has(p.id) || favs.has(p.id) || tiers[p.id]) continue;
+      if (refIds.has(p.id) || favs.has(p.id)) continue;
 
       var aff = scoreAffinity(p, refClassTypes, refLocations, maxTypeMatch, maxLocMatch);
       // Affinity is the entry gate: no shared class type or location → not a "like".
@@ -616,23 +604,6 @@
 
     var uniqueCount = Object.keys(instrStats).length;
 
-    // Tier distribution
-    var tierCounts = { S: 0, A: 0, B: 0, C: 0, D: 0, F: 0, unranked: 0 };
-    var unrankedList = []; // { id, name, count }
-    var tiers = {};
-    try { tiers = JSON.parse(localStorage.getItem(TIER_KEY) || '{}'); } catch (e) {}
-    var sIds = Object.keys(instrStats);
-    for (var s = 0; s < sIds.length; s++) {
-      var tier = tiers[sIds[s]] || null;
-      if (tier && tierCounts.hasOwnProperty(tier)) {
-        tierCounts[tier]++;
-      } else {
-        tierCounts.unranked++;
-        unrankedList.push({ id: sIds[s], name: instrStats[sIds[s]].name, count: instrStats[sIds[s]].count });
-      }
-    }
-    unrankedList.sort(function (a, b) { return b.count - a.count; });
-
     // Top 3 most booked
     var sorted = Object.entries(instrStats).sort(function (a, b) { return b[1].count - a[1].count; });
     var mostBooked = sorted.slice(0, 3);
@@ -642,13 +613,11 @@
 
     return {
       uniqueCount: uniqueCount,
-      tierCounts: tierCounts,
       mostBooked: mostBooked,
       triedOnce: triedOnce,
       totalBookings: sorted.reduce(function (sum, e) { return sum + e[1].count; }, 0),
       soloCount: soloCount,
       socialCount: socialCount,
-      unrankedList: unrankedList,
     };
   }
 
@@ -693,69 +662,17 @@
     }
     html += '</div>';
 
-    // Tier distribution bar
-    var tierTotal = 0;
-    var tierKeys = ['S', 'A', 'B', 'C', 'D', 'F', 'unranked'];
-    for (var t = 0; t < tierKeys.length; t++) tierTotal += data.tierCounts[tierKeys[t]];
-
-    if (tierTotal > 0 && data.tierCounts.unranked < tierTotal) {
-      html += '<div class="explore-tier-bar-wrap">';
-      html += '<div class="explore-tier-bar-label">Tier distribution</div>';
-      html += '<div class="explore-tier-bar">';
-      for (var ti = 0; ti < tierKeys.length; ti++) {
-        var count = data.tierCounts[tierKeys[ti]];
-        if (count === 0) continue;
-        var pct = (count / tierTotal * 100).toFixed(1);
-        var tierName = tierKeys[ti] === 'unranked' ? 'Unranked' : tierKeys[ti];
-        var label = pct >= 10 ? tierName + ' (' + count + ')' : count > 0 ? tierName : '';
-        html += '<div class="explore-tier-seg tier-' + tierKeys[ti] + '" ' +
-          'style="flex:' + count + '" title="' + tierKeys[ti] + ': ' + count + '">' +
-          label + '</div>';
-      }
-      html += '</div>';
-
-      // Legend. Each dot wears the SAME tier class as its segment above, so the
-      // stylesheet colours both (css/crisp.css — a neutral rank ramp: colour is
-      // kept for class types). The dots used to carry a second, hard-coded
-      // copy of the colours, and "unranked" did not match its segment.
-      html += '<div class="explore-tier-legend">';
-      for (var tl = 0; tl < tierKeys.length; tl++) {
-        if (data.tierCounts[tierKeys[tl]] === 0) continue;
-        html += '<span class="explore-tier-legend-item">' +
-          '<span class="explore-tier-legend-dot tier-' + tierKeys[tl] + '" aria-hidden="true"></span>' +
-          (tierKeys[tl] === 'unranked' ? 'Unranked' : tierKeys[tl]) + ' (' + data.tierCounts[tierKeys[tl]] + ')</span>';
-      }
-      html += '</div>';
-      html += '</div>';
-    }
-
-    // Unranked instructors — prompt to rank them
-    if (data.unrankedList.length > 0) {
-      html += '<div class="explore-tier-bar-label" style="margin-bottom:8px">Unranked (' + data.unrankedList.length + ')</div>';
-      html += '<div class="explore-unranked-list">';
-      for (var u = 0; u < data.unrankedList.length; u++) {
-        var ui = data.unrankedList[u];
-        html += '<button class="explore-unranked-item" onclick="window._explore_openSettingsForInstructor(\'' +
-          escapeForJsString(ui.name) + '\')">' +
-          '<span class="explore-unranked-name">' + escapeHtml(ui.name) + '</span>' +
-          '<span class="explore-unranked-count">' + ui.count + ' class' + (ui.count !== 1 ? 'es' : '') + '</span>' +
-        '</button>';
-      }
-      html += '</div>';
-    }
-
     // Most booked list
     if (data.mostBooked.length > 0) {
-      html += '<div class="explore-tier-bar-label" style="margin-bottom:8px">Most booked</div>';
+      html += '<div class="explore-map-label" style="margin-bottom:8px">Most booked</div>';
       html += '<div class="explore-top-list">';
       for (var m = 0; m < data.mostBooked.length; m++) {
         var entry = data.mostBooked[m];
         var instrId = entry[0];
         var stat = entry[1];
-        var tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
         html += '<div class="explore-top-item">' +
           '<span class="explore-top-rank">' + (m + 1) + '</span>' +
-          '<span class="explore-top-name">' + ((typeof instrLink === 'function') ? instrLink(stat.name, instrId) : escapeHtml(stat.name)) + ' ' + tierBadge + '</span>' +
+          '<span class="explore-top-name">' + ((typeof instrLink === 'function') ? instrLink(stat.name, instrId) : escapeHtml(stat.name)) + '</span>' +
           '<span class="explore-top-count">' + stat.count + ' class' + (stat.count !== 1 ? 'es' : '') + '</span>' +
         '</div>';
       }
@@ -771,8 +688,6 @@
   // ═══════════════════════════════════════════════════════════════════
 
   function instrCard(profile, whyLabel) {
-    var tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(profile.id) : '';
-
     // Class type tags, in the member's class-type colours: the tag only says
     // which type it is (data-ct) and css/crisp.css colours it — deep ink on the
     // class wash, which holds on light AND dark bases (the base colour as TEXT
@@ -813,7 +728,6 @@
         '<span class="explore-card-name" role="button" tabindex="0" onclick="event.stopPropagation();' +
           'window._features_openInstructorModal(\'' + nameEscaped + '\',\'' + idEscaped + '\')">' +
           escapeHtml(profile.name) + '</span>' +
-        tierBadge +
       '</div>' +
       tagHtml +
       locHtml +
@@ -882,22 +796,6 @@
         '</div>');
     }
   }
-
-  window._explore_openSettingsForInstructor = function (name) {
-    // The rankings moved to the Membership tab; the Settings sheet this used to
-    // open has no tier list, so the chip filled a hidden input behind an
-    // unrelated panel. (Name kept: it is in the chips' onclick strings.)
-    if (typeof switchTab === 'function') switchTab('membership');
-    // Wait for the tab to render, then pre-fill the search
-    setTimeout(function () {
-      var search = document.getElementById('tierSearch');
-      if (search) {
-        search.value = name;
-        search.dispatchEvent(new Event('input'));
-        search.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 200);
-  };
 
   window._explore_resetSync = function () {
     localStorage.removeItem(SYNC_KEY);

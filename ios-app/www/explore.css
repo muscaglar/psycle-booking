@@ -251,96 +251,14 @@
   margin-top: var(--space-1);
 }
 
-/* ── Tier distribution bar ───────────────────────────────────────── */
+/* ── Instructor map: a list's label ──────────────────────────────── */
 
-.explore-tier-bar-wrap {
-  margin-bottom: var(--space-7);
-}
-
-.explore-tier-bar-label {
+.explore-map-label {
   font-size: var(--text-sm);
   color: var(--text-faint, #666);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: var(--space-3);
-}
-
-.explore-tier-bar {
-  display: flex;
-  height: var(--space-9);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.explore-tier-seg {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-  min-width: 0;
-  transition: flex 0.3s;
-}
-/* (The segments' and the legend's colours: css/crisp.css, crisp:9e — one
-   neutral rank recipe per tier class. The hard-coded gold / green / blue
-   ramp that lived here, and its second copy in js/explore.js, are gone.) */
-
-.explore-tier-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-
-.explore-tier-legend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--text-dim, #888);
-}
-
-.explore-tier-legend-dot {
-  width: var(--space-3);
-  height: var(--space-3);
-  border-radius: 2px;
-}
-
-/* ── Unranked instructors ─────────────────────────────────────────── */
-
-.explore-unranked-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-7);
-}
-
-.explore-unranked-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  background: var(--bg-panel, #111);
-  border: 1px dashed var(--border, #333);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: border-color var(--transition-base), background var(--transition-base);
-}
-.explore-unranked-item:hover {
-  border-color: var(--accent, #e94560);
-  border-style: solid;
-  background: var(--bg-input, #1a1a1a);
-}
-
-.explore-unranked-name {
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  color: var(--text-heading, #f0f0f0);
-}
-
-.explore-unranked-count {
-  font-size: var(--text-xs);
-  color: var(--text-ghost, #555);
 }
 
 /* ── Most booked list ────────────────────────────────────────────── */

@@ -5,7 +5,7 @@
  * ---------------
  * This is a vanilla-JS, no-build-step PWA. Modules attach functions and objects
  * to `window` and then reference each other as *bare globals* (e.g. app.js calls
- * `escapeHTML(...)`, settings.js calls `getInstructorTier(...)`). State.js even
+ * `escapeHTML(...)`, settings.js calls `toggleFavFromSettings(...)`). State.js even
  * exposes mutable data (`instructors`, `_myBookings`, ...) as window property
  * accessors so older code can read/write them as plain globals.
  *
@@ -139,7 +139,6 @@ declare global {
   var _themeRenderWrapped: boolean;
   var _themeSearchWrapped: boolean;
   var _themeSetStatusWrapped: boolean;
-  var _eventCardTierPatched: boolean;
   var _bikePickerPrefsPatched: boolean;
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -250,11 +249,8 @@ declare global {
   function bookWeeklyTemplate(...args: any[]): any;
   function detectRecurringSlots(...args: any[]): any;
 
-  // Settings / tiers / prefs (settings.js)
-  function filterTierList(...args: any[]): any;
-  function setInstructorTier(...args: any[]): any;
-  function getInstructorTier(...args: any[]): any;
-  function tierBadgeHTML(...args: any[]): string;
+  // Settings / favourites / prefs (settings.js)
+  function filterFavList(...args: any[]): any;
   function toggleFavFromSettings(...args: any[]): any;
   function getBikePrefs(...args: any[]): any;
   function toggleBikePref(...args: any[]): any;

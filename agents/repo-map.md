@@ -47,8 +47,8 @@ psycle-booking/
 │   ├── features.css        # History modal, instructor modal, notifications
 │   ├── tabs.css            # Tab bar, insights sections, heatmap, cost tracker, My Bookings queue line / empty state / history button,
 │   │                       #   Stats switcher + sub-pages (last block)
-│   ├── settings.css        # Settings panel, tier list, bike prefs, floating pill
-│   ├── explore.css         # Explore cards, sync banner, unranked chips
+│   ├── settings.css        # Settings panel, the favourites list, bike prefs, floating pill
+│   ├── explore.css         # Explore cards, sync banner
 │   ├── redesign.css        # "Psync redesign" skin: top bar, Discover cards, pill rows, the Filters bar + chips, day strip + pager (layout + type only; colours from tokens)
 │   ├── discover-layout-fix.css  # Discover's pill rows: one side-scrolling line each below 1024px (the Time row wraps at every width), wrapped at ≥1024px,
 │   │                       #   where the filter groups also stay in ONE column (the left filter column itself is css/crisp.css 9b.9)
@@ -186,7 +186,7 @@ if tests/smoke.html's list drifts from the page's.
 | Change share card rendering           | js/tabs.js (`shareInsights`, canvas code; class-type bars through `_shareClassColour` → `PsycleClassColours.resolve`) |
 | Change a Stats chart (streak bars, "When you train", class types) | js/tabs.js (`pure:stats-charts` + the section's render function) + css/crisp.css (`crisp:9e-stats-membership`) |
 | Change the Class colours control      | js/tabs.js (`pure:class-colour-control`, `renderClassColours`) + css/crisp.css (9e: `.cc-control`, `.cc-row*`, `.cc-swatch*`, `.cc-preview` — the preview is a real `.class-card` built from `eventCard`'s anatomy, so 9b.7 styles it; `.cc-preview` only takes it out of the pointer's reach — `.cc-reset`, `.cc-note`) — the choices themselves live in js/theme.js (`PsycleClassColours`). NB `.cc-` here means class COLOURS; the class CARD's parts (`.cc-time`, `.cc-sub`, `.cc-name` …, 9b.7 — several also styled bare by css/redesign.css) share the prefix. The two sets are disjoint and tests/suites/9f-one-card.js keeps them so: never give the control a name the card uses |
-| Change the rank tiles (S–F)           | css/crisp.css (`crisp:9e-stats-membership` → 9e.5: one neutral recipe for the card tile, the rank buttons, the tier bar and its legend) |
+| Change the favourite star            | css/crisp.css (`.favs-star`, in `crisp:9e-stats-membership`): ONE look for Membership's rows and the instructor profile; its colour is `--fav` (css/theme.css) |
 | Change calendar export (web)          | js/calendar.js           |
 | Change iOS calendar sync (what is written, when, the hand-over) | ios-app/www/native-bridge.js ("Native Calendar Integration": `_buildCalEventData`, `syncAllBookingsToCalendar`, `_scheduleCalReconcile` / `_runCalSync`, `psycleSetCalendarConfig`, `psycleResyncCalendar`; pure `_calForeignEvents` / `_calSweepVictimIds` / `_calAckCovers`) + js/settings.js (`pure:calendar-sync`, `_confirmCalendarOwnership`); tests/suites/calendar-safety.js. NOT js/calendar.js — that is the web ICS / Google Calendar export |
 | Change the service worker             | sw.js (then `cd ios-app && npm run build` — SHELL and CACHE are generated) |

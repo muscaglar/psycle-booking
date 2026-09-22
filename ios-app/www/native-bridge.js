@@ -223,6 +223,7 @@
   // so data survives iOS storage purges — and, on Android, the web view's
   // storage being cleared under it (Preferences is SharedPreferences there).
 
+  var RETIRED_KEYS = ['psycle_instructor_tiers'];
   var SYNC_KEYS = [
     'psycle_bearer_token', 'psycle_bearer_token_enc',
     // AES key backup (written by security.js on native only). Without it an
@@ -230,7 +231,7 @@
     // the user is silently signed out forever.
     'psycle_sec_key_backup',
     'psycle_fav_instructors', 'psycle_saved_filters',
-    'psycle_instructor_tiers', 'psycle_bike_prefs',
+    'psycle_bike_prefs',
     'psycle_theme', 'psycle_class_history', 'psycle_history_synced',
     // The member's class-type colours and intensity (js/theme.js
     // PsycleClassColours): hand-picked, so a storage purge must not reset them.
@@ -275,6 +276,9 @@
   // restore only ever FILLS a missing key, so keys localStorage already has
   // are skipped without asking, and the rest are read together.
   async function restoreFromNative() {
+    // A key this app once mirrored and no longer reads: its native copy goes, so nothing of a retired feature
+    // stays on the phone (js/app.js RETIRED_STORAGE_KEYS removes the web copy). Not awaited: nothing depends on it.
+    RETIRED_KEYS.forEach(function (key) { Preferences.remove({ key: key }).catch(function () {}); });
     await Promise.all(SYNC_KEYS.map(async function (key) {
       // Per-key guard: one rejected read must not settle the batch early (that
       // would release the handshake while other keys are still in flight).

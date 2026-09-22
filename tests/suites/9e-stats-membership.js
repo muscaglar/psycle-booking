@@ -188,8 +188,8 @@ module.exports = function (t) {
       'the class-type bar and its legend say which type (data-ct); css/crisp.css colours them');
     const card = grab(exploreSrc, '  function instrCard(profile, whyLabel) {', '  }');
     ok(/class="explore-type-tag" data-ct="' \+ ct \+ '"/.test(card) && !/style="color|cat\.color|#888/.test(card), 'instructor-card tags the same way (the base colour as text was ~2.5:1 on dark panels)');
-    ok(!/tierColors|#b8860b|#2a7a2a|#222'/.test(exploreSrc) && /class="explore-tier-legend-dot tier-' \+ tierKeys\[tl\]/.test(exploreSrc),
-      'the tier legend wears the SAME class as its segment — one source of colour, so "unranked" can no longer disagree with itself');
+    ok(!/tierColors|tierKeys|explore-tier|explore-unranked|#b8860b|#2a7a2a/.test(exploreSrc),
+      'the instructor map has no grade bar, no legend and no "unranked" list: it counts instructors and names the most booked');
     const picker = grab(tabsSrc, '  function renderThemePicker() {', '  }');
     ok(/class="theme-swatch" data-theme="' \+ t\.id \+ '"/.test(picker) && !/style="background/.test(picker), 'a theme chip is drawn from that theme\'s OWN tokens (data-theme on the swatch) — no colour is copied into the markup');
     // …which only works while a theme's token block is a bare attribute selector
@@ -207,8 +207,7 @@ module.exports = function (t) {
     ok(section.length > 5000, 'the 9e section of css/crisp.css is there (' + section.length + ' bytes)');
     const heatRules = (section.match(/[^{}]*\.(?:hm-|heatmap-)[^{}]*\{[^}]*\}/g) || []).join('\n');
     ok(heatRules.length > 0 && !/--ct-/.test(heatRules), '…and none of its heatmap rules reads a class colour');
-    const rank = (section.match(/\.tier-[SABCDF], \.active-[SABCDF] \{[^}]*\}/g) || []);
-    eq([rank.length, rank.some((r) => /--ct-|--accent\b/.test(r))], [6, false], 'six rank recipes, all neutral (ink, surface, hairline, sunken)');
+    ok(!/\.tier-|\.active-[SABCDF]\b|--rank-/.test(section), 'the section holds no grade recipe: the star is the only mark on an instructor');
     ok(!/!important/.test(section), 'nothing in the section needs !important');
   }
 
@@ -238,7 +237,7 @@ module.exports = function (t) {
       ['--text', '--bg-panel', 'rank A, the chosen theme chip, the main cost figure', 4.5],
       ['--text-heading', '--border', 'rank B: the heading ink on the hairline fill', 4.5],
       ['--text-muted', '--bg-deep', 'rank C, a later milestone, captions in a sunken well (cost tiles, forecast, Settings rows)', 4.5],
-      ['--text-muted', '--bg', 'rank D / F / unranked in the tier bar, on the ground', 4.5],
+      ['--text-muted', '--bg', 'muted text on the ground', 4.5],
       ['--text-muted', '--bg-panel', 'rank D / F on a card; captions on a card', 4.5],
       ['--text-ghost', '--bg-panel', 'quiet labels on a card (This month, Longest, axis labels)', 4.5],
       ['--text-ghost', '--bg', 'quiet labels on the ground (section labels, about)', 4.5],
@@ -276,7 +275,7 @@ module.exports = function (t) {
     ok(/min-height: var\(--tap-lg\)/.test(body('.cc-row-btn')) && /min-height: var\(--tap-lg\)/.test(body('.ms-signout')) && /min-height: var\(--tap-min\)/.test(body('.explore-sync-btn')) &&
       /min-height: var\(--tap-min\)/.test(body('.habit-card .habit-find-btn')) && /min-height: var\(--tap-min\)/.test(body('.explore-card-action')) && /min-height: var\(--tap-min\)/.test(body('.share-insights-btn')),
       'rows, Sign out and every pill are at least a fingertip tall');
-    ['.cc-swatch', '.cc-row-btn', '.year-review-btn', '.share-insights-btn', '.explore-sync-btn', '.explore-unranked-item', '#tab-membership .theme-chip', '.stats-switcher-tab'].forEach((sel) => {
+    ['.cc-swatch', '.cc-row-btn', '.year-review-btn', '.share-insights-btn', '.explore-sync-btn', '#tab-membership .theme-chip', '.stats-switcher-tab'].forEach((sel) => {
       ok(new RegExp(sel.replace(/[.#[\]]/g, '\\$&') + ':focus-visible \\{ outline: var\\(--focus-ring\\)').test(section), sel + ' shows the body-ink focus ring');
     });
     ok(/\.cc-swatches\[hidden\] \{ display: none; \}/.test(section), 'a closed swatch panel stays closed (a display rule would beat the attribute)');

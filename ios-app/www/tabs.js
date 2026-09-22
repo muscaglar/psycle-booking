@@ -225,14 +225,13 @@
       // Sign out (signed-in only — toggled in renderMembershipInfo)
       '<button id="signOutRow" class="ms-signout" onclick="if(typeof confirmSignOut===\'function\')confirmSignOut();else if(typeof clearToken===\'function\')clearToken()" style="display:none">Sign out</button>' +
       '<div class="insights-section">' +
-        '<div class="insights-title">Instructor rankings and favourites</div>' +
-        '<div class="tier-group-label">Ranked</div>' +
-        '<div class="tier-list tier-list-short" id="tierListRanked"></div>' +
-        '<div class="tier-group-label" style="margin-top:16px">Not yet ranked</div>' +
-        '<div class="tier-list tier-list-short" id="tierListUnranked"></div>' +
-        '<div class="tier-group-label" style="margin-top:16px">Search all instructors</div>' +
-        '<input class="tier-search" id="tierSearch" placeholder="Type a name…" oninput="filterTierList()">' +
-        '<div class="tier-list" id="tierListSearch" style="display:none"></div>' +
+        '<div class="insights-title">Favourite instructors</div>' +
+        '<div class="favs-list favs-list-short" id="favListMine"></div>' +
+        '<div class="favs-group-label" id="favBookedLabel" style="margin-top:16px">Taken a class with</div>' +
+        '<div class="favs-list favs-list-short" id="favListBooked"></div>' +
+        '<div class="favs-group-label" style="margin-top:16px">Search all instructors</div>' +
+        '<input class="favs-search" id="favSearch" placeholder="Type a name…" oninput="filterFavList()">' +
+        '<div class="favs-list" id="favListSearch" style="display:none"></div>' +
       '</div>' +
       // Support Psync: optional tips through the store's own in-app purchase. Hidden until renderSupportPsync()
       // finds the native plugin AND the store returns at least one of the three products: never in the web app.
@@ -346,7 +345,7 @@
     if (tab === 'membership') {
       renderMembershipInfo();
       renderCostTracker();
-      if (typeof filterTierList === 'function') filterTierList();
+      if (typeof filterFavList === 'function') filterFavList();
     }
   };
 
@@ -422,7 +421,7 @@
       updateTabBadge();
       renderWeekView();
       _repaintMembership();
-      if (_currentTab === 'membership' && typeof filterTierList === 'function') filterTierList();
+      if (_currentTab === 'membership' && typeof filterFavList === 'function') filterFavList();
       // Stats' hero follows the session too, and a sign-out has no
       // bookings:loaded to repaint it.
       if (_currentTab === 'stats') renderInsights();
@@ -3855,10 +3854,9 @@
       var lastDt = new Date(stat.lastDate);
       var daysAgo = Math.round((now - lastDt) / 86400000);
       var lastStr = lastDt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-      var tierBadge = stat.instrId && (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(stat.instrId) : '';
 
       html += '<div class="lapsed-item">' +
-        '<div class="lapsed-name">' + instrLink(name, stat.instrId) + ' ' + tierBadge + '</div>' +
+        '<div class="lapsed-name">' + instrLink(name, stat.instrId) + '</div>' +
         '<div class="lapsed-detail">' + stat.count + ' classes · Last booked ' + lastStr + ' (' + daysAgo + 'd ago)</div>' +
       '</div>';
     }

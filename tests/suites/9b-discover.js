@@ -186,8 +186,9 @@ module.exports = function (t) {
       /<span class="cc-time-h">18:30<\/span>\s*<\/div>/.test(card(ctx, { duration: 0 })) && !/cc-dur/.test(card(ctx, { duration: 0 })), 'a class with no duration prints the time alone — no empty second line (it read "undefined min")');
     ok(!/cc-who/.test(card(ctx, { instructor_id: 404 })) && /<span class="cc-sub"><span class="cc-loc">Bank<\/span><\/span>/.test(card(ctx, { instructor_id: 404 })), 'no instructor: the studio alone, no empty unit before it');
     ok(/<span class="cc-sub"><span class="cc-who">[^]*?<\/span><\/span>/.test(card(ctx, { studio_id: 404 })) && !/cc-loc/.test(card(ctx, { studio_id: 404 })), 'no studio: the instructor alone');
+    // A grade tile used to ride after the name. Even if an older module still offered the hook, the card ignores it.
     ctx = mk({}, { tierBadgeHTML: (id) => (id === 1 ? '<span class="tier-badge tier-S">S</span>' : '') });
-    ok(/<span class="cc-who"><span class="instructor-link">Alex Stone<\/span><span class="tier-badge tier-S">S<\/span><\/span>/.test(card(ctx)), 'the rank tile rides inside the instructor\'s unit (settings.js tierBadgeHTML, called as before)');
+    ok(/<span class="cc-who"><span class="instructor-link">Alex Stone<\/span><\/span>/.test(card(ctx)) && !/tier-badge/.test(card(ctx)), 'the instructor\'s unit is the name alone: nothing grades a person on a card');
 
     // States — the label contract and the wrapper contract.
     ctx = mk({ 501: { bookingId: 9, slots: [12] } });

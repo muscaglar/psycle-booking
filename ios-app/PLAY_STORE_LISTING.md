@@ -54,7 +54,7 @@ Psync is not affiliated with, or endorsed by, Psycle. It signs in with your own 
 FIND YOUR CLASS
 • One timetable across all London studios, one day at a time. Swipe to change day
 • Filter by studio, class type, instructor, time of day and "available only"
-• Favourites, and your own instructor rankings from S to F
+• Star your favourite instructors, and find their classes in one tap
 • Colour by class type, in colours you choose and as strong as you like
 
 BOOK IN TWO TAPS
@@ -158,7 +158,7 @@ means sent by the app, from the phone, straight to Psycle.
 | Psycle email and password | Yes, when you sign in | Psycle's API (`psycle.codexfit.com`) only | The password never; the email is not stored either (the profile Psycle returns is held in memory while the app is open) | To sign in to the member's own Psycle account |
 | Session token (issued by Psycle) | Yes, on every request | Psycle's API only | Yes — encrypted (AES-GCM), mirrored in the app's private preferences so a cleared web view does not sign the member out | To stay signed in |
 | Bookings, waitlist places, profile, plan and credits | Fetched from and sent to Psycle | Psycle's API only | A saved copy of the bookings, for opening the app with no signal | The app's purpose |
-| Booking history, favourites, instructor rankings, spot preferences, the usual week, settings, theme | No | — | Yes | The app's features |
+| Booking history, favourites, spot preferences, the usual week, settings, theme | No | — | Yes | The app's features |
 | Error log and action log | No — unless the member shares a bug report themselves, through the share sheet | whoever the member sends it to | Yes | Diagnostics |
 | Calendar events | No | — | Written to the calendar the member hands over, on the phone. To find its own events the app READS the coming events of every calendar on the phone (the plugin has no calendar filter) and looks only at its own; none of it leaves the phone | Calendar sync |
 | Notifications | No — scheduled and posted on the phone; there is no push server | — | — | Reminders, and the silent countdown to a class that comes with them. On Android 12 and earlier there is no notification permission: both are on from the first booking until Class reminders are switched off |

@@ -558,7 +558,7 @@ module.exports = function (t) {
     ok(/var EXPORT_KEYS = \[[^\]]*'psycle_theme',\s*'psycle_class_colours',/.test(settingsJs), 'settings export carries the key');
     ok(/classColours: window\.PsycleClassColours \? window\.PsycleClassColours\.clean : null/.test(settingsJs), 'importSettings hands the engine\'s cleaner to the planner');
     const imp = t.loadPure('js/settings.js', 'import-validate');
-    const clean = { history: (v) => (Array.isArray(v) ? v : []), tiers: (v) => v || {}, idList: (v) => (Array.isArray(v) ? v : []), bikePrefs: (v) => v || {}, classColours: cc._ccStorable };
+    const clean = { history: (v) => (Array.isArray(v) ? v : []), idList: (v) => (Array.isArray(v) ? v : []), bikePrefs: (v) => v || {}, classColours: cc._ccStorable };
     const plan = (file, device) => imp._planSettingsImport(file, (k) => (device || {})[k] || '', { clean, themes: ['cloud', 'graphite'], historyMax: 2000 });
     const GOOD = JSON.stringify({ v: 1, intensity: 'bold', map: { ride: 'sky', yoga: 'hotpink' }, extra: '<b>' });
     let pl = plan({ psycle_class_colours: GOOD });
@@ -572,7 +572,7 @@ module.exports = function (t) {
       pl = plan({ psycle_class_colours: row[0] });
       eq([pl.writes.psycle_class_colours, pl.skipped.map((s) => s.key + ':' + s.reason)], [undefined, ['psycle_class_colours:' + row[1]]], JSON.stringify(row[0]) + ' → skipped (' + row[1] + ')');
     });
-    pl = imp._planSettingsImport({ psycle_class_colours: GOOD }, () => '', { clean: { history: clean.history, tiers: clean.tiers, idList: clean.idList, bikePrefs: clean.bikePrefs }, themes: [] });
+    pl = imp._planSettingsImport({ psycle_class_colours: GOOD }, () => '', { clean: { history: clean.history, idList: clean.idList, bikePrefs: clean.bikePrefs }, themes: [] });
     eq([pl.writes.psycle_class_colours, pl.skipped.length], [undefined, 1], 'no cleaner handed in → the key is refused, never copied raw');
     const syncKeys = (/var SYNC_KEYS = \[([\s\S]*?)\n  \];/.exec(bridge) || [])[1] || '';
     ok(/'psycle_class_colours'/.test(syncKeys.replace(/\/\/.*$/gm, '')), 'native-bridge.js SYNC_KEYS mirrors it to Preferences');

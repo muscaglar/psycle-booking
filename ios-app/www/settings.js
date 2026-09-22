@@ -1,8 +1,8 @@
 /**
- * settings.js — Settings panel, instructor tiers, bike preferences, floating pill
+ * settings.js — Settings panel, favourite instructors, bike preferences, floating pill
  *
  * Self-contained IIFE that provides:
- *   - Instructor tier ranking system (S/A/B/C/D/F)
+ *   - The favourite-instructors list in Membership (a star, and nothing else, is the only mark on a person)
  *   - Per-studio bike/spot preferences (prefer/avoid)
  *   - Floating "next class" countdown pill
  *   - Settings export/import (JSON backup)
@@ -10,16 +10,14 @@
  * Depends on: app.js (escapeHTML, _studioMap, _myBookings, _eventCache, etc.),
  *             state.js (PsycleEvents, favouriteInstructors)
  * Exposes on window:
- *   getInstructorTier, getBikePrefs, tierBadgeHTML, openSettings,
- *   closeSettings, filterTierList, setInstructorTier, toggleFavFromSettings,
+ *   getBikePrefs, openSettings,
+ *   closeSettings, filterFavList, toggleFavFromSettings,
  *   renderBikePrefGrid, toggleBikePref, exportSettings, importSettings
  */
 (function () {
   'use strict';
 
-  var TIER_KEY = 'psycle_instructor_tiers';
   var BIKE_PREF_KEY = 'psycle_bike_prefs';
-  var TIERS = ['S', 'A', 'B', 'C', 'D', 'F'];
 
   // ── Data Persistence ───────────────────────────────────────────
 
@@ -32,14 +30,6 @@
     localStorage.setItem(key, JSON.stringify(value));
   }
 
-  function loadTiers() {
-    try {
-      var t = JSON.parse(localStorage.getItem(TIER_KEY) || '{}');
-      return typeof _cleanStoredTiers === 'function' ? _cleanStoredTiers(t) : t;
-    } catch { return {}; }
-  }
-  function saveTiers(t) { _store(TIER_KEY, t); }
-
   function loadBikePrefs() {
     try {
       var p = JSON.parse(localStorage.getItem(BIKE_PREF_KEY) || '{}');
@@ -50,21 +40,9 @@
 
   // ── Public API ─────────────────────────────────────────────────
 
-  window.getInstructorTier = function (instrId) {
-    return loadTiers()[String(instrId)] || null;
-  };
-
   window.getBikePrefs = function (studioId) {
     var prefs = loadBikePrefs();
     return prefs[String(studioId)] || { avoid: [], prefer: [] };
-  };
-
-  window.tierBadgeHTML = function (instrId) {
-    var tier = getInstructorTier(instrId);
-    // Only a known tier letter reaches the markup: the stored value can come
-    // from an imported settings file, and it lands in a class attribute.
-    if (!tier || TIERS.indexOf(tier) === -1) return '';
-    return '<span class="tier-badge tier-' + tier + '" role="img" aria-label="Ranked ' + tier + '">' + tier + '</span>';
   };
 
 
@@ -554,7 +532,7 @@
           '<button class="settings-close" onclick="closeSettings()" aria-label="Close">×</button>' +
         '</div>' +
         '<div class="settings-body">' +
-          // App-focused settings only — instructor rankings/favourites
+          // App-focused settings only — favourite instructors
           // live on the Membership tab with the rest of the personal data.
           // Reminders exist only in the iOS app: on the web renderReminderRow
           // paints nothing, which left a heading over an empty section.
@@ -629,41 +607,35 @@
 
 
   // ═══════════════════════════════════════════════════════════════════
-  // Instructor Tier UI
+  // Favourite instructors (Membership)
   // ═══════════════════════════════════════════════════════════════════
+  // A star is the ONLY mark a member can put on an instructor: there is no
+  // grade, no rank and no "avoid" (agents/decisions.md section 3). Three
+  // lists: the favourites, the instructors the member has taken a class with
+  // and not starred, and — while typing — every instructor that matches.
 
-  window.filterTierList = function () { renderTierList(); };
+  window.filterFavList = function () { renderFavList(); };
 
-  function tierRowHTML(instr, tiers, favs) {
-    var sid = String(instr.id);
-    var currentTier = tiers[sid] || '';
-    var isFav = favs.has(sid);
-    // Which rank is set was a colour only. Same attributes as the instructor
-    // modal's copy of these buttons (features.js); the list is rebuilt from the
-    // store on every change, so they can't go stale. (The star needs nothing:
-    // its name already flips between "Add to…" and "Remove from favourites".)
-    var btns = TIERS.map(function (t) {
-      var cls = currentTier === t ? ' active-' + t : '';
-      return '<button class="tier-btn' + cls + '" aria-pressed="' + (currentTier === t) + '" aria-label="Rank ' + t + '" onclick="setInstructorTier(' + instr.id + ',\'' + t + '\')">' + t + '</button>';
-    }).join('');
-    return '<div class="tier-row">' +
-      '<button class="tier-fav' + (isFav ? ' is-fav' : '') + '" onclick="toggleFavFromSettings(' + instr.id + ')" title="' + (isFav ? 'Remove from favourites' : 'Add to favourites') + '"></button>' +
-      '<span class="tier-name">' + escapeHTML(instr.full_name) + '</span>' +
-      '<div class="tier-btns">' + btns + '</div>' +
+  function favRowHTML(instr, favs) {
+    var isFav = favs.has(String(instr.id));
+    var words = isFav ? 'Remove from favourites' : 'Add to favourites';
+    return '<div class="favs-row">' +
+      '<button class="favs-star' + (isFav ? ' is-fav' : '') + '" onclick="toggleFavFromSettings(' + instr.id + ')" aria-pressed="' + isFav + '" title="' + words + '" aria-label="' + words + ': ' + escapeHTML(instr.full_name) + '"></button>' +
+      '<span class="favs-name">' + escapeHTML(instr.full_name) + '</span>' +
     '</div>';
   }
 
-  function renderTierList() {
-    var rankedContainer = document.getElementById('tierListRanked');
-    var unrankedContainer = document.getElementById('tierListUnranked');
-    var searchContainer = document.getElementById('tierListSearch');
-    if (!rankedContainer) return;
+  function renderFavList() {
+    var mineContainer = document.getElementById('favListMine');
+    var bookedContainer = document.getElementById('favListBooked');
+    var bookedLabel = document.getElementById('favBookedLabel');
+    var searchContainer = document.getElementById('favListSearch');
+    if (!mineContainer) return;
 
-    var query = (document.getElementById('tierSearch')?.value || '').trim().toLowerCase();
-    var tiers = loadTiers();
+    var query = (document.getElementById('favSearch')?.value || '').trim().toLowerCase();
     var favs = (typeof favouriteInstructors !== 'undefined') ? favouriteInstructors : new Set();
-    var tierOrder = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
     var allInstructors = (typeof instructors !== 'undefined') ? instructors : [];
+    var byName = function (a, b) { return a.full_name.localeCompare(b.full_name); };
 
     // Build set of instructor IDs from booking history
     var historyInstrIds = new Set();
@@ -682,54 +654,29 @@
       });
     } catch (e) {}
 
-    // 1. Ranked instructors (have a tier or are favourited)
-    var ranked = allInstructors
-      .filter(function (i) { var sid = String(i.id); return !!tiers[sid] || favs.has(sid); })
-      .sort(function (a, b) {
-        var oa = tiers[String(a.id)] ? tierOrder[tiers[String(a.id)]] : 99;
-        var ob = tiers[String(b.id)] ? tierOrder[tiers[String(b.id)]] : 99;
-        if (oa !== ob) return oa - ob;
-        return a.full_name.localeCompare(b.full_name);
-      });
+    // 1. Favourites
+    var mine = allInstructors.filter(function (i) { return favs.has(String(i.id)); }).sort(byName);
+    mineContainer.innerHTML = mine.length
+      ? mine.map(function (i) { return favRowHTML(i, favs); }).join('')
+      : '<div class="favs-empty">No favourites yet. Star an instructor to find their classes faster.</div>';
 
-    if (ranked.length > 0) {
-      rankedContainer.innerHTML = ranked.map(function (i) { return tierRowHTML(i, tiers, favs); }).join('');
-      rankedContainer.style.display = '';
-    } else {
-      rankedContainer.innerHTML = '<div class="tier-empty">No ranked instructors yet.</div>';
-      rankedContainer.style.display = '';
+    // 2. Taken a class with, not starred — the whole group goes when there is nobody in it
+    var booked = allInstructors
+      .filter(function (i) { var sid = String(i.id); return historyInstrIds.has(sid) && !favs.has(sid); })
+      .sort(byName);
+    if (bookedContainer) {
+      bookedContainer.innerHTML = booked.map(function (i) { return favRowHTML(i, favs); }).join('');
+      bookedContainer.style.display = booked.length ? '' : 'none';
     }
-
-    // 2. Booked but not ranked
-    var rankedIds = new Set(ranked.map(function (i) { return String(i.id); }));
-    var unranked = allInstructors
-      .filter(function (i) {
-        var sid = String(i.id);
-        return historyInstrIds.has(sid) && !rankedIds.has(sid);
-      })
-      .sort(function (a, b) { return a.full_name.localeCompare(b.full_name); });
-
-    if (unrankedContainer) {
-      if (unranked.length > 0) {
-        unrankedContainer.innerHTML = unranked.map(function (i) { return tierRowHTML(i, tiers, favs); }).join('');
-        unrankedContainer.style.display = '';
-      } else {
-        unrankedContainer.innerHTML = '<div class="tier-empty">All booked instructors have been ranked.</div>';
-        unrankedContainer.style.display = '';
-      }
-    }
+    if (bookedLabel) bookedLabel.style.display = booked.length ? '' : 'none';
 
     // 3. Search results (only shown when typing)
     if (searchContainer) {
       if (query) {
-        var results = allInstructors
-          .filter(function (i) { return i.full_name.toLowerCase().includes(query); })
-          .sort(function (a, b) { return a.full_name.localeCompare(b.full_name); });
-        if (results.length > 0) {
-          searchContainer.innerHTML = results.map(function (i) { return tierRowHTML(i, tiers, favs); }).join('');
-        } else {
-          searchContainer.innerHTML = '<div class="tier-empty">No instructor matches "' + escapeHTML(query) + '".</div>';
-        }
+        var results = allInstructors.filter(function (i) { return i.full_name.toLowerCase().includes(query); }).sort(byName);
+        searchContainer.innerHTML = results.length
+          ? results.map(function (i) { return favRowHTML(i, favs); }).join('')
+          : '<div class="favs-empty">No instructor matches "' + escapeHTML(query) + '".</div>';
         searchContainer.style.display = '';
       } else {
         searchContainer.style.display = 'none';
@@ -749,23 +696,11 @@
       else favouriteInstructors.add(sid);
       if (typeof saveFavourites === 'function') saveFavourites(favouriteInstructors);
     }
-    renderTierList();
-  };
-
-  window.setInstructorTier = function (instrId, tier) {
-    var tiers = loadTiers();
-    if (tiers[String(instrId)] === tier) {
-      delete tiers[String(instrId)]; // toggle off
-    } else {
-      tiers[String(instrId)] = tier;
-    }
-    saveTiers(tiers);
-    renderTierList();
-    // Discover's S/A quick filter only exists while someone is ranked S or A,
-    // and it learns that inside renderInstrChips (the instructor modal ranks
-    // through here too).
+    renderFavList();
+    // The ★ filter beside Discover's instructor search reads the same list.
     if (typeof window.renderInstrChips === 'function') window.renderInstrChips();
   };
+
 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1232,30 +1167,10 @@
 
 
   // ═══════════════════════════════════════════════════════════════════
-  // Integration: Tier Badges on Class Cards
-  // ═══════════════════════════════════════════════════════════════════
-
-  // app.js (eventCard / renderMyBookings) calls this hook directly next to
-  // the instructor name. A direct hook instead of a regex patch over the
-  // card HTML: the old regex targeted markup that no longer exists in the
-  // redesigned eventCard, so badges silently stopped rendering.
-  window.tierBadgeHTML = function (instructorId) {
-    var tier = getInstructorTier(instructorId);
-    // This definition is the one that wins (it replaces the one above), so it
-    // carries the same guard: an imported tier that is not a known letter
-    // must never be interpolated into markup. The tile SAYS what it is: after
-    // an instructor's name a screen reader heard a bare "S" (role=img + a name;
-    // `tier` is a checked letter, so it is safe in the attribute too).
-    return tier && TIERS.indexOf(tier) !== -1 ? '<span class="tier-badge tier-' + tier + '" role="img" aria-label="Ranked ' + tier + '">' + tier + '</span>' : '';
-  };
-
-
-  // ═══════════════════════════════════════════════════════════════════
   // Export / Import Settings
   // ═══════════════════════════════════════════════════════════════════
 
   var EXPORT_KEYS = [
-    'psycle_instructor_tiers',
     'psycle_bike_prefs',
     'psycle_fav_instructors',
     'psycle_saved_filters',
@@ -1282,7 +1197,7 @@
     if (typeof window.pushAction === 'function') window.pushAction('settings:export');
 
     // iOS app: <a download> blob clicks are dead in WKWebView (same as the bug
-    // report below), so the only backup of tiers/favourites/bike prefs saved
+    // report below), so the only backup of favourites/bike prefs saved
     // nothing while claiming success. Hand the file to the share sheet instead
     // (Save to Files / AirDrop / Mail).
     if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
@@ -1346,15 +1261,15 @@
   // ── pure:import-validate:start ── (DOM-free; tests/suites/import-validate.js evaluates this block)
   // What an import file may do. It used to be written into localStorage as it
   // came — every key it named, unchecked, over whatever the device held, with
-  // no question asked: an old backup silently replaced months of history,
-  // rankings and favourites (and on iOS the Preferences mirror made that
+  // no question asked: an old backup silently replaced months of history
+  // and favourites (and on iOS the Preferences mirror made that
   // permanent), and a file made by someone else could plant markup in keys that
   // are later printed.
   //
   // Now: only the keys an export writes, each a string of bounded size whose
   // JSON has that key's shape (cleaned by app.js's pure:stored-data helpers,
   // handed in as `clean`). And the file only ever ADDS: classes this device has
-  // no record of, rankings / bike prefs for instructors / studios it has none
+  // no record of, bike prefs for studios it has none
   // for, favourites and spot alerts it lacks; theme, class colours, filters and
   // the sync stamp only where the device has none. Nothing the member already
   // has is replaced.
@@ -1362,7 +1277,7 @@
   var IMPORT_MAX_VALUE = 1048576; // chars per key
 
   // data: the parsed file. deviceGet(key) → this device's raw stored string.
-  // opts: { clean: {history, tiers, idList, bikePrefs, classColours}, themes: [ids], retiredThemes: {oldId: id}, historyMax }
+  // opts: { clean: {history, idList, bikePrefs, classColours}, themes: [ids], retiredThemes: {oldId: id}, historyMax }
   // → { writes: {key: string}, added: {…counts}, accepted (keys that passed), skipped: [{key, reason}],
   //     exportedAt, deviceHasData }
   function _planSettingsImport(data, deviceGet, opts) {
@@ -1425,7 +1340,7 @@
       }
     }
 
-    // Rankings and bike prefs — per instructor / studio, the device's kept.
+    // Bike prefs — per studio, the device's kept.
     var fillMap = function (key, cleaner, isEmpty, label) {
       var fileVal = jsonOf(key);
       var dev = cleaner(deviceJson(key, {}));
@@ -1441,7 +1356,6 @@
       });
       if (n) { plan.writes[key] = JSON.stringify(dev); plan.added[label] = n; }
     };
-    fillMap('psycle_instructor_tiers', clean.tiers, function (v) { return !v; }, 'rankings');
     fillMap('psycle_bike_prefs', clean.bikePrefs, function (v) { return !v || !(v.avoid.length || v.prefer.length); }, 'bikeStudios');
 
     // Favourites and spot alerts — set union.
@@ -1524,13 +1438,12 @@
     return plan;
   }
 
-  // "120 classes, 4 rankings and 2 favourites" — what the plan adds, in words.
+  // "120 classes and 2 favourites" — what the plan adds, in words.
   function _importSummary(added) {
     added = added || {};
     var n = function (count, one, many) { return count + ' ' + (count === 1 ? one : many); };
     var parts = [];
     if (added.classes) parts.push(n(added.classes, 'class', 'classes'));
-    if (added.rankings) parts.push(n(added.rankings, 'ranking', 'rankings'));
     if (added.favourites) parts.push(n(added.favourites, 'favourite', 'favourites'));
     if (added.bikeStudios) parts.push('bike preferences for ' + n(added.bikeStudios, 'studio', 'studios'));
     if (added.alerts) parts.push(n(added.alerts, 'spot alert', 'spot alerts'));
@@ -1580,7 +1493,7 @@
         var data = JSON.parse(e.target.result);
         var plan = _planSettingsImport(data, function (key) { return localStorage.getItem(key); }, {
           clean: {
-            history: _cleanStoredHistory, tiers: _cleanStoredTiers, idList: _cleanStoredIdList, bikePrefs: _cleanStoredBikePrefs,
+            history: _cleanStoredHistory, idList: _cleanStoredIdList, bikePrefs: _cleanStoredBikePrefs,
             classColours: window.PsycleClassColours ? window.PsycleClassColours.clean : null,
           },
           themes: (window.APP_THEMES || []).map(function (t) { return t.id; }),

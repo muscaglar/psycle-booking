@@ -1072,18 +1072,6 @@ select:focus, input:focus { border-color: var(--accent); }
   color: var(--text-dim);
 }
 
-/* ── settings.css: Tier System ───────────────────────────────────── */
-
-/* (The light-base ".tier-btn" rule lived here — a #ccc outline and the
-   --text-ghost ink. The rank buttons are css/crisp.css's tiles now, keyed on
-   the bare class (0,1,0) so every host wears them: at (0,2,0) this rule would
-   have re-inked them on Cloud. Removed, not overridden. The hover
-   rule stays: tests/suites/9f-one-card.js holds a chosen rank's ink against it.) */
-:is([data-theme="light"], [data-theme="cloud"]) .tier-btn:hover {
-  border-color: #aaa;
-  color: var(--text-muted);
-}
-
 /* ── settings.css: Bike Preferences extras ───────────────────────── */
 
 :is([data-theme="light"], [data-theme="cloud"]) .bike-pref-legend {
@@ -1222,8 +1210,7 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 .explore-map-stat-value { color: var(--text-heading); }
 .explore-map-stat-label { color: var(--text-faint); }
-.explore-tier-bar-label { color: var(--text-faint); }
-.explore-tier-legend-item { color: var(--text-dim); }
+.explore-map-label { color: var(--text-faint); }
 .explore-top-item {
   background: var(--bg-panel);
   border-color: var(--border);
@@ -1231,11 +1218,6 @@ select:focus, input:focus { border-color: var(--accent); }
 .explore-top-rank { color: var(--text-ghost); }
 .explore-top-name { color: var(--text-heading); }
 .explore-top-count { color: var(--text-dim); }
-/* (Two light-base tier-bar rules lived here — a hex track and a hex "unranked"
-   segment. The bar has NO track now and its segments wear the one neutral rank
-   recipe (css/crisp.css 9e.5); at (0,2,0) the track outranked crisp's plain
-   ".explore-tier-bar { background: none }" on Cloud, and the segment
-   rule was already dead.) */
 
 /* ═══════════════════════════════════════════════════════════════════
    Flavour themes — picked in Membership → Theme (?theme=id deep link).

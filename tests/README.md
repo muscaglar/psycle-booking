@@ -131,7 +131,7 @@ Rules for a pure block:
 
 Blocks exist today in `js/app.js` (core, gym-time, copy, event-details, a11y, session, data-owner, init-gate,
 filters, filter-summary, window, clash, book-fresh, booking, bookings-card, discover, day-pager, stored-data,
-tier-filter, offline, bookings-started, render-perf, template, predict, welcome, android-back), `js/reliability.js` (retry-auth,
+offline, bookings-started, render-perf, template, predict, welcome, android-back), `js/reliability.js` (retry-auth,
 offline-queue), `js/settings.js` (calendar-sync, settings-export, import-validate, build-id), `js/tabs.js`
 (cost-forecast, reminder-row, year-review, share, stats-pages), `js/features.js` (history, history-chunks, notify),
 `js/explore.js` (history-topup), `js/performance.js` (static-cache), `js/calendar.js` (ics-share),
@@ -257,7 +257,7 @@ token or a `#bookings` / `#stats` / `#membership` hash also keeps it away).
 Use an origin you never sign in on for real — a private window, a separate browser profile, or a different port.
 localStorage belongs to the origin, and a stubbed session writes to it: the fake token replaces a real one, and a
 stub `/profile` with a different customer id is an **account switch** as far as the app is concerned (the previous
-member's rankings and preferences are stashed and their history is cleared — see "Data owner" in
+member's favourites and preferences are stashed and their history is cleared — see "Data owner" in
 agents/architecture/session-and-accounts.md).
 
 ### 2. After a rebuild, get rid of the old service worker

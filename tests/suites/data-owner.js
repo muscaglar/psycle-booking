@@ -1,6 +1,6 @@
 'use strict';
 // Whose data is on this device (js/app.js, pure:data-owner + _claimDataOwner):
-// history, rankings, favourites, bike prefs, the usual bike, the weekly
+// history, favourites, bike prefs, the usual bike, the weekly
 // template… used to belong to the INSTALL. A second member signing in on the
 // same device inherited all of it, was never offered their own history sync,
 // and a manual sync merged both members' classes for good.
@@ -16,7 +16,6 @@ module.exports = async function (t) {
   const NOW = '2026-09-18T09:00:00.000Z', LATER = '2026-09-19T09:00:00.000Z';
 
   const A_DATA = {
-    psycle_instructor_tiers: '{"11":"S"}',
     psycle_fav_instructors: '["11","22"]',
     psycle_bike_prefs: '{"4":{"avoid":[1],"prefer":[7]}}',
     psycle_bike_history: '{"4":{"11":{"7":3}}}',
@@ -29,7 +28,7 @@ module.exports = async function (t) {
     psycle_calendar_data: '[{"eventId":"1"}]',
     psycle_offline_queue: '[{"eventId":77,"slots":[7]}]',
   };
-  const SMALL = ['psycle_instructor_tiers', 'psycle_fav_instructors', 'psycle_bike_prefs', 'psycle_bike_history',
+  const SMALL = ['psycle_fav_instructors', 'psycle_bike_prefs', 'psycle_bike_history',
     'psycle_weekly_template', 'psycle_recent_searches', 'psycle_notify_watchlist'];
   const REBUILDABLE = ['psycle_class_history', 'psycle_history_synced', 'psycle_history_prompt_dismissed', 'psycle_calendar_data', 'psycle_offline_queue', 'psycle_class_history_owner'];
   // features.js's own verdict on the history stamp (what _historyIsMine asks).
@@ -85,7 +84,7 @@ module.exports = async function (t) {
     eq([r.action, r.from, r.to], ['switch', '7', '8'], 'a different verified customer → switch');
     ok(stashWrittenBeforeRemoval === true, 'the stash is written BEFORE anything is removed');
     eq(writes[0], 'psycle_account_stash', '…it is the very first write');
-    eq(SMALL.concat(REBUILDABLE).filter((k) => s.getItem(k) !== null), [], 'none of A\'s per-account keys is left for B (history, sync flags, rankings, favourites, bike prefs/history, template, searches, alerts, calendar data, offline queue)');
+    eq(SMALL.concat(REBUILDABLE).filter((k) => s.getItem(k) !== null), [], 'none of A\'s per-account keys is left for B (history, sync flags, favourites, bike prefs/history, template, searches, alerts, calendar data, offline queue)');
     eq(r.cleared.slice().sort(), SMALL.concat(REBUILDABLE).sort(), '…and the result lists exactly those');
     eq(s.getItem('psycle_data_owner'), '8', 'the install is now stamped B');
     eq([s.getItem('psycle_class_history_owner'), historyOwnership(s.getItem('psycle_class_history_owner'), '8')], [null, 'adopt'],
@@ -124,7 +123,7 @@ module.exports = async function (t) {
   {
     const s = sAB;
     // B uses the app for a while.
-    s.setItem('psycle_instructor_tiers', '{"55":"A"}');
+    s.setItem('psycle_recent_searches', '[{"instructors":["55"]}]');
     s.setItem('psycle_fav_instructors', '["55"]');
     s.setItem('psycle_class_history', '[{"eventId":"9","instrName":"Bea","date":"2026-09-01 07:00:00"}]');
     s.setItem('psycle_history_synced', '2026-09-02T00:00:00.000Z');
@@ -137,7 +136,7 @@ module.exports = async function (t) {
       'B\'s class history is NOT handed to A — and A\'s own was never stashed: A is offered a fresh sync');
     const stash = stashOf(s);
     eq(Object.keys(stash), ['8'], 'the stash now holds B only (A\'s entry is consumed)');
-    eq([stash['8'].keys.psycle_instructor_tiers, stash['8'].keys.psycle_fav_instructors], ['{"55":"A"}', '["55"]'], '…with B\'s rankings and favourites');
+    eq([stash['8'].keys.psycle_recent_searches, stash['8'].keys.psycle_fav_instructors], ['[{"instructors":["55"]}]', '["55"]'], '…with B\'s searches and favourites');
     eq(s.getItem('psycle_data_owner'), '7', 'stamped A again');
     eq([s.getItem('psycle_class_history_owner'), historyOwnership(s.getItem('psycle_class_history_owner'), '7')], [null, 'adopt'], '…and B\'s history stamp is gone: A adopts the fresh history');
   }
@@ -148,13 +147,13 @@ module.exports = async function (t) {
     // device, and the first verified /profile after the update is member 222.
     const s = seed({ psycle_class_history_owner: '111' });
     const r = p._swapAccountData(s, '222', NOW);
-    eq([r.action, r.from, r.to], ['switch', '111', '222'], 'history stamp 111 + profile 222 → switch 111 → 222 (adopt made 222 the owner of 111\'s rankings AND history)');
-    eq([s.getItem('psycle_class_history'), s.getItem('psycle_class_history_owner'), s.getItem('psycle_instructor_tiers'), s.getItem('psycle_data_owner')], [null, null, null, '222'],
-      '222 starts clean: no history of 111\'s, no stamp, no rankings');
-    eq(stashOf(s)['111'].keys.psycle_instructor_tiers, A_DATA.psycle_instructor_tiers, '111\'s hand-entered keys are stashed under THEIR id');
+    eq([r.action, r.from, r.to], ['switch', '111', '222'], 'history stamp 111 + profile 222 → switch 111 → 222 (adopt made 222 the owner of 111\'s favourites AND history)');
+    eq([s.getItem('psycle_class_history'), s.getItem('psycle_class_history_owner'), s.getItem('psycle_fav_instructors'), s.getItem('psycle_data_owner')], [null, null, null, '222'],
+      '222 starts clean: no history of 111\'s, no stamp, no favourites');
+    eq(stashOf(s)['111'].keys.psycle_bike_prefs, A_DATA.psycle_bike_prefs, '111\'s hand-entered keys are stashed under THEIR id');
     const back = p._swapAccountData(s, '111', LATER);
-    eq([back.action, s.getItem('psycle_instructor_tiers'), s.getItem('psycle_fav_instructors')], ['switch', A_DATA.psycle_instructor_tiers, A_DATA.psycle_fav_instructors],
-      '111 comes back to their own rankings and favourites (they were stashed under 222 and lost before)');
+    eq([back.action, s.getItem('psycle_bike_prefs'), s.getItem('psycle_fav_instructors')], ['switch', A_DATA.psycle_bike_prefs, A_DATA.psycle_fav_instructors],
+      '111 comes back to their own bike preferences and favourites (they were stashed under 222 and lost before)');
 
     // The same member as the history stamp: still a plain adopt, nothing moved.
     const mine = seed({ psycle_class_history_owner: '7' });
@@ -189,7 +188,7 @@ module.exports = async function (t) {
     k2.setItem = (key, v) => { if (key === 'psycle_data_owner') throw new Error('killed'); realSet2(key, v); };
     p._swapAccountData(k2, '222', NOW);
     k2.setItem = realSet2;
-    eq([p._swapAccountData(k2, '222', LATER).action, k2.getItem('psycle_class_history'), stashOf(k2)['111'].keys.psycle_instructor_tiers], ['adopt', null, A_DATA.psycle_instructor_tiers],
+    eq([p._swapAccountData(k2, '222', LATER).action, k2.getItem('psycle_class_history'), stashOf(k2)['111'].keys.psycle_bike_prefs], ['adopt', null, A_DATA.psycle_bike_prefs],
       '…and a kill after that removal: 222 adopts an install already emptied of 111\'s data; 111\'s stash is intact');
   }
 
@@ -266,11 +265,11 @@ module.exports = async function (t) {
   {
     // Returning member 8 has a stash entry; the app is killed right after the
     // first of 8's keys has been restored (before the stamp).
-    const s = seed({ psycle_data_owner: '7', psycle_account_stash: JSON.stringify({ 8: { savedAt: NOW, pending: '', keys: { psycle_fav_instructors: '["88"]', psycle_instructor_tiers: '{"88":"S"}' } } }) });
+    const s = seed({ psycle_data_owner: '7', psycle_account_stash: JSON.stringify({ 8: { savedAt: NOW, pending: '', keys: { psycle_fav_instructors: '["88"]', psycle_bike_prefs: '{"8":{"avoid":[2],"prefer":[]}}' } } }) });
     const realSet = s.setItem.bind(s);
     let restoredWrites = 0;
     s.setItem = (k, v) => {
-      if (k === 'psycle_instructor_tiers' || k === 'psycle_fav_instructors') { if (++restoredWrites === 2) throw new Error('killed'); }
+      if (k === 'psycle_bike_prefs' || k === 'psycle_fav_instructors') { if (++restoredWrites === 2) throw new Error('killed'); }
       if (k === 'psycle_data_owner') throw new Error('killed');
       realSet(k, v);
     };
@@ -282,7 +281,7 @@ module.exports = async function (t) {
     const stash = stashOf(s);
     eq(stash['7'].keys.psycle_fav_instructors, A_DATA.psycle_fav_instructors, 'A\'s stash still holds A\'s favourites — NOT the half-restored B value that was sitting in localStorage');
     eq(SMALL.filter((k) => stash['7'].keys[k] !== A_DATA[k]), [], '…every one of A\'s keys is intact');
-    eq([s.getItem('psycle_fav_instructors'), s.getItem('psycle_instructor_tiers'), Object.keys(stash)], ['["88"]', '{"88":"S"}', ['7']], 'B has their own back, and B\'s entry is consumed');
+    eq([s.getItem('psycle_fav_instructors'), s.getItem('psycle_bike_prefs'), Object.keys(stash)], ['["88"]', '{"8":{"avoid":[2],"prefer":[]}}', ['7']], 'B has their own back, and B\'s entry is consumed');
   }
 
   // ── The real _applyProfile ───────────────────────────────────────────────

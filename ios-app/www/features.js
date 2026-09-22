@@ -6,7 +6,7 @@
  * modals, and scaffolds push notification watchlists for full classes.
  *
  * Depends on: app.js (submitBooking, confirmUnbook, eventCard, _eventCache, etc.),
- *             security.js (escapeHTML), settings.js (tierBadgeHTML)
+ *             security.js (escapeHTML), settings.js (toggleFavFromSettings)
  * Exposes on window:
  *   openHistoryModal, requestNotificationPermission,
  *   _features_openInstructorModal, _features_filterByInstructor,
@@ -442,20 +442,15 @@
     return null;
   }
 
-  // ★ + S–F under the name: the Membership tab's own controls (.tier-fav /
-  // .tier-btn) driven by its own writers, so a rank set here is THE rank. No
-  // ids in inline handlers — the overlay's one click listener reads data-*.
-  function instructorRankHtml(instrId) {
-    if (typeof window.setInstructorTier !== 'function' || typeof window.toggleFavFromSettings !== 'function') return '';
-    const sid = String(instrId);
-    const isFav = (typeof favouriteInstructors !== 'undefined' && favouriteInstructors) ? favouriteInstructors.has(sid) : false;
-    const tier = (typeof getInstructorTier === 'function') ? getInstructorTier(sid) : null;
-    const btns = ['S', 'A', 'B', 'C', 'D', 'F'].map(t =>
-      `<button type="button" class="tier-btn${tier === t ? ' active-' + t : ''}" data-instr-tier="${t}" aria-pressed="${tier === t}" aria-label="Rank ${t}">${t}</button>`
-    ).join('');
-    return `<button type="button" class="tier-fav${isFav ? ' is-fav' : ''}" data-instr-fav="1" aria-pressed="${isFav}"
-        title="${isFav ? 'Remove from favourites' : 'Add to favourites'}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}"></button>
-      <div class="tier-btns">${btns}</div>`;
+  // ★ under the name: the Membership tab's own control (.favs-star) driven by its
+  // own writer, so a star set here is THE star. A star is the only mark a
+  // member can put on an instructor. No ids in inline handlers — the overlay's
+  // one click listener reads data-*.
+  function instructorFavHtml(instrId) {
+    if (typeof window.toggleFavFromSettings !== 'function') return '';
+    const isFav = (typeof favouriteInstructors !== 'undefined' && favouriteInstructors) ? favouriteInstructors.has(String(instrId)) : false;
+    const words = isFav ? 'Remove from favourites' : 'Add to favourites';
+    return `<button type="button" class="favs-star${isFav ? ' is-fav' : ''}" data-instr-fav="1" aria-pressed="${isFav}" title="${words}" aria-label="${words}"></button>`;
   }
 
   function openInstructorModal(instrName, instrId) {
@@ -476,7 +471,6 @@
     const keywords = (meta.keywords || '').split(/[,|]/).map(k => k.trim()).filter(Boolean);
     const instagram = meta.instagram_handle || '';
     const handle = instr?.handle || instrName.toLowerCase().replace(/\s+/g, '-');
-    const tierBadge = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instrId) : '';
 
     // Gather upcoming classes for this instructor from _eventCache
     const now = new Date();
@@ -496,7 +490,7 @@
     }
     profileHtml += '<div class="instructor-profile-info">';
     // The id names the dialog below (this modal has no .modal-title).
-    profileHtml += `<div class="instructor-name-title" id="instructorModalName">${escapeHtml(instrName)} <span class="instructor-tier-slot">${tierBadge}</span></div>`;
+    profileHtml += `<div class="instructor-name-title" id="instructorModalName">${escapeHtml(instrName)}</div>`;
     if (keywords.length > 0) {
       profileHtml += '<div class="instructor-keywords">' +
         keywords.map(k => `<span class="instructor-keyword">${escapeHtml(k)}</span>`).join('') +
@@ -511,7 +505,7 @@
     // in the column beside the photo (~240px on a phone) six fingertip-sized
     // tiles cannot fit. Only for a real instructor record: a name with no id
     // has nothing to rank.
-    const rankHtml = instr ? instructorRankHtml(instr.id) : '';
+    const rankHtml = instr ? instructorFavHtml(instr.id) : '';
     if (rankHtml) profileHtml += `<div class="instructor-rank">${rankHtml}</div>`;
 
     // Bio
@@ -595,29 +589,19 @@
         return;
       }
       const fav = el.closest('[data-instr-fav]');
-      const tierBtn = el.closest('[data-instr-tier]');
-      if (!instr || (!fav && !tierBtn)) return;
-      const picked = tierBtn ? tierBtn.dataset.instrTier : null;
-      if (fav) window.toggleFavFromSettings(instr.id);
-      else window.setInstructorTier(instr.id, picked);
-      // Repaint from the stores those writers just changed (the tapped button
-      // is replaced, so hand the focus to its successor).
-      const rank = overlay.querySelector('.instructor-rank');
-      if (rank) {
-        rank.innerHTML = instructorRankHtml(instr.id);
-        const again = rank.querySelector(fav ? '[data-instr-fav]' : '[data-instr-tier="' + picked + '"]');
+      if (!instr || !fav) return;
+      window.toggleFavFromSettings(instr.id);
+      // Repaint from the store that writer just changed (the tapped button is
+      // replaced, so hand the focus to its successor).
+      const holder = overlay.querySelector('.instructor-rank');
+      if (holder) {
+        holder.innerHTML = instructorFavHtml(instr.id);
+        const again = holder.querySelector('[data-instr-fav]');
         if (again) again.focus();
       }
-      const slot = overlay.querySelector('.instructor-tier-slot');
-      if (slot) slot.innerHTML = (typeof tierBadgeHTML === 'function') ? tierBadgeHTML(instr.id) : '';
-      // The writers only repaint Membership's (hidden) list, and the tier badge
-      // is baked into each card when it is built: the cards under this modal
-      // kept the old rank. A star writes nothing on a card — it only brings
-      // back Discover's "My favourites" quick action after a first favourite.
-      if (tierBtn) {
-        if (typeof _renderWindowInPlace === 'function') _renderWindowInPlace();
-        if (typeof refreshUpcomingPanel === 'function') refreshUpcomingPanel();
-      } else if (typeof updateDiscoverEmptyState === 'function') updateDiscoverEmptyState();
+      // A star writes nothing on a card — it only brings back Discover's
+      // "My favourites" quick action after a first favourite.
+      if (typeof updateDiscoverEmptyState === 'function') updateDiscoverEmptyState();
     });
     // The rows are divs with role="button": Enter / Space must work too.
     overlay.addEventListener('keydown', function (e) {

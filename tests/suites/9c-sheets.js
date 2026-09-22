@@ -208,7 +208,7 @@ module.exports = function (t) {
   }
   {
     // settings.js's fav / avoid marks: shapes and classes, no inline colour.
-    const patch = between(settingsSrc, 'var _origShowBikePicker = window.showBikePicker;', '// Integration: Tier Badges on Class Cards');
+    const patch = between(settingsSrc, 'var _origShowBikePicker = window.showBikePicker;', '// Export / Import Settings');
     ok(!/#[0-9a-f]{3,8}\b/i.test(patch) && !/setAttribute\('fill'/.test(patch) && !/style="/.test(patch), 'no colour literal, no fill attribute, no inline style in the picker integration');
     ok(/createElementNS\('http:\/\/www\.w3\.org\/2000\/svg', 'circle'\)[\s\S]*?classList\.add\('pref-dot', 'pref-dot-prefer'\)/.test(patch) &&
       /createElementNS\('http:\/\/www\.w3\.org\/2000\/svg', 'path'\)[\s\S]*?classList\.add\('pref-dot', 'pref-dot-avoid'\)/.test(patch), 'prefer = a dot, avoid = a bar (a <path>: the seat rules style every <rect> in the seat) — two shapes, not two colours');
@@ -335,7 +335,7 @@ module.exports = function (t) {
     ok(/class="instructor-view-schedule pill-btn pill-primary" data-instr-schedule="1"/.test(prof) && /class="instructor-view-schedule instructor-psycle-link pill-btn pill-outline"/.test(prof), 'its two actions are pills');
     // The row's status: Crisp primitives in Discover's own words — not the older sheets' 4px UPPERCASE .badge
     // tag in the old status palette ("2 LEFT", "FULL" in red: red is reserved for a late-cancel charge).
-    const chipSrc = between(featSrc, '  function classStatusChip(evt) {', '  // ★ + S–F under the name');
+    const chipSrc = between(featSrc, '  function classStatusChip(evt) {', '  // ★ under the name');
     const chip = (evt, held, fresh) => {
       const ctx = t.vm.createContext({ Date, window: { _myBookings: held || {}, _countsFresh: () => fresh !== false, _spotsLeft: (e) => (Number.isFinite(e.capacity) ? Math.max(0, e.capacity - e.occupancy) : null) } });
       t.vm.runInContext(chipSrc + '\nthis.out = classStatusChip(' + JSON.stringify(evt) + ');', ctx, { filename: 'js/features.js[classStatusChip]' });

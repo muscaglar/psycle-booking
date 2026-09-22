@@ -889,8 +889,8 @@ header .theme-toggle:focus-visible { outline: var(--focus-ring); outline-offset:
 .cat-pill:focus-visible,
 .sub-pill:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -2); }
 
-/* "★ Favs" / "S/A" beside the Instructor label: two quiet neutral pills (they
-   were gold — colour means class type), with a taller hit area than they draw. */
+/* "★ Favs" beside the Instructor label: a quiet neutral pill (it was gold — colour
+   means class type), with a taller hit area than it draws. */
 .controls-body .fav-btn {
   position: relative;
   margin-left: var(--space-2);
@@ -1071,7 +1071,7 @@ header .theme-toggle:focus-visible { outline: var(--focus-ring); outline-offset:
        <div class="cc-info">
          <span class="cc-head"><span class="ct-tile">pictogram</span>
            <span class="cc-name">Ride 45</span></span>
-         <span class="cc-sub"><span class="cc-who">Instructor + rank</span>
+         <span class="cc-sub"><span class="cc-who">Instructor</span>
            <span class="cc-loc">Studio</span></span>   plain text, never coloured
          <span class="cc-spots [low]">…</span>          availability
        </div>
@@ -1090,10 +1090,9 @@ header .theme-toggle:focus-visible { outline: var(--focus-ring); outline-offset:
    surface, the dashed place, the glow, --cc-pill, the TIME block (.cc-time —
    one builder for every wearer, js/app.js _ccTimeHTML; a held class only adds
    its day), the title row (.cc-head), the meta line (.cc-sub · .cc-who ·
-   .cc-loc) and where the rank tile sits. crisp:9d-bookings adds only
+   .cc-loc). crisp:9d-bookings adds only
    what a held class needs on top (its grid, the day, seat chips, the actions
-   and More) and may not name .class-card at all (tests/suites/9d-bookings.js).
-   The rank tile's LOOK is neither's: it is the one neutral recipe of 9e.5. */
+   and More) and may not name .class-card at all (tests/suites/9d-bookings.js). */
 .class-grid { gap: var(--space-4); }
 .class-card[data-ct] {
   display: flex;
@@ -1198,7 +1197,7 @@ html[data-theme="gameboy"] .class-card[data-ct] { --cc-pill: var(--surface-2); }
   outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
 }
-/* "Instructor [rank] · Studio". The studio is ONE no-wrap unit that carries its
+/* "Instructor · Studio". The studio is ONE no-wrap unit that carries its
    own separator in the gap to its left; when the unit wraps to a new line that
    gap lies outside the line's left edge, where the clip takes the dot away —
    so a wrapped line never ends, or starts, on a bare "·". (The clip leaves
@@ -1216,8 +1215,7 @@ html[data-theme="gameboy"] .class-card[data-ct] { --cc-pill: var(--surface-2); }
   line-height: 1.45;
   clip-path: inset(calc(var(--space-2) * -1) calc(var(--space-2) * -1) calc(var(--space-2) * -1) calc(var(--space-1) * -1));
 }
-/* Inline, not a flex row: when a long name wraps, its rank tile follows the
-   last word instead of floating beside the block. */
+/* Inline, not a flex row: a long name wraps as text. */
 .class-card[data-ct] .cc-who { min-width: 0; }
 .class-card[data-ct] .cc-loc { position: relative; white-space: nowrap; }
 .class-card[data-ct] .cc-loc::before {
@@ -1227,13 +1225,6 @@ html[data-theme="gameboy"] .class-card[data-ct] { --cc-pill: var(--surface-2); }
   width: var(--space-5);
   text-align: center;
 }
-/* The rank tile rides inline after the instructor's name: only its PLACE is
-   said here. Its look is the one neutral rank recipe (crisp:9e-stats-membership,
-   9e.5) and is never re-coloured on a card — S to C are opaque tiles, and D / F
-   read in --text-muted, which IS --ct-ink-2: a pair the contrast matrix holds
-   on every tint. */
-.class-card[data-ct] .tier-badge { flex: none; margin-left: var(--space-1); vertical-align: middle; }
-
 .class-card[data-ct] .cc-spots {
   color: var(--ct-ink-2);
   font-family: var(--font-body);
@@ -3160,7 +3151,7 @@ html[data-theme="gameboy"] .next-class-pill { box-shadow: 0 0 0 var(--hairline) 
 /* == crisp:9e-stats-membership == */
 
 /* Stats (js/tabs.js, js/explore.js), Membership + the Class colours control
-   (js/tabs.js), the Settings panel chrome (js/settings.js), rank tiles, and the
+   (js/tabs.js), the Settings panel chrome (js/settings.js), and the
    first-run welcome's look (js/app.js _onboard*). The Stats board is the spec
    for Overview; Habits, Instructors and Membership carry the same language:
    surface cards on the ground with the ONE soft shadow and no outline,
@@ -3171,9 +3162,7 @@ html[data-theme="gameboy"] .next-class-pill { box-shadow: 0 0 0 var(--hairline) 
 
 /* A <button> does not inherit the page's face: every action of these two tabs
    (and the Settings panel) says so once. */
-.explore-sync-btn, .habit-find-btn, .year-review-btn, .share-insights-btn, .explore-card-action,
-.explore-unranked-item, .ms-row, .ms-signout, .theme-chip, .tier-btn, .app-advanced-btn, .app-row,
-.tab-empty .tab-empty-btn { font-family: var(--font-body); }
+.explore-sync-btn, .habit-find-btn, .year-review-btn, .share-insights-btn, .explore-card-action, .ms-row, .ms-signout, .theme-chip, .app-advanced-btn, .app-row, .tab-empty .tab-empty-btn { font-family: var(--font-body); }
 
 /* ── 9e.1 Stats: insets, headings, the switcher ─────────────────── */
 #tab-stats { --stats-inset: var(--space-9); }
@@ -3624,23 +3613,7 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 }
 .explore-map-stat-value { font-size: var(--text-6xl); font-weight: var(--weight-black); }
 .explore-map-stat-label { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
-.explore-tier-bar-label { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
-.explore-tier-bar { gap: calc(var(--space-1) / 2); border-radius: var(--radius-full); background: none; }
-.explore-tier-seg { font-family: var(--font-display); font-size: var(--type-label); font-weight: var(--weight-extrabold); border-radius: var(--radius-sm); overflow: hidden; white-space: nowrap; }
-.explore-tier-legend-item { font-size: var(--type-label); font-weight: var(--weight-semibold); color: var(--text-muted); }
-.explore-tier-legend-dot { border-radius: var(--radius-xs); }
-.explore-unranked-item {
-  min-height: var(--tap-min);
-  padding: 0 var(--space-7);
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 var(--hairline) var(--line);
-}
-.explore-unranked-item:hover { background: var(--surface-2); }
-.explore-unranked-item:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
-.explore-unranked-name { font-size: var(--type-meta); }
-.explore-unranked-count { font-size: var(--type-label); color: var(--text-muted); }
+.explore-map-label { font-size: var(--type-caption); font-weight: var(--weight-bold); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
 .explore-top-item {
   padding: var(--space-4) var(--space-7);
   border: 0;
@@ -3701,48 +3674,6 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 .variety-value { font-family: var(--font-display); font-size: var(--type-caption); font-weight: var(--weight-extrabold); color: var(--text-heading); }
 .variety-label { font-size: var(--text-xs); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
 
-/* ── 9e.5 Rank tiles (S–F): neutral, as drawn — colour is kept for class
-   types. One recipe for the tile on a card, the rank buttons, the tier bar's
-   segments and its legend (which used to carry a second copy of the colours):
-   S the ink, A an ink outline, B the hairline fill, then quieter. ── */
-.tier-S, .active-S { --rank-fill: var(--text); --rank-ink: var(--bg-panel); --rank-line: var(--text); }
-.tier-A, .active-A { --rank-fill: var(--bg-panel); --rank-ink: var(--text); --rank-line: var(--text); }
-.tier-B, .active-B { --rank-fill: var(--border); --rank-ink: var(--text-heading); --rank-line: var(--border); }
-.tier-C, .active-C { --rank-fill: var(--bg-deep); --rank-ink: var(--text-muted); --rank-line: var(--bg-deep); }
-.tier-D, .active-D { --rank-fill: transparent; --rank-ink: var(--text-muted); --rank-line: var(--border-light); }
-.tier-F, .active-F { --rank-fill: transparent; --rank-ink: var(--text-muted); --rank-line: var(--border-light); }
-.tier-unranked { --rank-fill: transparent; --rank-ink: var(--text-muted); --rank-line: var(--border-light); }
-.tier-badge.tier-S, .tier-badge.tier-A, .tier-badge.tier-B, .tier-badge.tier-C, .tier-badge.tier-D, .tier-badge.tier-F,
-.explore-tier-seg.tier-S, .explore-tier-seg.tier-A, .explore-tier-seg.tier-B, .explore-tier-seg.tier-C, .explore-tier-seg.tier-D, .explore-tier-seg.tier-F,
-.explore-tier-bar .explore-tier-seg.tier-unranked,
-.explore-tier-legend-dot,
-.tier-btn.active-S, .tier-btn.active-A, .tier-btn.active-B, .tier-btn.active-C, .tier-btn.active-D, .tier-btn.active-F {
-  border-color: transparent;
-  background: var(--rank-fill);
-  color: var(--rank-ink);
-  box-shadow: inset 0 0 0 var(--hairline) var(--rank-line);
-}
-/* …and the chosen rank stays readable under the pointer. The older light-base
-   ".tier-btn:hover" (css/theme.css) is (0,3,0): it outranked the rule above and
-   re-inked the letter --text-muted — on the S tile's ink fill that is 1.6:1, and
-   on iOS :hover sticks after the very tap that chose it (seen in the instructor
-   modal on Cloud; Membership's own rows are id-scoped and never had it). */
-.tier-btn.active-S:hover, .tier-btn.active-A:hover, .tier-btn.active-B:hover,
-.tier-btn.active-C:hover, .tier-btn.active-D:hover, .tier-btn.active-F:hover { border-color: transparent; color: var(--rank-ink); }
-.tier-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--space-7);
-  height: var(--space-7);
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-display);
-  font-size: var(--type-label);
-  font-weight: var(--weight-extrabold);
-  line-height: 1;
-  letter-spacing: 0;
-}
 
 /* ── 9e.6 Membership ─────────────────────────────────────────────── */
 /* ONE left edge on a phone: the wordmark, Discover, My Bookings and Stats
@@ -3926,23 +3857,21 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
   font-size: var(--type-body);
   font-weight: var(--weight-bold);
 }
-#tab-membership .tier-group-label { font-size: var(--type-caption); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
-#tab-membership .tier-list { gap: 0; }
-#tab-membership .tier-list-short { max-height: calc(var(--space-12) * 7); padding: 0; border: 0; border-radius: 0; background: none; }
+#tab-membership .favs-group-label { font-size: var(--type-caption); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
+#tab-membership .favs-list { gap: 0; }
+#tab-membership .favs-list-short { max-height: calc(var(--space-12) * 7); padding: 0; border: 0; border-radius: 0; background: none; }
 /* Two lines on a phone: the name gets the width it needs (it was cut to a
    first name and an ellipsis beside six buttons), the six ranks a full row of
    fingertip-sized tiles under it. One line again where there is room. */
-#tab-membership .tier-row { flex-wrap: wrap; row-gap: var(--space-2); padding: var(--space-4) 0; border-bottom: var(--hairline) solid var(--line); }
-#tab-membership .tier-row:last-child { border-bottom: 0; }
-#tab-membership .tier-name { flex: 1 1 calc(100% - var(--tap-min) - var(--space-4)); font-size: var(--type-body); font-weight: var(--weight-semibold); }
-#tab-membership .tier-btns { flex: 1 1 100%; }
+#tab-membership .favs-row { flex-wrap: wrap; row-gap: var(--space-2); padding: var(--space-4) 0; border-bottom: var(--hairline) solid var(--line); }
+#tab-membership .favs-row:last-child { border-bottom: 0; }
+#tab-membership .favs-name { flex: 1 1 calc(100% - var(--tap-min) - var(--space-4)); font-size: var(--type-body); font-weight: var(--weight-semibold); }
 @media (min-width: 641px) {
-  #tab-membership .tier-row { flex-wrap: nowrap; }
-  #tab-membership .tier-name { flex: 1 1 auto; }
-  #tab-membership .tier-btns { flex: 0 0 auto; }
+  #tab-membership .favs-row { flex-wrap: nowrap; }
+  #tab-membership .favs-name { flex: 1 1 auto; }
 }
-#tab-membership .tier-empty { font-size: var(--type-caption); }
-#tab-membership .tier-search {
+#tab-membership .favs-empty { font-size: var(--type-caption); }
+#tab-membership .favs-search {
   min-height: var(--tap-min);
   margin-bottom: var(--space-3);
   padding: 0 var(--space-8);
@@ -3953,35 +3882,12 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
   font-family: var(--font-body);
   font-size: var(--text-xl);
 }
-#tab-membership .tier-search:focus { box-shadow: inset 0 0 0 var(--hairline) var(--text); }
-/* The rank CONTROL — ★ + the six S–F buttons — has ONE look, keyed on its own
-   classes: Membership's rows (js/settings.js) and the instructor profile
-   (js/features.js instructorRankHtml) print the same buttons, and a host only
-   says where the row sits (above; css/features.css .instructor-rank). Scoped
-   to #tab-membership, the profile kept settings.css's 28×24px boxes. A chosen
-   rank's fill is 9e.5's ".tier-btn.active-*" (0,2,0), which outranks this.
-   Round-cornered tiles with a fingertip-sized hit area: it reaches up and down
-   to --tap-min, and half-way into the --space-2 gap on either side. */
-.tier-fav { width: var(--tap-min); height: var(--tap-min); margin-left: calc(var(--space-4) * -1); font-size: var(--text-3xl); }
-.tier-btns { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); }
-@media (min-width: 641px) {
-  .tier-btns { grid-template-columns: repeat(6, var(--tap-min)); }
-}
-.tier-btn {
-  position: relative;
-  width: auto;
-  height: calc(var(--tap-min) - var(--space-2));
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text-muted);
-  box-shadow: inset 0 0 0 var(--hairline) var(--line);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-}
-.tier-btn::after { content: ''; position: absolute; inset: calc(var(--space-1) * -0.75) calc(var(--space-2) * -0.5); }
-.tier-btn:focus-visible, .tier-fav:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+#tab-membership .favs-search:focus { box-shadow: inset 0 0 0 var(--hairline) var(--text); }
+/* The favourite star has ONE look, keyed on its own class: Membership's rows (js/settings.js) and the
+   instructor profile (js/features.js instructorFavHtml) print the same button, and a host only says where it
+   sits (css/features.css .instructor-rank). A fingertip-sized hit area: it reaches up and down to --tap-min. */
+.favs-star { width: var(--tap-min); height: var(--tap-min); margin-left: calc(var(--space-4) * -1); font-size: var(--text-3xl); }
+.favs-star:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
 #tab-membership .about-block { border-top: 0; }
 #tab-membership .about-mark { font-family: var(--font-display); font-size: var(--type-heading); font-weight: var(--weight-black); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
 #tab-membership .about-text { font-size: var(--type-caption); color: var(--text-ghost); }

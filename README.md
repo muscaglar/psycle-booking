@@ -13,7 +13,7 @@ and your data are stored on your device, and the page's content security policy 
 
 - **Discover** — one timetable across all studios, filtered instantly in the browser: date presets (Today,
   Tomorrow, 7 days, Next week, 14 days or a picked day), time of day, "Available only", studios, class types,
-  instructors, favourites and your S/A-ranked instructors. Cards show how many spots are left while the numbers
+  instructors and your favourites. Cards show how many spots are left while the numbers
   are fresh. The list is cached, refreshes itself quietly, and knows that Psycle opens the next week on Mondays
   at 12:00 London time.
 - **Booking** — a seat picker that remembers your usual spot and your prefer / avoid preferences, clash warnings
@@ -25,7 +25,7 @@ and your data are stored on your device, and the page's content security policy 
   Share; a read-only saved copy when you open the app with no signal; "Your usual week", which previews every
   class before anything is booked.
 - **Stats and Membership** — history, streaks, heatmap, year in review, a shareable stats card, plan usage and a
-  cost tracker, instructor rankings and favourites.
+  cost tracker, and your favourite instructors.
 - **Offline-aware** — changes made offline are queued and never spend a credit by surprise: a queued booking found
   after a relaunch asks before it is sent.
 - **Five themes**, keyboard and screen-reader support throughout, and an installable PWA.

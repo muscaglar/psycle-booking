@@ -528,7 +528,6 @@
   wrapGlobal('toggleInstructor', saveFilters);
   wrapGlobal('removeInstructor', saveFilters);
   wrapGlobal('applyFavouritesAsFilter', saveFilters);
-  wrapGlobal('applyTierFilter', saveFilters);
   wrapGlobal('toggleCategory', saveFilters);
   wrapGlobal('toggleStrengthSub', saveFilters);
   wrapGlobal('toggleReformerSub', saveFilters);

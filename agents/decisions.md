@@ -57,7 +57,7 @@ Chosen by the owner from several rounds of concepts, with a product designer adv
 | A sparing glow ONLY for what is selected or yours. | The glow was liked; it keeps that one meaning. | `--glow-*` tokens (css/theme.css); each `crisp:9*` section's suite pins its own list (9b-discover.js and its siblings) |
 | A waitlist place is drawn dashed / hollow, never with the glow, and is never spoken as "You have …". | It is not a seat until `/bookings` shows one. | `.ct-card.is-dashed`, `.ct-badge.is-dashed`, `.class-card[data-ct].is-waitlisted` (css/crisp.css) |
 | The day-strip dot marks a held SEAT only; a place marks nothing. | NOT the owner's words: the implementer's reading of "selected, or yours". Ask before changing it — and whether a day with a seat AND a place shows one mark or two is theirs to say. | `_pagerHeldDays` (the `b.waitlisted` skip; js/app.js); 9b-discover.js ("a waitlist PLACE marks nothing") |
-| Colour means CLASS TYPE and nothing else. | The owner corrected an earlier by-studio idea: "the colouring should be by class type … as opposed to by club/venue". | `window.PsycleClassColours`, `CLASS_COLOUR_PALETTE` (`pure:class-colours`) — js/theme.js; `classTypeKey` (js/app.js); the one `[data-ct]` mapping block in css/crisp.css; rank tiles, heatmap and tier bar stay neutral (css/crisp.css 9e.5) |
+| Colour means CLASS TYPE and nothing else. | The owner corrected an earlier by-studio idea: "the colouring should be by class type … as opposed to by club/venue". | `window.PsycleClassColours`, `CLASS_COLOUR_PALETTE` (`pure:class-colours`) — js/theme.js; `classTypeKey` (js/app.js); the one `[data-ct]` mapping block in css/crisp.css; the heatmap stays neutral |
 | Colour is customisable and calm by default: intensity Off / Soft (default) / Bold, and a curated swatch per class type with precomputed contrast-safe values. | "the colours should be customisable (as the current ones are too much)" | `renderClassColours`, `_ccControlModel` (`pure:class-colour-control`) — js/tabs.js; `psycle_class_colours`; the contrast matrix in 9a-foundation.js |
 | ONE class card component everywhere: Discover, My Bookings, the usual week. | A My Bookings layout inconsistent with Discover was disliked. | `.class-card[data-ct]` (css/crisp.css 9b.7); `_ccTimeHTML` (js/app.js); 9f-one-card.js |
 | Discover shows one day at a time, with a swipe and a day strip. No previous / next chevrons. | The owner dislikes chevron buttons for changing day. | `pure:day-pager`, `_wireDayPager` (js/app.js); 8b-day-pager.js fails if `day-nav` or "Previous day" comes back |
@@ -110,6 +110,20 @@ Chosen by the owner from several rounds of concepts, with a product designer adv
   point at them. A web donation link is NOT wanted unless the owner asks again. The Apple developer account is an
   individual one, so the seller shown on the store and the recipient of the money is the owner in person, not
   Ajar.dev Ltd. CLOSED.
+
+- **No grades on people, 2026-09-22.** The owner: "I think we should get rid of instructor ranking. It could be seen
+  as mean... Perhaps we maintain only a 'favoruites'", and then: "We dont need to maintain support for the old
+  system. We can go forward fully with only favoruites. So that way, we have no trace of the old rankings." So a STAR
+  is the only mark a member can put on an instructor — there is no grade, no rank, no "avoid" or "hide" for a person
+  (avoiding a BIKE is fine: that is furniture). Removed without migration or compatibility: the S–F grades, their
+  badge on cards and in the class sheet, the "S/A" filter and chip, the grade buttons in Membership and the
+  instructor profile, the grade bar and the "unranked" list in Stats, the key in export / import / the account stash
+  / the native mirror, every style and token. What an old device still holds is DELETED at launch
+  (`RETIRED_STORAGE_KEYS` in js/app.js; `RETIRED_KEYS` in the bridge for the native copy), and a backup made before
+  this still imports — its grades go nowhere. Suggestions run on favourites and booking history. Held by
+  tests/suites/9f-one-card.js ("the only mark on an instructor"), owner-tools.js, 8a-filters.js and
+  import-validate.js. "Most booked" in Stats stays: it counts the member's own habits and grades nobody. CLOSED —
+  do not bring back a rating, a rank or a negative flag for a person in any form.
 
 ## 4. Time zones
 
@@ -213,7 +227,7 @@ Chosen on the owner's behalf in the Android work (section 8), and theirs to over
   notifications plugin arms (`setAndAllowWhileIdle`) for up to an hour. Exact alarms are the known follow-up
   (agents/backlog.md).
 - The app's data is excluded from Google backup and from a phone-to-phone transfer: on a new phone the member signs
-  in again, and what lives only on the phone (rankings, favourites, spot preferences) travels by Settings → export
+  in again, and what lives only on the phone (favourites, spot preferences) travels by Settings → export
   and import, not by backup.
 - A stats or year card is shared as text on Android (an image needs a plugin the app does not carry).
 - The Android launch screen shows the mark without the wordmark.

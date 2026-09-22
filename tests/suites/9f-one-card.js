@@ -145,67 +145,23 @@ module.exports = function (t) {
     ok(/#tab-bookings \.rebook-hint-btn \{[^}]*font-family: var\(--font-body\);/.test(s9d), '"Find it" (the Book again? hint) names its face too');
   }
 
-  t.section('9f: the rank tile has ONE look (9e.5); a card only says where it sits');
+  t.section('9f: the favourite STAR has ONE look, keyed on its own class — and it is the only mark on an instructor');
   {
-    const recolours = (css) => rulesOf(css).filter(([sel, body]) => /\.tier-(?:badge|[SABCDF])(?![\w-])/.test(sel) && /(?:^|;)\s*(background|color|box-shadow|font-[\w-]+|border-radius)\s*:/.test(body)).map((r) => r[0]);
-    eq(recolours(s9b), [], 'crisp:9b-discover does not re-colour or re-shape it');
-    eq(recolours(s9d), [], 'crisp:9d-bookings does not either');
-    ok(/\.class-card\[data-ct\] \.tier-badge \{ flex: none; margin-left: var\(--space-1\); vertical-align: middle; \}/.test(s9b), 'on a card: placement only');
-    ok(/\.tier-badge\.tier-S,[^{]*\{[^}]*background: var\(--rank-fill\);[^}]*color: var\(--rank-ink\);/.test(s9e), 'the look: the neutral --rank-* recipe');
-    // D / F on a tinted card read in --text-muted: that must BE a guaranteed card ink.
-    ok(/\.tier-D, \.active-D \{[^}]*--rank-ink: var\(--text-muted\);/.test(s9e) && /--ct-ink-2: var\(--text-muted\);/.test(noComments(crispAll)),
-      'the quiet tiers\' ink on a tint is --text-muted = --ct-ink-2, a pair the 9a contrast matrix holds on every swatch');
-  }
-
-  t.section('9f: the rank CONTROL (★ + S–F) has ONE look, keyed on its own classes — a second host cannot be missed');
-  {
-    // Membership's rows and the instructor profile print the same buttons. The Crisp tiles were
-    // scoped to #tab-membership, so the profile kept settings.css's 28×24px boxes, 10px type and
-    // theme.css's hex outline.
-    const printed = (src) => ['tier-fav', 'tier-btns', 'tier-btn'].filter((c) => new RegExp('class="' + c + '[\'"$ ]').test(src));
-    eq([printed(t.readSource('js/settings.js')), printed(t.readSource('js/features.js'))], [['tier-fav', 'tier-btns', 'tier-btn'], ['tier-fav', 'tier-btns', 'tier-btn']], 'both hosts print .tier-fav, .tier-btns and .tier-btn');
+    // Membership's rows and the instructor profile print the same star. (They also printed six grade buttons,
+    // S to F, and a grade tile rode after an instructor's name on every card: retired in September 2026.)
+    const prints = (src) => /class="favs-star[$'" ]/.test(src);
+    eq([prints(t.readSource('js/settings.js')), prints(t.readSource('js/features.js'))], [true, true], 'both hosts print .favs-star');
     const crispRules = rulesOf(crispAll);
-    const control = crispRules.filter(([sel]) => { const subj = subjectClasses(sel); return subj.indexOf('.tier-btn') !== -1 || subj.indexOf('.tier-fav') !== -1; });
-    const scoped = control.map((r) => r[0]).filter((sel) => spec(sel)[0] !== 0 || /\.instructor-|\.tier-row/.test(sel));
-    ok(control.length >= 4 && scoped.length === 0, 'no rule about a rank button or the star is scoped to a host (an id, .tier-row or .instructor-*)' + (scoped.length ? ': ' + scoped.join(' · ') : ''));
-    const hosted = crispRules.filter(([sel]) => subjectClasses(sel).indexOf('.tier-btns') !== -1 && sel.trim() !== '.tier-btns');
-    ok(hosted.length > 0 && hosted.every(([, body]) => /^\s*flex:[^;]+;\s*$/.test(body)), 'a host only says how much of its row the six tiles take (flex) — the grid is the control\'s');
-    // Every declaration 9e makes for exactly this selector (".tier-btn" is also in the shared button-face list).
+    const star = crispRules.filter(([sel]) => subjectClasses(sel).indexOf('.favs-star') !== -1);
+    const scoped = star.map((r) => r[0]).filter((sel) => spec(sel)[0] !== 0 || /\.instructor-|\.favs-row/.test(sel));
+    ok(star.length >= 2 && scoped.length === 0, 'no rule about the star is scoped to a host (an id, .favs-row or .instructor-*)' + (scoped.length ? ': ' + scoped.join(' · ') : ''));
     const body = (sel) => rulesOf(s9e).filter((r) => r[0] === sel).map((r) => r[1]).join(';');
-    ok(/height:\s*calc\(var\(--tap-min\) - var\(--space-2\)\);/.test(body('.tier-btn')) && /border:\s*0;/.test(body('.tier-btn')) && /border-radius:\s*var\(--radius-lg\);/.test(body('.tier-btn')) &&
-      /box-shadow:\s*inset 0 0 0 var\(--hairline\) var\(--line\);/.test(body('.tier-btn')) && /font-family:\s*var\(--font-display\);/.test(body('.tier-btn')) && /font-size:\s*var\(--text-lg\);/.test(body('.tier-btn')),
-      'the tile: round-cornered, an inset hairline from --line (no border, no hex), the display face at --text-lg');
-    ok(/display:\s*grid;\s*grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\);\s*gap:\s*var\(--space-2\);/.test(body('.tier-btns')), 'six equal columns, --space-2 apart');
-    // The hit area: up and down to --tap-min, sideways half-way into the gap — neighbours meet, never overlap.
-    ok(/inset:\s*calc\(var\(--space-1\) \* -0\.75\) calc\(var\(--space-2\) \* -0\.5\);/.test(body('.tier-btn::after')), 'the hit area reaches 0.75 × --space-1 up and down, and half the grid gap to either side');
-    const tok = {};
-    noComments(t.readSource('css/theme.css')).replace(/\n\s*(--(?:space-[12]|tap-min))\s*:\s*([\d.]+)px;/g, (m, k, v) => { if (!(k in tok)) tok[k] = Number(v); return m; });
-    eq((tok['--tap-min'] - tok['--space-2']) + 2 * 0.75 * tok['--space-1'], tok['--tap-min'], '…which makes it exactly --tap-min tall (' + tok['--tap-min'] + 'px)');
-    ok(/width:\s*var\(--tap-min\);\s*height:\s*var\(--tap-min\);/.test(body('.tier-fav')) && /\.tier-btn:focus-visible, \.tier-fav:focus-visible \{ outline: var\(--focus-ring\);/.test(s9e), 'the star is a --tap-min box; both show the body-ink focus ring');
-    // At (0,1,0) the tile must not be out-ranked by an older sheet on what it paints. (A chosen rank is 9e.5's
-    // ".tier-btn.active-*", (0,2,0); the pointer states are held in the next section.)
-    const PAINTS = /(?:^|;)\s*(background(?:-color)?|color|border(?:-color)?|border-radius|box-shadow|width|height|font(?:-[\w-]+)?)\s*:/;
-    const beaten = [];
-    OLDER.forEach((f) => rulesOf(t.readSource('css/' + f)).forEach(([sel, decl]) => {
-      if (subjectClasses(sel).indexOf('.tier-btn') === -1 || /:(hover|active|focus)/.test(sel)) return;
-      const sp = spec(sel);
-      if ((sp[0] > 0 || sp[1] > 1) && PAINTS.test(decl)) beaten.push(f + ': ' + sel);
-    }));
-    eq(beaten, [], 'no older sheet outranks ".tier-btn" on its size, ink, outline or face (theme.css\'s light-base #ccc rule is gone — not overridden)');
-    ok(!/#tab-membership \.tier-btn\.active-/.test(noComments(crispAll)), 'the id-scoped copy of the chosen-rank fill is gone: 9e.5\'s ".tier-btn.active-*" outranks the bare tile on its own');
-  }
-
-  t.section('9f: the other old-rule leaks the merge found stay closed');
-  {
-    // A chosen rank under the pointer. theme.css's light-base ".tier-btn:hover" is (0,3,0).
-    const lightHover = rulesOf(t.readSource('css/theme.css')).filter(([sel]) => /\.tier-btn:hover$/.test(sel)).map(([sel]) => spec(sel));
-    ok(lightHover.length > 0 && lightHover.every((sp) => sp[0] === 0 && sp[1] <= 3), 'the older hover rule is still there, at most (0,3,0)…');
-    const held = rulesOf(s9e).filter(([sel, body]) => /^\.tier-btn\.active-[SABCDF]:hover$/.test(sel) && /color: var\(--rank-ink\)/.test(body));
-    eq(held.map((r) => r[0]).sort(), ['S', 'A', 'B', 'C', 'D', 'F'].map((x) => '.tier-btn.active-' + x + ':hover').sort(),
-      '…so every chosen rank re-states its ink on :hover at (0,3,0) (it read 1.6:1 on the S tile, and on iOS :hover sticks after the tap that chose it)');
-    ok(held.every(([sel]) => { const sp = spec(sel); return sp[0] === 0 && sp[1] === 3; }), 'a tie — css/crisp.css is linked last, so it wins');
-    ok(!/\.explore-tier-bar\s*\{[^}]*background:\s*#/.test(noComments(t.readSource('css/theme.css'))) && /\.explore-tier-bar \{[^}]*background: none;/.test(s9e),
-      'the tier bar has no track: the light-base hex track that outranked "background: none" is gone');
+    ok(/width:\s*var\(--tap-min\);\s*height:\s*var\(--tap-min\);/.test(body('.favs-star')) && /\.favs-star:focus-visible \{ outline: var\(--focus-ring\);/.test(s9e), 'the star is a --tap-min box with the body-ink focus ring');
+    const gone = /\.tier-|\.active-[SABCDF]\b|--rank-|explore-tier|explore-unranked/;
+    const sheets = ['styles.css', 'theme.css', 'features.css', 'tabs.css', 'settings.css', 'explore.css', 'redesign.css', 'discover-layout-fix.css', 'crisp.css'];
+    eq(sheets.filter((f) => gone.test(noComments(t.readSource('css/' + f)))), [], 'no sheet keeps a rule, a class or a token of the grades');
+    const shipped = ['js/app.js', 'js/settings.js', 'js/features.js', 'js/explore.js', 'js/tabs.js', 'js/interactions.js', 'psycle-finder.html'];
+    eq(shipped.filter((f) => /tierBadgeHTML|setInstructorTier|getInstructorTier|tier-badge|tier-btn/.test(t.readSource(f))), [], '…and nothing shipped prints or sets one');
   }
 
   t.section('9f: one prefix, two meanings — ".cc-" is the class CARD (9b) and the class COLOURS control (9e)');
@@ -222,11 +178,6 @@ module.exports = function (t) {
 
   t.section('9f: the two small handoffs taken at integration');
   {
-    const settings = t.readSource('js/settings.js');
-    const defs = settings.match(/'<span class="tier-badge tier-' \+ tier \+ '"[^;]*;/g) || [];
-    eq(defs.length, 2, 'both tierBadgeHTML definitions found (the second is the one that wins)');
-    ok(defs.every((d) => /role="img" aria-label="Ranked ' \+ tier \+ '"/.test(d)), 'the rank tile SAYS what it is ("Ranked S") — a bare letter after the instructor\'s name told a screen reader nothing; both definitions in step');
-    ok(/TIERS\.indexOf\(tier\) !== -1 \? '<span class="tier-badge/.test(settings) && /TIERS\.indexOf\(tier\) === -1\) return '';/.test(settings), '…and only a checked tier letter ever reaches the attribute');
     const app = t.readSource('js/app.js');
     ok(/stepDiscoverDay\(r\.dir, 'swipe'\)\) \{ if \(typeof window\.haptic === 'function'\) window\.haptic\('tap'\); return; \}/.test(app),
       'a swipe that really changed the day gives one light tick — typeof-guarded, and only on stepDiscoverDay\'s success (never at an edge or mid-search)');

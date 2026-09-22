@@ -44,7 +44,7 @@ sign-in host, no gambling, contests, medical information or mature themes.
 Your next class on the Lock Screen, a countdown before it starts, and your usual week rebooked in a couple of taps. For members of the Psycle London studios.
 ```
 
-### Description (4,000 characters: 2056)
+### Description (4,000 characters: 2093)
 ```
 Psync is an independent companion app for members of the Psycle London studios. Sign in with your Psycle account to find classes, book the spot you want and keep track of what you hold.
 
@@ -78,7 +78,7 @@ ON YOUR IPHONE
 
 YOUR TRAINING
 • Streaks, your busiest days and times, and the instructors and class types you book most
-• Rank instructors your own way
+• Star your favourite instructors, and find their classes in one tap
 • A stats card you can share
 
 PRIVATE BY DESIGN

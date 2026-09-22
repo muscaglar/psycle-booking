@@ -143,8 +143,7 @@ module.exports = async function (t) {
     eq([asked, routed.log.calls, [...routed.sb.selectedInstructors]], [[{ instructorId: '31' }], [], ['1', '2']],
       'with _focusSearch present it is handed the instructor and nothing else is touched here (no second search, no second tab switch)');
     const explore = t.readSource('js/explore.js');
-    const chipFn = grab(explore, '  window._explore_openSettingsForInstructor = function (name) {', '  };');
-    ok(/switchTab\('membership'\)/.test(chipFn) && !/openSettings\(/.test(chipFn), "Stats' Unranked chips open the Membership tab (where #tierSearch lives), not the Settings sheet");
+    ok(!/_explore_openSettingsForInstructor|explore-unranked/.test(explore), 'Stats has no "Unranked" list to prompt a grade with: the chips and their helper are gone');
     ok(!/_features_filterByInstructor\([^)]*\);'\s*\+\s*\n\s*'window\.switchTab/.test(explore), 'the Explore card no longer switches tab a second time');
   }
 

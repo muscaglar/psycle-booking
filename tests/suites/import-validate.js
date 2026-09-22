@@ -1,6 +1,6 @@
 'use strict';
 // What comes out of storage, and what an import file may put into it.
-//   • js/app.js pure:stored-data — ids / seat lists / rankings / bike prefs are
+//   • js/app.js pure:stored-data — ids / seat lists / bike prefs are
 //     coerced where they are READ (an imported file, or the iOS Preferences
 //     mirror of one, can hold anything);
 //   • the three sinks that printed them raw (instrLink, the instructor chips,
@@ -48,10 +48,7 @@ module.exports = async function (t) {
     eq(clean._cleanStoredHistory([{ eventId: '5', cancelledAt: null, typeName: null }])[0], { eventId: '5', cancelledAt: null, typeName: null }, 'null stays null (a live entry carries cancelledAt: null)');
   }
 
-  t.section('Stored data: rankings and bike prefs');
-  eq(clean._cleanStoredTiers({ 11: 'S', 22: 'F', 33: 'Z', 44: '<b>', 55: 1, [XSS]: 'A' }), { 11: 'S', 22: 'F' }, 'a ranking is a clean id → one of S A B C D F');
-  eq(clean._cleanStoredTiers(JSON.parse('{"__proto__":"S","constructor":"A","7":"B"}')), { 7: 'B' }, 'prototype keys are never ranked');
-  eq([clean._cleanStoredTiers(['S', 'A']), clean._cleanStoredTiers(null), clean._cleanStoredTiers('S')], [{}, {}, {}], 'an array is not a ranking map (["S","A"]["1"] would rank instructor 1)');
+  t.section('Stored data: bike prefs');
   eq(clean._cleanStoredBikePrefs({ 4: { avoid: [1, '2', '<svg/onload=1>'], prefer: 'x' }, 5: 'nope', 6: [1], [XSS]: { avoid: [1], prefer: [] } }), { 4: { avoid: [1, 2], prefer: [] } },
     'bike prefs are { studio: { avoid: [numbers], prefer: [numbers] } } and nothing else');
 
@@ -140,20 +137,19 @@ module.exports = async function (t) {
     const fav = appSrc.slice(appSrc.indexOf('function loadFavourites() {'), appSrc.indexOf('function _saveSetting('));
     ok(/new Set\(_cleanStoredIdList\(JSON\.parse\(/.test(fav), 'favourites are read through the id-list cleaner');
     const settingsSrc = t.readSource('js/settings.js');
-    ok(/_cleanStoredTiers\(t\)/.test(settingsSrc) && /_cleanStoredBikePrefs\(p\)/.test(settingsSrc), 'settings.js reads rankings and bike prefs through their cleaners');
+    ok(/_cleanStoredBikePrefs\(p\)/.test(settingsSrc), 'settings.js reads bike prefs through their cleaner');
   }
 
   // ── Import ───────────────────────────────────────────────────────────────
   const imp = t.loadPure('js/settings.js', 'import-validate');
   const OPTS = {
-    clean: { history: clean._cleanStoredHistory, tiers: clean._cleanStoredTiers, idList: clean._cleanStoredIdList, bikePrefs: clean._cleanStoredBikePrefs },
+    clean: { history: clean._cleanStoredHistory, idList: clean._cleanStoredIdList, bikePrefs: clean._cleanStoredBikePrefs },
     themes: ['cloud', 'linen', 'graphite'], historyMax: 2000,
   };
   const device = (obj) => (key) => (Object.prototype.hasOwnProperty.call(obj || {}, key) ? obj[key] : null);
   const plan = (file, dev, opts) => imp._planSettingsImport(file, device(dev), Object.assign({}, OPTS, opts || {}));
   const hist = (id, extra) => Object.assign({ eventId: String(id), typeName: 'Ride', instrName: 'Alex', instrId: '11', locName: 'Bank', date: '2026-01-' + String(10 + (Number(id) % 18)).padStart(2, '0') + ' 07:00:00', slots: [7] }, extra || {});
   const FILE = {
-    psycle_instructor_tiers: '{"11":"S","22":"B"}',
     psycle_bike_prefs: '{"4":{"avoid":[1],"prefer":[7]}}',
     psycle_fav_instructors: '["11","22"]',
     psycle_saved_filters: '{"locationIds":["3"],"instructorIds":["11"],"dateQuickMode":"week"}',
@@ -167,11 +163,11 @@ module.exports = async function (t) {
   t.section('Import: a real export onto an empty device');
   {
     const pl = plan(FILE, {});
-    eq(Object.keys(pl.writes).sort(), Object.keys(FILE).filter((k) => k[0] !== '_').sort(), 'all eight exported keys are written');
-    eq([pl.deviceHasData, pl.skipped, pl.accepted, pl.exportedAt], [false, [], 7, '2026-08-03T10:00:00.000Z'], 'nothing on the device to weigh it against (no confirm), nothing refused, the export date is read');
+    eq(Object.keys(pl.writes).sort(), Object.keys(FILE).filter((k) => k[0] !== '_').sort(), 'all seven exported keys are written');
+    eq([pl.deviceHasData, pl.skipped, pl.accepted, pl.exportedAt], [false, [], 6, '2026-08-03T10:00:00.000Z'], 'nothing on the device to weigh it against (no confirm), nothing refused, the export date is read');
     eq(JSON.parse(pl.writes.psycle_class_history).map((h) => h.eventId).sort(), ['1', '2', '3'], 'the history arrives');
-    eq([pl.writes.psycle_theme, pl.writes.psycle_history_synced, JSON.parse(pl.writes.psycle_instructor_tiers)], ['linen', FILE.psycle_history_synced, { 11: 'S', 22: 'B' }], 'theme and sync stamp are raw strings, as the app stores them');
-    eq(imp._importSummary(pl.added), '3 classes, 2 rankings, 2 favourites, bike preferences for 1 studio, 1 spot alert, your theme and your last search filters', 'the toast / dialog says what it adds');
+    eq([pl.writes.psycle_theme, pl.writes.psycle_history_synced], ['linen', FILE.psycle_history_synced], 'theme and sync stamp are raw strings, as the app stores them');
+    eq(imp._importSummary(pl.added), '3 classes, 2 favourites, bike preferences for 1 studio, 1 spot alert, your theme and your last search filters', 'the toast / dialog says what it adds');
   }
 
   t.section('Import: unknown keys, prototype-pollution keys and the token are ignored');
@@ -190,15 +186,18 @@ module.exports = async function (t) {
     const pl2 = plan(polluted, {});
     eq([Object.keys(pl2.writes), pl2.writes.psycle_theme], [['psycle_fav_instructors'], undefined], 'a "__proto__" member of the file is just an unknown key');
     // …and a key the file merely INHERITS (a polluted Object.prototype) is not the file's.
-    const inherited = Object.assign(Object.create({ psycle_theme: 'linen', psycle_instructor_tiers: '{"66":"S"}' }), { psycle_fav_instructors: '["11"]' });
+    const inherited = Object.assign(Object.create({ psycle_theme: 'linen', psycle_bike_prefs: '{"6":{"avoid":[1],"prefer":[]}}' }), { psycle_fav_instructors: '["11"]' });
     eq(Object.keys(plan(inherited, {}).writes), ['psycle_fav_instructors'], 'only the file\'s OWN properties are read');
     ok({}.polluted === undefined, 'Object.prototype is untouched');
+    // A backup made before instructor grades were retired (September 2026) still names their key.
+    const old = plan(Object.assign({}, FILE, { psycle_instructor_tiers: '{"11":"S","22":"F"}' }), {});
+    ok(!('psycle_instructor_tiers' in old.writes) && Object.keys(old.writes).length === 7 && !/rank/i.test(imp._importSummary(old.added)),
+      'an old backup still imports everything else; the grades in it are written nowhere and named nowhere');
     const nested = plan({
-      psycle_instructor_tiers: '{"__proto__":"S","constructor":"A","11":"S"}',
       psycle_bike_prefs: '{"__proto__":{"avoid":[1],"prefer":[]},"4":{"avoid":[1],"prefer":[]}}',
       psycle_saved_filters: '{"__proto__":{"x":1},"constructor":"c","locationIds":["3"],"deep":{"a":1},"list":[1,{"a":1},"ok"]}',
     }, {});
-    eq([JSON.parse(nested.writes.psycle_instructor_tiers), JSON.parse(nested.writes.psycle_bike_prefs)], [{ 11: 'S' }, { 4: { avoid: [1], prefer: [] } }], 'prototype keys INSIDE a value are dropped too');
+    eq(JSON.parse(nested.writes.psycle_bike_prefs), { 4: { avoid: [1], prefer: [] } }, 'prototype keys INSIDE a value are dropped too');
     eq(JSON.parse(nested.writes.psycle_saved_filters), { locationIds: ['3'], list: [1, 'ok'] }, 'saved filters are copied flat: primitives and lists of primitives, nothing nested');
   }
 
@@ -206,7 +205,6 @@ module.exports = async function (t) {
   {
     const pl = plan({
       psycle_class_history: '{"not":"an array"}',
-      psycle_instructor_tiers: '["S","A"]',
       psycle_bike_prefs: 'not json {',
       psycle_fav_instructors: { already: 'parsed' },
       psycle_notify_watchlist: '"901"',
@@ -217,7 +215,7 @@ module.exports = async function (t) {
     eq(pl.writes, {}, 'nothing is written');
     eq(pl.skipped.map((s) => s.key + ':' + s.reason).sort(), [
       'psycle_bike_prefs:unreadable', 'psycle_class_history:wrong shape', 'psycle_fav_instructors:not text', 'psycle_history_synced:not a date',
-      'psycle_instructor_tiers:wrong shape', 'psycle_notify_watchlist:wrong shape', 'psycle_saved_filters:wrong shape', 'psycle_theme:unknown theme',
+      'psycle_notify_watchlist:wrong shape', 'psycle_saved_filters:wrong shape', 'psycle_theme:unknown theme',
     ], 'every refusal is recorded with its reason');
     eq([pl.accepted, imp._importSummary(pl.added)], [0, ''], 'nothing accepted → the caller says "not a Psync backup"');
 
@@ -236,7 +234,7 @@ module.exports = async function (t) {
       const raw = (from, to) => { const a = appSrc.indexOf(from); return appSrc.slice(a, appSrc.indexOf(to, a)); };
       ok(/_cleanStoredHistory\(history\)/.test(raw('function detectRecurringSlots() {', 'const typeByName')) && /_cleanStoredHistory\(history\)/.test(raw('function predictNextClass() {', 'const typeByName')) &&
         /_cleanStoredHistory\(history\)/.test(t.readSource('js/settings.js').split("JSON.parse(localStorage.getItem('psycle_class_history') || '[]');")[1].slice(0, 300)),
-        'the three readers that parsed the key raw (template detection, the Book-again hint, the rankings list) go through the cleaner too');
+        'the three readers that parsed the key raw (template detection, the Book-again hint, the favourites list in Membership) go through the cleaner too');
     }
 
     const big = plan({ psycle_class_history: JSON.stringify([hist(1, { typeName: 'x'.repeat(1048576) })]), psycle_fav_instructors: '["11"]' }, {});
@@ -263,7 +261,6 @@ module.exports = async function (t) {
   t.section('Import: onto a device that already has data it only ADDS — nothing is replaced');
   {
     const DEVICE = {
-      psycle_instructor_tiers: '{"11":"A","33":"C"}',
       psycle_bike_prefs: '{"4":{"avoid":[9],"prefer":[]},"5":{"avoid":[],"prefer":[]}}',
       psycle_fav_instructors: '["33","11"]',
       psycle_saved_filters: '{"locationIds":["8"]}',
@@ -282,12 +279,11 @@ module.exports = async function (t) {
     eq(h.filter((x) => x.eventId === '3').map((x) => !!x.cancelledAt), [true], '…a class cancelled here is NOT resurrected as attended by an older backup');
     eq(h.filter((x) => x.eventId === '1').map((x) => !!x.cancelledAt).sort(), [false, true], 'a class only the file knows arrives with both its rows (cancelled + rebooked), duplicates collapsed');
     eq([h.length, h.map((x) => x.date).join() === h.map((x) => x.date).sort().reverse().join()], [5, true], 'merged newest-first');
-    eq(JSON.parse(pl.writes.psycle_instructor_tiers), { 11: 'A', 22: 'B', 33: 'C' }, 'rankings: the device\'s A for instructor 11 beats the file\'s S; 22 is new');
     eq(JSON.parse(pl.writes.psycle_bike_prefs), { 4: { avoid: [9], prefer: [] }, 5: { avoid: [2], prefer: [] } }, 'bike prefs: studio 4 kept, the EMPTY studio 5 is filled, an empty studio 6 is not imported');
     eq(JSON.parse(pl.writes.psycle_fav_instructors), ['33', '11', '22'], 'favourites: union, device order first');
     eq([pl.writes.psycle_theme, pl.writes.psycle_saved_filters, pl.writes.psycle_history_synced], [undefined, undefined, undefined], 'theme, last filters and the sync stamp are never overwritten');
-    eq(pl.added, { classes: 2, rankings: 1, bikeStudios: 1, favourites: 1, alerts: 1 }, 'the counts the dialog shows');
-    eq(imp._importSummary(pl.added), '2 classes, 1 ranking, 1 favourite, bike preferences for 1 studio and 1 spot alert', '…in words');
+    eq(pl.added, { classes: 2, bikeStudios: 1, favourites: 1, alerts: 1 }, 'the counts the dialog shows');
+    eq(imp._importSummary(pl.added), '2 classes, 1 favourite, bike preferences for 1 studio and 1 spot alert', '…in words');
 
     const same = plan(FILE, FILE);
     eq([same.writes, same.accepted > 0, imp._importSummary(same.added)], [{}, true, ''], 'a backup that adds nothing writes nothing (the caller says so instead of reloading)');
@@ -295,7 +291,7 @@ module.exports = async function (t) {
     eq(JSON.parse(capped.writes.psycle_class_history).length, 4, 'the merged history honours the shared cap');
     const noHist = plan({ psycle_history_synced: FILE.psycle_history_synced }, {});
     eq(noHist.writes, {}, 'a sync stamp without the history it vouches for is not imported (it would hide the first-run sync offer)');
-    const brokenDevice = plan(FILE, { psycle_class_history: '{broken', psycle_instructor_tiers: 'null', psycle_fav_instructors: '7' });
+    const brokenDevice = plan(FILE, { psycle_class_history: '{broken', psycle_bike_prefs: 'null', psycle_fav_instructors: '7' });
     eq([brokenDevice.deviceHasData, JSON.parse(brokenDevice.writes.psycle_class_history).length], [false, 3], 'unreadable device values count as empty');
   }
 

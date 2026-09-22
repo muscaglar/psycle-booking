@@ -113,7 +113,6 @@ item and a saved-copy item. `_bookingsLoadState` is `'pending' | 'loaded' | 'fai
 | **Booking horizon** (OBSERVED) | none; arithmetic in `pure:horizon` | `_bookingHorizon(now)` → `{openThrough, listedThrough, lastRelease, nextRelease, lastBatch {from, to}, nextBatch {from, to}}` | *Release* = Monday 12:00 London. *Batch* = the Friday → Thursday week a release opens, 18 to 24 days on. *Listed* = one batch further. Not in the API; advisory only |
 | **Theme** | `psycle_theme` | an id of `APP_THEMES` (`js/theme.js`): `cloud` `graphite` `terminal` `gameboy` (shown as "Handheld" — grep the id, never the name) `blueprint`, each `{id, name, base, bg, accent, mono?}` | Retired ids map through `RETIRED_THEMES` |
 | **Class colour** | `psycle_class_colours` `{v: 1, intensity, map}` | *swatch* = one of 11 names in `CLASS_COLOUR_PALETTE` (`js/theme.js`: cobalt sky teal jade moss sun ember rose orchid violet slate); *intensity* = `off`, `soft` (default) or `bold` | `map` holds only the member's own choices over `CLASS_COLOUR_DEFAULTS` (`js/theme.js`) |
-| **Tier** | `psycle_instructor_tiers` `{instructorId: letter}` | letters `S A B C D F` (there is no E): `TIERS` in `js/settings.js`, `_cleanStoredTiers` | The member's ranking. The "S/A" filter is `_topTierInstructorIds` |
 | **Favourite** | `psycle_fav_instructors` `[instructorId]` → the `favouriteInstructors` Set | | The star |
 | **Bike preferences** | `psycle_bike_prefs` `{studioId: {prefer: [slot], avoid: [slot]}}` | | Marked by hand in Settings |
 | **Usual spot** | `psycle_bike_history` `{studioId: {instructorId: {slot: count}}}` | | LEARNED: the most-booked slot for that studio and instructor (`_recordBikeHistory`, `_usualSlotForEvent`) |
@@ -141,7 +140,7 @@ Member (currentUser.id = every `owner` stamp)
 |-----------------|----------|
 | Bike preferences | STUDIO id |
 | Usual spot | studio id → instructor id → slot |
-| Tier, favourite | instructor id |
+| Favourite | instructor id |
 | Usual-week entry | weekday + time + LOCATION id + event-type id + instructor id |
 | History entry, watch, queue item, saved-copy item, saved class details, waitlist memory | event id |
 | Every `owner` stamp (`psycle_data_owner`, queue, saved copy, waitlist memory, history owner) | customer id |

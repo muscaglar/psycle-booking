@@ -269,69 +269,14 @@ module.exports = function (t) {
     t.ok(/^Build: unknown$/m.test(rep), 'no resolver (older web bundle) → "unknown", no throw');
 
     // ════════════════════════════════════════════════════════════════════
-    // S/A tier quick filter
+    // ★ Favs: the one quick filter beside the instructor search
     // ════════════════════════════════════════════════════════════════════
-    t.section('Tier filter: S and A among the LOADED instructors, from one parse');
-    function tierWorld(tiersRaw, selected) {
-      const log = { calls: [], reads: 0 };
-      const btn = { style: { display: 'none' } };
-      const ctx = t.loadPure('js/app.js', 'tier-filter', {
-        localStorage: { getItem: (k) => { log.reads++; return k === 'psycle_instructor_tiers' ? tiersRaw : null; } },
-        instructors: [{ id: 1, full_name: 'Ann' }, { id: 2, full_name: 'Bo' }, { id: 3, full_name: 'Cy' }, { id: 4, full_name: 'Di' }],
-        selectedInstructors: new Set(selected || []),
-        document: { getElementById: (id) => (id === 'tierBtn' ? btn : null) },
-        renderInstrChips: () => log.calls.push('chips'),
-        refreshFacetCounts: () => log.calls.push('facets'),
-        triggerAutoSearch: () => log.calls.push('search'),
-      });
-      return { ctx, log, btn, picked: () => Array.from(ctx.selectedInstructors).sort() };
-    }
-    let tw = tierWorld(JSON.stringify({ 1: 'S', 2: 'B', 3: 'A', 4: 'F', 99: 'S' }), ['2']);
-    tw.ctx.applyTierFilter();
-    t.eq(tw.picked(), ['1', '3'], 'S + A replace the current selection; B/F are out; a rank for someone no longer loaded (99) never becomes a chip');
-    t.eq(tw.log.calls, ['chips', 'facets', 'search'], 'then chips → facet counts → auto-search, like toggleInstructor');
-    t.eq(tw.log.reads, 1, 'the tier map is parsed once per tap (getInstructorTier would re-parse it per instructor)');
-
-    t.section('Tier filter: nothing ranked S/A leaves the filters alone');
-    [['B–F only', JSON.stringify({ 1: 'B', 2: 'F' })], ['never ranked', null], ['corrupt JSON', '{not json'], ['JSON null', 'null'],
-      ['an array', '["S","A"]'], ['a string', '"S"'], ['lower-case / junk values', JSON.stringify({ 1: 's', 2: 'SS', 3: true })]].forEach(([name, raw]) => {
-      const w2 = tierWorld(raw, ['2']);
-      w2.btn.style.display = '';
-      w2.ctx.applyTierFilter();
-      t.eq([w2.picked(), w2.log.calls, w2.btn.style.display], [['2'], [], 'none'],
-        name + ': selection kept, no search, and the stale button takes itself away');
-    });
-
-    t.section('Tier filter: the S/A button shows only when it would select someone');
-    tw = tierWorld(JSON.stringify({ 3: 'A' }));
-    tw.ctx._syncTierFilterBtn();
-    t.eq(tw.btn.style.display, '', 'one loaded A-tier instructor → shown');
-    tw = tierWorld(JSON.stringify({ 1: 'C', 99: 'S' }));
-    tw.btn.style.display = '';
-    tw.ctx._syncTierFilterBtn();
-    t.eq(tw.btn.style.display, 'none', 'tiers exist but none is a loaded S/A → hidden ("any tier exists" would strand B–F-only members)');
-    const noBtn = t.loadPure('js/app.js', 'tier-filter', { localStorage: { getItem: () => '{}' }, instructors: [], document: { getElementById: () => null } });
-    noBtn._syncTierFilterBtn();
-    t.ok(true, 'a page without #tierBtn (older cached HTML) does not throw');
-
-    t.section('Tier filter: wiring');
-    const appSrc = t.readSource('js/app.js');
-    const chipsFn = slice(appSrc, 'function renderInstrChips() {', '\nfunction renderInstrDropdown() {', 'renderInstrChips');
-    t.ok(/_syncTierFilterBtn\(\);/.test(chipsFn), 'renderInstrChips keeps the button in step (launch, chips, restore, clear all pass through it)');
+    t.section('Favourites filter: the one quick filter, with its own spoken name');
     const html = t.readSource('psycle-finder.html');
-    const tag = (/<button[^>]*id="tierBtn"[^>]*>/.exec(html) || [])[0] || '';
-    t.ok(/class="fav-btn"/.test(tag) && /onclick="applyTierFilter\(\)"/.test(tag), '#tierBtn reuses .fav-btn (already themed for every theme) and calls applyTierFilter');
-    t.ok(/style="display:none"/.test(tag) && !/#[0-9a-f]{3,6}/i.test(tag), 'it starts hidden and carries no inline colour');
-    t.ok(/aria-label="[^"]+"/.test(tag), '"S/A" has a spoken name');
-    t.ok(/id="favBtn"[^>]*>[^<]*<\/button><button[^>]*id="tierBtn"/.test(html), 'it sits directly beside ★ Favs, inside the Instructor label');
-    // That <label> names its first labelable descendant — ★ Favs — from ALL of
-    // its content, #tierBtn's aria-label included: VoiceOver read "Instructor
-    // Filter by instructors ranked S or A" on the Favs button. Its own
-    // aria-label outranks the wrapping label.
     const favTag = (/<button[^>]*id="favBtn"[^>]*>/.exec(html) || [])[0] || '';
     const favName = (/aria-label="([^"]+)"/.exec(favTag) || [])[1] || '';
-    t.ok(!!favName && favName !== (/aria-label="([^"]+)"/.exec(tag) || [])[1] && /starred/i.test(favName),
-      '★ Favs carries its own spoken name ("' + favName + '"), so the label\'s text — and the S/A description in it — is not read out on it');
-    t.ok(/wrapGlobal\('applyTierFilter', saveFilters\);/.test(t.readSource('js/interactions.js')), 'interactions.js persists the selection, as it does for ★ Favs');
+    t.ok(!!favName && /starred/i.test(favName), '★ Favs carries its own spoken name ("' + favName + '"), so the wrapping label\'s text is not read out on it');
+    t.ok(!/id="tierBtn"|applyTierFilter|S\/A/.test(html) && !/applyTierFilter|_topTierInstructorIds/.test(t.readSource('js/app.js') + t.readSource('js/interactions.js')),
+      'there is no grade filter: a star is the only mark a member can put on an instructor');
   })();
 };

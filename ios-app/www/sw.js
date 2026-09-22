@@ -1,4 +1,4 @@
-const CACHE = 'psycle-2889898d';
+const CACHE = 'psycle-dd514066';
 const SHELL = [
   './psycle-finder.html',
   './index.html',

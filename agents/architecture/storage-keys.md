@@ -19,7 +19,6 @@ in IndexedDB (`psycle_sec`), not localStorage.
 | psycle_history_prompt_dismissed | ✓ | `'1'` once the first-run "sync my history" prompt was dismissed (never asked again; Stats keeps a Sync entry point) |
 | psycle_history_topup_at |  | ISO — when a silent weekly history top-up last STARTED (explore.js); not exported |
 | psycle_history_topup_skipped |  | `{at: ISO, count}` — a silent top-up found more unknown classes than it may fetch quietly (explore.js): it waits a week and the Stats banner offers Re-sync meanwhile; removed once a sync has tried them, cleared with the history on an account switch; not exported |
-| psycle_instructor_tiers | ✓ | `{instrId: "S"..."F"}` |
 | psycle_fav_instructors | ✓ | `[instrId, ...]` |
 | psycle_bike_prefs | ✓ | `{studioId: {avoid: [], prefer: []}}` |
 | psycle_bike_history | ✓ | `{studioId:{instructorId:{slot:count}}}` — your usual spot, pre-selected in the picker |
