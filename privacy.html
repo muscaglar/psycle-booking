@@ -70,7 +70,6 @@
   strong { color: var(--text); font-weight: 700; }
   .lede { color: var(--text); }
   .host { font-family: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 0.92em; overflow-wrap: anywhere; }
-  .owner-fill { background: var(--badge-full-bg); color: var(--badge-full-text); border: var(--hairline) dashed var(--badge-full-border); border-radius: 6px; padding: 1px 6px; font-weight: 700; }
   .foot { margin-top: 28px; padding-top: 16px; border-top: var(--hairline) solid var(--border); font-size: 14px; color: var(--text-ghost); }
   .foot a { color: var(--text-muted); font-weight: 700; }
   a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
@@ -87,9 +86,9 @@
   <p class="lede">This policy covers Psync for iPhone, Psync for Android and the Psync web app. They are the same app, and they treat your data in the same way.</p>
 
   <h2>Who publishes Psync</h2>
-  <!-- THE ONE PLACEHOLDER ON THIS PAGE. The owner replaces the whole <span> with their name and a contact
-       e-mail address before the page's address is given to a store. Nothing else here is to be filled in. -->
-  <p>Psync is published by <span class="owner-fill" id="publisher">[OWNER TO COMPLETE: your name, and an e-mail address for privacy questions]</span>. Write to that address about anything on this page.</p>
+  <!-- The ONE place the publisher and the contact address are named (tests/suites/22-play-release.js holds the
+       page to exactly one e-mail address, here). Plain text, not a mailto: link: every href on this page is relative. -->
+  <p>Psync is published by <span id="publisher">Ajar.dev Ltd, a company registered in England and Wales (company number 14071311). Contact: support@ajar.dev</span>. Write to that address about anything on this page, or for help with the app.</p>
   <p>Psync is an independent companion for Psycle London members. It is not affiliated with, or endorsed by, Psycle.</p>
 
   <h2>The short version</h2>
@@ -105,7 +104,7 @@
   <ul>
     <li><strong>When you sign in</strong>, the e-mail address and password you type are sent straight to that system. Your password is never stored, and it is never sent anywhere else.</li>
     <li>Psycle answers with a <strong>session token</strong>. Psync sends it back to Psycle with each request, so that you stay signed in.</li>
-    <li>With it, Psync asks Psycle for the timetable, your bookings, your waitlist places, your profile, and your plan and credits &mdash; and sends Psycle your requests to book, cancel, join or leave a waitlist, or claim a place. Nothing is booked or claimed unless you confirm it.</li>
+    <li>With it, Psync asks Psycle for the timetable, your bookings, your waitlist places, your profile, and your plan and credits &mdash; and sends Psycle your requests to book, cancel, join or leave a waitlist, or claim a spot. Nothing is booked or claimed unless you confirm it.</li>
   </ul>
   <p>What Psycle does with that information is for Psycle's own privacy policy. It is the information Psycle would hold if you booked on its own pages.</p>
   <p>Three smaller things leave your device, and only in the ordinary way of the web:</p>
@@ -152,7 +151,7 @@
   <h2>Changes to this policy</h2>
   <p>If this policy changes, this page changes, and the date below changes with it.</p>
 
-  <p class="foot">Last updated: 20 September 2026. <a href="./psycle-finder.html">Back to Psync</a></p>
+  <p class="foot">Last updated: 22 September 2026. <a href="./support.html">Support</a> &middot; <a href="./psycle-finder.html">Back to Psync</a></p>
 </main>
 </body>
 </html>

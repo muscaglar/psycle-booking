@@ -245,6 +245,23 @@ module.exports = function (t) {
   eq(refs.filter((r) => !/^[a-z][a-z0-9+.-]*:|^\/\//i.test(r)).map((r) => r.replace(/^\.\//, '').replace(/[?#].*$/, '')).filter((r) => !has(r)), [], '…and every relative one resolves');
   ok(!/https?:\/\//i.test(pageNoComments), 'no http(s) address is written into it at all, even as text (Psycle\'s host is named without a scheme)');
 
+  // The support page both store listings give as their Support URL: the same kind of page — text, relative links,
+  // nothing loaded from outside, no service worker, not part of the app shell — naming the publisher and ONE address.
+  {
+    const sup = read('support.html');
+    const supNoComments = sup.replace(/<!--[\s\S]*?-->/g, '');
+    const supVisible = supNoComments.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const supRefs = (supNoComments.match(/\b(?:href|src|action|srcset|poster|data)\s*=\s*"[^"]*"/g) || []).map((a) => a.replace(/^[^"]*"/, '').slice(0, -1));
+    ok(/<html lang="en-GB"/.test(sup) && /<title>Support[^<]*Psync<\/title>/.test(sup), 'support.html is a titled page in British English');
+    eq(supRefs.filter((r) => /^[a-z][a-z0-9+.-]*:|^\/\//i.test(r)), [], '…every href / src on it is relative');
+    ok(!/https?:\/\//i.test(supNoComments) && !/serviceWorker/.test(sup), '…no http(s) address is written into it, and it registers no service worker');
+    eq(Array.from(new Set(supVisible.match(EMAIL) || [])), ['support@ajar.dev'], '…it gives ONE address to write to');
+    ok(/Ajar\.dev Ltd/.test(supVisible) && /14071311/.test(supVisible) && /not affiliated with, or endorsed by, Psycle/.test(supVisible), '…names the publisher as privacy.html does, and says what Psync is not');
+    ok(/href="\.\/privacy\.html"/.test(sup) && /href="\.\/support\.html"/.test(read('privacy.html')), '…and the two pages link to each other');
+    ok(read('ios-app/build.js').indexOf("'support.html'") === -1 && read('sw.js').indexOf('support.html') === -1, '…like privacy.html it is not copied into the native bundle and not precached');
+    ok(/support\.html/.test(read('ios-app/APP_STORE_LISTING.md')) && /support@ajar\.dev/.test(read('ios-app/PLAY_STORE_LISTING.md')), '…the App Store listing gives it as the Support URL, and the Play listing gives the same address as the developer contact');
+  }
+
   // The ONE owner placeholder — or, once filled in, one e-mail address, there and nowhere else.
   const publisher = (/<span\b[^>]*\bid="publisher"[^>]*>([\s\S]*?)<\/span>/.exec(page) || [])[1];
   ok(typeof publisher === 'string' && (page.match(/\bid="publisher"/g) || []).length === 1, 'ONE element names the publisher (<span id="publisher">)');
@@ -348,7 +365,7 @@ module.exports = function (t) {
   eq(SECRETS.filter((n) => guide.indexOf('`' + n + '`') === -1), [], 'it names the four secrets exactly');
   eq(gradleVars.filter((n) => guide.indexOf('`' + n + '`') === -1), [], '…and the four variables app/build.gradle reads');
   eq(SECRETS.filter((n) => raw.split('\n').filter((l) => /^#/.test(l)).join('\n').indexOf(n) === -1), [], '…which the workflow\'s own header lists too, by name only');
-  ok(/`privacy\.html`/.test(guide) && /\[OWNER TO COMPLETE/.test(guide) && /id="publisher"/.test(guide), 'it names the privacy page and the one placeholder in it');
+  ok(/`privacy\.html`/.test(guide) && /id="publisher"/.test(guide) && /support@ajar\.dev/.test(guide) && /`support\.html`/.test(guide), 'it names the privacy page, the element that holds the publisher and the contact address, and the support page beside it');
   eq(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].filter((n) => !new RegExp('^## ' + n + '\\. ', 'm').test(guide)), [], 'it has its ten numbered steps, 0 to 9');
   ok(/check the current figure in Play Console/i.test(guide) && (guide.match(/check|read the current|confirm/gi) || []).length >= 8, 'it tells the owner to check Google\'s current figures, more than once');
   const target = (/targetSdkVersion\s*=\s*(\d+)/.exec(read('ios-app/android/variables.gradle')) || [])[1];

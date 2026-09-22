@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-GB" data-theme="cloud">
+<head>
+<meta charset="UTF-8">
+<!-- The privacy policy of Psync: the iPhone app, the Android app and the web app. Google Play and
+     the App Store each ask for its address (ios-app/PLAY_STORE_DEPLOY.md, step 5).
+     A page of text: it loads nothing from anywhere but this origin, talks to no host at all
+     (no connect-src), links to nothing outside the site and registers NO service worker.
+     It is served from the repository root with the web app, but it is NOT part of the app shell:
+     ios-app/build.js copies five named root files and this is not one of them, so it is neither
+     in sw.js's SHELL list nor in ios-app/www/. tests/suites/22-play-release.js holds all of that.
+     'unsafe-inline' because the page is self-contained, as login.html is. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Support &middot; Psync</title>
+<meta name="theme-color" content="#e6e9ee">
+<script id="themeBoot">
+// First paint in the reader's own theme: the same script as the head of login.html
+// (tests/suites/22-play-release.js compares the two). A visitor who has never opened the app
+// gets Cloud or Graphite, by the system's light / dark setting.
+(function () {
+  try {
+    var BG = { cloud: '#e6e9ee', graphite: '#12161f', terminal: '#060906', gameboy: '#0f380f', blueprint: '#0a1c30' };
+    var RETIRED = { linen: 'cloud', synthwave: 'graphite' };
+    var id = null;
+    try { id = localStorage.getItem('psycle_theme'); } catch (e) {}
+    if (id && Object.prototype.hasOwnProperty.call(RETIRED, id)) id = RETIRED[id];
+    if (!id || !Object.prototype.hasOwnProperty.call(BG, id)) {
+      id = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'graphite' : 'cloud';
+    }
+    document.documentElement.setAttribute('data-theme', id);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', BG[id]);
+  } catch (e) {}
+})();
+</script>
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @font-face { font-family:'Sofia Sans'; font-style:normal; font-weight:400 800; font-display:swap; src:url('fonts/sofia-sans.woff2') format('woff2'); }
+  @font-face { font-family:'Sofia Sans Condensed'; font-style:normal; font-weight:600 900; font-display:swap; src:url('fonts/sofia-sans-condensed.woff2') format('woff2'); }
+  /* The few tokens this page needs, copied value for value from login.html, theme by theme
+     (22-play-release.js compares them). <html data-theme> is always one of these ids. */
+  :root {
+    --radius-8xl: 28px; --hairline: 1.5px;
+    --font-display: 'Sofia Sans Condensed', 'Avenir Next Condensed', 'Helvetica Neue', sans-serif;
+    --font-body: 'Sofia Sans', 'Helvetica Neue', Helvetica, sans-serif;
+  }
+  [data-theme="cloud"] { --bg: #e6e9ee; --bg-panel: #fcfdfe; --border: #d3d9e1; --text: #1b2130; --text-heading: #1b2130; --text-muted: #3a4252; --text-ghost: #566073; --badge-full-bg: #fbe1e2; --badge-full-text: #a81f28; --badge-full-border: #f2b8bc; }
+  [data-theme="graphite"] { --bg: #12161f; --bg-panel: #1b2130; --border: #2b3345; --text: #eef1f5; --text-heading: #ffffff; --text-muted: #b7bfcc; --text-ghost: #8d97a9; --badge-full-bg: #3a1b20; --badge-full-text: #ff9aa2; --badge-full-border: #5e2b33; }
+  [data-theme="terminal"] { --bg: #060906; --bg-panel: #0a120a; --border: #16341a; --text: #b8e6b8; --text-heading: #e4ffe4; --text-muted: #8cc78c; --text-ghost: #518a51; --badge-full-bg: #271010; --badge-full-text: #f87171; --badge-full-border: #4a1d1d; --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; }
+  [data-theme="gameboy"] { --bg: #0f380f; --bg-panel: #133f13; --border: #306230; --text: #9bbc0f; --text-heading: #c6e034; --text-muted: #8bac0f; --text-ghost: #8bac0f; --badge-full-bg: #2a572a; --badge-full-text: #c6e034; --badge-full-border: #3f7a3f; --radius-8xl: 0; --font-body: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; }
+  [data-theme="blueprint"] { --bg: #0a1c30; --bg-panel: #0e2440; --border: #1c3d61; --text: #d8e9f9; --text-heading: #ffffff; --text-muted: #a4c4e0; --text-ghost: #6e90ad; --badge-full-bg: #3a1525; --badge-full-text: #ff8097; --badge-full-border: #66293f; }
+  body {
+    font-family: var(--font-body); background: var(--bg); color: var(--text); min-height: 100vh;
+    padding: 24px 16px; padding-bottom: calc(32px + env(safe-area-inset-bottom)); -webkit-font-smoothing: antialiased;
+  }
+  main { background: var(--bg-panel); border-radius: var(--radius-8xl); padding: 28px 24px 24px; max-width: 680px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  .brand svg .bm-top { fill: var(--text-heading); } .brand svg .bm-bot { fill: var(--text-ghost); }
+  .brand .word { font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing: 0.2px; color: var(--text-heading); line-height: 1; }
+  h1 { font-family: var(--font-display); font-size: 34px; font-weight: 900; line-height: 1.05; color: var(--text-heading); margin-bottom: 10px; }
+  h2 { font-family: var(--font-display); font-size: 22px; font-weight: 800; line-height: 1.15; color: var(--text-heading); margin: 28px 0 8px; }
+  p, li { font-size: 16px; font-weight: 500; line-height: 1.55; color: var(--text-muted); }
+  p + p { margin-top: 10px; }
+  ul + p { margin-top: 12px; }
+  ul { margin: 8px 0 0 20px; }
+  li + li { margin-top: 6px; }
+  strong { color: var(--text); font-weight: 700; }
+  .lede { color: var(--text); }
+  .host { font-family: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 0.92em; overflow-wrap: anywhere; }
+  .foot { margin-top: 28px; padding-top: 16px; border-top: var(--hairline) solid var(--border); font-size: 14px; color: var(--text-ghost); }
+  .foot a { color: var(--text-muted); font-weight: 700; }
+  a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="136 136 752 752" aria-hidden="true" focusable="false" width="32" height="32"><defs><mask id="privacyGrooves" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><path d="M304.2 367.7A180 180 0 0 1 551.2 328.6" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/><path d="M719.8 656.3A180 180 0 0 1 591.7 727.3" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/></mask></defs><g mask="url(#privacyGrooves)"><path class="bm-top" d="M201.2 476A40 40 0 0 1 161.7 429.6A290 290 0 0 1 734.3 429.6A40 40 0 0 1 694.8 476L534.5 476A16 16 0 0 1 518.8 462.9A72 72 0 0 0 377.2 462.9A16 16 0 0 1 361.5 476Z"/><path class="bm-bot" d="M822.8 548A40 40 0 0 1 862.3 594.4A290 290 0 0 1 289.7 594.4A40 40 0 0 1 329.2 548L489.5 548A16 16 0 0 1 505.2 561.1A72 72 0 0 0 646.8 561.1A16 16 0 0 1 662.5 548Z"/></g></svg>
+    <span class="word">Psync</span>
+  </div>
+
+  <h1>Support</h1>
+  <p class="lede">Help with Psync for iPhone, Psync for Android and the Psync web app.</p>
+
+  <h2>Get in touch</h2>
+  <p>Write to support@ajar.dev. Say which app you use (iPhone, Android or the web) and what you were doing, and attach a bug report if you can: in Psync, open Membership, choose Data &amp; privacy, then Bug report. It holds no password, and you can read it before you send it.</p>
+  <p>Psync is published by Ajar.dev Ltd, a company registered in England and Wales (company number 14071311). It is an independent companion for Psycle London members, and it is not affiliated with, or endorsed by, Psycle.</p>
+
+  <h2>Things Psycle looks after</h2>
+  <p>Your account, your password, your membership, your credits and your bookings belong to Psycle. Psync cannot create or delete a Psycle account, reset a password, refund a class or change a charge. For any of those, contact Psycle.</p>
+
+  <h2>Common questions</h2>
+  <ul>
+    <li><strong>I can't sign in.</strong> Psync uses your existing Psycle email and password. If they work on Psycle's own site and not here, write to us. If they don't work there either, reset your password with Psycle.</li>
+    <li><strong>A booking looks wrong.</strong> Pull down to refresh My Bookings. What Psycle holds is always the truth: Psync shows a class as booked only once Psycle confirms it. If something still looks wrong, send a bug report.</li>
+    <li><strong>Reminders or the calendar aren't working.</strong> Check that notifications and calendar access are allowed for Psync in your phone's settings, then switch the feature off and on again in Psync's Settings.</li>
+    <li><strong>How do I remove my data?</strong> Signing out removes your session and your data from the device. Deleting the app removes everything else. Psync keeps nothing anywhere else: there is no Psync account and no Psync server.</li>
+  </ul>
+
+  <p class="foot"><a href="./privacy.html">Privacy policy</a> &middot; <a href="./psycle-finder.html">Back to Psync</a></p>
+</main>
+</body>
+</html>

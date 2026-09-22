@@ -182,12 +182,12 @@ module.exports = async function (t) {
     const inP = (seats) => ({ classMs: utc(2026, 9, 28, 6), seats });
     const afterP = (seats) => ({ classMs: utc(2026, 10, 14, 6), seats });
     const capped = (made, o) => Object.assign({ subscription: { max_bookings: 12, bookings_made: made }, periodStartMs: start, periodEndMs: end, periodWord: 'month' }, o);
-    eq(P._templatePlanCaution(capped(10, { items: [inP(2), inP(2)] })), '4 seats this month. Your plan shows 2 left.', 'a capped plan: more seats in the period than are left');
-    eq(P._templatePlanCaution(capped(12, { items: [inP(1)] })), '1 seat this month. Your plan shows none left.', '…none left');
+    eq(P._templatePlanCaution(capped(10, { items: [inP(2), inP(2)] })), '4 spots this month. Your plan shows 2 left.', 'a capped plan: more seats in the period than are left');
+    eq(P._templatePlanCaution(capped(12, { items: [inP(1)] })), '1 spot this month. Your plan shows none left.', '…none left');
     eq(P._templatePlanCaution(capped(10, { items: [inP(2)] })), '', 'within what is left → nothing to say');
     eq(P._templatePlanCaution(capped(10, { items: [inP(1), afterP(3)] })), '', 'seats in classes AFTER the period /profile is counting are not weighed (it cannot say what is left then)');
     eq(P._templatePlanCaution({ subscription: { max_bookings: 0, bookings_made: 40 }, periodStartMs: start, periodEndMs: end, items: [inP(4), inP(4)] }), '', 'an unlimited plan has nothing to run out of');
-    eq(P._templatePlanCaution({ subscription: null, creditsRemaining: 3, items: [inP(2), afterP(2)] }), '4 seats. You have 3 credits left.', 'no plan: the credit balance (credits do not reset with a period)');
+    eq(P._templatePlanCaution({ subscription: null, creditsRemaining: 3, items: [inP(2), afterP(2)] }), '4 spots. You have 3 credits left.', 'no plan: the credit balance (credits do not reset with a period)');
     eq([P._templatePlanCaution({ creditsRemaining: 0, items: [inP(2)] }), P._templatePlanCaution({ creditsRemaining: NaN, items: [inP(2)] }), P._templatePlanCaution({}), P._templatePlanCaution(null)], ['', '', '', ''],
       'a balance nobody can vouch for says nothing (as the class sheet\'s own note)');
     ok(/function templatePlanCaution\(items\) \{[\s\S]*?_templatePlanCaution\(\{[\s\S]*?\} catch \(e\) \{ return ''; \}/.test(app), 'app.js feeds it from /profile, and an error there can never get in the way of the sheet');
@@ -363,10 +363,10 @@ module.exports = async function (t) {
     eq([note({ instructorChanged: true }).on, note({ state: 'waitlist' }).on], [false, false], 'a cover instructor and a waitlist row still start unticked');
     eq(note({ instructorChanged: true, beyondOpen: true }).text, 'Different instructor this week. Tick to book it anyway.. May not be open yet. Psycle opens new dates on Mondays at 12:00.', 'both reasons are said');
     const topUp = note({ state: 'booked', seats: 2, heldSeats: 1, canAdd: true });
-    eq([topUp.pickable, topUp.on, topUp.topUp, topUp.text], [true, false, true, '1 of 2 seats held. Tick to add 1 more.'], '"1 of 2 seats held": offered, unticked — one more seat in a class already held is the member\'s call');
+    eq([topUp.pickable, topUp.on, topUp.topUp, topUp.text], [true, false, true, '1 of 2 spots held. Tick to add 1 more.'], '"1 of 2 seats held": offered, unticked — one more seat in a class already held is the member\'s call');
     eq(note({ state: 'booked', seats: 3, heldSeats: 1, canAdd: true, count: true }).text, '1 of 3 spaces held. Tick to add 2 more.', 'a studio with no spot map counts spaces');
     eq([note({ state: 'booked', seats: 2, heldSeats: 2 }), note({ state: 'booked', seats: 2, heldSeats: 1, canAdd: false }), note({ state: 'booked', heldSeats: 1 })],
-      [{ text: 'Already booked · 2 seats' }, { text: 'Already booked' }, { text: 'Already booked' }], 'held in full, or no room to add: not pickable');
+      [{ text: 'Already booked · 2 spots' }, { text: 'Already booked' }, { text: 'Already booked' }], 'held in full, or no room to add: not pickable');
     eq(note({ state: 'nolayout' }).pickable, undefined, 'a studio nobody knows the kind of is listed, never bookable from here');
 
     eq([U._uwSeatOptions(1), U._uwSeatOptions(2), U._uwSeatOptions(3), U._uwSeatOptions(4), U._uwSeatOptions(9), U._uwSeatOptions('x')], [[1, 2], [1, 2], [1, 2, 3], [1, 2, 3, 4], [1, 2, 3, 4], [1, 2]],
@@ -374,7 +374,7 @@ module.exports = async function (t) {
     eq([U._uwSeatOptions(3, 2), U._uwSeatOptions(1, 1), U._uwSeatOptions(4, 0), U._uwSeatOptions(4, null)], [[1, 2], [1], [1, 2, 3, 4], [1, 2, 3, 4]], '…never above the class\'s own max_bookable_slots');
 
     eq([U._uwConfirmLabel({ classes: 3, seats: 4 }), U._uwConfirmLabel({ classes: 1, seats: 1 }), U._uwConfirmLabel({ places: 2 }), U._uwConfirmLabel({ classes: 2, seats: 3, places: 1 }), U._uwConfirmLabel({}), U._uwConfirmLabel(null)],
-      ['Book 3 classes · 4 seats', 'Book 1 class · 1 seat', 'Join 2 waitlists', 'Book 2 classes · 3 seats · join 1 waitlist', '', ''], 'the confirm button counts what it will SPEND (the brief\'s own example first)');
+      ['Book 3 classes · 4 spots', 'Book 1 class · 1 spot', 'Join 2 waitlists', 'Book 2 classes · 3 spots · join 1 waitlist', '', ''], 'the confirm button counts what it will SPEND (the brief\'s own example first)');
 
     const fmt = (d, how) => how + ':' + d;
     eq([U._uwRangeLabel({ id: 'next7', start: '2026-09-19', end: '2026-09-25' }, fmt), U._uwRangeLabel({ id: 'week2', start: '2026-09-28', end: '2026-10-04' }, fmt),
@@ -402,7 +402,7 @@ module.exports = async function (t) {
     ok(/window\.planWeeklyTemplate\(start, \{ newest: st\.wantNewest \}\)/.test(tabs), '…which reaches the plan');
     ok(/<strong class="usual-week-range">' \+ escapeHTML\(_uwDateLabel\(plan\.weekStart\) \+ ' – ' \+ _uwDateLabel\(plan\.weekEnd\)\) \+ '<\/strong>' \+\n\s*'<span>Nothing is booked until you press the button below\./.test(tabs),
       'the chosen dates are the first, bold line — then "Nothing is booked until you press the button below."');
-    ok(/on the spots shown, and every seat uses a class credit or counts towards your plan/.test(tabs) && !/on your usual spot or the first free one/.test(tabs), 'the money line says what is true now: the spots shown — not "your usual or the first free one"');
+    ok(/on the spots shown, and every spot uses a class credit or counts towards your plan/.test(tabs) && !/on your usual spot or the first free one/.test(tabs), 'the money line says what is true now: the spots shown — not "your usual or the first free one"');
     ok(/if \(st\.closed \|\| st\.running \|\| st\.choosing\) return;/.test(tabs) && /if \(st\.choosing \|\| e\.defaultPrevented/.test(tabs), 'while the seat map is up the sheet neither closes nor takes keys');
     // Every row has the same two controls: to a screen reader each says WHICH class it is for (escaped API text).
     ok(/var forClass = escapeHTML\(' for ' \+ \(r\.typeName \|\| 'this class'\) \+ ', ' \+ _uwDateLabel\(r\.date\)\);/.test(tabs) && /aria-label="Change spot' \+ forClass \+ '">Change spot</.test(tabs) && /role="group" aria-label="' \+ unit \+ forClass \+ '">/.test(tabs),
@@ -541,7 +541,7 @@ module.exports = async function (t) {
     // (a) the shown seat went while the class filled: the same index is now a waitlist join.
     eq(keep(ranAs({}, 1), { state: 'waitlist' }), { on: false, same: false, seats: null },
       'ticked to BOOK a seat, re-planned as "Full. Tick to join the waitlist.": UNTICKED — a join is a place Psycle turns into a charge, and nobody ticked that');
-    // (b) booked at one seat of a saved two: the same index is now "1 of 2 seats held. Tick to add 1 more.".
+    // (b) booked at one seat of a saved two: the same index is now "1 of 2 spots held. Tick to add 1 more.".
     eq(keep(ranAs({}, 1), { state: 'booked', heldSeats: 1, canAdd: true }), { on: false, same: false, seats: null },
       'just booked at 1 seat, re-planned as the top-up to the saved 2: UNTICKED — the extra seat is one the member declined a minute ago');
     // (d) the re-plan matched another class for that index, or a cover instructor.

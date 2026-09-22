@@ -315,7 +315,7 @@ module.exports = function (t) {
       'the buttons are neutral pills OUTSIDE the data-ct block (the class colour stays on the tick and the seat)');
     ok(/<div class="bc-title">Booked!<\/div>/.test(made.innerHTML) && /Free cancel until Tue 07:00/.test(made.innerHTML), 'title and free-cancel line as before');
     ctx.showBookingConfirmation(10, [], { waitlist: true });
-    ok(/On the waitlist!/.test(made.innerHTML) && !/bc-slot/.test(made.innerHTML) && !/glow-mine/.test(made.innerHTML), 'a waitlist place: no seat, so nothing glows');
+    ok(/On the waitlist</.test(made.innerHTML) && !/On the waitlist!/.test(made.innerHTML) && !/bc-slot/.test(made.innerHTML) && !/glow-mine/.test(made.innerHTML), 'a waitlist place: no seat, so nothing glows');
   }
 
   // ── Find similar, instructor profile, history ────────────────────────────

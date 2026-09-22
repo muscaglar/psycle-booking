@@ -37,7 +37,7 @@ git grep -n "<name>"           # not grep -r: untracked folders at the root (a t
 | Path | What it is |
 |---|---|
 | psycle-finder.html · login.html · index.html | The app shell (CSP, first-paint `themeBoot`, SW-update script) · the sign-in page · a redirect |
-| privacy.html | The privacy policy of both apps and the web app, served with the web app. NOT part of the app shell: ios-app/build.js does not copy it and sw.js does not precache it, so an edit needs no rebuild (tests/suites/22-play-release.js) |
+| privacy.html · support.html | The privacy policy of both apps and the web app, and the support page the store listings point to, served with the web app. NOT part of the app shell: ios-app/build.js does not copy it and sw.js does not precache it, so an edit needs no rebuild (tests/suites/22-play-release.js) |
 | js/ | 15 modules, no bundler; the load order is fixed |
 | css/ | 9 stylesheets; tokens and themes in theme.css; crisp.css is linked LAST and is tokens only |
 | tests/ | unit.js + suites/ (Node, no dependencies), smoke.html, tools/ (fake-psycle.js, App Store capture) |

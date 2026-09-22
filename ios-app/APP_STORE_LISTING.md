@@ -103,8 +103,10 @@ The first release of Psync, an independent companion app for members of the Psyc
 
 ### Support URL
 ```
-https://github.com/muscaglar/psycle-booking/issues
+https://muscaglar.github.io/psycle-booking/support.html
 ```
+`support.html` at the root of this repository, published with the web app: how to reach support@ajar.dev, what is
+Psycle's to answer and not Psync's, and four common questions.
 
 ### Marketing URL (optional)
 Leave empty, or use the hosted web app's address.
@@ -113,14 +115,18 @@ Leave empty, or use the hosted web app's address.
 ```
 https://muscaglar.github.io/psycle-booking/privacy.html
 ```
-The page is `privacy.html` at the root of this repository, published with the web app. **It still carries one
-placeholder — the publisher's name and a contact e-mail address. Fill it in, push, and open the address above
-before submitting**: Apple's reviewer opens it.
+The page is `privacy.html` at the root of this repository, published with the web app. It names the publisher
+(Ajar.dev Ltd, company number 14071311) and the contact address (support@ajar.dev). Open the address above in a
+private window before submitting: Apple's reviewer opens it.
 
 ### Copyright
 ```
-© 2026 <the owner's name>
+© 2026 Ajar.dev Ltd
 ```
+The App Store shows the SELLER as the legal name on the Apple Developer account. If that account is an individual
+one, the store page will carry a person's name while the privacy policy says Ajar.dev Ltd: either is allowed, but
+they should agree. Publishing under the company means enrolling (or converting) the account as an organisation,
+which needs the company's D-U-N-S number.
 
 ## Screenshots
 
@@ -208,8 +214,9 @@ everything). Do not paste a second version anywhere.
 
 ## Only the owner can do these
 
-- [ ] Put a name and a contact e-mail address into the one placeholder in `privacy.html`, push, and open the
-      published page.
+- [ ] Open the published `privacy.html` and `support.html` in a private window (both name Ajar.dev Ltd and
+      support@ajar.dev), and check that support@ajar.dev really receives mail.
+- [ ] Decide whose name the store shows as the seller: the Apple Developer account's legal name (see Copyright).
 - [ ] Provide a demo Psycle account for App Review, with at least one class credit, and paste it into the notes.
 - [ ] Fill the App Review contact fields and the copyright line.
 - [ ] Rename the App Store Connect record from "PsycleBookingBuddy" to the name above.

@@ -1355,7 +1355,7 @@
         '<span class="usual-week-when"><span class="usual-week-day">' + escapeHTML(day) + '</span>' + _uwTimeHtml(min) + '</span>' +
         '<span class="usual-week-what">' + escapeHTML(label) +
           // More than one seat LEADS the second line: the ellipsis takes the end of a line, and the count must never be what it eats.
-          (seats > 1 ? '<span class="usual-week-seats"><span class="usual-week-sep"> · </span>' + _uwPlural(seats, 'seat', 'seats') + '</span>' : '') +
+          (seats > 1 ? '<span class="usual-week-seats"><span class="usual-week-sep"> · </span>' + _uwPlural(seats, 'spot', 'spots') + '</span>' : '') +
           // The separator has a span of its own: the card puts the studio on a second line (styles.css), where it is dropped.
           (en.locName ? '<span class="usual-week-where"><span class="usual-week-sep"> · </span>' + escapeHTML(en.locName) + '</span>' : '') + '</span>' +
         '<button type="button" class="usual-week-remove" onclick="removeUsualWeekEntry(' + i + ')" aria-label="' +
@@ -1524,7 +1524,7 @@
     if (row.state === 'waitlist') return { pickable: true, on: false, warn: true, text: join(['Full. Tick to join the waitlist.', row.clashLine]) };
     if (row.state === 'booked') {
       var held = Number(row.heldSeats) || 0, asked = Number(row.seats) || 1;
-      var unit = row.count ? 'space' : 'seat';
+      var unit = row.count ? 'space' : 'spot';
       // Fewer seats than the usual week asks for, and room left: the missing
       // one(s) can be added — those and no more.
       if (row.canAdd && held > 0 && held < asked) return { pickable: true, on: false, topUp: true, text: held + ' of ' + asked + ' ' + unit + 's held. Tick to add ' + (asked - held) + ' more.' };
@@ -1619,7 +1619,7 @@
     t = t || {};
     var n = function (count, one, many) { return count + ' ' + (count === 1 ? one : many); };
     var classes = Math.max(0, Number(t.classes) || 0), seats = Math.max(0, Number(t.seats) || 0), places = Math.max(0, Number(t.places) || 0);
-    var book = classes ? 'Book ' + n(classes, 'class', 'classes') + ' · ' + n(seats, 'seat', 'seats') : '';
+    var book = classes ? 'Book ' + n(classes, 'class', 'classes') + ' · ' + n(seats, 'spot', 'spots') : '';
     if (!places) return book;
     if (!book) return 'Join ' + n(places, 'waitlist', 'waitlists');
     return book + ' · join ' + n(places, 'waitlist', 'waitlists');
@@ -2043,7 +2043,7 @@
             _uwSeatOptions(r.seats, max).map(function (n) {
               var on = n === rowNeed(r);
               return '<button type="button" class="seg-btn" aria-pressed="' + on + '" data-uw-key="seats-' + n + '" data-uw-seats="' + n + '"' +
-                ' aria-label="' + n + (n === 1 ? (kind === 'count' ? ' space' : ' seat') : (kind === 'count' ? ' spaces' : ' seats')) + '">' + n + '</button>';
+                ' aria-label="' + n + (n === 1 ? (kind === 'count' ? ' space' : ' spot') : (kind === 'count' ? ' spaces' : ' spots')) + '">' + n + '</button>';
             }).join('') + '</div>';
         }
         el.hidden = false;
@@ -2187,7 +2187,7 @@
           '<div class="usual-week-total" data-uw-total hidden></div>' +
           // The dialogs' warn line: the caution mark, then the sentence in the body ink.
           '<div class="confirm-warn">' + (typeof _uiIcon === 'function' ? _uiIcon('caution', 16) : '') +
-            '<span>Each class is booked straight away, on the spots shown, and every seat uses a class credit or counts towards your plan. ' +
+            '<span>Each class is booked straight away, on the spots shown, and every spot uses a class credit or counts towards your plan. ' +
             'Psycle\'s normal 12-hour cancellation policy applies to every one.' +
             // What a waitlist join means — shown only WHILE a waitlist row is ticked
             // (syncGo): everything but the list is pinned, and on a short phone these

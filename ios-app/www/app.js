@@ -6498,7 +6498,7 @@ function showBookingConfirmation(eventId, slotsArr, opts = {}) {
   // Class info line
   const classLine = [typeName, instrName].filter(Boolean).join(' \u00b7 ');
   // Shown in the sheet and spoken below: one string, so they can't drift.
-  const title = opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist!') : 'Booked!';
+  const title = opts.waitlist ? (opts.already ? 'Already on the waitlist' : 'On the waitlist') : 'Booked!';
 
   // Crisp Colour: the tick sits in the class's own colour and the seat is the
   // seat badge with the glow (it is yours now); the two buttons stay neutral
@@ -11923,7 +11923,7 @@ function _templatePlanCaution(f) {
   f = f || {};
   const items = Array.isArray(f.items) ? f.items : [];
   const seatsOf = it => Math.max(0, Math.floor(Number(it && it.seats)) || 0);
-  const words = n => n + ' ' + (n === 1 ? 'seat' : 'seats');
+  const words = n => n + ' ' + (n === 1 ? 'spot' : 'spots');
   const sub = f.subscription;
   if (sub && typeof sub === 'object') {
     const max = Number(sub.max_bookings);

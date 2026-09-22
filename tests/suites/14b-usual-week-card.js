@@ -94,7 +94,7 @@ module.exports = function (t) {
     eq([undefined, null, '2', '', true, [2], { seats: 2 }].map(u._uwCardSeats), [1, 1, 1, 1, 1, 1, 1], 'an entry saved before seats existed, and anything that is not a number → 1 (the card never promises a seat the stored entry does not plainly hold)');
     const rows = rowsOf(u._uwCardHtml(WEEK, false));
     eq(rows.length, 4, 'one row per entry');
-    ok(/<span class="usual-week-seats"><span class="usual-week-sep"> · <\/span>2 seats<\/span>/.test(rows[1]) && /3 seats/.test(rows[2]), '"2 seats" / "3 seats" on their rows');
+    ok(/<span class="usual-week-seats"><span class="usual-week-sep"> · <\/span>2 spots<\/span>/.test(rows[1]) && /3 spots/.test(rows[2]), '"2 spots" / "3 spots" on their rows (the owner\'s word, as everywhere else)');
     ok(!/usual-week-seats/.test(rows[0]) && !/usual-week-seats/.test(rows[3]) && !/\bseats?\b/.test(text(rows[0])), 'one seat is not said: the rows of a member who never books two look as they did');
     ok(rows[1].indexOf('usual-week-seats') < rows[1].indexOf('usual-week-where') && rows[1].indexOf('usual-week-seats') > rows[1].indexOf('STRENGTH'),
       'it LEADS the second line, before the studio: the ellipsis takes the end of a line, and the count must never be what it eats');

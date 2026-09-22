@@ -89,6 +89,20 @@ Chosen by the owner from several rounds of concepts, with a product designer adv
   **Settings → Data has a "Privacy policy" button** (both stores expect the policy inside the app; the native
   apps open the hosted copy, since the page is not bundled); exported files are named `psync-…`, not `psycle-…`.
 
+- **The owner's answers, 2026-09-22.** On the word in the usual week: "spot" — so the card, the review sheet, its
+  button and the plan note say spot / spots like the rest of the app ("space" stays for a studio with no map). On the
+  waitlist sheet's title: "On the waitlist is fine" — read as the title WITHOUT its exclamation mark, which is what
+  was proposed; "Booked!" keeps its own. On who publishes Psync and where to write: "Use support@ajar.dev as part of"
+  the company at Companies House number 14071311 — AJAR.DEV LTD, written "Ajar.dev Ltd" in prose. It is named in
+  privacy.html (the ONE address there), support.html, and both store listings. CLOSED.
+- **Money, 2026-09-22.** The owner: "This app will be free. I want to allow people to give me money." Advice given,
+  nothing built: no payment link inside either native app (App Review 3.1.1 and Play's billing policy treat a tip
+  to the developer as a digital purchase; the UK storefront had no link-out exemption when this was written — read
+  the current text first); a "Support Psync" link on the WEB app and the support page instead, to a Stripe Payment
+  Link under the company (Ko-fi or Buy Me a Coffee if nothing is to be set up); an in-app-purchase tip jar is the
+  compliant route inside the iPhone app, best after the first approval. Taking money makes Psycle's written
+  permission matter more. OPEN: the owner has not chosen.
+
 ## 4. Time zones
 
 | Decision | Why | Held by |
@@ -177,12 +191,12 @@ Listed by IMPROVEMENTS-2026-09.md ("Follow-up: your usual week" → "Decisions t
 choices made on the owner's behalf and not yet confirmed. Ask before changing one; treat none as settled.
 
 - The usual-week card's primary sits in the head in both states, and "Clear" sits beside "Update from my bookings".
-- "1 of 2 seats held" starts unticked.
+- "1 of 2 spots held" starts unticked.
 - The reminder tap's Discover route shows ONE day, the batch's first: the date row cannot name a custom range yet.
 - The Settings row reads "Monday booking reminder — Mondays at 12:00 — when Psycle opens new dates": "Monday"
   twice, and no "UK" although it always fires at London noon.
 - A second seat is the free one closest to the first, which can be the seat in front rather than the one beside.
-- The review's button counts a no-map studio's spaces as "seats".
+- The review's button counts a no-map studio's spaces as "spots" (the word was "seats" until the owner chose "spot").
 - "Not now" to the reminder offer leaves the reminder unset rather than writing `'off'`.
 
 Chosen on the owner's behalf in the Android work (section 8), and theirs to overrule:

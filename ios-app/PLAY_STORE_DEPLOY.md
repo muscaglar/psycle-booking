@@ -9,7 +9,7 @@ and picture the store listing needs, and the data-safety answers) and `CICD.md` 
 | The signed bundle (`app-release.aab`) | GitHub Actions, **by hand** — or you, on a machine with Android Studio | the workflow **Android release (signed AAB)** (`.github/workflows/android-release.yml`): manual, `main` only, stops if a signing secret is missing, proves the bundle is signed by your key, keeps it for 5 days |
 | The upload, the listing, every form, every release | **you**, in Play Console | nothing in this repository talks to Google Play |
 | The listing graphics | the repository | `sh assets/render-play-assets.sh` (icon, feature graphic — already built, in `playstore-assets/`) and `node tests/tools/appstore-shots.mjs --play` (the six phone screenshots) |
-| The privacy policy | the repository, once you have put your name in it | `privacy.html` at the repository root, published with the web app |
+| The privacy policy and the support page | the repository | `privacy.html` and `support.html` at the repository root, published with the web app; both name the publisher (Ajar.dev Ltd) and the contact address support@ajar.dev |
 
 Google changes its rules and its figures often. Wherever this file gives a number of Google's — a fee, a tester
 count, a number of days, an API level, a picture size — **check the current figure in Play Console** (or Play
@@ -349,16 +349,14 @@ address**, and open the page in a private window before you give it to Google. I
 the address changes and the listing must follow.
 
 Before you submit it:
-1. **Put your name and a contact e-mail address into `privacy.html`.** There is exactly one placeholder, in the
-   first section — "[OWNER TO COMPLETE: …]", the `<span id="publisher">`. Nothing else on the page needs filling
-   in. It is a public repository: use an address you are content to publish (it can be the listing's).
-   `22-play-release.js` accepts the page with the placeholder or with an e-mail address there, and nothing else.
+1. **The publisher and the contact address are in `privacy.html`**: Ajar.dev Ltd (company number 14071311) and
+   support@ajar.dev, in the first section's `<span id="publisher">` — the ONE e-mail address on the page, which
+   `22-play-release.js` holds it to. Use the same address as the listing's developer contact. `support.html`,
+   beside it, is the page to give wherever a store asks for a support or website address.
 2. Merge it to `main`: the page is live only once `main` holds it.
-3. Play also wants the policy reachable **from inside the app**. The app has no such link yet (Membership →
-   Settings → Data & privacy is where it belongs). It is a small web change and it is not made
-   (`agents/backlog.md` sizes it): best made **before the closed test starts its clock**, because a reviewer of an
-   app that takes another service's password looks here first. The checklist (step 9) holds a box for it, so that
-   submitting without it is a choice and not an oversight.
+3. Play also wants the policy reachable **from inside the app**, and it is: Membership → Data & privacy →
+   **Privacy policy** (`openPrivacyPolicy` in js/settings.js; the native apps open the hosted copy, since the page
+   is not bundled). A reviewer of an app that takes another service's password looks here first.
 
 The page is accurate to the code as of September 2026. If the app ever gains analytics, a server, a new
 permission or a new host, the page changes in the same commit.
@@ -524,10 +522,9 @@ Appeals are made from the same page.
 - [ ] The `play-release` environment exists: deployment branches `main` only, you as a required reviewer.
 - [ ] The four secrets exist IN that environment, and nowhere at repository level: `PSYNC_KEYSTORE_BASE64`,
       `PSYNC_KEYSTORE_PASSWORD`, `PSYNC_KEY_ALIAS`, `PSYNC_KEY_PASSWORD`.
-- [ ] `privacy.html` names you and a contact address, is on `main`, and opens at its public address in a private
-      window.
-- [ ] The app links to `privacy.html` (Membership → Settings → Data & privacy) — or I have chosen to submit without
-      it, knowing a reviewer may refuse (step 5.3).
+- [ ] `privacy.html` (it names Ajar.dev Ltd and support@ajar.dev) opens at its public address in a private window,
+      and so does `support.html`.
+- [ ] In the installed app, Membership → Data & privacy → Privacy policy opens that page.
 - [ ] A review-only Psycle account exists, with no credits and no card (steps 0.3 and 5.4).
 - [ ] The testers for the closed test have been asked, and have said yes (steps 0.3 and 1.5).
 - [ ] The six Play screenshots are built (`--play`), looked at, and committed beside the icon and the feature graphic.

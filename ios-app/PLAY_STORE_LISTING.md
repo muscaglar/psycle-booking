@@ -188,8 +188,9 @@ The declaration is the owner's to make, and Google's definitions move: read them
 
 Required, as a public web address. The page is `privacy.html` at the repository root — one policy for the iPhone
 app, the Android app and the web app, written from the table above — and it is published with the web app. Its
-address, the one placeholder in it that the owner fills in (a name and a contact e-mail address), and Play's wish
-for a link to it inside the app as well: `PLAY_STORE_DEPLOY.md`, step 5.3. When a row of the table above changes,
+address, and the link to it inside the app: `PLAY_STORE_DEPLOY.md`, step 5.3. It names the publisher, Ajar.dev
+Ltd, and the contact address support@ajar.dev — the address to give as the listing's developer contact too; the
+website or support address is `support.html`, published beside it. When a row of the table above changes,
 the page changes in the same commit.
 
 ---

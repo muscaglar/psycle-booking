@@ -814,7 +814,7 @@
       '</div>' +
       '<div class="cal-sync-hint">' +
         'The calendar you pick becomes fully managed by Psync: upcoming events in it are ' +
-        'kept in lockstep with your bookings, so cancelled classes, slot changes and any ' +
+        'kept in lockstep with your bookings, so cancelled classes, spot changes and any ' +
         'duplicates are cleaned up automatically, and anything else in that calendar will ' +
         'be removed. Use a dedicated calendar (e.g. create a "Psycle" calendar in the ' +
         'Calendar app), not your personal one. Past events are never touched. Switching ' +

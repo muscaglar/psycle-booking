@@ -10,7 +10,7 @@
          booked, signed out, or before the app was ever opened: the widget never says who is
          signed in, or whether anyone is. -->
     <string name="widget_next_class_label">Next class</string>
-    <string name="widget_next_class_description">Your next booked class: the time, the class and your seat.</string>
+    <string name="widget_next_class_description">Your next booked class: the time, the class and your spot.</string>
     <string name="widget_nothing_booked">Nothing booked</string>
     <!-- What a screen reader says for the whole card: "Next class: Today 18:30, RIDE 45, ...". -->
     <string name="widget_spoken_next">Next class: %1$s</string>
