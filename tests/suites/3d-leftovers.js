@@ -161,8 +161,8 @@ module.exports = async function (t) {
     eq(f._forecastVerdict(10, 20, 140, 7, 11, 140 / 11, 1), 'Book 4 more to beat £10.00/class', '…four in two days (today + 1) still is');
     eq(f._forecastVerdict(3, 0, 140, 0, 6, 140 / 6, 20), 'Book 11 more to beat £10.00/class', 'unlimited plan: no cap to clamp to');
     eq(f._forecastVerdict(3, 0, 140, 0, 4, 35, 2), 'On pace for £35.00/class. Too few days left to beat £10.00/class.', '…but the days still count');
-    eq(f._forecastVerdict(11, 12, 140, 140 / 12, 12, 140 / 12, 3), 'On pace to use all 12 classes — top value at £11.67/class', 'on pace for the whole plan: unchanged');
-    eq(f._forecastVerdict(15, 0, 140, 0, 16, 8.75, 3), 'On pace for £8.75/class — great value', 'already under the target: unchanged');
+    eq(f._forecastVerdict(11, 12, 140, 140 / 12, 12, 140 / 12, 3), 'On pace to use all 12 classes, £11.67/class', 'on pace for the whole plan: unchanged');
+    eq(f._forecastVerdict(15, 0, 140, 0, 16, 8.75, 3), 'On pace for £8.75/class', 'already under the target: unchanged');
 
     let bad = [];
     [0, 8, 12, 30].forEach((max) => [1, 2, 5, 10, 11, 13].forEach((made) => [45, 99, 140, 239].forEach((price) => [0, 1, 2, 6, 27].forEach((daysLeft) => {

@@ -39,6 +39,22 @@ module.exports = async function (t) {
     const dashed = [];
     shipped.forEach((f) => read(f).split('\n').forEach((line, i) => { if (/toast\([^\n]*( — |\\u2014)/.test(line)) dashed.push(f + ':' + (i + 1)); }));
     eq(dashed, [], 'no toast is written "problem — instruction": two sentences instead');
+    // …and not only toasts: a hint, a note or a verdict is often built in a variable first. Every string literal in
+    // shipped code that still joins two clauses with a dash is listed here BY NAME, so a new one is a decision:
+    // the two label contracts (decisions.md section 2), the Monday row the owner has yet to rule on, the calendar
+    // event title (the member's own data; the reconcile may match on it), and lines no member reads (console and
+    // security logs, the owner's Diagnostics panel and report).
+    const ALLOWED = /Failed — retry|Unconfirmed — retry|Mondays at 12:00 — when Psycle opens new dates|_instrName \? ' — '|console\.(log|warn|error|info)\(|\[perf\]|\[security\]|_logSecurityError\(|diag-ok|reload pending|still loading/;
+    const stillDashed = [];
+    jsFiles.concat(['ios-app/www/native-bridge.js']).forEach((f) => read(f).split('\n').forEach((line, i) => {
+      const s = line.trim();
+      if (/^(\/\/|\*|\/\*)/.test(s)) return;
+      const code = line.replace(/\s\/\/.*$/, '');
+      if (!/(['"`])((?:\\.|(?!\1).)*?(?: — |\\u2014)(?:\\.|(?!\1).)*?)\1/.test(code)) return;
+      if (ALLOWED.test(code)) return;
+      stillDashed.push(f + ':' + (i + 1));
+    }));
+    eq(stillDashed, [], 'no other member-visible string joins two clauses with a dash (the allowed ones are named above)');
     ok(!/safe mode|Heads up/.test(between(read('js/diagnostic.js'), "var msg = document.createElement('span');", 'banner.appendChild(msg);', 'the banner text')),
       'the banner shown when Psycle changes a field uses no jargon ("safe mode") and no filler');
     const messages = between(read('js/api-client.js'), 'var USER_MESSAGES = {', '};', 'USER_MESSAGES');

@@ -149,13 +149,13 @@ module.exports = async function (t) {
     eq(say({ usual: 9 }), [[9], 'your usual'], 'the usual spot, free → it');
     eq(say({ usual: 9, free: [1, 2, 3, 8, 10, 12], prefer: [12] }), [[12], 'one you prefer'], 'the usual is taken → a PREFERRED spot that is free');
     eq(say({ usual: 9, free: [1, 2, 8, 10, 12], prefer: [2, 12] }), [[2], 'one you prefer'], '…of two preferred, the one nearer the usual BY THE MAP (2 is diagonally in front of 9; 12 is three seats along)');
-    eq(say({ usual: 9, free: [1, 2, 8, 12] }), [[8], 'closest to your usual — 9 is taken'], 'no preferred spot free → the free spot closest to the usual, by the layout\'s own coordinates — and it says why');
-    eq(say({ usual: 9, free: [3, 4, 12] }), [[3], 'closest to your usual — 9 is taken'], '3 sits right in front of 9 (one row forward) — nearer than 12, three across');
-    eq(say({ usual: 9, free: [8, 10] }), [[8], 'closest to your usual — 9 is taken'], 'a tie → the lower id');
+    eq(say({ usual: 9, free: [1, 2, 8, 12] }), [[8], 'closest to your usual (9 is taken)'], 'no preferred spot free → the free spot closest to the usual, by the layout\'s own coordinates — and it says why');
+    eq(say({ usual: 9, free: [3, 4, 12] }), [[3], 'closest to your usual (9 is taken)'], '3 sits right in front of 9 (one row forward) — nearer than 12, three across');
+    eq(say({ usual: 9, free: [8, 10] }), [[8], 'closest to your usual (9 is taken)'], 'a tie → the lower id');
     eq(say({ free: [4, 2, 7] }), [[2], 'first free'], 'no habit to go by → the first free one (lowest id)');
     eq(say({ usual: 99, free: [4, 2, 7] }), [[2], 'first free'], 'a usual spot this map does not have is no anchor');
-    eq(say({ usual: 9, avoid: [8], free: [1, 8, 10] }), [[10], 'closest to your usual — 9 is taken'], 'an AVOIDED spot is never suggested while another is free (8 would win the tie on its id — it is avoided, so 10)');
-    eq(say({ usual: 9, avoid: [9], free: [8, 9, 10] }), [[8], 'closest to your usual — 9 is one you avoid'], 'even the usual one, if the member has since marked it to avoid — and the reason says so');
+    eq(say({ usual: 9, avoid: [8], free: [1, 8, 10] }), [[10], 'closest to your usual (9 is taken)'], 'an AVOIDED spot is never suggested while another is free (8 would win the tie on its id — it is avoided, so 10)');
+    eq(say({ usual: 9, avoid: [9], free: [8, 9, 10] }), [[8], 'closest to your usual (9 is one you avoid)'], 'even the usual one, if the member has since marked it to avoid — and the reason says so');
     eq(say({ avoid: [4, 5], free: [4, 5] }), [[4], 'first free (nothing else is free)'], 'only avoided spots left → one of them, and it says so');
     eq(say({ usual: 9, count: 2 }), [[9, 3], 'your usual, plus the closest free'], 'a second seat = the free spot closest to the first (3, 8 and 10 are all one seat away: ties → lower id)');
     eq(say({ usual: 9, count: 3, free: [9, 3, 10, 12], avoid: [10] })[0], [9, 3, 12], '…further seats skip an avoided spot while another is free');
@@ -165,13 +165,13 @@ module.exports = async function (t) {
     eq(say({ held: [9], usual: 2, free: [2, 8, 10] }), [[8], 'closest to 9, which you hold'], 'adding a seat to a class already held: next to the seat held, not the usual across the room');
     // The member's own choice (Change spot) outranks every rule — while it is free.
     eq(say({ usual: 9, keep: [4] }), [[4], 'your pick'], 'the member\'s pick stands');
-    eq(say({ usual: 9, keep: [4], free: [1, 9] }), [[9], '4 was just taken — your usual'], 'a pick that has gone is NAMED, then the rules start again');
-    eq(say({ usual: 9, keep: [4, 5], count: 2, free: [4, 6, 9] }), [[4, 9], '5 was just taken — your pick, plus the closest free'], 'half a pick gone: the half that stands, the free spot nearest IT (9, not the usual rule), and the reason');
+    eq(say({ usual: 9, keep: [4], free: [1, 9] }), [[9], '4 was just taken; your usual'], 'a pick that has gone is NAMED, then the rules start again');
+    eq(say({ usual: 9, keep: [4, 5], count: 2, free: [4, 6, 9] }), [[4, 9], '5 was just taken; your pick, plus the closest free'], 'half a pick gone: the half that stands, the free spot nearest IT (9, not the usual rule), and the reason');
     eq(sug({ keep: [4, 5, 6], count: 2 }).slots, [4, 5], 'never more seats than the row asks for');
     eq(say({ free: ['2', 2, 'x', null, 3] })[0], [2], 'ids are read as numbers, junk dropped, each once');
     const noMap = S._spotSuggestion({ slots: [{ id: 1 }, { id: 5 }, { id: 9 }], free: [1, 5], usual: 9, count: 1 });
     eq([noMap.slots, noMap.why], [[5], 'near-usual'], 'a map without coordinates falls back on the numbers (5 is nearer 9 than 1 is)');
-    eq(S._spotWhyText({ why: 'near-usual', usual: 9, usualTaken: true, lost: [], filled: 0 }, (id) => 'B' + id), 'closest to your usual — B9 is taken', 'the reason prints the number ON the seat (a layout label can differ from its id)');
+    eq(S._spotWhyText({ why: 'near-usual', usual: 9, usualTaken: true, lost: [], filled: 0 }, (id) => 'B' + id), 'closest to your usual (B9 is taken)', 'the reason prints the number ON the seat (a layout label can differ from its id)');
     eq([S._spotSuggestion(null).slots, S._spotSuggestion({}).slots, S._spotWhyText(null)], [[], [], ''], 'nothing in, nothing out — no throw');
   }
 
@@ -182,12 +182,12 @@ module.exports = async function (t) {
     const inP = (seats) => ({ classMs: utc(2026, 9, 28, 6), seats });
     const afterP = (seats) => ({ classMs: utc(2026, 10, 14, 6), seats });
     const capped = (made, o) => Object.assign({ subscription: { max_bookings: 12, bookings_made: made }, periodStartMs: start, periodEndMs: end, periodWord: 'month' }, o);
-    eq(P._templatePlanCaution(capped(10, { items: [inP(2), inP(2)] })), '4 seats this month — your plan shows 2 left', 'a capped plan: more seats in the period than are left');
-    eq(P._templatePlanCaution(capped(12, { items: [inP(1)] })), '1 seat this month — your plan shows none left', '…none left');
+    eq(P._templatePlanCaution(capped(10, { items: [inP(2), inP(2)] })), '4 seats this month. Your plan shows 2 left.', 'a capped plan: more seats in the period than are left');
+    eq(P._templatePlanCaution(capped(12, { items: [inP(1)] })), '1 seat this month. Your plan shows none left.', '…none left');
     eq(P._templatePlanCaution(capped(10, { items: [inP(2)] })), '', 'within what is left → nothing to say');
     eq(P._templatePlanCaution(capped(10, { items: [inP(1), afterP(3)] })), '', 'seats in classes AFTER the period /profile is counting are not weighed (it cannot say what is left then)');
     eq(P._templatePlanCaution({ subscription: { max_bookings: 0, bookings_made: 40 }, periodStartMs: start, periodEndMs: end, items: [inP(4), inP(4)] }), '', 'an unlimited plan has nothing to run out of');
-    eq(P._templatePlanCaution({ subscription: null, creditsRemaining: 3, items: [inP(2), afterP(2)] }), '4 seats — you have 3 credits left', 'no plan: the credit balance (credits do not reset with a period)');
+    eq(P._templatePlanCaution({ subscription: null, creditsRemaining: 3, items: [inP(2), afterP(2)] }), '4 seats. You have 3 credits left.', 'no plan: the credit balance (credits do not reset with a period)');
     eq([P._templatePlanCaution({ creditsRemaining: 0, items: [inP(2)] }), P._templatePlanCaution({ creditsRemaining: NaN, items: [inP(2)] }), P._templatePlanCaution({}), P._templatePlanCaution(null)], ['', '', '', ''],
       'a balance nobody can vouch for says nothing (as the class sheet\'s own note)');
     ok(/function templatePlanCaution\(items\) \{[\s\S]*?_templatePlanCaution\(\{[\s\S]*?\} catch \(e\) \{ return ''; \}/.test(app), 'app.js feeds it from /profile, and an error there can never get in the way of the sheet');
@@ -730,7 +730,7 @@ module.exports = async function (t) {
     const first = S._spotSuggestion({ slots, free: [4, 5, 6], avoid: [4], count: 2 });
     eq([first.slots, first.firstSkipped, S._spotWhyText(first)], [[5, 6], true, 'first free you don\'t avoid, plus the closest free'], 'a lower free spot the member avoids was passed over: "first free" would be untrue');
     eq(S._spotSuggestion({ slots, free: [4, 5], count: 1 }).firstSkipped, false, '(nothing passed over: plain "first free")');
-    eq(S._spotWhyText({ why: 'usual', lost: [4, 5, 6], filled: 0 }), '4, 5 & 6 were just taken — your usual', 'three lost picks read as a list');
+    eq(S._spotWhyText({ why: 'usual', lost: [4, 5, 6], filled: 0 }), '4, 5 & 6 were just taken; your usual', 'three lost picks read as a list');
     ok(/if \(labels\.length > 2 && labels\.every\(function \(l\) \{ return isFinite\(Number\(l\)\); \}\)\) labels\.sort\(/.test(tabs), 'three or four suggested seats are listed in seat order ("Benches 5, 6, 10 & 11"); a pair keeps the order its reason is about');
     const sheets = t.loadPure('js/app.js', 'sheets');
     eq([sheets._pickerConfirmLabel('Bench', [5, 6, 10, 11], 'Use'), sheets._chooseSpotHint('Bike', 4, [1, 2, 3])], ['Use benches 5, 6, 10 & 11', 'Bikes 1, 2 & 3 selected. Pick 1 more.'], 'the seat map words the same seats the same way');

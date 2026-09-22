@@ -7198,14 +7198,14 @@ async function cancelBikeSlot(slotId, eventId) {
       PsycleEvents.emit('seat:cancelled', eventId, slotId);
     } else {
       const data = await res.json().catch(() => ({}));
-      document.getElementById('modalHint').textContent = 'Cancel failed — try again';
+      document.getElementById('modalHint').textContent = 'Couldn\'t cancel. Try again.';
       toast(describeCancelError(res, data), 'error');
       // A 5xx can follow a DELETE that did land (it is re-sent up to three
       // times): the toast says "check My Bookings", so make that true.
       if (res.status >= 500) _scheduleBookingsRefetch(1500);
     }
   } catch (e) {
-    document.getElementById('modalHint').textContent = 'Cancel failed — try again';
+    document.getElementById('modalHint').textContent = 'Couldn\'t cancel. Try again.';
     toast(describeCancelError(null, null, e, sentOnline), 'error');
     // The DELETE may have landed without its answer reaching us: let /bookings
     // say (as leaveWaitlist does). Not offline — that read could only fail —
@@ -11933,12 +11933,12 @@ function _templatePlanCaution(f) {
       !(f.periodStartMs > 0 && it.classMs < f.periodStartMs);
     const n = items.filter(inPeriod).reduce((sum, it) => sum + seatsOf(it), 0);
     if (n <= left) return '';
-    return words(n) + ' this ' + (f.periodWord || 'period') + ' — your plan shows ' + (left === 0 ? 'none' : left) + ' left';
+    return words(n) + ' this ' + (f.periodWord || 'period') + '. Your plan shows ' + (left === 0 ? 'none' : left) + ' left.';
   }
   const credits = Math.floor(Number(f.creditsRemaining));
   if (!(credits > 0)) return '';
   const total = items.reduce((sum, it) => sum + seatsOf(it), 0);
-  return total > credits ? words(total) + ' — you have ' + credits + ' ' + (credits === 1 ? 'credit' : 'credits') + ' left' : '';
+  return total > credits ? words(total) + '. You have ' + credits + ' ' + (credits === 1 ? 'credit' : 'credits') + ' left.' : '';
 }
 // ── pure:template:end ──
 
@@ -12036,14 +12036,14 @@ function _spotWhyText(s, labelOf) {
   let text = s.why === 'pick' ? 'your pick'
     : s.why === 'usual' ? 'your usual'
     : s.why === 'preferred' ? 'one you prefer'
-    : s.why === 'near-usual' ? 'closest to your usual — ' + name(s.usual) + (s.usualTaken ? ' is taken' : ' is one you avoid')
+    : s.why === 'near-usual' ? 'closest to your usual (' + name(s.usual) + (s.usualTaken ? ' is taken)' : ' is one you avoid)')
     : s.why === 'near-held' ? 'closest to ' + name(s.heldNear) + ', which you hold'
     : s.why === 'first' ? (s.firstSkipped ? "first free you don't avoid" : 'first free') : '';
   if (text && s.filled > 0) text += ', plus the closest free';
   if (text && s.avoided) text += ' (nothing else is free)';
   const lost = Array.isArray(s.lost) ? s.lost : [];
   const names = lost.map(name); // "4", "4 & 5", "4, 5 & 6" — as formatSlots lists seats
-  if (lost.length) text = (names.length > 2 ? names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1] : names.join(' & ')) + (lost.length > 1 ? ' were' : ' was') + ' just taken' + (text ? ' — ' + text : '');
+  if (lost.length) text = (names.length > 2 ? names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1] : names.join(' & ')) + (lost.length > 1 ? ' were' : ' was') + ' just taken' + (text ? '; ' + text : '');
   return text;
 }
 // ── pure:template-spots:end ──

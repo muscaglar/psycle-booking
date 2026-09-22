@@ -1020,7 +1020,7 @@
     }
 
     var weekLabel = days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) +
-      ' — ' + days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      ' – ' + days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
     // (The weekly-template buttons that used to sit here moved to the "Your
     // usual week" card in My Bookings — this grid is never mounted.)
@@ -1068,7 +1068,7 @@
         var socialBadge = slotsCount > 1 ? '<span class="week-event-social" title="' + slotsCount + ' spots booked">+1</span>' : '';
         // A waitlist place is shown, but clearly not as a seat.
         var isPlace = !!(booking && booking.waitlisted);
-        if (isPlace) socialBadge = '<span class="week-event-social week-event-wl" title="Waitlist place — not booked yet">WL</span>';
+        if (isPlace) socialBadge = '<span class="week-event-social week-event-wl" title="Waitlist place, not booked yet">WL</span>';
 
         html += '<div class="week-event' + (isPlace ? ' is-waitlisted' : '') + '" onclick="switchTab(\'bookings\')" title="' +
           escapeHTML(evt._typeName || '') + ' · ' + escapeHTML(evt._instrName || '') + (isPlace ? ' · waitlist' : '') + '">' +
@@ -3143,10 +3143,10 @@
   // with a day to go it asked for a week's worth of classes.
   function _forecastVerdict(made, max, priceGbp, costAtMax, projected, projectedCost, daysLeft) {
     if (max > 0 && projected >= max) {
-      return 'On pace to use all ' + max + ' classes — top value at ' + _formatGbp(costAtMax) + '/class';
+      return 'On pace to use all ' + max + ' classes, ' + _formatGbp(costAtMax) + '/class';
     }
     if (projectedCost <= FORECAST_TARGET_GBP) {
-      return 'On pace for ' + _formatGbp(projectedCost) + '/class — great value';
+      return 'On pace for ' + _formatGbp(projectedCost) + '/class';
     }
     var onPace = 'On pace for ' + _formatGbp(projectedCost) + '/class';
     // How many more to drop under the target?

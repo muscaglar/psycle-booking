@@ -323,7 +323,7 @@
   function makeError(categorized, contextMsg) {
     var cat = categorized || categorizeError(null);
     var err = new Error(contextMsg
-      ? (contextMsg + ' — ' + cat.userMessage)
+      ? (contextMsg + '. ' + cat.userMessage)
       : cat.userMessage);
     err.psycleError = cat;
     return err;
