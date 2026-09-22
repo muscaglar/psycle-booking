@@ -120,6 +120,21 @@ module.exports = function (t) {
       [{ num: '5', rest: 'credits left', when: '', bar: null }, 'credit left', '0'], 'a credit pack: "5 credits left" / "1 credit left", never negative');
     eq(p._mbUsageModel().num, 'Unlimited', 'no input: no throw');
 
+    // What "next month" is counted in: spots, the unit of Psycle's own bookings_made.
+    const oneBike = { bookingId: 'A', bookingIds: ['A'], slots: [7], slotBookings: { 7: 'A' }, waitlisted: false };
+    const twoBenches = { bookingId: 'B', bookingIds: ['B', 'C'], slots: [21, 22], slotBookings: { 21: 'B', 22: 'C' }, waitlisted: false };
+    const threeSpaces = { bookingId: 'E', bookingIds: ['E', 'F', 'G'], slots: [], slotBookings: {}, waitlisted: false };
+    const aPlace = { bookingId: null, slots: [], slotBookings: {}, waitlisted: true, waitlist: { id: 900, status: 'waiting', expiresAt: null } };
+    eq([p._mbSpotsHeld(oneBike), p._mbSpotsHeld(twoBenches), p._mbSpotsHeld(threeSpaces)], [1, 2, 3],
+      'a held class uses one of the plan\'s bookings PER SPOT: one bike, two benches, three spaces in a studio with no spot map');
+    eq([p._mbSpotsHeld(aPlace), p._mbSpotsHeld(null), p._mbSpotsHeld({}), p._mbSpotsHeld({ slots: 'x', bookingIds: 7 })], [0, 0, 1, 1],
+      'a waitlist place has used nothing; a held entry that names no spot is still one booking, never 0 or NaN');
+    {
+      const tmpl = t.loadPure('js/app.js', 'template');
+      const held = [oneBike, twoBenches, threeSpaces, aPlace, null, {}];
+      eq(held.map((h) => p._mbSpotsHeld(h)), held.map((h) => tmpl._templateSeatsHeld(h)), '…the rule the usual week already counts a held class by (_templateSeatsHeld): the two never disagree');
+    }
+
     const html = p._mbUsageHtml(m({ made: 8, max: 12 }), esc);
     eq([(html.match(/<i class="is-on"><\/i>/g) || []).length, (html.match(/<i><\/i>/g) || []).length], [8, 4], 'markup: 8 lit segments of 12');
     ok(/<span class="mb-usage-num">8 of 12<\/span> this month<\/span><span class="mb-usage-when">Resets 12 Oct<\/span>/.test(html), '…the numerals in a span of their own (the display face)');
@@ -277,8 +292,22 @@ module.exports = function (t) {
     const two = world({ bookings: BOOKINGS, events: EVENTS, sub: { name: 'Monthly 12', max_bookings: 12, bookings_made: 8, period_start: '2026-08-23 00:00:00', period_end: '2026-09-23 00:00:00', upcoming_billing_periods: [{ start: '2026-09-23 00:00:00', end: '2026-10-23 00:00:00' }] } });
     const bars = two.html.match(/<div class="mb-period-bar[^"]*" role="button" tabindex="0" aria-expanded="true" onclick="[^"]*">/g) || [];
     eq([(two.html.match(/<div class="mb-period-section">/g) || []).length, bars.length], [2, 2], 'a class after period_end: two sections, each bar still a reachable button that says it is expanded (_commitBookingsHtml re-folds them)');
-    ok(/8 of 12<\/span> this month/.test(two.html) && /<span class="mb-usage-num">2 of 12<\/span> next month<\/span><span class="mb-usage-when">From 23 Sept?<\/span>/.test(two.html),
-      'the next period counts its SEATS — classes 78 and 79, not the waitlist place beside them: "2 of 12 next month · From 23 Sep"');
+    ok(/8 of 12<\/span> this month/.test(two.html) && /<span class="mb-usage-num">4 of 12<\/span> next month<\/span><span class="mb-usage-when">From 23 Sept?<\/span>/.test(two.html),
+      'the next period counts SPOTS, as Psycle does — two benches in class 78 and two spaces in class 79 are 4 of the plan\'s 12, not 2; the waitlist place beside them is none: "4 of 12 next month · From 23 Sep"');
+    // The owner's report: 15 classes next month with two spots each read "15 of 30" over a month that was full.
+    {
+      const bookings = {}, events = {};
+      for (let i = 0; i < 15; i++) {
+        bookings[200 + i] = seat([3, 4], ['P' + i, 'Q' + i]);
+        events[200 + i] = evt({ id: 200 + i, start_at: '2026-10-' + String(1 + i).padStart(2, '0') + 'T07:00:00', _typeName: 'RIDE: 45' });
+      }
+      bookings[77] = seat([7], ['A']); events[77] = EVENTS[77];
+      const full = world({ bookings, events, sub: { name: 'Monthly 30', max_bookings: 30, bookings_made: 22, period_start: '2026-09-01 00:00:00', period_end: '2026-10-01 00:00:00', upcoming_billing_periods: [{ start: '2026-10-01 00:00:00', end: '2026-11-01 00:00:00' }] } });
+      ok(/<span class="mb-usage-num">30 of 30<\/span> next month<\/span><span class="mb-usage-when">From 1 Oct<\/span>/.test(full.html) && /style="width:100%"/.test(full.html),
+        'fifteen classes of two spots each: "30 of 30 next month", the bar full');
+      ok(/<span class="mb-usage-num">22 of 30<\/span> this month/.test(full.html), '…and this month\'s number is still Psycle\'s own bookings_made, untouched');
+      eq(full.count, '16', '…while the header still counts CLASSES (16 held), which is what it says it counts');
+    }
     eq((two.html.match(/<span class="mb-period-chevron" aria-hidden="true"><svg /g) || []).length, 2, 'the fold mark is an aria-hidden stroke, not a "▼" character');
     const credits = world({ bookings: BOOKINGS, events: EVENTS });
     ok(!/mb-usage/.test(credits.html), 'no plan and no credits: no bar');

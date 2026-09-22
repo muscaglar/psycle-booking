@@ -12,6 +12,13 @@ Newest on top. **Add an entry when you finish a stretch of work; keep the ten mo
 - **Left:** what is unfinished or now the owner's; anything the owner decided → decisions.md, in their words.
 ```
 
+### 2026-09-22 — "next month" counts spots, not classes
+- **State:** `main` at "My Bookings: next month's count is in spots, the unit Psycle counts in"; pushed yes — a bug the owner reported from the iPhone; branch ahead of `origin/main` by 0.
+- **Changed:** the owner: "Its stuck on 15 for the next month… counting the bookings, there are 30/30". /profile counts only the CURRENT period, so `renderMyBookings` counts the next one itself — and counted held CLASSES, while Psycle counts a booking per SPOT: fifteen two-spot classes read "15 of 30". Now `_mbSpotsHeld` (pure:bookings-crisp; the rule of `_templateSeatsHeld`), summed over the classes from `period_end` on; one test (`inNextPeriod`) now serves the split and the buckets ([learnings.md](learnings.md) I5).
+- **Verified:** `npm run ci` (8,962 → 8,968 checks; the new ones fail on the old code); in a desktop browser on the fake server with a 30-a-month plan: 14 two-spot classes read "28 of 30 next month", booking a fifteenth with two spots (ONE POST) made it "30 of 30", cancelling one spot (one DELETE) "29 of 30"; this month's figure stayed Psycle's own; no write left the page.
+- **Not verified:** on the owner's phone against their real plan — that Psycle's next-period figure is 30 is the owner's count, not something /profile reports.
+- **Left:** nothing.
+
 ### 2026-09-22 — instructor grades removed: favourites are the only mark on a person
 - **State:** `main` at "Remove instructor grades: a star is the only mark on a person"; pushed yes — at the owner's request; branch ahead of `origin/main` by 0. Check it: the command under "State of play".
 - **Changed:** the owner: "It could be seen as mean… we have no trace of the old rankings" ([decisions.md](decisions.md) section 3). Gone, with no migration: the S–F grades and everything that read them, in six js/ modules, six stylesheets, the bridge's mirror list, export / import and the account stash; Membership's section is "Favourite instructors" (`renderFavList`, `.favs-*`), the instructor profile has one star, Stats' instructor map counts and names the most booked. An old device's grades are deleted at launch (web and native). Both store descriptions, the privacy page and all twelve store screenshots were redone: the old shots showed grade badges beside instructors' names. `IPHONE_LAUNCH_DIGEST` re-recorded a second time for ONE added call (the native key removal), proved as before.

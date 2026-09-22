@@ -236,6 +236,8 @@ Purpose: the mistakes this repository has already paid for, most expensive first
 
 **I4. A source comment that says "follow-up" or "TODO" is not a licence.** A time-zone "follow-up" for the widget snapshot, the T-90 reminders and the ICS export was offered and DECLINED (`agents/decisions.md` section 4, CLOSED). Check decisions.md before acting on any such comment.
 
+**I5. The plan counts booking RECORDS — one per spot — never classes.** `bookings_made` / `max_bookings` are in that unit, so any number WE add up beside them must be too. My Bookings' "next month" bar counted held classes, and a member who books two spots a class read "15 of 30 next month" over a month that was full (owner's report, on the iPhone). Count a held class with `_mbSpotsHeld` (= `_templateSeatsHeld`: its seats, or its records where a studio has no spot map; 0 for a waitlist place). /profile covers the CURRENT period only — nothing from Psycle confirms our figure for the next one. Guard: 9d-bookings.js ("30 of 30 next month").
+
 ## J. Review spend paths adversarially
 
 - Why: even carefully specified work shipped two money bugs that only review caught (A4, and A5's "Choose again"). The July 2026 review found four critical and fifteen high-severity bugs in an app that "worked" (REVIEW.md).

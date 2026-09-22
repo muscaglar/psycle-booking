@@ -9491,6 +9491,18 @@ function _mbMoreKeyStep(key, index, count) {
   return null;
 }
 
+// How many of the plan's bookings a held entry uses. Psycle keeps one booking
+// per spot and counts each against the plan (its own bookings_made does), so
+// two bikes in one class are 2 of "30 next month", not 1. A studio with no spot
+// map keeps one slot-less record per space; a waitlist place has used nothing.
+// The same rule as _templateSeatsHeld (pure:template) and "Cancel all N".
+function _mbSpotsHeld(booking) {
+  if (!booking || booking.waitlisted) return 0;
+  var seats = Array.isArray(booking.slots) ? booking.slots.length : 0;
+  var records = Array.isArray(booking.bookingIds) ? booking.bookingIds.length : 0;
+  return Math.max(1, seats || records);
+}
+
 // What a billing period is called: Psycle bills by the month, some plans by the
 // week; anything else is just "period" rather than a guess.
 function _mbPeriodWord(startMs, endMs) {
@@ -9658,6 +9670,12 @@ function renderMyBookings() {
   // Membership / credits info bar + billing period
   var periodStart = null, periodEnd = null, nextPeriodStart = null;
   const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  // A class is the next period's from period_end on. ONE test for the split
+  // and the buckets, and the start parsed the way the period's own bounds are
+  // (parsePsycleDate): a space-form start_at is Invalid Date to iOS WebKit,
+  // which is neither before nor after anything — the two used to disagree on it
+  // ("no split", then every card filed under "next").
+  const inNextPeriod = evt => { const d = parsePsycleDate(evt.start_at); return !!(periodEnd && d && d >= periodEnd); };
   const userStats = currentUser?.stats || {};
   const creditsRemaining = Number(userStats.credits_remaining) || 0;
   const availableCredits = currentUser?.available_credits || [];
@@ -9670,7 +9688,7 @@ function renderMyBookings() {
 
     // Only show the standalone sub-bar if there's NO period split
     // (when there IS a split, the period section headers replace it)
-    const willHaveSplit = periodEnd && items.some(item => new Date(item.evt.start_at) >= periodEnd);
+    const willHaveSplit = periodEnd && items.some(item => inNextPeriod(item.evt));
     if (!willHaveSplit) {
       // "8 of 12 this month · Resets 12 Oct" (_mbUsageModel, pure:bookings-crisp).
       // period_end is the first day of the NEXT period: the day the count resets.
@@ -9707,11 +9725,10 @@ function renderMyBookings() {
     // Split items into current vs next billing period
     for (const day of sortedDays) {
       for (const item of byDay[day]) {
-        const dt = new Date(item.evt.start_at);
-        if (dt < periodEnd) {
-          currentPeriodItems.push(item);
-        } else {
+        if (inNextPeriod(item.evt)) {
           nextPeriodItems.push(item);
+        } else {
+          currentPeriodItems.push(item);
         }
       }
     }
@@ -9762,12 +9779,15 @@ function renderMyBookings() {
       // Close current period body + section
       html += `</div></div>`;
 
-      // Next period sub-bar (collapsible, starts open): "2 of 12 next month · From 12 Oct".
-      // Seats only — a waitlist place has not used a class yet.
+      // Next period sub-bar (collapsible, starts open): "4 of 12 next month · From 12 Oct".
+      // /profile only counts the CURRENT period, so this one is counted here —
+      // in SPOTS, the unit of Psycle's own bookings_made (_mbSpotsHeld): it
+      // counted classes, and a member who books two spots a class read
+      // "15 of 30" over a month that was full. A waitlist place has used nothing.
       const nextPeriod = periods.length > 0 ? periods[0] : null;
       const nextStart = nextPeriod ? parsePsycleDate(nextPeriod.start) : null;
       const nextEnd = nextPeriod ? parsePsycleDate(nextPeriod.end) : null;
-      const nextBooked = nextPeriodItems.filter(item => !item.booking.waitlisted).length;
+      const nextBooked = nextPeriodItems.reduce((sum, item) => sum + _mbSpotsHeld(item.booking), 0);
 
       html += `<div class="mb-period-section">`;
       html += `<div class="mb-period-bar mb-period-bar-next" role="button" tabindex="0" aria-expanded="true" onclick="this.setAttribute('aria-expanded', String(!this.parentElement.classList.toggle('collapsed')))">`;
