@@ -1,14 +1,37 @@
 name: CI
 
+# What runs when, and why it is this narrow (tests/suites/25-ci-cost.js holds it):
+#   - a push to `main` or to an `android/**` branch, a pull request, a manual run. A push to any OTHER
+#     branch starts nothing: its pull request runs the same job, so it used to run twice;
+#   - a newer push to the same branch or pull request cancels the run still going for the older one;
+#   - the native jobs read what the push changed (`changes`, below) and are skipped when it cannot have
+#     changed their result: the macOS compile for a push with no native iOS input in it, the Android
+#     build on `main` for one that changes neither the Android project nor the web app the APK carries.
+# The repository is public, so GitHub bills none of this. It is kept lean for the wait, and because a
+# macOS minute counts ten times over the day the repository is made private. The metered build is Apple's
+# (Xcode Cloud, ios-app/CICD.md): every push to `main` archives, whatever this file does.
 on:
   push:
+    branches:
+      - main
+      - 'android/**'
   pull_request:
   workflow_dispatch:
+
+# (The event is part of the group: a push never cancels a run somebody started by hand.)
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every job reads the repository and nothing else (a job may narrow this further, never widen it).
+permissions:
+  contents: read
 
 jobs:
   ci:
     name: Lint, test, drift & types
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -90,6 +113,34 @@ jobs:
         run: npm run agents:check
         continue-on-error: true
 
+  # What did this push change? Three yes/no answers the native jobs below read, worked out by
+  # .github/scripts/changed-areas.js from `git diff --name-only <old head> <new head>`. It fails OPEN:
+  # a manual run, a first push, a force-push whose old head is gone, or any git error answers yes to
+  # everything. The event's values reach the script as environment variables, never inside a command.
+  # (Should this JOB fail, the run is red and the native jobs do not start: re-run it.)
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ios: ${{ steps.areas.outputs.ios }}
+      android: ${{ steps.areas.outputs.android }}
+      android_src: ${{ steps.areas.outputs.android_src }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Read what the push changed
+        id: areas
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: node .github/scripts/changed-areas.js
+
   # Unsigned compile of the full native project (pods + Swift + pbxproj) so
   # iOS breakage surfaces on main, not at archive time. No certificates are
   # involved (simulator destination + CODE_SIGNING_ALLOWED=NO). macOS runners
@@ -105,8 +156,12 @@ jobs:
     name: iOS build check (unsigned)
     # Runs in parallel with the web job — it consumes nothing from it, and
     # serializing would just delay iOS feedback by the ubuntu job's runtime.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Only when an input of the COMPILE changed (`changes`): the web app is a folder of resources copied
+    # into the bundle and cannot break it. A manual run always compiles.
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.ios == 'true')
     runs-on: macos-15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -152,9 +207,14 @@ jobs:
   # Before the APK: the JVM unit tests of the app module (app/src/test/ — the
   # widget's snapshot rules and the countdown notification's plan). They need no
   # emulator, and they BLOCK.
+  #
+  # On `main` it runs only when the APK would differ (`changes`): the Android project, or the web app it
+  # carries. A push of docs or tests alone leaves the last APK the newest one. An `android/**` branch and a
+  # manual run always build: that is where CI is the compiler.
   android-build:
     name: Android build check (debug APK)
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/android/')))
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/android/') || (github.ref == 'refs/heads/main' && needs.changes.outputs.android == 'true')))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Read-only token: the job reads the repository and uploads artifacts.
@@ -174,11 +234,21 @@ jobs:
           cache: npm
           cache-dependency-path: ios-app/package-lock.json
 
+      # `cache: gradle` keeps Gradle's downloads (its own distribution, the Android plugin, every
+      # dependency) between runs: without it each run fetched all of them again before compiling a line.
+      # Keyed on the files that name them; a plugin's Android module comes from node_modules, so the npm
+      # lockfile is one of those files.
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
+          cache-dependency-path: |
+            ios-app/android/*.gradle
+            ios-app/android/app/*.gradle
+            ios-app/android/gradle/wrapper/gradle-wrapper.properties
+            ios-app/package-lock.json
 
       # postinstall runs patch-plugins.js here too. It edits Swift sources in
       # node_modules only, which Gradle never compiles.
@@ -254,7 +324,9 @@ jobs:
 
       # Advisory: Android lint on the app module (the plugins' own modules are
       # not ours to fix). A finding never blocks a merge; the report is kept.
+      # Only when the Android SOURCES changed: over the same sources lint says the same thing again.
       - name: Android lint (advisory)
+        if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.android_src == 'true'
         working-directory: ios-app/android
         continue-on-error: true
         run: ./gradlew :app:lintDebug --no-daemon

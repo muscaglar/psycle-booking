@@ -15,18 +15,30 @@ Read this when a check fails, you add a suite or a `pure:<name>` block, or you t
   Runs on `postinstall` (so `npm ci` on Xcode Cloud / GH Actions patches before `cap sync`) and at the top of
   `npm run sync`; pinned to the exact plugin version and FAILS LOUD on upstream drift. `npm run patch:check` verifies.
 - `npm run sync:check` (or root `npm run drift`) — fails if www/ or the SW cache stamp drifted from source (CI + pre-commit; see ios-app/PRECOMMIT.md).
-- Root: `npm run check` (node --check on js/*.js, sw.js, ios-app/build.js, ios-app/patch-plugins.js and
-  ios-app/www/native-bridge.js), `npm test` (tests/unit.js — see Tests below), `npm run typecheck`
+- Root: `npm run check` (node --check on js/*.js, sw.js, ios-app/build.js, ios-app/patch-plugins.js,
+  ios-app/www/native-bridge.js and .github/scripts/changed-areas.js), `npm test` (tests/unit.js — see Tests below), `npm run typecheck`
   (advisory tsc --checkJs), `npm run ci` (check + test + drift).
+- **When CI runs, and what it skips** (tests/suites/25-ci-cost.js): a push to `main` or an `android/**` branch, a
+  pull request, a manual run — a push to any OTHER branch starts nothing (its pull request runs the same job, once);
+  a newer push cancels the run still going for the older one; every job has a timeout. The job `changes` runs
+  .github/scripts/changed-areas.js over `git diff --name-only <old head> <new head>` and answers `ios`, `android`,
+  `android_src`; it fails OPEN (a manual run, a first push, a git error: yes to all). On `main` the macOS compile runs
+  only when an input of the compile changed (ios-app/ios/, ios-app/package*.json, capacitor.config.json,
+  patch-plugins.js, build.js), and `android-build` only when the APK would differ (ios-app/android/, the web app in
+  ios-app/www/, the same config files); a change to ci.yml or the script re-proves everything. So a web-only push runs
+  the web job and the Android build, and a docs- or tests-only push the web job alone. The repository is public:
+  GitHub bills none of it. The metered build is Apple's — ios-app/CICD.md "What a push to main costs".
 - CI in .github/workflows/ci.yml: check → test → drift → iOS deps + `patch:check` → smoke page in headless Chrome
   (advisory; every host but loopback is unresolvable) → typecheck (advisory) → `agents:check` (advisory). A second job
-  compiles the full native project unsigned for the simulator on main pushes / manual dispatch. TestFlight delivery is
-  Xcode Cloud's (ios-app/CICD.md): every push to main archives and uploads. Two Android jobs ([android.md](android.md)):
-  `android-build` — on `main` and `android/**` pushes and manual dispatch — runs `npm ci`, `npm run sync:android`, the
+  compiles the full native project unsigned for the simulator on main pushes / manual dispatch (when `changes` says
+  `ios`). TestFlight delivery is Xcode Cloud's (ios-app/CICD.md): every push to main archives and uploads. Two Android
+  jobs ([android.md](android.md)):
+  `android-build` — on `android/**` pushes and manual dispatch always, on `main` when `changes` says `android` — runs `npm ci`, `npm run sync:android`, the
   app module's JVM unit tests (`./gradlew :app:testDebugUnitTest`: the Android widget's snapshot rules and the class
   countdown's plan — BLOCKING, and before the APK; artifact `android-unit-test-report`; a second step stops the job
   unless a class named …Countdown…Test really ran) and `./gradlew assembleDebug`, uploads the debug APK as the
-  artifact `psync-debug-apk`, then an advisory `:app:lintDebug`; it is the ONLY compiler — and the only JVM — the
+  artifact `psync-debug-apk`, then an advisory `:app:lintDebug` (when `changes` says `android_src`; Gradle's
+  downloads are cached between runs); it is the ONLY compiler — and the only JVM — the
   Android project has. `android-smoke` — advisory, `android/**` pushes and manual dispatch — installs that APK on a
   phone-sized emulator, launches it, sends one Back key, opens the debug-only widget preview in nine states, then has
   the debug-only `CountdownProofReceiver` seed a sample class so that the app posts its REAL countdown notification,

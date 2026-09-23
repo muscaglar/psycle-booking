@@ -24,10 +24,33 @@ The GitHub Actions checks run in parallel on the same push — if Actions goes
 red, treat that TestFlight build as suspect even if it archived; push the
 fix and take the next build.
 
-Budget note: the developer program includes 25 Xcode Cloud compute hours per
-month and a build costs ~20–30 min, so roughly 50+ main pushes/month fit. If
-pushes get more frequent than that, batch work on a branch and merge to main
-when it's TestFlight-worthy (or switch the start condition to a tag).
+### What a push to `main` costs
+
+Two services build on every push to `main`. Only one of them is metered.
+
+| Service | What it runs | What it costs |
+|---|---|---|
+| GitHub Actions (`.github/workflows/ci.yml`) | tests; the unsigned iPhone compile; the Android debug APK | **Nothing while the repository is public** — GitHub does not bill its standard runners there. Made private, a macOS minute counts as ten. |
+| Xcode Cloud (Apple) | the archive that goes to TestFlight | **Compute hours**: 25 a month come with the developer programme; more is a paid plan. |
+
+Measured in September 2026: 52 pushes to `main` since July; 30 archives in the month, about 2.9 hours by the
+clock of their GitHub checks (the authority is App Store Connect → Xcode Cloud → Usage). A day of many small
+pushes is what spends the hours: 22 September had six archives and 86 minutes.
+
+What keeps it low, most effective first:
+
+1. **Push to `main` once per piece of work, not once per commit.** Work on a branch; `npm run ci` proves the same
+   things locally; push when there is something to put on a phone. A newer push cancels the archive still running
+   for the older one, so two pushes a minute apart cost one build — two pushes twenty minutes apart cost two.
+2. **GitHub skips what a push cannot have changed** (`changes` in ci.yml, tests/suites/25-ci-cost.js): no macOS
+   compile for a push with no native iOS input in it (23 of those 52 pushes), no Android build for one that changes
+   neither the Android project nor the web app (12 of 52). A push to a branch with a pull request runs once, not twice.
+3. **Optional, the owner's, in Xcode** (Report navigator → Cloud → the workflow → Edit Workflow → Start
+   Conditions → Branch Changes → Files and Folders): start a build only when something under `ios-app/` changes.
+   It saves the archive for a push of documents or tests alone (5 of those 52), and nothing else — nearly every
+   change to the app changes `ios-app/www/`. Label names move between Xcode versions.
+4. **Deliberate uploads only**: replace Branch Changes with a Tag condition (`ios-v*`), below. Nothing is built
+   until a tag is pushed.
 
 ## One-time Xcode Cloud setup (in Xcode, ~10 minutes)
 
@@ -166,10 +189,9 @@ build's **What to Test** notes so testers know channel 3 exists.
   build. When a future Xcode raises the floor again, change that constant and
   the four `IPHONEOS_DEPLOYMENT_TARGET` settings in the project together.
 - `ci_post_clone.sh` must stay executable (`chmod +x`); git preserves the bit.
-- Free tier: 25 Xcode Cloud compute hours/month — the budget is worked out
-  under "Release flow" above (a build is ~20–30 min, so roughly 50 pushes to
-  `main` a month). A day of many small pushes can spend a large share of it:
-  batch commits into one push.
+- Free tier: 25 Xcode Cloud compute hours/month — what a push costs, and what
+  keeps it low, is under "What a push to `main` costs" above. A day of many
+  small pushes can spend a large share of it: batch commits into one push.
 - External testers (beyond your own devices) need a one-off Beta App Review:
   add a demo Psycle account's credentials in the TestFlight review notes,
   since the app requires a login.

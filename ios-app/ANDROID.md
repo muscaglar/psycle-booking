@@ -16,12 +16,14 @@ the tap are in the checklist below.
 **The class countdown — the silent notification that stands in for the iPhone's Live Activity — has been
 compiled by CI's `android-build` job, which first ran all 81 JVM tests against the real org.json (36 of them the countdown's; all pass), and POSTED on an emulator by `android-smoke`: Android's own record (`dumpsys notification`) shows one notification, id 7090, tag `psync-countdown`, on the channel `class-countdown` at importance LOW with no sound, vibration or badge, flags ongoing + only-alert-once, the class colour, a count-down chronometer and a timeout equal to the time left; its private version reads "RIDE 45" / "Shoreditch · Bike 9" and its PUBLIC version only "Next class" and the time; the shade screenshot shows it under "Silent" counting down; and after the class was marked started the app had no notification left.** On a phone, nobody has seen it: its section of the checklist is its proof.
 GitHub Actions is the compiler:
-the `android-build` job builds a debug APK on every push to `main` or to an `android/…` branch. What only a phone
+the `android-build` job builds a debug APK on every push to an `android/…` branch, and on every push to `main`
+that changes the app (the Android project, or the web app inside it — a push of documents or tests alone builds
+nothing, and the last APK stays the newest). What only a phone
 can prove is the [on-device checklist](#on-device-checklist) at the end, and none of it is ticked.
 
 | Leg | System | Trigger | What it does |
 |-----|--------|---------|--------------|
-| Compile + debug APK | GitHub Actions, job `android-build` (`.github/workflows/ci.yml`) | push to `main` or `android/**`, or "Run workflow" | `npm ci`, `npm run sync:android`, the JVM unit tests — the widget's snapshot rules and the countdown's plan (`./gradlew :app:testDebugUnitTest` — a failure stops the job before any APK exists; report: **`android-unit-test-report`**), a check that the countdown's tests really ran, `./gradlew assembleDebug`; uploads the artifact **`psync-debug-apk`** (kept 30 days); then an advisory Android lint |
+| Compile + debug APK | GitHub Actions, job `android-build` (`.github/workflows/ci.yml`) | push to `android/**`; push to `main` that changes the app; or "Run workflow" | `npm ci`, `npm run sync:android`, the JVM unit tests — the widget's snapshot rules and the countdown's plan (`./gradlew :app:testDebugUnitTest` — a failure stops the job before any APK exists; report: **`android-unit-test-report`**), a check that the countdown's tests really ran, `./gradlew assembleDebug`; uploads the artifact **`psync-debug-apk`** (kept 30 days); then an advisory Android lint |
 | Emulator smoke (advisory) | GitHub Actions, job `android-smoke` | push to `android/**`, or "Run workflow" | installs that APK on a phone-sized emulator, opens it, screenshot, ONE Back key, screenshot; then opens the debug-only widget preview nine times (compact, wide, wide at night, class colours off, empty, four seats, two seats on the narrowest card, the smallest card, a long class name with a larger system font) and keeps a picture of each; then POSTS THE COUNTDOWN for real — it grants the notification permission with `adb`, has a debug-only hook put a made-up class 40 minutes ahead, reads the posted notification back from the system (its channel, silent, ongoing, counting down, private with a public version, and the timeout that removes it at the start), photographs the open notification shade, then seeds a class that has started and checks the notification is gone; uploads **`android-smoke`** (twelve pictures, three logs, the notification dumps and a process id, for a person to read). It fails — as a warning, never the workflow — when the app did not survive Back, crashed, logged a widget the preview could not draw, or the countdown was not posted as it should be or did not go. It never taps, so it can book nothing |
 | Release | you, by hand | — | a signed bundle from your own keystore, uploaded by you in Play Console. Nothing about Android is wired to a store. The bundle is built on your machine, or by the MANUAL workflow **Android release (signed AAB)**, which reads the keystore from four repository secrets that only you can create — until you do, no key lives in GitHub. The runbook: [PLAY_STORE_DEPLOY.md](PLAY_STORE_DEPLOY.md) |
 
@@ -32,7 +34,8 @@ Capacitor plugin package was added for Android's sake (the widget's three plugin
 ## Try it with nothing installed
 
 1. On github.com open the repository → **Actions** → the newest **CI** run on `main` with a green **Android build
-   check (debug APK)** job. (The widget is on the `android/widget` branch until it is merged: an APK that has it
+   check (debug APK)** job (a run where that job reads "skipped" changed nothing in the app: take the one before it,
+   or press **Run workflow** on `main` to build one now). (The widget is on the `android/widget` branch until it is merged: an APK that has it
    comes from a green run on that branch.) You must be signed in to GitHub to download artifacts.
 2. At the bottom of the run, under **Artifacts**, download **psync-debug-apk**. It arrives as a zip; inside is
    `app-debug.apk`.

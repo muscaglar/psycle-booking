@@ -444,7 +444,7 @@ module.exports = function (t) {
   const jobIf = (text) => (/\n {4}if: (.*)/.exec(text) || [])[1] || '';
 
   const ios = job('ios-build');
-  eq(jobIf(ios), "github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')", 'the iOS job runs when it always did');
+  eq(jobIf(ios), "github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.ios == 'true')", 'the iOS job runs on main and by hand, as it always did — now only when an input of the compile changed (25-ci-cost.js)');
   ok(/run: npm run sync\n/.test(ios) && !/android/i.test(ios), '…runs the iOS-only `npm run sync`, and nothing Android');
 
   const build = job('android-build');

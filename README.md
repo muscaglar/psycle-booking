@@ -50,7 +50,7 @@ http rather than opening the HTML file directly — the app shows a red warning 
 npm run ci
 ```
 
-runs the three core checks that CI also runs on every push:
+runs the three core checks that CI also runs on every push to `main` and on every pull request:
 
 | Script | What it does |
 |--------|--------------|
@@ -108,7 +108,7 @@ web view, haptics, the in-app browser, and a hardware Back that closes what is o
 home-screen widget of its own, "Next class", fed by the same snapshot as the iPhone's, and, in the Live Activity's
 place, one silent notification that counts down to the next class from 90 minutes before it. Nothing was
 added to the iPhone build for it. It was written without an Android toolchain, so GitHub Actions is its compiler:
-every push to `main` or an `android/…` branch builds a debug APK (the `psync-debug-apk` artifact) that can be
+a push to `main` that changes the app, or any push to an `android/…` branch, builds a debug APK (the `psync-debug-apk` artifact) that can be
 sideloaded with nothing installed. It has not yet been seen on a phone, and a Google Play release waits for the
 Capacitor upgrade. Installing it, building it, releasing it and the on-device checklist:
 [ios-app/ANDROID.md](ios-app/ANDROID.md); store copy: [ios-app/PLAY_STORE_LISTING.md](ios-app/PLAY_STORE_LISTING.md); the
