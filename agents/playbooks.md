@@ -39,6 +39,7 @@ npm run drift                         # must end "www/ is in sync"
 npm run ci                            # = check + test + drift, as CI runs them
 ```
 
+0. Before changing behaviour, copy, colour, time handling or the release flow: `grep -n -i "<feature>" agents/decisions.md`. A row marked CLOSED is the owner's answer — do not build the other one (the Android countdown ending AT the start, not five minutes after, is one).
 1. Before editing a function, find who tests it: `grep -l "<name>" tests/suites/*.js`. If a suite slices it by anchor, keep its opener at column 0 and its indentation (B1). tests/unit.js reads no arguments: there is no single-suite filter — it always runs everything; grep the log for your suite's section title.
    "the index is stale" for one of `bookClass`, `submitBooking`, `_bookingHorizon`, `renderMyBookings`, `_profileFrom`, `planWeeklyTemplate`, `_spotSuggestion` (js/app.js), `PsycleClassColours` (js/theme.js), `_pillCoversBook` (js/settings.js) or `syncAllBookingsToCalendar` (the bridge — BELOW `SYNC_KEYS`, so every new mirrored key moves it) means only that a line moved: run `npm run agents:index`. Nothing is wrong.
 2. New DOM-free logic goes in a `// ── pure:<name>:start … :end` block, named in a suite through `t.loadPure` (B2). One file per feature area in `tests/suites/`; nothing to register.
@@ -176,7 +177,7 @@ Sources: ios-app/ios/App/ — `App/` (AppDelegate + `SceneDelegate`, `AppGroupPr
 
 tests/tools/fake-psycle.js answers every request to the API host inside the page: a 7-day timetable (3 seat studios, 5 class types, one empty day, one full class), bookings kept in memory, one id returned per POST however many seats. Any scriptable browser will do. `.claude/skills/verify/SKILL.md` is the same recipe as a skill; its "Waitlist flows" section gives stub shapes for a place and for join / leave / claim / offer probe / allocation.
 
-1. Serve the repo on loopback: `python3 -m http.server 8080 --bind 127.0.0.1`. Use an origin nobody signs in on (H4) — `127.0.0.1:8080`, not a `localhost:8080` the owner may use: step 3 clears that origin's storage, and the fake `/profile` (customer id 1) reads as ANOTHER MEMBER — an account switch that stashes rankings and clears history.
+1. Serve the repo on loopback: `python3 -m http.server 8080 --bind 127.0.0.1`. Use an origin nobody signs in on (H4) — `127.0.0.1:8080`, not a `localhost:8080` the owner may use: step 3 clears that origin's storage, and the fake `/profile` (customer id 1) reads as ANOTHER MEMBER — an account switch that stashes favourites and bike prefs and clears history.
 2. Open a blank same-origin page — `http://127.0.0.1:8080/__blank__` (the 404 page is fine). Never the app page first (F5).
 3. **One evaluate boots everything**:
    ```js
@@ -250,7 +251,7 @@ Whole-app load check without any of this: open `http://127.0.0.1:8080/tests/smok
 
 ## P14. Change the Android native project — and prove it
 
-Sources: ios-app/android/ — `MainActivity.java`, the three plugin twins beside it, `widget/` (the home-screen widget), `countdown/` (the class countdown), `AndroidManifest.xml`, `res/`, `app/build.gradle`, `variables.gradle`; `app/src/test/` (JVM tests) and `app/src/debug/` (the widget preview, the countdown's proof hook). What DIFFERS by platform is mostly not there: it is an `IS_ANDROID` branch of ios-app/www/native-bridge.js, or a `getPlatform() === 'android'` test in js/ (step 4). The widget and the countdown are the exceptions — and even they are driven by the bridge's existing path: the widget with no branch at all (G11), the countdown with ONE Android-only key.
+Sources: ios-app/android/ — `MainActivity.java`, the four plugin twins beside it, `tips/` (the tip jar's allow-list), `widget/` (the home-screen widget), `countdown/` (the class countdown), `AndroidManifest.xml`, `res/`, `app/build.gradle`, `variables.gradle`; `app/src/test/` (JVM tests) and `app/src/debug/` (the widget preview, the countdown's proof hook). What DIFFERS by platform is mostly not there: it is an `IS_ANDROID` branch of ios-app/www/native-bridge.js, or a `getPlatform() === 'android'` test in js/ (step 4). The widget and the countdown are the exceptions — and even they are driven by the bridge's existing path: the widget with no branch at all (G11), the countdown with ONE Android-only key.
 
 1. **Read first**: ios-app/android/AGENTS.md (the rules), `agents/architecture/android.md` (the mechanism). The standing limits (`agents/decisions.md` section 8): no new Capacitor plugin, no new npm package, no Swift edit, `npm run sync` untouched — the iPhone build must not change.
 2. **Write it by reading** (G9): nobody compiles this locally. Well-formed XML; resource FILE names `[a-z0-9_]` only; every `@type/name` and style parent present; androidx classes and platform APIs that exist at the versions in variables.gradle and from minSdk 22 (anything newer → a qualified folder, as values-v23/ and values-v27/); never edit capacitor.settings.gradle or app/capacitor.build.gradle (`cap sync android` writes them). Keep the change small: a red compile costs a push and a wait.

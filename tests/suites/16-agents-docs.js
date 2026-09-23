@@ -240,4 +240,54 @@ module.exports = function (t) {
   ['agents/HANDOVER.md', 'agents/backlog.md'].forEach((f) => {
     ok(guideRows.some((cells) => namedIn(cells[1] || '', f)) && listed.indexOf(f) !== -1, f + ' is a row of AGENTS.md\'s reading guide and of agents/README.md\'s table');
   });
+
+  // 7. "Only names that exist" (agents/README.md). A reader GREPS for the name a guide gives: a function that was
+  // renamed or removed sends them nowhere. (`_classReminderTail` and `_cleanStoredTiers` were both still named, as
+  // current, the day after they went.) So: every code name a guide puts in backticks is in the code that ships, or is
+  // DEFINED by a suite, or is on the short list below. Not checked: the files that are history on purpose
+  // (decisions, the handover, the learnings, the backlog), which name what was removed in order to say so.
+  t.section('Agents docs: only names that exist — a code name a guide gives is in the code');
+  {
+    const SOURCE = /\.(?:js|mjs|css|html|json|swift|java|xml|gradle|plist|pbxproj|rb|sh|yml|properties|entitlements|ts)$/;
+    const SKIP = /^(?:node_modules|Pods|build|DerivedData|agents|tests)$/;
+    const sweep = (rel, out) => {
+      fs.readdirSync(path.join(REPO_ROOT, rel), { withFileTypes: true }).forEach((ent) => {
+        if (ent.name[0] === '.' && ent.name !== '.github') return;
+        const child = rel ? rel + '/' + ent.name : ent.name;
+        if (ent.isDirectory()) { if (!SKIP.test(ent.name) && child !== 'ios-app/www') sweep(child, out); } else if (SOURCE.test(ent.name)) out.push(child);
+      });
+      return out;
+    };
+    const textOf = (files) => files.map((f) => { try { return fs.readFileSync(path.join(REPO_ROOT, f), 'utf8'); } catch (e) { return ''; } }).join('\n');
+    // What ships (ios-app/www/ is a generated copy, except the hand-written bridge) and what builds it.
+    const shipped = textOf(sweep('', []).concat(['ios-app/www/native-bridge.js', 'agents/tools/build-index.mjs', 'agents/tools/check-split.mjs']));
+    const suites = textOf(walk('tests').filter((f) => /\.(?:js|mjs|html)$/.test(f)));
+    // A name of the platform's or of a plugin's, or one a guide gives in order to say it is NOT used.
+    const NOT_OURS = ['ACTION_MAIN', 'ActionException', 'MIN_IOS_DEPLOYMENT_TARGET', 'USE_EXACT_ALARM', 'camelCase', 'getTimeoutAfter', 'onBackPressed', 'presentVC', 'toLocale', 'toLocaleTimeString', 'visualViewport'];
+    const word = (name) => new RegExp('(?:^|[^A-Za-z0-9_$])' + esc(name) + '(?![A-Za-z0-9_$])');
+    const defined = (name) => new RegExp('(?:const|let|var|function)\\s+' + esc(name) + '(?![A-Za-z0-9_$])');
+    // A code name: _private, camelCase, PascalCase with two humps, or CONSTANT_CASE. (A path, a CSS class, an id, a
+    // storage key, an API field in snake_case and a bare word are none of these.)
+    const codeName = (s) => /^_[A-Za-z][A-Za-z0-9_]*$/.test(s) || /^[a-z][a-z0-9]*(?:[A-Z][A-Za-z0-9]*)+$/.test(s) ||
+      /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(s) || /^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$/.test(s);
+    const namesIn = (text) => (text.match(/`[^`\n]+`/g) || []).map((span) => (/^(?:window\.|t\.)?([A-Za-z_][A-Za-z0-9_]*)(?:\(|$)/.exec(span.slice(1, -1).trim()) || [])[1]).filter((n) => n && codeName(n));
+    const guides = ['AGENTS.md'].concat(folderGuides, ['agents/README.md', 'agents/repo-map.md', 'agents/ontology.md', 'agents/playbooks.md'], topicFiles.map((f) => (f.indexOf('/') === -1 ? dir + '/' + f : f)));
+    eq(guides.filter((g) => !has(g)), [], 'the guides that are checked all exist (' + guides.length + ')');
+    const gone = [];
+    let checked = 0;
+    guides.filter(has).forEach((g) => {
+      Array.from(new Set(namesIn(t.readSource(g)))).forEach((name) => {
+        checked++;
+        if (word(name).test(shipped) || defined(name).test(suites) || NOT_OURS.indexOf(name) !== -1) return;
+        gone.push(g + ': `' + name + '`');
+      });
+    });
+    ok(checked > 800, 'the guides give code names in backticks, and each was looked up (' + checked + ')');
+    eq(gone, [], 'every one is in the code that ships, is defined by a suite, or is a platform name on the list — a name that is none of these was renamed or removed: fix the guide');
+    eq(NOT_OURS.filter((n) => word(n).test(shipped)), [], '…and that list holds no name that IS in the code (take it off the list)');
+    // The check can fail: a name that was removed the day before, and one that never was.
+    eq(['_classReminderTail', '_cleanStoredTiers', 'applyTierFilter', '_noSuchHelperEver'].filter((n) => word(n).test(shipped) || defined(n).test(suites)), [], '(it CAN fail: three names removed on 2026-09-22, and one that never existed, are not found)');
+    eq(['_classReminderBody', 'renderMyBookings', 'SYNC_KEYS', 'PsycleLiveActivityRetirement', 'PsyncCountdownPlan'].filter((n) => !word(n).test(shipped)), [], '(…while a bridge helper, a web function, a bridge constant, a Swift type and a Java class are)');
+    eq(['camelCase', 'psycle_theme', 'start_at', 'POST', 'js/app.js', '.cal-btn', '#bikeModal', 'Bookings'].filter(codeName), ['camelCase'], '(a storage key, an API field, a verb, a path, a class, an id and a word are not code names; "camelCase" is shaped like one, which is why it is on the list)');
+  }
 };

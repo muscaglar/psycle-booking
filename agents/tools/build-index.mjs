@@ -73,7 +73,11 @@ const CSS_FILES = listFiles('css', (n) => n.endsWith('.css'));
 const SUITE_FILES = listFiles('tests/suites', (n) => n.endsWith('.js'));
 const TOOL_FILES = listFiles('tests/tools', () => true);
 const SWIFT_FILES = walk('ios-app/ios/App', (n) => n.endsWith('.swift'), ['Pods', 'build', 'DerivedData', 'node_modules']);
-const INPUT_PATHS = ['js', 'css', 'sw.js', 'ios-app/www/native-bridge.js', 'ios-app/ios/App', 'tests/suites', 'tests/tools',
+// The Android app's OWN Java: the three source sets of the app module. What Capacitor or Gradle generates lives outside them.
+const JAVA_ROOT = 'ios-app/android/app/src';
+const JAVA_FILES = ['main', 'debug', 'test'].flatMap((set) => walk(JAVA_ROOT + '/' + set + '/java', (n) => n.endsWith('.java'), ['build']));
+const SECTION_FILES = ['tests/unit.js'].filter(exists).concat(SUITE_FILES);
+const INPUT_PATHS = ['js', 'css', 'sw.js', 'ios-app/www/native-bridge.js', 'ios-app/ios/App', JAVA_ROOT, 'tests/suites', 'tests/tools',
   'tests/unit.js', ...HTML_FILES, GENERATOR, 'CLAUDE.md', 'agents/architecture'];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -246,6 +250,43 @@ function lexSwift(src) {
   }
   code.push(buf); depth.push(braces);
   return { code, depth };
+}
+
+// Java: `code` has comments AND the contents of string, character and text-block literals blanked; `nocom` has only
+// the comments blanked. Both keep every column where it was.
+function lexJava(src) {
+  const code = [], nocom = [];
+  let cbuf = '', nbuf = '', m = 'code';   // code | lc | bc | str | chr | text
+  const n = src.length;
+  const both = (c, w) => { cbuf += c; nbuf += w === undefined ? c : w; };
+  for (let i = 0; i < n; i++) {
+    const ch = src[i], nx = src[i + 1];
+    if (ch === '\n') {
+      if (m === 'lc' || m === 'str' || m === 'chr') m = 'code';         // a literal left open at a line end: recover
+      code.push(cbuf); nocom.push(nbuf); cbuf = ''; nbuf = '';
+      continue;
+    }
+    if (m === 'code') {
+      if (ch === '/' && nx === '/') { m = 'lc'; both('  '); i++; continue; }
+      if (ch === '/' && nx === '*') { m = 'bc'; both('  '); i++; continue; }
+      if (ch === '"' && nx === '"' && src[i + 2] === '"') { m = 'text'; both('"""'); i += 2; continue; }
+      if (ch === '"') { m = 'str'; both(ch); continue; }
+      if (ch === "'") { m = 'chr'; both(ch); continue; }
+      both(ch); continue;
+    }
+    if (m === 'lc') { both(' '); continue; }
+    if (m === 'bc') {
+      if (ch === '*' && nx === '/') { m = 'code'; both('  '); i++; } else both(' ');
+      continue;
+    }
+    if (ch === '\\') { both(' ', ch); if (nx !== undefined && nx !== '\n') { both(' ', nx); i++; } continue; }
+    if (m === 'str' && ch === '"') { m = 'code'; both(ch); continue; }
+    if (m === 'chr' && ch === "'") { m = 'code'; both(ch); continue; }
+    if (m === 'text' && ch === '"' && nx === '"' && src[i + 2] === '"') { m = 'code'; both('"""'); i += 2; continue; }
+    both(' ', ch);
+  }
+  code.push(cbuf); nocom.push(nbuf);
+  return { code, nocom };
 }
 
 // An HTML shell: inline <script> bodies go through the JS lexer; everything else stays as written in `nocom`
@@ -1362,7 +1403,7 @@ function renderTests(suites, tools) {
   return doc('Tests — what each suite covers and which source it depends on',
     'Purpose: per `tests/suites/*.js`: its opening sentence, the pure blocks it loads (js/app.js unless a file is named), the shipped functions it slices out of source by anchor line, and the other source text it cuts by. Read this when you move, rename or re-indent a function (a sliced one breaks its suite), or look for the suite that covers an area. Skip it otherwise. How to run and write tests: tests/README.md.',
     [suites.length + ' suites, run in filename order by `node tests/unit.js` (`npm test`; it reads no arguments — there is no single-suite filter). "slices" = the suite holds a string such as `\'function bookClass(\'` (or the whole opener, `\'function _paintDayDot(pill, held) {\'`) and cuts the real function out of the file from that opener to its closing bare `}` — keep the opener on one line, at its indentation, with its parameter list as written. "text anchors" = other strings the suite holds that are, verbatim, a piece of that source and shaped like the start of a declaration, a comment or a banner (`⏎` = a line break; a `pure:` marker is on the "pure" line instead): what `between(src, A, B)` and `src.indexOf(A)` cut by, so the code BETWEEN two of them is evaluated or read whole — do not move or reword them. "ok/eq call sites" counts calls in the file, not assertions run.',
-      'This list under-reports (an anchor built from parts is invisible): `grep -l "<name>" tests/suites/*.js` is the authority. Section titles are not repeated here — `grep -n "section(" tests/suites/<suite>.js` lists a suite\'s sections with their lines, and `grep -rn "section(" tests/suites | grep -i <word>` finds the section that pins a rule.',
+      'This list under-reports (an anchor built from parts is invisible): `grep -l "<name>" tests/suites/*.js` is the authority. Section titles are not repeated here: test-sections.md lists every one with its line — `grep -n -i "<words of the rule>" agents/index/test-sections.md` finds the section that pins a rule.',
       ...out,
       '', '## tests/tools', ...toolOut]);
 }
@@ -1424,6 +1465,188 @@ function renderSwift(files) {
       ...out]);
 }
 
+// ── test-sections.md ───────────────────────────────────────────────────────
+// From the "(" at (line, col) in the code mask → the text up to the matching ")", as written (comments dropped).
+function callArgument(lx, line, col, maxLines = 12) {
+  let d = 0, out = '';
+  for (let i = line; i < Math.min(lx.code.length, line + maxLines); i++) {
+    const c = lx.code[i], raw = lx.nocom[i];
+    for (let j = i === line ? col : 0; j < c.length; j++) {
+      const ch = c[j];
+      if (ch === '(' || ch === '[' || ch === '{') { d++; if (d === 1) continue; }
+      else if (ch === ')' || ch === ']' || ch === '}') { d--; if (d === 0) return out; }
+      out += raw[j] === undefined ? ' ' : raw[j];
+    }
+    out += '\n';
+  }
+  return null;
+}
+
+const unescapeTitle = (lit) => lit
+  .replace(/\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})/g, (m, a, b, c) => String.fromCodePoint(parseInt(a || b || c, 16)))
+  .replace(/\\(\r?\n|[\s\S])/g, (m, ch) => (ch === 'n' || ch === 't' || ch === 'r' ? ' ' : /\n/.test(ch) ? '' : ch));
+
+// 'A' + "B" + `C` → ABC. Anything else between the parentheses (a variable, a call, `${…}`) → null.
+function literalText(arg) {
+  const part = /\s*(?:'((?:[^'\\\n]|\\[\s\S])*)'|"((?:[^"\\\n]|\\[\s\S])*)"|`((?:[^`\\$]|\\[\s\S]|\$(?!\{))*)`)\s*/y;
+  let at = 0, out = '';
+  for (;;) {
+    part.lastIndex = at;
+    const mt = part.exec(arg);
+    if (!mt) return null;
+    out += unescapeTitle(mt[1] !== undefined ? mt[1] : mt[2] !== undefined ? mt[2] : mt[3]);
+    at = part.lastIndex;
+    if (at >= arg.length) return out;
+    if (arg[at] !== '+') return null;
+    at++;
+  }
+}
+
+function analyseSections(rel) {
+  const src = read(rel);
+  const lx = lexJs(src);
+  // A suite is handed `t`; tests/unit.js, which declares `section`, calls it bare for its built-in checks.
+  const call = rel === 'tests/unit.js' ? /(?<![\w$.])(?:t\.)?section\(/g : /(?<![\w$.])t\.section\(/g;
+  const items = [];
+  for (let i = 0; i < lx.code.length; i++) {
+    call.lastIndex = 0;
+    let mt;
+    while ((mt = call.exec(lx.code[i]))) {
+      if (/\bfunction\s*\*?\s*$/.test(lx.code[i].slice(0, mt.index))) continue;          // the declaration, not a call
+      const arg = callArgument(lx, i, mt.index + mt[0].length - 1);
+      if (arg === null || !arg.trim()) continue;
+      const text = literalText(arg);
+      items.push({ line: i + 1, title: text !== null ? clip(squash(text), 320) : clip(squash(arg), 160) });
+    }
+  }
+  return { rel, lines: countLines(src), items };
+}
+
+function renderSections(files) {
+  const out = [];
+  let total = 0;
+  for (const f of files) {
+    if (!f.items.length) continue;
+    total += f.items.length;
+    out.push('', '## ' + f.rel);
+    for (const it of f.items) out.push('L' + it.line + '  ' + it.title);
+  }
+  const listed = files.filter((f) => f.items.length);
+  const none = files.filter((f) => !f.items.length).map((f) => f.rel.replace(/^tests\/suites\//, ''));
+  return doc('Test sections — every `t.section(…)` title, with its line',
+    'Purpose: which test guards a rule. A section title says what the group of assertions under it proves; this file lists every one, per file, with its line. Use it with ONE grep: `grep -n -i "<words of the rule>" agents/index/test-sections.md` — the hit is `L<line>  <title>`, and the nearest `## <file>` heading above it (`grep -n` prints both line numbers, so compare them) is the suite to open at that line. Skip it when you want what a suite LOADS or SLICES: that is tests.md.',
+    [total + ' sections in ' + listed.length + ' files: tests/unit.js (its built-in checks, which run first), then tests/suites/*.js in filename order, which is the order `npm test` runs them in. Format: `L<line>  <title>`. A title is the string the call was given, adjacent literals joined; one built from a variable is printed as written between the parentheses (`\'Text tokens — \' + id`). The assertions of a section run from its line to the next section\'s. No hit is not "no test": a rule may be held by an assertion\'s own message — `grep -rn -i "<words>" tests/suites/`.'
+      + (none.length ? ' Without a section: ' + none.join(', ') + '.' : ''),
+      ...out]);
+}
+
+// ── java.md ────────────────────────────────────────────────────────────────
+const JAVA_MODS = '(?:public|protected|private|abstract|static|final|synchronized|native|strictfp|transient|volatile|default|sealed|non-sealed)';
+const JAVA_TYPE_RE = new RegExp('^\\s*((?:' + JAVA_MODS + '\\s+)*)(class|interface|enum|record|@interface)\\s+([A-Za-z_$][\\w$]*)', 'd');
+const JAVA_METHOD_RE = new RegExp('^\\s*((?:' + JAVA_MODS + '\\s+)*)(?:<[^()]*?>\\s*)?(?:([\\w$.]+(?:\\s*<[^()]*>)?(?:\\s*\\[\\s*\\])*)\\s+)?([A-Za-z_$][\\w$]*)\\s*$', 'd');
+const JAVA_FIELD_RE = new RegExp('^\\s*((?:' + JAVA_MODS + '\\s+)*)([\\w$.]+(?:\\s*<[^=;()]*>)?(?:\\s*\\[\\s*\\])*)\\s+([A-Za-z_$][\\w$]*)\\s*(?:\\[\\s*\\]\\s*)*(?==|,|$)', 'd');
+const JAVA_ANNOTATION = /@(?!interface\b)[\w.]+(?:\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))?/g;
+const JAVA_NOT_A_NAME = new Set(['if', 'for', 'while', 'switch', 'catch', 'synchronized', 'return', 'new', 'throw', 'try', 'do', 'else', 'super', 'this', 'assert']);
+
+// A Javadoc or line comment as the index prints it: inline tags opened, a "// -- Title -----" rule line dropped.
+function javaComment(raw, line) {
+  const kept = raw.map((l) => (/^\s*\/\/\s*-{2,}\s.*-{4,}\s*$/.test(l) ? '//' : l));
+  while (line > 0 && /^\s*\/\/\s*[\w-]+:(?:start|end)\s*$/.test(raw[line - 1])) line--;      // a "// name:start" marker a suite cuts by
+  return tidy(firstSentence(commentAbove(kept, line).replace(/\{@\w+\s+([^}]*)\}/g, '$1').replace(/<\/?\w+>/g, '')));
+}
+
+// Statement by statement at MEMBER level (the top of the file, or directly inside a type body): a "{" opens a type, a
+// method body or an initialiser, and only a type's body is read further. So a local or anonymous class is not listed.
+function analyseJava(rel) {
+  const src = read(rel);
+  const raw = src.split('\n');
+  const lx = lexJava(src);
+  const items = [];
+  const stack = [];                          // one entry per open "{": { type, kind, name, head (an enum's constants), expr }
+  let code = '', text = '', at = [], parens = 0, assigned = false;
+  const reset = () => { code = ''; text = ''; at = []; parens = 0; assigned = false; };
+  const top = () => stack[stack.length - 1];
+  const memberLevel = () => stack.length === 0 || top().type;
+  const lineOf = (index) => at[Math.min(index, at.length - 1)] + 1;
+  const add = (kind, nameAt, shown) => items.push({ kind, line: lineOf(nameAt), depth: stack.length,
+    text: squash(shown.replace(/@Override\b\s*/g, '')), comment: javaComment(raw, at[0]) });
+  // What the statement read so far declares, when its end ("{" or ";") is reached.
+  const declare = (end) => {
+    if (!code.trim()) return null;
+    const bare = code.replace(JAVA_ANNOTATION, (m) => ' '.repeat(m.length));      // same length: an index into it is an index into `at`
+    let mt = JAVA_TYPE_RE.exec(bare);
+    if (mt) {
+      if (end !== '{') return null;
+      add('type', mt.indices[3][0], text);
+      return { type: true, kind: mt[2], name: mt[3], head: mt[2] === 'enum' };
+    }
+    const owner = top();
+    if (!owner || !owner.type || owner.head) return null;
+    const paren = bare.indexOf('(');
+    const equals = bare.indexOf('=');
+    if (paren !== -1 && (equals === -1 || paren < equals)) {
+      mt = JAVA_METHOD_RE.exec(bare.slice(0, paren));
+      if (!mt || JAVA_NOT_A_NAME.has(mt[3]) || (mt[2] === undefined && mt[3] !== owner.name)) return null;
+      add('method', mt.indices[3][0], text);
+      return null;
+    }
+    if (end !== ';') return null;
+    mt = JAVA_FIELD_RE.exec(equals === -1 ? bare : bare.slice(0, equals));
+    if (!mt) return null;
+    const constant = (/\bstatic\b/.test(mt[1]) && /\bfinal\b/.test(mt[1])) || owner.kind === 'interface' || owner.kind === '@interface';
+    if (!constant || JAVA_NOT_A_NAME.has(mt[3]) || JAVA_NOT_A_NAME.has(mt[2])) return null;
+    add('constant', mt.indices[3][0], text);
+    return null;
+  };
+  for (let i = 0; i < lx.code.length; i++) {
+    const c = lx.code[i], w = lx.nocom[i];
+    for (let j = 0; j < c.length; j++) {
+      const ch = c[j];
+      if (!memberLevel()) {
+        if (ch === '{') stack.push({ type: false });
+        else if (ch === '}') stack.pop();
+        continue;
+      }
+      if (ch === '{') {
+        if (parens > 0 || assigned) { stack.push({ type: false, expr: true }); code += ' '; at.push(i); text += '{…}'; continue; }   // an array, a lambda or an anonymous class INSIDE the statement
+        const opened = declare('{');
+        stack.push(opened || { type: false });
+        reset();
+        continue;
+      }
+      if (ch === '}') { stack.pop(); reset(); continue; }
+      if (ch === ';' && parens === 0) {
+        if (top() && top().head) top().head = false; else declare(';');
+        reset();
+        continue;
+      }
+      if (code === '' && (ch === ' ' || ch === '\t')) continue;
+      if (ch === '(') parens++;
+      else if (ch === ')') parens = Math.max(0, parens - 1);
+      else if (ch === '=' && parens === 0) assigned = true;
+      code += ch; text += w[j] === undefined ? ' ' : w[j]; at.push(i);
+    }
+    if (code !== '' && memberLevel()) { code += ' '; text += ' '; at.push(i); }
+  }
+  return { rel, lines: countLines(src), items, balanced: stack.length === 0 };
+}
+
+function renderJava(files) {
+  const out = [];
+  const count = { type: 0, method: 0, constant: 0 };
+  for (const f of files) {
+    out.push('', '## ' + f.rel + ' — ' + f.lines + ' lines');
+    for (const it of f.items) {
+      count[it.kind]++;
+      out.push('  '.repeat(it.depth) + 'L' + it.line + '  ' + clip(it.text, 140) + (it.comment ? '  — ' + clip(it.comment, 160) : ''));
+    }
+  }
+  return doc('Java — types, methods and constants of the Android app',
+    'Purpose: per Java file of the Android app\'s own source sets (' + JAVA_ROOT + '/main, /debug and /test): its types, and the methods, constructors and `static final` constants declared directly inside a type, with line numbers. Read this when you touch the plugin twins, the home-screen widget, the class countdown or a JVM test — a `@Test` method\'s name says what it holds, so `grep -n -i "<word>" agents/index/java.md` also finds the JVM test for a rule. Skip it for web-only or iPhone-only work.' + seeAlso('What each class does', ['agents/architecture/android.md']),
+    [files.length + ' files · ' + count.type + ' types · ' + count.method + ' methods and constructors · ' + count.constant + ' constants. Format: `L<line>  <declaration as written, without its body>  — first sentence of the comment directly above it`; indentation = nesting inside a type. The line is the one that holds the declared NAME: an annotation on a line of its own (`@Test`, `@PluginMethod`) sits above it and is printed in front of the declaration (`@Override` is left out). NOT listed: fields that are not `static final`, enum constants, the members of an anonymous or local class, lambdas, and anything Capacitor or Gradle generates (it is outside app/src). No compiler runs here: a line number is read from the text, so rebuild after an edit, and prove a Java edit with CI\'s `android-build` job.',
+      ...out]);
+}
+
 // ── README.md ──────────────────────────────────────────────────────────────
 function renderReadme(files, jsInfos, loadOrder) {
   const big = [...jsInfos].sort((a, b) => b.lines - a.lines)[0];
@@ -1454,7 +1677,9 @@ function renderReadme(files, jsInfos, loadOrder) {
     'css-sections.md': 'stylesheet sections with line ranges; custom properties css/theme.css defines',
     'dom-ids.md': 'ids in the HTML shells and ids created by JS → files that reference them',
     'tests.md': 'each suite: what it covers, pure blocks it loads, functions and source text it slices by anchor',
+    'test-sections.md': 'which test guards a rule: every `t.section(…)` title of tests/unit.js and tests/suites/*.js, with its line',
     'swift.md': 'Swift types and functions with line numbers; the stored and computed properties of value types',
+    'java.md': 'the Android app\'s Java (app/src main, debug, test): types, methods, `static final` constants and `@Test` names, with line numbers',
   };
   const rows = Object.keys(about).filter((f) => files.has(f)).map((f) => '| [' + f + '](' + f + ') | ' + bodyLines(files.get(f)) + ' | ' + about[f] + ' |');
   const order = (rel) => { const k = loadOrder.indexOf(rel); return k === -1 ? 99 : k; };
@@ -1469,13 +1694,14 @@ function renderReadme(files, jsInfos, loadOrder) {
       '2. You know what it DOES, not what it is called: a symbol carries the first sentence of the comment DIRECTLY above it, when it has one — `grep -rni "' + phrase + '" agents/index/symbols/` (' + hitsFor(phrase) + ' hits). About ' + bareShare + '% of the symbols have none' + (bareBig.length ? ' — the longest functions of ' + big.rel + ' among them (' + bareBig.join(', ') + ')' : '') + ', because their comment sits inside the body or behind a blank line or a marker. No hit is not "no such code": grep agents/architecture/, then the source.',
       '3. Open the SOURCE at that line with a small window (`+N` is the length of the declaration in lines); widen only if you must.',
       '4. For "who else touches this" use the cross-reference files below (events, storage keys, globals, API calls, ids) before you grep the whole tree.',
+      '5. You know the RULE and want the test that guards it: `grep -n -i "<words of the rule>" agents/index/test-sections.md` — a hit is a section title with its line, under the `## <file>` heading of its suite. For a rule of the Android app\'s Java, java.md lists the JVM tests by name.',
       'A symbols file is also the fastest way to see the SHAPE of a module: its headings are the file\'s own banner comments.',
       '',
       '## How fresh it is',
       'Line 4 of every file names the commit the rebuild was made ON TOP OF — "working tree" = built over uncommitted changes, which is the normal case, because the index is rebuilt and committed together with the change it describes. So the hash is normally the PARENT of the commit that carries these lines; it cannot be compared with `git log` to judge freshness. A file is rewritten only when its content changes, so an old hash means "unchanged since", not "stale". Only a check tells you:',
       '- `npm run agents:check` — exits 1 and lists the files a rebuild would change. It is NOT part of `npm run ci` or of the pre-commit hook; .github/workflows/ci.yml runs it as a NON-BLOCKING step, so a stale index shows as a warning on the commit, never as a red build.',
       '- `npm run agents:index` — rebuilds (`node agents/tools/build-index.mjs --force` also restamps every header).',
-      'Rebuild after an edit that adds or removes lines in js/, css/, the HTML shells, ios-app/www/native-bridge.js, Swift or tests/suites — every symbol below the edit moves — and commit the result with it. A drifted index is not an error: `npm test` only prints an advisory line (' + INDEX_GUARD + '), and the header on line 4 tells you how old it is — when in doubt rebuild first, it takes a second.',
+      'Rebuild after an edit that adds or removes lines in js/, css/, the HTML shells, ios-app/www/native-bridge.js, Swift, the Android app\'s Java (' + JAVA_ROOT + '), tests/unit.js or tests/suites — every symbol below the edit moves — and commit the result with it. A drifted index is not an error: `npm test` only prints an advisory line (' + INDEX_GUARD + '), and the header on line 4 tells you how old it is — when in doubt rebuild first, it takes a second.',
       'The folder is wholly generated: never put a hand-written file in agents/index/ — the next rebuild deletes every `.md` it did not write.',
       '',
       '## Files',
@@ -1488,6 +1714,8 @@ function renderReadme(files, jsInfos, loadOrder) {
       '- Line-based regexes over a small lexer that blanks comments, strings, template literals and regex literals and counts brackets. No AST.',
       '- "Top level" = bracket depth 0, OR one level inside a top-level IIFE (`(function () { … })();`). Most modules wrap everything in one IIFE; for those, the declarations directly inside it are what you would call the module\'s top level.',
       '- Listed: `function`, `async function`, `class`, `const|let|var` (function-valued ones with their parameters), `window.x = function | arrow | { … } | anotherName`, top-level IIFEs of ten lines or more. NOT listed: functions nested inside functions, members of object literals (an exported object shows its keys), callbacks, anything inside `document.addEventListener(…, function () { … })`.',
+      '- Java (java.md) is read statement by statement at member level, after comments, strings and character literals are blanked: a `{` opens a type, a method body or an initialiser, and only a type\'s body is read further — so the members of an anonymous or local class are not listed. Swift (swift.md) is read line by line. The Android project\'s XML, Gradle files and manifest are not indexed.',
+      '- A section title (test-sections.md) is the string literal `t.section(…)` was called with; a call inside a string or a comment is not a call.',
       '- Comments are quoted from the source (first sentence, clipped). In symbols/app.js.md they are clipped harder to keep the file under 60 KB — symbols are never dropped.',
       '- Line numbers are exact for the commit in the header and drift with every edit above them. If a line does not show the symbol, grep the source and rebuild the index.',
     ]);
@@ -1553,7 +1781,11 @@ function build() {
   files.set('css-sections.md', renderCss(cssInfos, linkOrder));
   files.set('dom-ids.md', renderIds(collectIds(htmlUnits, jsInfos, cssInfos)));
   files.set('tests.md', renderTests(suites, tools));
+  files.set('test-sections.md', renderSections(SECTION_FILES.map(analyseSections)));
   files.set('swift.md', renderSwift(SWIFT_FILES.map(analyseSwift)));
+  const javaInfos = JAVA_FILES.map(analyseJava);
+  for (const j of javaInfos) if (!j.balanced) warnings.push(j.rel + ': braces do not balance at end of file — its list in java.md may be incomplete');
+  files.set('java.md', renderJava(javaInfos));
   files.set('README.md', renderReadme(files, jsInfos, loadOrder));
   return { files, warnings };
 }
@@ -1595,4 +1827,4 @@ function main() {
 // Run as a script; importable (for a quick look at what a lexer makes of a snippet) without side effects.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
 
-export { lexJs, lexCss, lexSwift, build };
+export { lexJs, lexCss, lexSwift, lexJava, build };

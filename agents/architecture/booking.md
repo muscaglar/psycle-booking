@@ -24,7 +24,7 @@ Full + not held → the waitlist path; exactly one seat left → a direct confir
 steps run ahead of guard 3: a token about to expire offers "Sign in again first?", and a tap on a class where
 only a waitlist place is held goes to `leaveWaitlist` — never the picker, never a second join.
 
-**Bookings are verified, and a booking POST is never re-sent**: reliability.js's `apiFetch` retries other verbs
+**Bookings are verified, and a booking POST is never re-sent** (guards: tests/suites/reliability.js "a POST is never re-sent" and "POST call sites", booking.js, booking-races.js, offline-queue.js): reliability.js's `apiFetch` retries other verbs
 up to 3 times but gives a POST 0 retries by default — a timed-out `POST /bookings` may have booked server-side, so
 no tap ever sends it twice (the offline queue's slot-body replay is the one, guarded, exception — see Offline
 queue). `submitBooking` is the choke point the picker, the last-seat confirm, the no-layout confirm and the

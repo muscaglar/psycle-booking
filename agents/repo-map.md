@@ -36,7 +36,7 @@ psycle-booking/
 │   ├── calendar.js         # ICS generation / share, Google Calendar links
 │   ├── features.js         # Class history, instructor profiles, "notify me" watchlist
 │   ├── tabs.js             # 4-tab navigation, Stats sub-pages + insights rendering, share card, Membership (incl. the Class colours control), "Your usual week" card + confirm sheet
-│   ├── settings.js         # Settings panel, tiers, bike prefs, next-class pill, calendar-sync UI, export/import, bug report, diagnostics
+│   ├── settings.js         # Settings panel, favourite instructors, bike prefs, next-class pill, calendar-sync UI, export/import, bug report, diagnostics
 │   ├── explore.js          # Instructor suggestions, history sync + weekly top-up, instructor map
 │   ├── api-client.js       # window.PsycleAPI — typed getters, schema validation, error categorisation
 │   └── diagnostic.js       # window.PsycleDiag — API drift detection, safe-mode banner, diagnostics
@@ -63,11 +63,11 @@ psycle-booking/
 │                           #   appstore-capture.html + appstore-shots.mjs (rebuild the six App Store screenshots over Chrome's DevTools protocol;
 │                           #   `--play` = the same six as Google Play's 1080 × 1920, into ios-app/playstore-assets/)
 ├── types/globals.d.ts      # Ambient declarations for the advisory typecheck
-├── .github/workflows/      # ci.yml (four jobs: `ci` — check, test, drift, types; `ios-build`, unsigned; `android-build` — the JVM tests, then the debug APK;
+├── .github/workflows/      # ci.yml (five jobs: `ci` — check, test, drift, types; `changes` — which native builds the push needs; `ios-build`, unsigned; `android-build` — the JVM tests, then the debug APK;
 │                           #   the advisory `android-smoke`) · android-release.yml (MANUAL, `main` only: the signed Android bundle from four secrets
 │                           #   only the owner can create; it uploads nothing to a store — tests/suites/22-play-release.js reads it)
 │
-├── README.md · SETUP.md · CLAUDE.md   # Overview · iOS toolchain · this architecture guide
+├── README.md · SETUP.md · CLAUDE.md   # Overview · iOS toolchain · a four-line pointer to AGENTS.md
 ├── AGENTS.md               # (added at the split) The entry for an agent or developer arriving cold; CLAUDE.md is a pointer to it
 │                           #   js/, css/, tests/, ios-app/, ios-app/ios/App/ and ios-app/android/ each hold a folder guide: an AGENTS.md (local rules) + a CLAUDE.md pointer
 ├── agents/                 # (added at the split) On-demand docs, never shipped: README.md (what is here), decisions.md, learnings.md,
@@ -90,7 +90,7 @@ psycle-booking/
     ├── android/            # Gradle project — COMMITTED (one activity, the manifest, res/); compiled only by CI's android-build job.
     │   │                   #   Generated and git-ignored: the copied web assets, two config copies, res/xml/config.xml, the Cordova shim
     │   └── app/src/
-    │       ├── main/java/com/psyclefinder/app/         # MainActivity (Back, a widget tap) + the three plugin TWINS the bridge finds by name:
+    │       ├── main/java/com/psyclefinder/app/         # MainActivity (Back, a widget tap) + the four plugin TWINS the bridge finds by name:
     │       │   │                                       #   AppGroupPreferencesPlugin, WidgetCenterPlugin, PsycleDeepLinkPlugin
     │       │   ├── widget/                             # The home-screen widget: NextClassWidgetProvider, PsyncWidgetViews (the one RemoteViews builder),
     │       │   │                                       #   PsyncWidgetStore (the file psync_widget), PsyncSnapshot + PsyncWidgetPlan (PURE: no android.*),
@@ -99,7 +99,7 @@ psycle-booking/
     │       │                                           #   PsyncCountdownNotifier (channel class-countdown, IMPORTANCE_LOW), PsyncCountdownReceiver (plan(); one inexact alarm, a ten-minute window;
     │       │                                           #   BOOT_COMPLETED, MY_PACKAGE_REPLACED, TIMEZONE_CHANGED, TIME_SET), PsyncCountdownDismissReceiver (a swipe: the delete intent)
     │       ├── main/res/                               # layout/widget_next_class_*.xml, drawable/widget_*.xml + ic_ct_<key>.xml, xml/next_class_widget_info.xml, …
-    │       ├── test/java/…/widget/ · …/countdown/      # JVM unit tests (JUnit 4) of the three pure classes — CI runs them before the APK, and proves the countdown's ran
+    │       ├── test/java/…/widget/ · …/countdown/      # JVM unit tests (JUnit 4) of the four pure classes (the tip jar's allow-list is in …/tips/) — CI runs them before the APK, and proves the countdown's ran
     │       └── debug/                                  # WidgetPreviewActivity + CountdownProofReceiver + their manifest: DEBUG builds only, behind DUMP —
     │                                                   #   what CI's emulator photographs, and the hook that has it post a REAL countdown
     ├── NATIVE_FEATURES.md · CICD.md · PRECOMMIT.md · APP_STORE_LISTING.md
@@ -157,7 +157,7 @@ if tests/smoke.html's list drifts from the page's.
 | Change how far ahead the app thinks Psycle books | js/app.js (`pure:horizon`: the three named constants — OBSERVED, advisory only) |
 | Change instructor suggestions / history sync | js/explore.js     |
 | Change instructor modal / history / notify me | js/features.js + css/features.css |
-| Change settings/tiers/prefs           | js/settings.js + css/settings.css |
+| Change settings / the favourites list / bike prefs | js/settings.js + css/settings.css |
 | Change settings export / import       | js/settings.js (`pure:settings-export`, `pure:import-validate`) |
 | Change retry rules / the offline queue | js/reliability.js (`pure:retry-auth`, `pure:offline-queue`) |
 | Change colours only                   | css/theme.css (colour vars in the theme block) |
@@ -171,7 +171,7 @@ if tests/smoke.html's list drifts from the page's.
 | Change when the next-class pill hides | js/settings.js (`pure:pill-scroll` — the scroll; `pure:pill-rest` + `_pillRestCheck` — at rest on a Book button) + css/crisp.css (9d §8 `.is-tucked`) |
 | Add iOS-specific feature              | ios-app/www/native-bridge.js (+ Swift under ios-app/ios/App) |
 | Change what Android's Back closes     | js/app.js (`pure:android-back`: `_androidBackDecision`, `_androidBackDialog`, `_androidBackWelcomeControl`, `_androidBackAsksMember`, `_androidBackWaits`; `_androidBackBusy`, `_androidBackFacts`, `window._psycleAndroidBack`) + login.html (its own `_psycleAndroidBack`); the native half is ios-app/android/…/MainActivity.java; tests/suites/18-android.js, 19-android-project.js |
-| Change an Android-only behaviour (channels, small icon, status-bar colour, calendar shapes, copy) | ios-app/www/native-bridge.js (`IS_ANDROID`: `_ensureAndroidChannels`, `_forAndroid`, `pure:android-bridge` `_themeGround`, `_listNativeEvents`, `_classReminderTail`, `_androidCountdownSwitch`) + js/tabs.js (`_shareAsTextOnAndroid`, `_osSettingsWords`, `_classReminderSwitch`) + js/app.js (`_welcomePages`, `_swSkippedHere`) + js/settings.js (`diagPlatform`); the iPhone path must not move: tests/suites/18-android.js |
+| Change an Android-only behaviour (channels, small icon, status-bar colour, calendar shapes, copy) | ios-app/www/native-bridge.js (`IS_ANDROID`: `_ensureAndroidChannels`, `_forAndroid`, `pure:android-bridge` `_themeGround`, `_listNativeEvents`, `_classReminderBody`, `_androidCountdownSwitch`) + js/tabs.js (`_shareAsTextOnAndroid`, `_osSettingsWords`, `_classReminderSwitch`) + js/app.js (`_welcomePages`, `_swSkippedHere`) + js/settings.js (`diagPlatform`); the iPhone path must not move: tests/suites/18-android.js |
 | Change the Android native project (manifest, themes and bar colours, icons, launch screen, signing, SDK levels) | ios-app/android/ — read its AGENTS.md first; agents/playbooks.md P14; CI is the only compiler |
 | Change the Android home-screen widget | WHAT it shows, WHEN it repaints (`nextRepaintMillis`) and what FITS a size and a font scale: ios-app/android/…/widget/PsyncSnapshot.java, PsyncWidgetPlan.java (pure; the plan's constants are the XML's numbers) + their JVM tests in app/src/test/; how it is DRAWN: PsyncWidgetViews.java + res/layout/widget_next_class_*.xml; refresh, tap, alarm: NextClassWidgetProvider.java, MainActivity.java (`handWidgetTap`, the cold-start `requestRefresh`); the plugin twins beside MainActivity; what it is FED: `updateWidgetSnapshot`, `_snapshotEventFor` (ios-app/www/native-bridge.js — the iPhone widgets read the same keys); tests/suites/19-android-project.js, 20-android-widget.js; agents/playbooks.md P14 step 7 |
 | Change the Android class countdown (the notification in the Live Activity's place) | WHAT it shows, until WHEN, when it looks again: ios-app/android/…/countdown/PsyncCountdownPlan.java (pure) + PsyncCountdownPlanTest; how it is POSTED (channel `class-countdown`, the private / public pair, the timeout): PsyncCountdownNotifier.java; WHEN it plans, the alarm, boot: PsyncCountdownReceiver.java and its callers (WidgetCenterPlugin, AppGroupPreferencesPlugin, MainActivity, NextClassWidgetProvider); the tap: widget/PsyncTapIntent.java; its OFF SWITCH: `_androidCountdownSwitch`, `_androidCountdownFlipped` (ios-app/www/native-bridge.js, Android only) + `PsyncSnapshot.isStoreKey` / `fitsKey`; its copy: `_classReminderSwitch` (js/tabs.js), the first-booking ask (the bridge); its proof on the emulator: app/src/debug/…/CountdownProofReceiver.java + the `android-smoke` script in .github/workflows/ci.yml; tests/suites/19-android-project.js, 21-android-countdown.js; agents/playbooks.md P14 step 11 |

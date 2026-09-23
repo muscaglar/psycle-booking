@@ -1,4 +1,42 @@
 # The class card — one component, worn by Discover and by My Bookings
 Read this when you change `eventCard`, the card markup in `renderMyBookings`, `_ccTimeHTML` or css/crisp.css 9b.7. Skip it when you are not touching a card. Related: [bookings-tab.md](bookings-tab.md) (what a held class adds).
 
-**The class card (Crisp Colour)**: ONE component, two wearers — Discover's `eventCard` and My Bookings' `renderMyBookings` (plus its read-only saved copy) print the same root, `.class-card.ct-card` + `data-ct` (`classTypeKey`), and everything they SHARE is said ONCE, on `.class-card[data-ct]` in css/crisp.css (9b.7): the tinted surface, radius and ink; the dashed waitlist place (`.is-waitlisted`); the glow — one recipe, two triggers: `.is-booked` on Discover (it follows the in-place sync, which cannot add a primitive class) and, on My Bookings where every card is held, only the NEXT seat (`.glow-mine-card`); `--cc-pill`; the meta line (`.cc-sub` · `.cc-who` · `.cc-loc`). `crisp:9d-bookings` adds only what a held class needs (its grid, the day, seat chips, actions + More) and may not name `.class-card` at all. **That shared root is only (0,2,0), so no older sheet may outrank it** on surface / ink / radius / border / shadow: two light-base `:is([data-theme=…])` rules in css/theme.css did — they washed the class tint out of booked and past cards on the light themes — and were DELETED, not overridden; tests/suites/9f-one-card.js reads every older sheet and fails if one comes back. The TIME block and the TITLE ROW are shared too (they were not at first: the same class read differently on Discover and on My Bookings, with its text 14px further right, and a long name wrapped UNDER the tile on one tab and BESIDE it on the other). The time block is built ONCE, by `_ccTimeHTML({hours, mins, duration, dayHtml?, hook?})` (`pure:class-type`): `eventCard`, `renderMyBookings`, `_savedBookingsHTML` and the Class colours preview (js/tabs.js, which IS a `.class-card` now) all call it — the last three behind a `typeof` guard, because suites run them on their own — and My Bookings only adds its day (`.mb-day`, "Thu 24") and its grid hook (`mb-when`). It prints the approved boards' form — the 24-hour time ("18:30", from `_clock24`: see Clock times) over the duration alone ("45 min"; no second line when the length is unknown) — so every time is five tabular digits, one narrow column; to change it, change that ONE function and 9b.7's `.cc-time*` rules. The title row is `.cc-head` > `.ct-tile` + `.cc-name` in all three builders (`mb-title` / `mb-name` are hooks: room for the More button, the cursor). The COMPACT wearers (usual-week rows, the instructor profile's rows, the welcome minis) are one line each — day over `.t-time.is-compact` (the same 24-hour digits), no duration. tests/suites/9f-one-card.js holds all of it. The anatomy: `.is-booked` / `.is-waitlisted` on the root; `.cc-time` = `.cc-time-h` (the 24-hour digits, display face, `--type-time`) over ONE small no-wrap line `.cc-dur` = the duration (every time is five digits wide, so every card's text starts on the same line); `.cc-info` = `.cc-head` (`.ct-tile` pictogram + `.cc-name`, the title flowing inline after the tile) · `.cc-sub` (`.cc-who` instructor, `.cc-loc` studio as plain text) · `.cc-spots` · `.cc-meta`; `.cc-action` = ONE pill. The "·" between instructor and studio is NOT in the markup: css draws it in the gap to the left of `.cc-loc`'s no-wrap unit and `.cc-sub`'s `clip-path` removes it when that unit wraps to a new line, so a line never ends or starts on a bare dot. The pill is styled from its STATE classes only — never put a primitive class on it: the booking code assigns `className = 'book-btn[ booked| waitlist]'` wholesale, reliability.js compares it as a string, the ✓ label contract is read off its plain-text label, and features.js's bell regex needs `<button class="book-btn"…>Full</button>`. Its quiet fill is the custom property `--cc-pill` (surface; one shade down where the card IS the surface — intensity `off`, and Handheld, which has no shadows). Text on a tinted card uses only `--ct-ink`, `--ct-ink-2`, `--ct-deep` (tests/suites/9b-discover.js holds the section to that, and the glow to the chosen day + your booked class).
+### The shared .class-card root
+
+**The class card (Crisp Colour)**: ONE component, two wearers — Discover's `eventCard` and My Bookings' `renderMyBookings` (plus its read-only saved copy) print the same root, `.class-card.ct-card` + `data-ct` (`classTypeKey`), and everything they SHARE is said ONCE, on `.class-card[data-ct]` in css/crisp.css (9b.7): the tinted surface, radius and ink; the dashed waitlist place (`.is-waitlisted`); the glow — one recipe, two triggers: `.is-booked` on Discover (it follows the in-place sync, which cannot add a primitive class) and, on My Bookings where every card is held, only the NEXT seat (`.glow-mine-card`); `--cc-pill`; the meta line (`.cc-sub` · `.cc-who` · `.cc-loc`).
+
+`crisp:9d-bookings` adds only what a held class needs (its grid, the day, seat chips, actions + More) and may not name `.class-card` at all.
+
+### Shared root specificity
+
+**That shared root is only (0,2,0), so no older sheet may outrank it** on surface / ink / radius / border / shadow: two light-base `:is([data-theme=…])` rules in css/theme.css did — they washed the class tint out of booked and past cards on the light themes — and were DELETED, not overridden; tests/suites/9f-one-card.js reads every older sheet and fails if one comes back.
+
+### Time block, title row and compact wearers
+
+The TIME block and the TITLE ROW are shared too (they were not at first: the same class read differently on Discover and on My Bookings, with its text 14px further right, and a long name wrapped UNDER the tile on one tab and BESIDE it on the other).
+
+The time block is built ONCE, by `_ccTimeHTML({hours, mins, duration, dayHtml?, hook?})` (`pure:class-type`): `eventCard`, `renderMyBookings`, `_savedBookingsHTML` and the Class colours preview (js/tabs.js, which IS a `.class-card` now) all call it — the last three behind a `typeof` guard, because suites run them on their own — and My Bookings only adds its day (`.mb-day`, "Thu 24") and its grid hook (`mb-when`).
+
+It prints the approved boards' form — the 24-hour time ("18:30", from `_clock24`: see Clock times) over the duration alone ("45 min"; no second line when the length is unknown) — so every time is five tabular digits, one narrow column; to change it, change that ONE function and 9b.7's `.cc-time*` rules.
+
+The title row is `.cc-head` > `.ct-tile` + `.cc-name` in all three builders (`mb-title` / `mb-name` are hooks: room for the More button, the cursor).
+
+The COMPACT wearers (usual-week rows, the instructor profile's rows, the welcome minis) are one line each — day over `.t-time.is-compact` (the same 24-hour digits), no duration.
+
+tests/suites/9f-one-card.js holds all of it.
+
+### Card anatomy
+
+The anatomy: `.is-booked` / `.is-waitlisted` on the root; `.cc-time` = `.cc-time-h` (the 24-hour digits, display face, `--type-time`) over ONE small no-wrap line `.cc-dur` = the duration (every time is five digits wide, so every card's text starts on the same line); `.cc-info` = `.cc-head` (`.ct-tile` pictogram + `.cc-name`, the title flowing inline after the tile) · `.cc-sub` (`.cc-who` instructor, `.cc-loc` studio as plain text) · `.cc-spots` · `.cc-meta`; `.cc-action` = ONE pill.
+
+The "·" between instructor and studio is NOT in the markup: css draws it in the gap to the left of `.cc-loc`'s no-wrap unit and `.cc-sub`'s `clip-path` removes it when that unit wraps to a new line, so a line never ends or starts on a bare dot.
+
+### The book-btn pill
+
+The pill is styled from its STATE classes only — never put a primitive class on it: the booking code assigns `className = 'book-btn[ booked| waitlist]'` wholesale, reliability.js compares it as a string, the ✓ label contract is read off its plain-text label, and features.js's bell regex needs `<button class="book-btn"…>Full</button>`.
+
+Its quiet fill is the custom property `--cc-pill` (surface; one shade down where the card IS the surface — intensity `off`, and Handheld, which has no shadows).
+
+### Text on a tinted card
+
+Text on a tinted card uses only `--ct-ink`, `--ct-ink-2`, `--ct-deep` (tests/suites/9b-discover.js holds the section to that, and the glow to the chosen day + your booked class).

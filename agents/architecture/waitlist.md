@@ -1,8 +1,48 @@
 # Waitlist — places, offers, claims, auto-allocation, phases
 Read this when you touch `joinWaitlist`, `leaveWaitlist`, `claimWaitlistSpot`, `fetchMyWaitlists` or a Waitlisted card. Skip it otherwise. A place is a separate server resource from a booking, and nothing is ever claimed automatically.
 
-**Waitlist**: waitlist places are a SEPARATE server resource from bookings (verified against Psycle's own CodexFit widget + live probes; `POST /bookings` without slots is rejected with "Booking slot required"). Full+waitlistable classes skip the bike picker — `bookClass` → `confirmJoinWaitlist` → `joinWaitlist` does `PUT /waitlists/{eventId}` (retries:0; `422 "already on this waitlist"` = already joined — Psycle allows ONE place per person per class, so there is no multi-spot waitlist). `fetchMyBookings` also pages `GET /waitlists` (`fetchMyWaitlists`) and merges places into `_myBookings` as `{bookingId:null, slots:[], slotBookings:{}, waitlisted:true, waitlist:{id,status,addedAt,expiresAt,offer?}}` — a real booking for the same event wins (keeps `waitlisted:false`, place attached as `.waitlist`; may also carry `fromWaitlist:true`). The map is built locally and swapped in once per fetch; a `/waitlists` slower than 5s falls back to the last good list and re-merges when it lands; local writes (`_noteLocalBookingWrite`) make a fetch that started earlier skip its button "release" pass and re-run. `waitlisted` means "no real seat": calendar/widget/Live Activity/reminders/history/pill/badge all skip such entries. Leaving = `leaveWaitlist` → `DELETE /waitlists/{entryId}` (404 or the server's 500 "already been cancelled" = gone); `confirmUnbook`/`upcomingCancel` route waitlisted entries there and never to `DELETE /bookings`. Claiming an emailed offer = `claimWaitlistSpot` → `GET /waitlist/{entryId}` then, only after an explicit confirm showing credits, `POST /waitlist/{entryId} {confirmed:true}` → `fetchMyBookings()` (success is only announced once /bookings shows the seat). Near class time (≤2.5h, or after 10pm for 6–9am classes) `fetchMyBookings` probes `GET /waitlist/{id}` for held places (`_probeWaitlistOffers`, ≤3, throttled) so the card can show "Spot available → Claim spot". Nothing is ever claimed automatically. `psycle_waitlist_places` remembers `{places:{eventId:entryId}, allocated:{eventId:iso}}` between launches — SEATLESS places only (a place merely attached to a seat the user booked must never read as an allocation); `_diffWaitlistPlaces` spots a place that became a real seat (Psycle auto-allocated it → chargeable) and fetchMyBookings announces it with a modal + "From waitlist" badge (`waitlist:allocated` → history). The announcement is acknowledgement-based: `_pendingAnnounce` holds found-but-unacknowledged ids, memory is only marked announced (`_persistPlacesNow`) once the user dismisses the dialog, and a dialog displaced by another `confirmModal` re-arms itself (`onReplaced`). A fetch that raced a local write shows its snapshot but leaves memory/announcements/button release to the 250ms heal re-run; if `/waitlists` can't be read at all with no earlier list, remembered places render as unverified "Waitlisted" with a note (`_waitlistsUnavailable`). Pure helpers live between the `waitlist:pure:start/end` markers in app.js (unit-tested). Events: `waitlist:joined|left|claimed|allocated`.
+### Joining a waitlist with joinWaitlist
+**Waitlist**: waitlist places are a SEPARATE server resource from bookings (verified against Psycle's own CodexFit widget + live probes; `POST /bookings` without slots is rejected with "Booking slot required").
 
-**Waitlist phases**: the offer window lives in the `waitlist:pure` block — `_inWaitlistOfferWindow(startAt, now)` = ≤2.5h, or from 10pm the evening before for 6–9am classes (read off the class's wall-clock digits, so midnight and the device zone don't matter); `_waitlistPhase(startAt, now)` → `auto` | `offers` (≤2h, same early rule) | `closed` (≤30 min) drives the Waitlisted card's status line, badge and which button leads ("Check for a spot" is primary in the offers phase) and the join confirmation's line. While My Bookings is on screen a 2-min ticker (`_waitlistRecheckTick`: visible + online + bookings tab + nothing modal/busy) re-runs the offer probe and repaints only when the offer state or the phase moved; it never claims. `_diffWaitlistPlaces` also returns `ended` (a remembered place that is now neither place nor seat): `_noteEndedPlaces` toasts once, only when the waitlist has just closed on it, never for a place left from this app — and it must run BEFORE `bookings:loaded` is emitted (that emit rewrites the saved copy it reads). `_waitlistsUnavailable` is `false | 'late' | 'failed'` (the note shows on `failed` only).
+Full+waitlistable classes skip the bike picker — `bookClass` → `confirmJoinWaitlist` → `joinWaitlist` does `PUT /waitlists/{eventId}` (retries:0; `422 "already on this waitlist"` = already joined — Psycle allows ONE place per person per class, so there is no multi-spot waitlist).
 
+### fetchMyWaitlists and the _myBookings merge
+`fetchMyBookings` also pages `GET /waitlists` (`fetchMyWaitlists`) and merges places into `_myBookings` as `{bookingId:null, slots:[], slotBookings:{}, waitlisted:true, waitlist:{id,status,addedAt,expiresAt,offer?}}` — a real booking for the same event wins (keeps `waitlisted:false`, place attached as `.waitlist`; may also carry `fromWaitlist:true`).
+
+The map is built locally and swapped in once per fetch; a `/waitlists` slower than 5s falls back to the last good list and re-merges when it lands; local writes (`_noteLocalBookingWrite`) make a fetch that started earlier skip its button "release" pass and re-run.
+
+`waitlisted` means "no real seat": calendar/widget/Live Activity/reminders/history/pill/badge all skip such entries.
+
+### Leaving with leaveWaitlist
+Leaving = `leaveWaitlist` → `DELETE /waitlists/{entryId}` (404 or the server's 500 "already been cancelled" = gone); `confirmUnbook`/`upcomingCancel` route waitlisted entries there and never to `DELETE /bookings`.
+
+### Claiming with claimWaitlistSpot
+Claiming an emailed offer = `claimWaitlistSpot` → `GET /waitlist/{entryId}` then, only after an explicit confirm showing credits, `POST /waitlist/{entryId} {confirmed:true}` → `fetchMyBookings()` (success is only announced once /bookings shows the seat).
+
+### Offer probe _probeWaitlistOffers
+Near class time (≤2.5h, or after 10pm for 6–9am classes) `fetchMyBookings` probes `GET /waitlist/{id}` for held places (`_probeWaitlistOffers`, ≤3, throttled) so the card can show "Spot available → Claim spot". Nothing is ever claimed automatically.
+
+### Auto-allocation and psycle_waitlist_places
+`psycle_waitlist_places` remembers `{places:{eventId:entryId}, allocated:{eventId:iso}}` between launches — SEATLESS places only (a place merely attached to a seat the user booked must never read as an allocation); `_diffWaitlistPlaces` spots a place that became a real seat (Psycle auto-allocated it → chargeable) and fetchMyBookings announces it with a modal + "From waitlist" badge (`waitlist:allocated` → history).
+
+The announcement is acknowledgement-based: `_pendingAnnounce` holds found-but-unacknowledged ids, memory is only marked announced (`_persistPlacesNow`) once the user dismisses the dialog, and a dialog displaced by another `confirmModal` re-arms itself (`onReplaced`).
+
+A fetch that raced a local write shows its snapshot but leaves memory/announcements/button release to the 250ms heal re-run; if `/waitlists` can't be read at all with no earlier list, remembered places render as unverified "Waitlisted" with a note (`_waitlistsUnavailable`).
+
+### waitlist:pure helpers and waitlist events
+Pure helpers live between the `waitlist:pure:start/end` markers in app.js (unit-tested). Events: `waitlist:joined|left|claimed|allocated`.
+
+### Waitlist phases and the offer window
+**Waitlist phases**: the offer window lives in the `waitlist:pure` block — `_inWaitlistOfferWindow(startAt, now)` = ≤2.5h, or from 10pm the evening before for 6–9am classes (read off the class's wall-clock digits, so midnight and the device zone don't matter); `_waitlistPhase(startAt, now)` → `auto` | `offers` (≤2h, same early rule) | `closed` (≤30 min) drives the Waitlisted card's status line, badge and which button leads ("Check for a spot" is primary in the offers phase) and the join confirmation's line.
+
+### Recheck ticker _waitlistRecheckTick
+While My Bookings is on screen a 2-min ticker (`_waitlistRecheckTick`: visible + online + bookings tab + nothing modal/busy) re-runs the offer probe and repaints only when the offer state or the phase moved; it never claims.
+
+### Ended places and _noteEndedPlaces
+`_diffWaitlistPlaces` also returns `ended` (a remembered place that is now neither place nor seat): `_noteEndedPlaces` toasts once, only when the waitlist has just closed on it, never for a place left from this app — and it must run BEFORE `bookings:loaded` is emitted (that emit rewrites the saved copy it reads).
+
+### _waitlistsUnavailable values
+`_waitlistsUnavailable` is `false | 'late' | 'failed'` (the note shows on `failed` only).
+
+### A place's class and _eventCache
 **A place's class and `_eventCache`.** A place's class is normally already in `_eventCache`: `fetchMyBookings` hydrates every id through `GET /events/{id}` and, failing that, `_seedEventCacheFromEntries` seeds it from the entry's nested `event` (`_eventCacheEntryFromWaitlist`: `T`-form `start_at`, `_typeName`, `_fromWaitlist: true`). A remembered place shown as `waitlist.unverified` may have NO cache entry, so a reader that may not fetch (the day dot, [day-pager.md](day-pager.md)) shows nothing for it.

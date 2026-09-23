@@ -17,7 +17,7 @@ Rule → why → guard. A bare `name.js` is in suites/.
 | Path | Holds | Index |
 |---|---|---|
 | unit.js | Zone pin, browser shim, `t`, `loadPure`, the built-in checks, then the suites | [README.md](README.md) §1 |
-| suites/ | One file per feature area | [agents/index/tests.md](../agents/index/tests.md): what each loads and slices · [pure-blocks.md](../agents/index/pure-blocks.md) |
+| suites/ | One file per feature area | [agents/index/tests.md](../agents/index/tests.md): what each loads and slices · [test-sections.md](../agents/index/test-sections.md): every `t.section` title with its line · [pure-blocks.md](../agents/index/pure-blocks.md) |
 | smoke.html | Every module in production order, in a browser: title `SMOKE: PASS` | README.md §2 |
 | tools/fake-psycle.js | Rule 9 | Its header · README.md → "Driving the app against a stubbed API" |
 | tools/appstore-shots.mjs · tools/appstore-capture.html | Rebuild the six App Store screenshots on the fake server; `--play` = the same six as Google Play's 1080 × 1920, into ios-app/playstore-assets/ | playbooks P9 |
@@ -37,11 +37,12 @@ Digit-led suites are `<wave>[<lane>]-<topic>.js` (`1f-…`, `10a-…`, `17-…`)
 | The Play release | `22-play-release.js` (READS .github/workflows/android-release.yml — manual, `main` only, a read-only token, GitHub's own actions only, no secret echoed or interpolated into a script, exactly the four `PSYNC_…` names app/build.gradle reads, a missing secret FAILS, the keystore decoded after `npm ci` into the runner's temp folder and shredded BEFORE the upload action and again at the end, an unsigned bundle never uploaded — then privacy.html (no analytics, nothing external, no service worker, ONE owner placeholder, not in the app shell — and its PROMISES held to the code: the shells' `connect-src`, every host js/ names, ios-app/package.json's dependencies, the calendar read, Android 12 and earlier), ios-app/PLAY_STORE_DEPLOY.md, the Play graphics' sizes, the `--play` screenshot canvas, and that no keystore or service-account key is tracked; its first section proves each detector can fail. It cannot run the workflow) |
 | These docs | `15-agents-index.js` is only ADVISORY about index drift · `16-agents-docs.js` holds the reading guide and agents/README.md's lists to the files on disk, each folder guide's shape, and the handover's session log (first section, newest first, 1–10 entries, 160 lines) |
 | Any other module | `grep -n "js/<file>" agents/index/tests.md`: the suites that load, slice or anchor it |
+| The test that guards a rule | `grep -n -i "<words of the rule>" agents/index/test-sections.md`: the section, under its suite's heading; a JVM test by name: agents/index/java.md |
 
 ## After you edit
 ```bash
 node tests/unit.js > /tmp/unit.log 2>&1; grep -E "✗|passed,|stopped before|crashed" /tmp/unit.log   # any writable path
-npm run agents:index   # after the last edit to a suite or a tools/ file: both are indexed; then `npm run agents:check` exits 0
+npm run agents:index   # after the last edit to unit.js, a suite or a tools/ file: all are indexed; then `npm run agents:check` exits 0
 npm run ci             # check + test + drift, as CI runs them
 ```
 Nothing in tests/ ships: an edit here alone needs no `cd ios-app && npm run build`. A suite written for a js/ edit follows js/AGENTS.md's loop as well (build + drift). How a stretch of work ends: playbooks P0 step 6.

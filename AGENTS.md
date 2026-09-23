@@ -52,38 +52,38 @@ The six biggest files — never read one whole; find the symbol in agents/index/
 | File | Holds |
 |---|---|
 | js/app.js (~14,000 lines) | API, session, search + window cache, Filters bar, day pager, booking, waitlist, My Bookings, class sheet, welcome |
-| js/tabs.js (~4,400) | Tabs, Stats sub-pages, share card, Membership, the Class colours control, the usual-week card + review sheet |
+| js/tabs.js (~4,600) | Tabs, Stats sub-pages, share card, Membership (with Support Psync, the tip jar), the Class colours control, the usual-week card + review sheet |
 | css/crisp.css (~4,200) | The Crisp Colour layer, in marked sections `crisp:9a-foundation` … `crisp:9e-stats-membership` |
 | css/styles.css (~3,200) | Core layout, the older class-card / booking UI rules, desktop layout, the first-run welcome (`.onboard-*`) |
-| ios-app/www/native-bridge.js (~2,500) | The native bridge, loaded by the iPhone AND the Android app: storage mirror, haptics, calendar, notifications, widget snapshot |
-| js/settings.js (~2,200) | Settings panel, tiers, bike prefs, next-class pill, calendar-sync UI, export / import |
+| ios-app/www/native-bridge.js (~2,650) | The native bridge, loaded by the iPhone AND the Android app: storage mirror, haptics, calendar, notifications, widget snapshot |
+| js/settings.js (~2,200) | Settings panel, the favourite-instructors list, bike prefs, next-class pill, calendar-sync UI, export / import |
 
 ## Reading guide
-One row per file; the generated index is one row, and agents/index/README.md lists its files. A name with no folder is in agents/architecture/ (the former CLAUDE.md, moved verbatim — section titles unchanged). ≈ tokens = bytes ÷ 4: what the file costs to read whole.
+One row per file; the generated index is one row, and agents/index/README.md lists its files. A name with no folder is in agents/architecture/ (the former CLAUDE.md, moved verbatim — section titles unchanged). ≈ tokens = bytes ÷ 4: what the file costs to read whole — and you rarely need to: each architecture file is cut into "###" sections, one per mechanism, so `grep -n "^###" <file>` and read the one you need.
 
 | If your task or question is… | Read | ≈ tokens |
 |---|---|---|
 | a first visit: what is in agents/, and in what order | agents/README.md | 2,050 |
-| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md | 8,600 |
+| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md (grep it for the feature; read a section, not the file) | 10,050 |
 | picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 8,400 |
 | "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 5,750 |
 | anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 12,300 |
 | a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 14,100 |
 | what a word means (seat / space / place, record / entry, held / unverified): grep it there, or read §4 (≈ 1,250); a field shape → §1; a state machine → §3; the invariants → §5 — never the whole file | agents/ontology.md | 8,700 |
 | where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 6,950 |
-| after a push to `main`: the Xcode Cloud check is missing, cancelled or failed; a TestFlight build did not arrive (checklist: playbooks P10; lesson: learnings G5) | ios-app/CICD.md → "Notes / gotchas" | 2,850 |
-| a line number: function, pure block, event, storage key, global, API call, CSS section, DOM id, suite, Swift type | agents/index/README.md, then grep agents/index/ | 1,850 (the folder: 70,500 — grep it, never read it whole) |
-| rebuilding the index (`npm run agents:index`), or re-proving that the split lost nothing | agents/tools/build-index.mjs · agents/tools/check-split.mjs | run them, do not read them (25,500 · 2,200) |
+| after a push to `main`: the Xcode Cloud check is missing, cancelled or failed; a TestFlight build did not arrive (checklist: playbooks P10; lesson: learnings G5) | ios-app/CICD.md → "Notes / gotchas" | 3,300 |
+| a line number: function, pure block, event, storage key, global, API call, CSS section, DOM id, suite, test section (which test guards a rule), Swift type, Java type | agents/index/README.md, then grep agents/index/ | 2,050 (the folder: 98,500 — grep it, never read it whole) |
+| rebuilding the index (`npm run agents:index`), or re-proving that the split lost nothing | agents/tools/build-index.mjs · agents/tools/check-split.mjs | run them, do not read them (29,200 · 2,200) |
 | an old "CLAUDE.md → section" reference | agents/architecture/README.md | 800 |
 | any js/ module for the first time (state, events, wrappers) | core-patterns.md | 800 |
 | what a whole tab shows, before changing part of it | tab-structure.md | 1,450 |
 | a flow end to end (booking, history sync, find similar) | user-flows.md | 550 |
 | booking, cancelling (which control cancels one seat, which the whole booking), clash warnings, no-layout studios | booking.md | 2,450 |
-| the class sheet, seat picker, `confirmModal`, the Booked sheet | sheets-and-dialogs.md | 1,700 |
+| the class sheet, seat picker, `confirmModal`, the Booked sheet | sheets-and-dialogs.md | 1,900 |
 | waitlist places, offers, claims, phases | waitlist.md | 1,250 |
 | "Your usual week": card, review sheet, spot suggestion, the run | usual-week.md | 4,650 |
 | the offline queue, failed cancels, the saved copy | offline.md | 1,300 |
-| My Bookings: render commit, card actions, More menu, next-class pill | bookings-tab.md | 1,900 |
+| My Bookings: render commit, the plan-usage bars, card actions, the footer row, More menu, next-class pill | bookings-tab.md | 2,100 |
 | search, filters, the Filters bar, the timetable window cache | discover.md | 2,500 |
 | the day strip / pager, the held-day dot, or the swipe rules | day-pager.md | 2,650 |
 | the Monday 12:00 release, the iOS Monday reminder, how far ahead Psycle books | monday-release.md | 2,500 |
@@ -98,13 +98,13 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 | the class card (Discover and My Bookings wear the same one) | class-card.md | 1,100 |
 | an overlay (checklist: playbooks P5), a toast, focus, a control that is not a `<button>` | accessibility.md | 850 |
 | sw.js or the update banner | pwa-shell.md | 450 |
-| native-bridge.js, Swift, widgets, the Live Activity, calendar sync, notifications (then playbooks P7 for the commands) | ios.md | 5,200 |
-| the Android app: how it differs (Back, channels, the status bar, backups off, what is absent), its home-screen widget (the plugin twins, the snapshot reader, RemoteViews), its class countdown (the one silent notification in the Live Activity's place: the planner, the notifier, the alarm, the off switch), how it is built and proved (then playbooks P14) | android.md | 16,750 (the widget section alone: 4,150; the countdown's: 3,250) |
-| installing the Android debug APK, adding the widget, the class countdown as the owner sees it, a release build, the keystore, Play Console, the Android on-device checklist | ios-app/ANDROID.md (store copy: ios-app/PLAY_STORE_LISTING.md) | 12,100 (the checklist alone: 3,900) |
-| getting the Android app onto Google Play: the target-API and policy preconditions, the developer account, the upload key, the manual release workflow (.github/workflows/android-release.yml) and its four secrets, every Play Console form, the testing tracks, the privacy page, a one-page checklist (an agent's part of a release: playbooks P15) | ios-app/PLAY_STORE_DEPLOY.md | 9,150 |
+| native-bridge.js, Swift, widgets, the Live Activity, calendar sync, notifications and their words (`_classReminderBody`), Support Psync — the tip jar, three product ids held in JS, Swift and Java (then playbooks P7 for the commands) | ios.md | 6,100 |
+| the Android app: how it differs (Back, channels, the status bar, backups off, what is absent), its home-screen widget (the plugin twins, the snapshot reader, RemoteViews), its class countdown (the one silent notification in the Live Activity's place: the planner, the notifier, the alarm, the off switch), how it is built and proved (then playbooks P14) | android.md — grep its "###" headings and read ONE section | 17,700 (the widget section alone: 4,250; the countdown's: 3,400) |
+| installing the Android debug APK, adding the widget, the class countdown as the owner sees it, a release build, the keystore, Play Console, the Android on-device checklist | ios-app/ANDROID.md (store copy: ios-app/PLAY_STORE_LISTING.md) | 13,600 (the checklist alone: 4,450) |
+| getting the Android app onto Google Play: the target-API and policy preconditions, the developer account, the upload key, the manual release workflow (.github/workflows/android-release.yml) and its four secrets, every Play Console form, the testing tracks, the privacy page, a one-page checklist (an agent's part of a release: playbooks P15) | ios-app/PLAY_STORE_DEPLOY.md | 10,600 |
 | a request to Psycle, or a stub for one | api.md | 650 |
-| a localStorage / sessionStorage key | storage-keys.md | 2,850 |
-| a failing check, a new suite, build.js, the plugin patcher, CI | testing-and-ci.md | 1,450 |
+| a localStorage / sessionStorage key (adding one: the checklist is playbooks P3) | storage-keys.md | 2,850 |
+| a failing check, a new suite, build.js, the plugin patcher, CI (when it runs, what it skips), which suite guards a rule (`git grep -n "<its words>" tests/suites/`: the section titles say what each proves) | testing-and-ci.md | 2,000 |
 
 ## Keeping these docs true
 - Text moves with the code: change behaviour a paragraph describes, and change that paragraph in the same commit. Use the code's exact names; a reader will grep for them.

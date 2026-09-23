@@ -22,7 +22,7 @@ The rule → why → its guard. Suites are in tests/suites/; F… and G… are e
 | capacitor.config.json | ONE file for both apps: `appId`, `webDir`, the Preferences `group` — a key prefix on iOS (NOT an App Group), the SharedPreferences file on Android; `plugins.LocalNotifications` (Android's small icon and tint) and the `android` block are read by Android only | — |
 | www/ | the GENERATED flat web app + native-bridge.js (never read it whole) | agents/index/symbols/native-bridge.js.md |
 | ios/ | the committed Xcode project, Swift, the Podfile | [ios/App/AGENTS.md](ios/App/AGENTS.md) · agents/index/swift.md |
-| android/ | the committed Gradle project: one activity, three plugin twins, the home-screen widget, the class countdown (one silent notification in the Live Activity's place), the manifest, resources; never compiled locally | [android/AGENTS.md](android/AGENTS.md) · not indexed |
+| android/ | the committed Gradle project: one activity, four plugin twins, the home-screen widget, the class countdown (one silent notification in the Live Activity's place), the manifest, resources; never compiled locally | [android/AGENTS.md](android/AGENTS.md) · agents/index/java.md (the Java; XML and Gradle are not indexed) |
 | native-checks/ | run.sh (old payloads decode, times) · render.sh (layouts → PNGs); a Mac, no simulator | playbooks P7 step 2 |
 | appstore-assets/ | GENERATED: screenshots (tests/tools/appstore-shots.mjs), icon sizes (assets/render-icons.sh) | playbooks P9 |
 | CICD.md | release flow, Xcode Cloud set-up, reading the check | ≈ 2,850 tokens |

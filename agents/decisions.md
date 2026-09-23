@@ -33,6 +33,7 @@ How to read it:
 ## 2. Money and safety
 
 The rule behind most design choices: **nothing spends a class credit that the member did not see and confirm.**
+(How the app takes MONEY for itself — optional tips through each store's own in-app purchase, and no payment link anywhere — is the "Money, 2026-09-22" bullet of section 3.)
 
 | Decision | Why | Held by |
 |---|---|---|
@@ -190,6 +191,8 @@ From IMPROVEMENTS-2026-09.md → "Deliberately NOT changed — owner decisions".
 | Tell the owner plainly what was verified and what was not. Put decisions that are theirs to them as short questions with a recommendation. | The owner's stated preference. | — |
 
 ## 8. Platforms: the Android app
+
+(When the class countdown ENDS is in section 6, under "The Live Activity goes about five minutes after…": on Android it ends AT the start. CLOSED.)
 
 Decided on 2026-09-20: of the levels put to them, the owner chose level 2 — and, once it had compiled and launched, level 3, and then the countdown notification that level 3 had left out.
 

@@ -1,7 +1,7 @@
 # Psycle Class Finder — Architecture
 The depth of the former CLAUDE.md, split by topic and moved verbatim. Read this when a comment or a doc names a section ("CLAUDE.md → Gym time") and you need its file; skip it when the reading guide in [AGENTS.md](../../AGENTS.md) has already routed you.
 
-- Under each file's two-line header the text is unchanged. A cross-reference inside it ("see Theming", "see Monday-noon release below", "see Key Patterns → The class card") names a section TITLE: find the title in this table, or `grep -rn "<title>" agents/`.
+- Under each file's two-line header the text is unchanged. A cross-reference inside it ("see Theming", "see Booking horizon", "see Key Patterns → The class card") names a section TITLE: find the title in this table, or `grep -rn "<title>" agents/`.
 - Proof that nothing was lost in the move: `node agents/tools/check-split.mjs`.
 
 | Section title, as it was in CLAUDE.md | Now in |

@@ -7,8 +7,7 @@ Read this when you add, change or retire a theme, touch `themeBoot`, or a css/cr
   fixes are written as `:is([data-theme="light"], [data-theme="cloud"])`; `light` is a legacy id that nothing applies
   any more. **That prefix is worth one class of specificity — and Cloud is the default theme.**
   A plain selector in css/crisp.css (linked last) wins a TIE against the older sheets, but loses to one of these: four
-  such rules outranked the Crisp look on the light base only (booked and past My Bookings cards lost their tint, the
-  tier bar kept a hex track, a chosen rank's letter went 1.6:1 under `:hover` — which sticks after a tap on iOS).
+  such rules outranked the Crisp look on the light base only (booked and past My Bookings cards lost their tint).
   When a Crisp rule "does not take" on a light theme, look here first; delete the old rule if it is dead, or match its
   specificity. tests/suites/9f-one-card.js guards the class card's root against it.
 - Registry: `APP_THEMES` in `js/theme.js` — `{id, name, base, bg, accent, mono?}` (`mono: true` on Terminal and

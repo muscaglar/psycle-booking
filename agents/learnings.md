@@ -218,7 +218,7 @@ Purpose: the mistakes this repository has already paid for, most expensive first
 
 **H2–H3. Seeding a fresh profile**: `agents/playbooks.md` P8 step 3 — the welcome flag, the sync-prompt flag, the token through `_secureTokenStore`; never `_myBookings` by hand (`bookClass` waits for an applied `/bookings` answer, and with no token `fetchMyBookings` empties the map).
 
-**H4. Use an origin you never sign in on.** A stub `/profile` with another customer id is an ACCOUNT SWITCH to the app: the real member's rankings are stashed and their history cleared.
+**H4. Use an origin you never sign in on.** A stub `/profile` with another customer id is an ACCOUNT SWITCH to the app: the real member's favourites, bike prefs and usual week are stashed and their history cleared.
 
 **H5. Headless capture.** A `--screenshot` flag cannot wait for an app to settle: drive the browser over the DevTools protocol and wait for a signal the page gives (tests/tools/appstore-shots.mjs waits for a `READY` title). Headless Chrome does not always exit after `--screenshot` (assets/render-icons.sh waits for the file, then stops it). A page with no viewport meta is laid out wide and shrunk under mobile emulation — both harness pages carry one.
 
