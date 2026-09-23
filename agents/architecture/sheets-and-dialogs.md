@@ -45,4 +45,4 @@ Small decisions live in `pure:sheets` (js/app.js, two regions; tests/suites/9c-s
   Banners are inset soft cards below 1024px; crisp.css never sets a banner's padding (tests/suites/2e-css-layout.js).
 
 ### Text-editing overlay not built
-**Not built yet: a text-editing overlay.** The token dialog is the only overlay with an input. Nothing handles the iOS soft keyboard over a sticky bottom action bar (`visualViewport`, `dvh`) or an unsaved draft on Escape; the first such overlay needs a check on the owner's device (agents/playbooks.md P5 — "an overlay that holds unsaved input").
+**Not built yet: a text-editing overlay.** No overlay has a text field. Nothing handles the iOS soft keyboard over a sticky bottom action bar (`visualViewport`, `dvh`) or an unsaved draft on Escape; the first such overlay needs a check on the owner's device (agents/playbooks.md P5 — "an overlay that holds unsaved input").

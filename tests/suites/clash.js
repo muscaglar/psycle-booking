@@ -1,9 +1,9 @@
 'use strict';
 // Clash detection (#63): the pure interval helper (pure:clash in js/app.js) and
-// the places that speak it — the REAL bookClass confirms + picker hand-off,
-// confirmJoinWaitlist and the headless "Book my week" path, sliced out of
-// source and run against a scripted API. No new gate dialog exists on purpose:
-// the line rides inside the confirms the member already sees.
+// the places that speak it — the REAL bookClass confirms + picker hand-off and
+// confirmJoinWaitlist, sliced out of source and run against a scripted API.
+// No new gate dialog exists on purpose: the line rides inside the confirms the
+// member already sees.
 module.exports = async function (t) {
   const { ok, eq } = t;
   const src = t.readSource('js/app.js');
@@ -143,7 +143,7 @@ module.exports = async function (t) {
     const ctx = t.loadPure('js/app.js', 'clash', globals);
     t.vm.runInContext("var _bookingsLoadState = 'loaded'; var MAX_SEATS = 2;\n" +
       [grab('function _busyLabel('), grab('function _clashFor('), grab('async function bookClass('),
-        grab('async function confirmJoinWaitlist('), grab('async function _bookEventHeadless(')].join('\n'), ctx);
+        grab('async function confirmJoinWaitlist(')].join('\n'), ctx);
     // bookClass calls the (stubbed) confirmJoinWaitlist by default; `realJoin` lets the real one run.
     if (!o.realJoin) {
       const real = ctx.confirmJoinWaitlist;
@@ -217,30 +217,12 @@ module.exports = async function (t) {
     ok(w.log.confirms[0].warn.indexOf('One waitlist place per person.') === 0, 'no clash → the warning reads exactly as before');
   }
 
-  t.section('Clash: "Book my week" skips a hard overlap, and only that');
+  t.section('Clash: the lookup is advisory');
   {
-    let w = world();
-    eq(await w.ctx._bookEventHeadless(77, 4), 'skipped', 'headless, overlapping a held seat → skipped');
-    eq([w.log.posts, w.log.joins], [[], []], '…with no POST and no waitlist join');
-    ok(w.log.infos.some((m) => m.indexOf(CLASH) !== -1), 'the reason is logged (the sweep has one summary toast)');
-
-    w = world({ detail: { is_fully_booked: true, is_waitlistable: true } });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.joins], ['skipped', []], 'a FULL overlapping class is not joined either');
-
-    // Held 7:00–7:45 at Oxford Circus; template class 8:00 at Bank: tight, but the member's own plan.
-    w = world({ cache: { 77: { id: 77, start_at: '2026-09-21 08:00:00', duration: 45, _typeName: 'Ride', _locName: 'Bank' } } });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.posts], ['booked', [[7]]], 'a travel squeeze is NOT skipped');
-
-    w = world({ bookings: {} });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.posts], ['booked', [[7]]], 'nothing held → books as before');
-
-    w = world();
-    w.ctx._clashFor = () => { throw new Error('odd cache shape'); };
-    eq(await w.ctx._bookEventHeadless(77, 4), 'booked', 'the lookup is advisory: if it throws, the class is booked as before');
     const b = btn();
-    w = world({ slots: [7] });
+    const w = world({ slots: [7] });
     w.ctx._clashFor = () => { throw new Error('odd cache shape'); };
     await w.ctx.bookClass(77, b, 4);
-    eq([w.log.confirms.map((c) => c.warn), w.log.toasts], [[POLICY], []], '…and bookClass carries on to its confirm with no error toast');
+    eq([w.log.confirms.map((c) => c.warn), w.log.toasts], [[POLICY], []], 'if the lookup throws, bookClass carries on to its confirm with no error toast');
   }
 };

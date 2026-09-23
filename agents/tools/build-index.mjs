@@ -967,7 +967,6 @@ function renderGlobals({ globals, accessors }, jsInfos, loadOrder) {
 
 // ── api-calls.md ───────────────────────────────────────────────────────────
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
-const API_CLIENT = 'js/api-client.js';
 const NETWORK_PRIMITIVE = /(?:^|\.)(?:fetch|apiFetch|fetchWithRetry|_?orig(?:inal)?ApiFetch)$/;
 
 function pathLiterals(text) {
@@ -1030,10 +1029,6 @@ function collectApi(units) {
       }
     }
   }
-  // js/api-client.js exports typed getters on window.PsycleAPI. One that no other shipped file calls is not a live
-  // call site: say so, or a reader changing a booking lands on it first.
-  const usedElsewhere = (fn) => units.some((u) => u.rel !== API_CLIENT && u.code && u.code.some((l) => l.indexOf('PsycleAPI') !== -1 && new RegExp('PsycleAPI\\s*\\.\\s*' + fn + '(?![\\w$])').test(l)));
-  for (const c of calls) if (c.file === API_CLIENT && c.fn && !usedElsewhere(c.fn)) c.unused = true;
   return calls;
 }
 
@@ -1097,10 +1092,8 @@ function renderApi(calls) {
   const row = ({ c, l }) => '- ' + c.file + ':' + c.line + (c.fn ? ' ' + c.fn : '')
     + (c.callee !== 'apiFetch' ? ' · via `' + c.callee + '(' + (c.via || '') + ')`' : c.via ? ' · via `' + c.via + '`' : '')
     + (c.retries ? ' · retries: ' + c.retries : '')
-    + (shown(l) !== norm(l) ? ' · `' + clip(shown(l), 90) + '`' : '')
-    + (c.unused ? ' · NO CALLER in the shipped code (`PsycleAPI.' + c.fn + '`)' : '');
-  const live = (r) => (r.c.unused ? 1 : 0);
-  const section = (list) => list.flatMap((g) => ['', '### ' + g.method + ' ' + g.path, ...g.rows.sort((a, b) => live(a) - live(b) || byName(a.c.file, b.c.file) || a.c.line - b.c.line).map(row)]);
+    + (shown(l) !== norm(l) ? ' · `' + clip(shown(l), 90) + '`' : '');
+  const section = (list) => list.flatMap((g) => ['', '### ' + g.method + ' ' + g.path, ...g.rows.sort((a, b) => byName(a.c.file, b.c.file) || a.c.line - b.c.line).map(row)]);
   const isWrite = (g) => g.method !== 'GET';
   const computedRow = (c) => '- ' + c.file + ':' + c.line + (c.fn ? ' ' + c.fn : '') + ' · `' + c.callee + '(' + clip(c.first, 70) + ')`'
     + (c.method !== 'GET' ? ' · method: ' + c.method : '') + (c.retries ? ' · retries: ' + c.retries : '');
@@ -1108,7 +1101,7 @@ function renderApi(calls) {
   const computedReads = computed.filter((c) => c.method === 'GET');
   return doc('API calls — every request the shipped code can make',
     'Purpose: each `apiFetch` / `fetch` / request-helper call with a path literal, as `METHOD path` → `file:line enclosingFunction`, writes first. Read this when you touch booking, cancel, waitlist, sign-in or retry code, or need to stub the API. Skip it otherwise. HARD RULE: https://psycle.codexfit.com is a real booking system — tests, scripts and browser checks must never send it a POST / PUT / DELETE, and the unit tests never touch the network (tests/README.md).' + seeAlso('What each endpoint answers', ['agents/architecture/api.md', 'CLAUDE.md#API']),
-    ['Paths are relative to the customer API base (`DIRECT_API` in js/app.js)' + (calls.some((c) => c.unused) ? '. A row marked NO CALLER is a typed getter that js/api-client.js exports on `window.PsycleAPI` and nothing in the shipped code calls — the live call sites are the other rows' : '') + '. `{id}` stands for any interpolated part; the literal as written follows when it says more (a query string, or the expression a path is joined to: `/bookings/{ctx.bookingId}`). `retries:` is shown only where the call sets it — the default for a POST is 0 and for other verbs 3 (js/reliability.js wraps `apiFetch`). A method in brackets is an expression, not a literal. `via` = the helper called, or the variable the path was read from (resolved to the nearest assignment above the call).',
+    ['Paths are relative to the customer API base (`DIRECT_API` in js/app.js). `{id}` stands for any interpolated part; the literal as written follows when it says more (a query string, or the expression a path is joined to: `/bookings/{ctx.bookingId}`). `retries:` is shown only where the call sets it — the default for a POST is 0 and for other verbs 3 (js/reliability.js wraps `apiFetch`). A method in brackets is an expression, not a literal. `via` = the helper called, or the variable the path was read from (resolved to the nearest assignment above the call).',
       'Not every request goes straight to that base: opened from `file://`, `apiUrl()` (js/app.js, `IS_FILE` / `PROXY`) routes EVERY call — the bearer token with it — through a public CORS proxy, so a stub that matches on the host psycle.codexfit.com does not cover that path. Always serve the app over http (`python3 -m http.server 8080`).',
       '', '## Writes (POST / PUT / PATCH / DELETE)',
       ...section(sorted.filter(isWrite)),

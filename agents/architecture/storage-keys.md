@@ -54,7 +54,7 @@ in IndexedDB (`psycle_sec`), not localStorage.
 | psycle_error_log | ✓ | Error entries (max 100) |
 | psycle_action_log | ✓ | User action entries (max 100; action name + timestamp only) |
 | psycle_api_contract |  | Snapshot of expected API response shapes (field names only) for drift detection |
-| psycle_api_schema_log |  | Observed response shapes + missing-field counters (field names only, no PII) |
+| psycle_api_schema_log |  | Observed response shapes (field names only, no PII) |
 | psycle_api_last_drift |  | ISO timestamp of the last detected API drift |
 | psycle_quota_probe |  | Transient 64K pad written and removed at once by `_persistWindow` to test for free room — never left behind |
 

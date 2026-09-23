@@ -54,7 +54,7 @@ The six biggest files — never read one whole; find the symbol in agents/index/
 | js/app.js (~14,000 lines) | API, session, search + window cache, Filters bar, day pager, booking, waitlist, My Bookings, class sheet, welcome |
 | js/tabs.js (~4,600) | Tabs, Stats sub-pages, share card, Membership (with Support Psync, the tip jar), the Class colours control, the usual-week card + review sheet |
 | css/crisp.css (~4,200) | The Crisp Colour layer, in marked sections `crisp:9a-foundation` … `crisp:9e-stats-membership` |
-| css/styles.css (~3,200) | Core layout, the older class-card / booking UI rules, desktop layout, the first-run welcome (`.onboard-*`) |
+| css/styles.css (~2,900) | Core layout, the older class-card / booking UI rules, desktop layout, the first-run welcome (`.onboard-*`) |
 | ios-app/www/native-bridge.js (~2,650) | The native bridge, loaded by the iPhone AND the Android app: storage mirror, haptics, calendar, notifications, widget snapshot |
 | js/settings.js (~2,200) | Settings panel, the favourite-instructors list, bike prefs, next-class pill, calendar-sync UI, export / import |
 

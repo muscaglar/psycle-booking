@@ -272,22 +272,7 @@ select:focus, input:focus {
 
 .class-card:hover { border-color: var(--accent, #e94560); }
 
-.class-time {
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  color: var(--text-heading, #fff);
-  min-width: 54px;
-  line-height: 1;
-}
-
 .class-info { flex: 1; }
-
-.class-type {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
-  color: var(--text, #f0f0f0);
-  margin-bottom: 3px;
-}
 
 .class-instructor {
   font-size: var(--text-md);
@@ -321,10 +306,6 @@ select:focus, input:focus {
 .badge.full { background: var(--badge-full-bg, #2a0f0f); color: var(--badge-full-text, #e94560); border-color: var(--badge-full-border, #4a1a1a); }
 .badge.waitlist { background: var(--badge-waitlist-bg, #1a1a0a); color: var(--badge-waitlist-text, #b8860b); border-color: var(--badge-waitlist-border, #3a3a10); }
 .badge.highlight { background: var(--badge-highlight-bg, #0f1e2a); color: var(--badge-highlight-text, #4a9eff); border-color: var(--badge-highlight-border, #1a3a5a); }
-
-/* Capacity urgency chips — subtle amber (soft) / red (urgent) */
-.badge.avail-soft { background: #2a200a; color: #e0a93c; border-color: #4a3a14; }
-.badge.avail-urgent { background: #2a0f0f; color: #ef5a72; border-color: #4a1a1a; }
 
 .no-results {
   text-align: center;
@@ -525,23 +506,6 @@ select:focus, input:focus {
   line-height: 1.4;
 }
 
-.days-control {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.days-control input[type="number"] {
-  background: var(--bg-input, #1a1a1a);
-  border: 1px solid var(--border-light, #333);
-  color: var(--text, #f0f0f0);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--text-lg);
-  width: 70px;
-  text-align: center;
-}
-
 .instr-box {
   background: var(--bg-input, #1a1a1a);
   border: 1px solid var(--border-light, #333);
@@ -677,9 +641,6 @@ select:focus, input:focus {
   gap: var(--space-4);
 }
 
-.auth-pill .user-name { color: var(--text-muted, #aaa); }
-.auth-pill .user-name strong { color: var(--text, #f0f0f0); }
-
 .auth-pill a {
   color: var(--accent, #e94560);
   text-decoration: none;
@@ -814,77 +775,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 /* Nothing on a saved card is tappable: no pointer, no hover lift, no press squeeze. */
 .my-booking-card.is-saved-copy { cursor: default; }
 .my-booking-card.is-saved-copy:hover, .my-booking-card.is-saved-copy:active { transform: none; box-shadow: none; }
-
-.token-dialog {
-  position: fixed; inset: 0;
-  background: var(--modal-overlay, rgba(0,0,0,0.85));
-  z-index: 300;
-  display: flex; align-items: center; justify-content: center;
-  padding: var(--space-9);
-}
-
-.token-dialog .modal {
-  max-width: 520px;
-}
-
-.token-steps {
-  margin: var(--space-7) 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.token-step {
-  display: flex;
-  gap: var(--space-5);
-  align-items: flex-start;
-  font-size: var(--text-md);
-  color: var(--text-muted, #aaa);
-  line-height: 1.5;
-}
-
-.token-step-num {
-  background: var(--accent, #e94560);
-  color: var(--accent-ink, #fff);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  width: var(--space-8); height: var(--space-8);
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.token-cmd {
-  display: block;
-  background: var(--bg-deep, #0d0d0d);
-  border: 1px solid var(--border-subtle, #2a2a2a);
-  border-radius: 5px;
-  padding: var(--space-3) var(--space-5);
-  font-family: monospace;
-  font-size: var(--text-base);
-  color: #4a9eff;
-  margin-top: var(--space-2);
-  cursor: pointer;
-  user-select: all;
-  word-break: break-all;
-}
-
-.token-cmd:hover { border-color: var(--text-off, #444); }
-
-.token-input {
-  width: 100%;
-  background: var(--bg-input, #1a1a1a);
-  border: 1px solid var(--border-light, #333);
-  color: var(--text, #f0f0f0);
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--text-md);
-  font-family: monospace;
-  margin-top: var(--space-3);
-}
-
-.token-input:focus { outline: none; border-color: var(--accent, #e94560); }
 
 .book-btn {
   margin-top: var(--space-4);
@@ -1035,24 +925,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   margin-top: var(--space-2);
 }
 
-.type-section-header {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  padding: var(--space-4) 0 var(--space-2);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--section-border, #1a1a1a);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.type-section-header .type-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
 /* Upcoming bookings panel */
 .upcoming-panel {
   margin: var(--space-7) var(--space-9) 0;
@@ -1087,19 +959,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 }
 .upcoming-body { padding: 0 var(--space-4) var(--space-4); }
 .upcoming-list { display: flex; flex-direction: column; gap: var(--space-1); }
-.up-cancel {
-  background: transparent;
-  border: 1px solid var(--border-light, #333);
-  color: var(--text-dim, #888);
-  font-size: var(--text-xs);
-  padding: 3px var(--space-3);
-  border-radius: 5px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--transition-base);
-  flex-shrink: 0;
-}
-.up-cancel:hover { background: var(--bg-input, #1a1a1a); }
 
 .up-seats {
   display: flex;
@@ -1138,15 +997,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 
 /* My Bookings day groups */
 .mb-day-group { margin-bottom: var(--space-5); }
-.mb-day-header {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--accent, #e94560);
-  padding: var(--space-1) var(--space-1);
-  border-bottom: 1px solid var(--border, #222);
-  margin-bottom: var(--space-2);
-}
 .mb-past { opacity: 0.5; }
 .mb-past .class-card { border-left-color: var(--border-light, #333); background: #0a0a0a; }
 
@@ -1228,12 +1078,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   flex: 1;
   min-width: 0;
 }
-.mb-period-bar-text .sub-bar-name {
-  display: block;
-}
-.mb-period-bar-text .sub-bar-count {
-  display: block;
-}
 .mb-period-bar .sub-progress {
   width: 100%;
 }
@@ -1258,31 +1102,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 
 .mb-period-section.collapsed .mb-period-body {
   display: none;
-}
-
-/* Legacy period header (keep for backward compat) */
-.mb-period-header {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim, #888);
-  padding: var(--space-3) var(--space-1) var(--space-1);
-  margin-top: var(--space-1);
-}
-.mb-period-next {
-  margin-top: var(--space-5);
-  padding-top: var(--space-5);
-  border-top: 1px dashed var(--border, #333);
-  color: var(--accent, #e94560);
-}
-.mb-period-hint {
-  font-weight: var(--weight-normal);
-  font-size: var(--text-xs);
-  color: var(--text-ghost, #555);
-  text-transform: none;
-  letter-spacing: normal;
-  margin-left: var(--space-3);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1518,29 +1337,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   margin-bottom: var(--space-4);
 }
 
-.sub-bar-text {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 5px;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.sub-bar-name {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent, #e94560);
-}
-
-.sub-bar-count {
-  font-size: var(--text-base);
-  color: var(--text-muted, #aaa);
-  font-weight: var(--weight-semibold);
-}
-
 .sub-progress {
   height: 4px;
   background: var(--spinner-track, #1a1a1a);
@@ -1632,7 +1428,7 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
    is styled in redesign.css with the rest of Discover's filter rows; the
    desktop block below hides it, because the panel is always open there. */
 
-/* ── Sign-in pill + signed-in avatar chip ─────────────────────────
+/* ── Sign-in pill ─────────────────────────────────────────────────
    Selector carries .auth-pill so it outranks theme.css's
    `.auth-pill a { color: var(--accent) }` (red-on-red = invisible). */
 .auth-pill a.signin-pill {
@@ -1651,45 +1447,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
 .auth-pill a.signin-pill:hover { background: var(--accent-hover, #c73650); text-decoration: none; }
 .auth-pill a.signin-pill:active { transform: scale(0.96); }
 
-.user-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--bg-input, #1a1a1a);
-  border: 1px solid var(--border-light, #333);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display, sans-serif);
-  font-size: var(--text-md);
-  color: var(--text, #f0f0f0);
-}
-
-/* Auth pill — compact on mobile */
-.auth-icon { display: none; }
-.auth-link, .disconnect-link {
-  color: var(--accent, #e94560);
-  text-decoration: none;
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  font-size: var(--text-sm);
-}
-.disconnect-link { color: var(--text-ghost, #555); }
-
-/* Header subtitle — hide on very small screens */
-.header-subtitle {
-  font-size: var(--text-base);
-  color: var(--text-faint, #666);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
 @media (max-width: 640px) {
   /* Header: compact */
   header {
@@ -1699,19 +1456,12 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   }
 
   header h1 { font-size: var(--text-3xl); }
-  /* Keep "Companion" visible on mobile — without it the bare wordmark
-     reads as the official Psycle app */
-  .header-subtitle { font-size: var(--text-2xs); }
 
-  /* Auth pill: icon only on mobile */
-  .auth-full { display: none; }
-  .auth-icon { display: inline; font-size: var(--text-xl); }
+  /* Auth pill: tighter on mobile */
   .auth-pill { gap: var(--space-2); flex-shrink: 0; }
-  .user-name { font-size: var(--text-sm); }
 
   /* Compact header buttons on mobile */
   .theme-toggle { width: 28px; height: 28px; font-size: var(--text-lg); }
-  .history-btn { font-size: var(--text-xs); padding: var(--space-1) var(--space-3); }
 
   /* Controls: tighter on mobile */
   .controls {
@@ -1818,11 +1568,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
     margin: 0 auto;
   }
   /* Consistent alignment: all children flush to the same edges */
-  #tab-discover .week-view {
-    padding: var(--space-5) 0 var(--space-7);
-    border-bottom: 1px solid var(--border, #222);
-    margin-bottom: var(--space-1);
-  }
   #tab-discover .controls {
     flex-direction: column;
     align-items: stretch;
@@ -2003,13 +1748,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   right: var(--space-7);
 }
 
-.cds-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  margin-bottom: var(--space-7);
-}
-
 .cds-photo {
   width: 64px;
   height: 64px;
@@ -2019,10 +1757,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   /* The circle exists before the bytes do — and is all that is left when the
      photo cannot load (js/app.js swaps the <img> for a div of this class). */
   background: var(--border, #222);
-}
-
-.cds-header-info {
-  min-width: 0;
 }
 
 .cds-instr-name {
@@ -2043,16 +1777,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
-}
-
-.cds-duration-badge {
-  display: inline-block;
-  background: var(--accent-soft, #1a1a2e);
-  color: var(--accent, #e94560);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  padding: 2px var(--space-3);
-  border-radius: var(--radius-xl);
 }
 
 .cds-details {
@@ -2475,11 +2199,6 @@ button.app-banner-action { background: none; border: none; padding: 0; font: inh
   font-size: var(--text-sm, 12px);
   color: var(--text-muted, #aaa);
   line-height: 1.4;
-}
-
-.travel-notice-icon {
-  color: var(--accent-blue, #4a9eff);
-  flex-shrink: 0;
 }
 
 .travel-notice-close {
@@ -3070,12 +2789,6 @@ label.usual-week-pick { cursor: pointer; }
   font-weight: var(--weight-bold);
   line-height: 1;
   color: var(--text-heading);
-}
-.onboard-mini-rule {
-  flex: none;
-  align-self: stretch;
-  width: 1px;
-  background: var(--border);
 }
 .onboard-mini-info {
   flex: 1;

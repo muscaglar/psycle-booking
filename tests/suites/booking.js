@@ -113,13 +113,7 @@ module.exports = async function (t) {
       setTimeout: (fn, ms) => { log.timers.push({ fn, ms }); return log.timers.length; },
       clearTimeout: () => {},
       getBearerToken: () => token,
-      // _bookEventHeadless only: a layout studio with bike 7 free.
-      document: { createElement: () => btn() },
-      _studioMap: { 4: { has_layout: true, layout: { slots: [{ id: 7 }] } } },
-      _eventCache: {},
-      _usualSlotForEvent: () => null,
       apiFetch: async (path, opts) => {
-        if (path === '/events/77' && !opts) return { ok: true, status: 200, json: async () => ({ slots: [7], data: {} }) };
         if (path !== '/bookings' || !opts || opts.method !== 'POST') throw new Error('unexpected call ' + path);
         log.posts.push(JSON.parse(opts.body));
         log.readsAtPost.push(log.reads);
@@ -161,15 +155,11 @@ module.exports = async function (t) {
     };
     t.vm.runInContext('var _bookingsRefetchTimer = null; var _unverifiedBookings = {}; var BOOKING_VERIFY_DEADLINE_MS = 10000;\n' + appFns, ctx);
     t.vm.runInContext('var _originalSubmitBooking = submitBooking;\n' + wrapperSrc, ctx);
-    // In the browser `window.submitBooking = …` rebinds the bare global too —
-    // which is what _bookEventHeadless calls.
-    ctx.submitBooking = ctx.window.submitBooking;
-    t.vm.runInContext(grab(appSrc, 'async function _bookEventHeadless(', '}'), ctx);
     return { ctx, log, btn, submit: (slots, b, opts) => ctx.window.submitBooking(77, slots, b, opts) };
   }
   function btn(className) {
     const b = { textContent: 'Book', className: className || 'book-btn', disabled: false, dataset: {}, onclick: null };
-    b.classList = { contains: c => b.className.split(/\s+/).includes(c) }; // read-only: what theme.js / old headless code looked at
+    b.classList = { contains: c => b.className.split(/\s+/).includes(c) }; // read-only: what theme.js looks at
     return b;
   }
   const seat5 = () => ({ 77: { bookingId: 'A', bookingIds: ['A'], slots: [5], slotBookings: { 5: 'A' }, waitlisted: false } });
@@ -253,16 +243,6 @@ module.exports = async function (t) {
     const w3 = world({}, [{ status: 403, body: {} }], []);
     await w3.submit([7], stale);
     eq(stale.className, 'book-btn', '…but never .booked with no seat behind it');
-  }
-  {
-    // "Book my week" counts what _bookEventHeadless reports.
-    let w = world({}, [{ status: 403, body: { message: 'No credits left' } }], []);
-    eq(await w.ctx._bookEventHeadless(77, 4), 'failed', 'headless: a refused class is reported failed, not booked');
-    eq(w.log.posts, [{ event_id: 77, slots: [7] }], '(the POST did go out)');
-    w = world({}, [{ status: 201, body: { data: { id: 'H' } } }], []);
-    eq(await w.ctx._bookEventHeadless(77, 4), 'booked', 'headless: a confirmed seat is reported booked');
-    w = world({}, [new Error('timeout')], [false, false]);
-    eq(await w.ctx._bookEventHeadless(77, 4), 'failed', 'headless: an unconfirmed POST is not counted as booked');
   }
 
   t.section('Booking: a POST that never answered is verified, never guessed (#25)');

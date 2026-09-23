@@ -39,14 +39,10 @@
 
   var MAX_FIELDS_PER_KIND = 80;   // cap stored field names so the log stays small
   var MAX_KINDS = 40;             // cap number of distinct kinds tracked
-  var MISSING_THRESHOLD = 3;      // repeated misses in a session => drift handling
   var CONTRACT_DELAY_MS = 10000;  // self-capture contract ~10s after first records
   var INIT_CHECK_DELAY_MS = 12000;// run the first checkContract shortly after load
 
-  // ── Session-scoped counters (reset on reload; not persisted) ──────────
-  // Tracks how many times a given field path has been reported missing THIS
-  // session, so transient single misses don't flip us into safe mode.
-  var _sessionMisses = {};
+  // ── Session-scoped state (reset on reload; not persisted) ─────────────
   var _recordedAny = false;
   var _contractTimer = null;
   var _safeModeActive = false;
@@ -153,9 +149,9 @@
   // ═══════════════════════════════════════════════════════════════════
   // 1. record(kind, sampleData)
   // ═══════════════════════════════════════════════════════════════════
-  // Called by api-client on each SUCCESSFUL response. Stores the observed
-  // top-level field shape for `kind`. Cheap, idempotent-ish, never throws,
-  // never stores values/PII.
+  // Called by js/app.js _recordShape with one sample of a SUCCESSFUL response,
+  // at most once a minute per kind. Stores the observed top-level field shape
+  // for `kind`. Cheap, idempotent-ish, never throws, never stores values/PII.
 
   function record(kind, sampleData) {
     try {
@@ -173,7 +169,7 @@
         fields: fields,
         lastSeen: nowISO(),
         count: (typeof prev.count === 'number' ? prev.count : 0) + 1,
-        // preserve any accumulated missing-field counters across records
+        // keep a `missing` map already in the stored log (nothing adds to it now)
         missing: (prev.missing && typeof prev.missing === 'object') ? prev.missing : {},
       };
       writeJSON(SCHEMA_LOG_KEY, log);
@@ -189,67 +185,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 2. noteMissingField(path)
-  // ═══════════════════════════════════════════════════════════════════
-  // Called by PsycleAPI.field(...) when an expected field is missing. We
-  // increment a persistent counter (for diagnostics) AND a session counter
-  // (for the >=3-in-a-session drift trigger). `path` is expected to look like
-  // "<kind>.<field>" or "<kind>.<a>.<b>"; we derive kind from the first segment.
-
-  function noteMissingField(path) {
-    try {
-      if (!path || typeof path !== 'string') return;
-
-      // Persist a per-kind missing counter in the schema log.
-      var dot = path.indexOf('.');
-      var kind = dot === -1 ? path : path.slice(0, dot);
-
-      var log = getSchemaLog();
-      var entry = log[kind] || { fields: [], lastSeen: nowISO(), count: 0, missing: {} };
-      if (!entry.missing || typeof entry.missing !== 'object') entry.missing = {};
-      entry.missing[path] = (entry.missing[path] || 0) + 1;
-      log[kind] = entry;
-      writeJSON(SCHEMA_LOG_KEY, log);
-
-      // Session counter (drives the drift trigger; resets on reload).
-      _sessionMisses[path] = (_sessionMisses[path] || 0) + 1;
-
-      // If this missing path corresponds to a REQUIRED field and we've now
-      // seen it vanish repeatedly this session, treat it as real drift.
-      if (_sessionMisses[path] >= MISSING_THRESHOLD) {
-        var field = dot === -1 ? '' : path.slice(dot + 1);
-        var required = requiredFieldsFor(kind);
-        var isRequired = field && required.indexOf(field) !== -1;
-        // If we have no schema info at all, fall back to treating a thrice-
-        // missing field as suspicious too — but only flag, don't hard-fail.
-        if (isRequired) {
-          handleDrift('Required field "' + path + '" missing ' +
-            _sessionMisses[path] + 'x this session');
-        }
-      }
-    } catch (e) {
-      softError('noteMissingField failed: ' + (e && e.message));
-    }
-  }
-
-  /** Central drift reaction: record timestamp, re-check, enter safe mode. */
-  function handleDrift(reason) {
-    try {
-      writeJSON(LAST_DRIFT_KEY, nowISO());
-      var findings = checkContract();
-      var hasRequiredLoss = findings.some(function (f) {
-        return f.missingRequired && f.missingRequired.length;
-      });
-      if (hasRequiredLoss || reason) {
-        enterSafeMode(reason || 'API response shape changed');
-      }
-    } catch (e) {
-      softError('handleDrift failed: ' + (e && e.message));
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // 3. captureContract()
+  // 2. captureContract()
   // ═══════════════════════════════════════════════════════════════════
   // Snapshot the CURRENT observed shapes (from the schema log) into the
   // contract key with a timestamp. Idempotent-safe to call repeatedly; each
@@ -294,7 +230,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 4. checkContract()
+  // 3. checkContract()
   // ═══════════════════════════════════════════════════════════════════
   // Compare live observed shapes against (a) the stored contract and (b)
   // PsycleAPI.SCHEMAS.required. Returns an array of drift findings:
@@ -357,7 +293,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 5. enterSafeMode(reason) / exitSafeMode()
+  // 4. enterSafeMode(reason)
   // ═══════════════════════════════════════════════════════════════════
   // Shows a dismissible amber top banner mirroring the visual approach of the
   // existing #sessionBanner in psycle-finder.html. Idempotent. Emits the
@@ -447,15 +383,6 @@
     } catch (e) {}
   }
 
-  function exitSafeMode() {
-    try {
-      _safeModeActive = false;
-      removeBanner();
-    } catch (e) {
-      softError('exitSafeMode failed: ' + (e && e.message));
-    }
-  }
-
   /**
    * Open the diagnostics view. We don't own a diagnostics panel yet, so we do
    * the best available: open the settings panel (a future diagnostics section
@@ -479,7 +406,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 6. getDiagnostics()
+  // 5. getDiagnostics()
   // ═══════════════════════════════════════════════════════════════════
   // Plain object for a future settings/diagnostics panel. No PII.
 
@@ -515,9 +442,7 @@
 
     var appVersion = null;
     try {
-      if (typeof window.PsycleAPI !== 'undefined' && window.PsycleAPI && window.PsycleAPI.VERSION) {
-        appVersion = String(window.PsycleAPI.VERSION);
-      } else if (window.APP_VERSION) {
+      if (window.APP_VERSION) {
         appVersion = String(window.APP_VERSION);
       }
     } catch (e) {}
@@ -535,7 +460,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 7. Self-init — run one contract check after the app's initial calls
+  // 6. Self-init — run one contract check after the app's initial calls
   // ═══════════════════════════════════════════════════════════════════
   // Defensive on every front: PsycleEvents may not exist; the initial loads
   // may or may not have happened; the contract may or may not be captured.
@@ -585,11 +510,9 @@
 
   window.PsycleDiag = {
     record: record,
-    noteMissingField: noteMissingField,
     captureContract: captureContract,
     checkContract: checkContract,
     enterSafeMode: enterSafeMode,
-    exitSafeMode: exitSafeMode,
     getDiagnostics: getDiagnostics,
   };
 

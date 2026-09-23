@@ -71,7 +71,6 @@ Know this about a debug build:
 | Status bar | the page is drawn under it | a band of its own, coloured to the theme's ground |
 | Launch screen | the mark and the wordmark | the mark alone |
 | Rotating the phone | does nothing: portrait only | the same: the activity is locked to portrait |
-| The line under "Connect Psycle account" | "Works on iPhone and desktop." | "Works on your phone and on desktop." |
 | Storage that survives a purge | the Preferences mirror | the same mirror (SharedPreferences); what it survives is the web view's storage being cleared |
 | Backups | — | **off**: nothing the app stores goes into a Google backup or a phone-to-phone transfer. On a new phone you sign in again |
 | Service worker | none | none (the files are in the app) |
@@ -420,7 +419,7 @@ logs.
 - [ ] With no signal the app still opens, and My Bookings shows the saved copy.
 
 **Sign-in**
-- [ ] "Connect Psycle account" opens the sign-in page inside the app; signing in works (the page is served from
+- [ ] "Sign in" opens the sign-in page inside the app; signing in works (the page is served from
       `https://localhost`, an origin Psycle's API has not been seen to answer before); Back from the sign-in page
       returns to the app.
 - [ ] Close the app from the task switcher and open it again: still signed in.

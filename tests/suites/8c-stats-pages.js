@@ -42,14 +42,16 @@ module.exports = function (t) {
   // the year wrap — so the heatmap and the class types moved there from Habits.
   eq(PAGES[0].sections, ['statsBar', 'streakSection', 'heatmapSection', 'classTypeSection', 'yearReviewSection', 'shareSection'],
     'Overview, in the board\'s order: the tiles, the streak, When you train, class types, the year wrap, share');
-  eq([p._statsPageOfSection('habitSection'), p._statsPageOfSection('recoSection')],
+  // The page a section sits on, read from the shipped table; null when it is on none.
+  const pageOf = (sid) => { const pg = PAGES.find((x) => x.sections.indexOf(sid) !== -1); return pg ? pg.id : null; };
+  eq([pageOf('habitSection'), pageOf('recoSection')],
     ['habits', 'habits'], 'Habits: what repeats, each with its action — usual slots, routine');
-  eq([p._statsPageOfSection('heatmapSection'), p._statsPageOfSection('classTypeSection')], ['overview', 'overview'], 'the two charts of the board sit on Overview');
+  eq([pageOf('heatmapSection'), pageOf('classTypeSection')], ['overview', 'overview'], 'the two charts of the board sit on Overview');
   ok(/var model = _heatmapModel\(allEvents\.map\(function \(evt\) \{ return evt\.start_at; \}\)\);/.test(tabsSrc), 'renderHeatmap still plots WHEN you train (weekday × time of day, pure:stats-charts) — not a calendar of volume');
-  eq(p._statsPageOfSection('varietySection'), 'instructors', '"Instructor variety" counts unique INSTRUCTORS per month — who, not what');
-  eq(['exploreMapSection', 'lapsedSection', 'exploreLikeSection', 'exploreNewSection'].map(p._statsPageOfSection),
+  eq(pageOf('varietySection'), 'instructors', '"Instructor variety" counts unique INSTRUCTORS per month — who, not what');
+  eq(['exploreMapSection', 'lapsedSection', 'exploreLikeSection', 'exploreNewSection'].map(pageOf),
     ['instructors', 'instructors', 'instructors', 'instructors'], 'Instructors: the map, lapsed favourites and both suggestion rows');
-  eq(p._statsPageOfSection('costSection'), null, 'a section that is not on Stats has no page');
+  eq(pageOf('costSection'), null, 'a section that is not on Stats has no page');
 
   t.section('Stats pages: which page opens');
   eq([p._statsPageId(null), p._statsPageId(undefined), p._statsPageId(''), p._statsPageId('insights'), p._statsPageId('__proto__'), p._statsPageId(7)],

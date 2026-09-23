@@ -194,7 +194,7 @@
     membershipPanel.id = 'tab-membership';
     membershipPanel.className = 'tab-panel';
     // Membership = the user's relationship with Psycle: plan, usage,
-    // and their instructor rankings/favourites. App-focused settings
+    // and their favourite instructors. App-focused settings
     // (theme, reminders, data) live in the Settings panel.
     membershipPanel.innerHTML =
       '<div id="membershipSignin" class="tab-empty" style="display:none"></div>' +
@@ -333,9 +333,8 @@
         window._dayStripRevealOwed = false;
         if (typeof _restoreDayStrip === 'function') _restoreDayStrip();
       }
-      // The Filters bar's chips can name a RANK ("S/A"), and a rank changed on
-      // Membership has no event to follow: re-read them on the way back in
-      // (no DOM write when nothing changed).
+      // The Filters bar's chips are re-read on the way back in (no DOM write
+      // when nothing changed).
       if (typeof updateFiltersSummary === 'function') updateFiltersSummary();
     }
     if (tab === 'stats') {
@@ -476,12 +475,6 @@
   // stored: a fresh launch; an id from another build) is Overview.
   function _statsPageId(raw) {
     return _statsPageById(raw) ? raw : STATS_PAGE_DEFAULT;
-  }
-  function _statsPageOfSection(sectionId) {
-    for (var i = 0; i < STATS_PAGES.length; i++) {
-      if (STATS_PAGES[i].sections.indexOf(sectionId) !== -1) return STATS_PAGES[i].id;
-    }
-    return null;
   }
   // A key pressed in the tab list → the page to move to, or null when the key
   // is not the tab list's. Left / Right wrap round; Home / End jump to the ends.
@@ -3893,7 +3886,6 @@
     if (sorted.length < 2) { container.style.display = 'none'; return; }
 
     var maxInstr = Math.max.apply(null, sorted.map(function (e) { return e[1].instructors.size; }));
-    var maxTotal = Math.max.apply(null, sorted.map(function (e) { return e[1].total; }));
 
     container.style.display = '';
     // The heading carries the chart's unit; it used to need a subtitle for it.

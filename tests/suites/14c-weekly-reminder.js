@@ -500,7 +500,7 @@ module.exports = async function (t) {
     const hEnd = appSrc.indexOf('async function search(opts) {');
     t.ok(hStart !== -1 && hEnd > hStart, 'the hook can be sliced (anchors moved? update tests/suites/14c-weekly-reminder.js)');
     const hookCode = appSrc.slice(hStart, hEnd).replace(/\/\/[^\n]*/g, '');
-    t.ok(!/\b(bookWeeklyTemplate|submitBooking|bookClass|_bookTemplateSeat|_bookEventHeadless|joinWaitlist|claimWaitlistSpot|apiFetch|fetch)\s*\(/.test(hookCode),
+    t.ok(!/\b(bookWeeklyTemplate|submitBooking|bookClass|_bookTemplateSeat|joinWaitlist|claimWaitlistSpot|apiFetch|fetch)\s*\(/.test(hookCode),
       'the hook never books, joins, claims or fetches: it opens the sheet (or moves the date row) and stops');
     t.eq((hookCode.match(/bookTemplateWeek\(/g) || []).length, 1, '…through exactly ONE call');
     t.ok(/window\.bookTemplateWeek\(\{ range: 'newest' \}\)/.test(hookCode), '…bookTemplateWeek({ range: \'newest\' }) — the shared contract with the sheet');

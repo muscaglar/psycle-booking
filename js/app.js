@@ -1166,8 +1166,8 @@ function announce(text, assertive) {
 function _dialogLiveRegion(id, assertive) {
   try {
     if (typeof document.querySelectorAll !== 'function') return null; // a test page without one
-    // Open = rendered: the token dialog and the picker are static markup inside
-    // a display:none overlay while closed. And not on its way out: a dismissed
+    // Open = rendered: the picker is static markup inside a display:none
+    // overlay while closed. And not on its way out: a dismissed
     // confirm (the usual-week sheet, the tour) stays rendered — top layer, still
     // aria-modal — for the ~200ms of its fade, and the toast its answer raised
     // ("You're offline — nothing was cancelled") went into a region that was
@@ -1300,7 +1300,7 @@ function _emitAuthChanged(signedIn) {
 }
 
 // ── pure:data-owner:start ── (DOM-free; tests/suites/data-owner.js evaluates this block)
-// Whose data is on this device. History, rankings, favourites, bike prefs, the
+// Whose data is on this device. History, favourites, bike prefs, the
 // usual bike, the weekly template… were keyed to the INSTALL, not the member:
 // a second account signing in here inherited all of it, was never offered its
 // own history sync, and a manual sync merged both members' classes for good.
@@ -1406,7 +1406,7 @@ function _swapAccountData(store, newId, nowIso, write) {
   try { stored = store.getItem(DATA_OWNER_KEY); } catch (e) { return res; }
   // An install updated from the build before this stamp has none — but it does
   // say whose HISTORY it holds. When that is somebody else, "adopt" would hand
-  // the newcomer their history, rankings and bike prefs, and stash those under
+  // the newcomer their history, favourites and bike prefs, and stash those under
   // the wrong id the day the real owner came back. Treat them as the owner.
   if ((stored == null || stored === '') && newId != null) {
     const h = get(HISTORY_OWNER_STAMP_KEY);
@@ -1511,7 +1511,7 @@ function _applyProfile(data) {
       }
     }
     _lastProfileId = user.id;
-    // What is STORED per account (history, rankings, usual bike…) follows the
+    // What is STORED per account (history, favourites, usual bike…) follows the
     // same rule, across launches — before currentUser is set and anything
     // repaints. Guarded twice over: nothing here may get in a sign-in's way.
     try { if (typeof _claimDataOwner === 'function') _claimDataOwner(user.id); } catch (e) {}
@@ -1695,7 +1695,7 @@ if (typeof PsycleEvents !== 'undefined') {
   PsycleEvents.on('auth:changed', s => {
     // (Discover's presets repaint via the updateDiscoverEmptyState wrapper.)
     try { renderRebookHint(); } catch {}
-    // A sign-in AFTER launch (login popup, token dialog, a healed connection)
+    // A sign-in AFTER launch (login popup, a healed connection)
     // has no timetable yet: the launch path only searches when a token already
     // existed. `initial` is skipped because that launch search is already
     // running — a second one would double-fetch or flash "No classes found".
@@ -1847,47 +1847,6 @@ function openLoginPopup() {
     // Popup blocked — fall back to navigation
     location.href = './login.html';
   }
-}
-
-function showTokenDialog() {
-  document.getElementById('tokenInput').value = '';
-  document.getElementById('saveTokenBtn').disabled = true;
-  // The line under "Connect Psycle account" names the iPhone in the markup
-  // (psycle-finder.html), and stays so for the iPhone app and the web. Only the
-  // Android app rewords it, as its other copy is: at run time, by platform.
-  const worksOn = document.getElementById('tokenWorksOn');
-  if (worksOn && typeof _onboardPlatform === 'function' && _onboardPlatform() === 'android') worksOn.textContent = 'Works on your phone and on desktop.';
-  document.getElementById('tokenDialog').style.display = 'flex';
-}
-
-function closeTokenDialog() {
-  document.getElementById('tokenDialog').style.display = 'none';
-}
-
-function validateToken() {
-  const val = document.getElementById('tokenInput').value.trim();
-  document.getElementById('saveTokenBtn').disabled = val.length < 10;
-}
-
-async function saveToken() {
-  // Users paste straight from devtools — tolerate a copied "Bearer " prefix
-  // and wrapping quotes rather than sending a doubled Authorization header.
-  const token = document.getElementById('tokenInput').value.trim()
-    .replace(/^["']+|["']+$/g, '')
-    .replace(/^bearer\s+/i, '')
-    .trim();
-  if (window._secureTokenStore) await window._secureTokenStore.set(token);
-  else localStorage.setItem('psycle_bearer_token', token);
-  closeTokenDialog();
-  await checkAuth();
-  if (currentUser) {
-    toast(`Connected as ${currentUser.first_name || currentUser.email}`, 'success');
-    if (typeof scheduleTokenExpiryCheck === 'function') scheduleTokenExpiryCheck();
-  } else if (getBearerToken()) {
-    // Still stored = Psycle couldn't be reached, not a rejected token (a 401
-    // clears it). It's re-checked on Retry / when the connection returns.
-    toast("Can't reach Psycle to check that token. It's been kept.", 'error');
-  } else toast('Token not recognised. Try again.', 'error');
 }
 
 function clearToken() {
@@ -2240,7 +2199,7 @@ function _filterSummaryChips(state, maps) {
   if (s.availableOnly === true) chips.push({ kind: 'available', id: '', label: 'Available only' });
 
   // Instructors, in the order they were picked (the panel's own chips). ★ Favs
-  // and S/A select a whole set in one tap, so that set reads as ONE chip while
+  // selects a whole set in one tap, so that set reads as ONE chip while
   // it still IS that set: every selected id belongs to it, and every member of
   // it that is on the instructor list is selected. One instructor is a name.
   const instrs = strs(s.instructorIds);
@@ -4057,7 +4016,7 @@ function _clashStartMin(startAt) {
 // they are at different locations with under CLASH_TRAVEL_MIN between them
 // (only when BOTH locations are known: a missing name must not invent one).
 // An overlap outranks a travel squeeze; within a kind the earliest class wins.
-// opts.includePlaces (opt-in — the headless sweep and the join dialog stay on
+// opts.includePlaces (opt-in — the usual-week run and the join dialog stay on
 // seats): a waitlist place that truly OVERLAPS is reported too, flagged
 // `place: true`. It is only a POSSIBLE seat — Psycle may turn it into a
 // chargeable one — so a real seat always outranks it, and a travel squeeze
@@ -6268,7 +6227,7 @@ function _announceVerifiedSeats(eventId, btn, entry, landed) {
 // and announce only what it shows. `conflict`: the server refused, as opposed
 // to never answering. Never throws.
 //
-// Label contract (reliability.js, theme.js and _bookEventHeadless all read
+// Label contract (reliability.js, theme.js and _bookTemplateSeat all read
 // it): ✓ + .booked ONLY when /bookings shows a seat in this class. _myBookings
 // is then the server's own snapshot and the optimistic wrapper leaves it be;
 // every other outcome carries neither, so the wrapper drops its optimistic entry.
@@ -6735,7 +6694,7 @@ window.confirmModal = confirmModal;
 
 // ── Sheets and panels: one focus stack, one key handler ──────────────────
 // Only confirmModal (above) and the first-run tour looked after the keyboard.
-// The other nine overlays are plain divs opened all over the app and closed —
+// The other eight overlays are plain divs opened all over the app and closed —
 // mostly — by an inline `.remove()`: Escape did nothing, Tab wandered into the
 // page behind, and closing one dropped focus back at the top of the document.
 // Handled HERE, once, rather than per dialog: per-dialog document listeners
@@ -6747,7 +6706,6 @@ window.confirmModal = confirmModal;
 // is what that overlay's own × does. Called by name at key time, so a later
 // module's wrapper is the one that runs.
 const _OVERLAYS = [
-  ['tokenDialog', () => closeTokenDialog()],
   ['bikeModal', () => closeBikePicker()],
   ['syncPromptOverlay', () => {
     const syncBtn = document.getElementById('syncPromptBtn');
@@ -6762,8 +6720,8 @@ const _OVERLAYS = [
 ];
 const _overlayStack = []; // { el, opener, close } in the order they opened — the last is on top
 
-// Seven are built on open and removed on close (present = showing); the token
-// dialog and the bike picker are static markup toggled by `display`.
+// Seven are built on open and removed on close (present = showing); the bike
+// picker is static markup toggled by `display`.
 function _overlayIsOpen(el) {
   return !!el && el.isConnected && el.style.display !== 'none';
 }
@@ -6853,7 +6811,7 @@ if (typeof MutationObserver === 'function' && document.body) {
   const _overlayObserver = new MutationObserver(_syncOverlayStack);
   // Every built overlay is appended to <body>: direct children are enough.
   _overlayObserver.observe(document.body, { childList: true });
-  ['tokenDialog', 'bikeModal'].forEach(id => {
+  ['bikeModal'].forEach(id => {
     const el = document.getElementById(id);
     if (el) _overlayObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
   });
@@ -7708,7 +7666,7 @@ function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {
   //             over the small line .cc-dur ("45 min") — _ccTimeHTML
   //             (pure:class-type), the ONE builder every wearer of the card calls
   //   .cc-info  .cc-head = .ct-tile pictogram + .cc-name · .cc-sub = .cc-who
-  //             (instructor + rank) and .cc-loc (the studio, plain text) ·
+  //             (the instructor) and .cc-loc (the studio, plain text) ·
   //             .cc-spots (availability) · .cc-meta (a label such as Online)
   //   .cc-action ONE pill. Its class stays exactly book-btn[ booked| waitlist]
   //             and its label plain text: the booking code rewrites both, and
@@ -8774,7 +8732,7 @@ function loadFavourites() {
   catch { return new Set(); }
 }
 
-// Small hand-entered settings (stars, rankings, bike prefs). A full
+// Small hand-entered settings (stars, bike prefs). A full
 // localStorage used to throw out of the tap that called these — nothing was
 // saved and nothing said so. Frees the app's own caches and retries first
 // (security.js); false = still not saved, and the member has been told.
@@ -9712,10 +9670,8 @@ function renderMyBookings() {
     html += `<div class="mb-past-toggle"><button type="button" class="mb-past-btn" onclick="togglePastBookings()">${_showPastBookings ? 'Hide' : 'Show'} ${past.length} past class${past.length !== 1 ? 'es' : ''}</button></div>`;
   }
 
-  // Bucket bookings by billing period
-  var currentPeriodItems = [];
+  // The bookings that fall in the NEXT billing period
   var nextPeriodItems = [];
-  var otherItems = [];
 
   let _countdownShown = 0;
   const sortedDays = Object.keys(byDay).sort();
@@ -9724,14 +9680,10 @@ function renderMyBookings() {
   const nextSeatId = nextSeat ? String(nextSeat.evtId) : null;
 
   if (periodEnd) {
-    // Split items into current vs next billing period
+    // Collect the bookings that fall in the next billing period
     for (const day of sortedDays) {
       for (const item of byDay[day]) {
-        if (inNextPeriod(item.evt)) {
-          nextPeriodItems.push(item);
-        } else {
-          currentPeriodItems.push(item);
-        }
+        if (inNextPeriod(item.evt)) nextPeriodItems.push(item);
       }
     }
   }
@@ -12039,27 +11991,6 @@ function _resolveTemplateLocationId(id) {
   return sid; // best effort
 }
 
-// ── pure:core:start ── (needs localDateStr, from the first pure:core block)
-// Date of the given weekday (0=Sun..6=Sat) within the upcoming 7 days
-// (today counts as day 0). Returns a YYYY-MM-DD string.
-// No caller since the usual-week sheet replaced the old sweep; kept because
-// tests/suites/facets-core.js pins it — delete the two together.
-function _upcomingWeekdayDate(dayOfWeek, fromDate = new Date(), timeMinutes = null) {
-  const today0 = new Date(fromDate);
-  today0.setHours(0, 0, 0, 0);
-  let diff = (Number(dayOfWeek) - today0.getDay() + 7) % 7;
-  // Same weekday as today: if the template's class time has already passed,
-  // the user means NEXT week's occurrence, not this morning's class.
-  if (diff === 0 && timeMinutes != null) {
-    const nowMin = fromDate.getHours() * 60 + fromDate.getMinutes();
-    if (timeMinutes <= nowMin) diff = 7;
-  }
-  const target = new Date(today0);
-  target.setDate(target.getDate() + diff);
-  return localDateStr(target);
-}
-// ── pure:core:end ──
-
 // A cached class → the real location id a template entry stores: through its
 // studio, else by the location's display name. null when neither resolves
 // (never the studio id — see _templateFromSeats).
@@ -12070,84 +12001,6 @@ function _templateLocationIdFor(evt) {
   const loc = name && typeof locations !== 'undefined'
     ? locations.find(l => String(l.name || '').replace('Psycle ', '').toLowerCase() === name) : null;
   return loc ? loc.id : null;
-}
-
-// Headlessly book a single resolved event the way rebookNextWeek does —
-// a detached button drives bookClass(), but we never pop the bike picker:
-// no-layout → submitBooking; layout → auto-pick usual/first available slot.
-// Returns 'booked' | 'waitlisted' | 'skipped' | 'failed'.
-async function _bookEventHeadless(eventId, studioId) {
-  const btn = document.createElement('button');
-  btn.className = 'book-btn';
-  btn.textContent = 'Book';
-
-  try {
-    const res = await apiFetch(`/events/${eventId}`);
-    if (!res.ok) return 'failed';
-    const detail = await res.json();
-    const availableSlotIds = new Set((detail.slots || []).map(Number));
-    const evtData = detail.data || {};
-    const cached = _eventCache[String(eventId)] || {};
-    const isFullyBooked = evtData.is_fully_booked ?? cached.is_fully_booked;
-    const isWaitlistable = evtData.is_waitlistable ?? cached.is_waitlistable;
-
-    // This path spends credits with no confirm, so a HARD overlap with a seat
-    // already held is skipped — before a waitlist join too (Psycle turns a
-    // place into a chargeable seat by itself). A tight change between two
-    // locations is the member's own template and stays bookable. Advisory
-    // lookup: if reading the cache throws, book exactly as before.
-    let clash = null;
-    try { clash = _clashFor(eventId, evtData); } catch (e) {}
-    if (clash && clash.kind === 'overlap') {
-      console.info('[psycle] headless book skipped:', eventId, _clashLabel(clash));
-      return 'skipped';
-    }
-
-    const studio = _studioMap[studioId];
-    let layout = studio?.layout;
-    // As bookClass: "Book my week" gets here straight after fetchDay's render()
-    // replaced the studio record with a LIST response's — has_layout, no seat
-    // map — so this path always saw a seat studio as map-less and POSTed with
-    // no slots ("Booking slot required": every such entry counted as failed).
-    // The detail just read carries the map. (typeof: the suites slice this
-    // function on its own.)
-    if (studio?.has_layout && !(layout?.slots?.length > 0) && typeof _layoutFromEventDetail === 'function') {
-      layout = _layoutFromEventDetail(detail, studioId);
-      if (layout) studio.layout = layout;
-    }
-    const hasLayout = studio?.has_layout && layout?.slots?.length > 0;
-
-    const noSeatsLeft = isFullyBooked || (hasLayout && availableSlotIds.size === 0);
-    if (noSeatsLeft) {
-      if (_myBookings[String(eventId)]?.waitlisted) return 'skipped'; // already hold a place
-      if (!isWaitlistable) return 'failed';
-      const joined = await joinWaitlist(eventId, btn, { quiet: true });
-      return joined ? 'waitlisted' : 'failed';
-    }
-
-    // A seat studio and still no map: there is no seat to name, and Psycle
-    // turns a slot-less body down. After the block above — a FULL class needs
-    // no map to join its waitlist.
-    if (!hasLayout && studio?.has_layout) return 'failed';
-
-    if (hasLayout) {
-      // Auto-pick: the user's usual slot if it's free, else the first available.
-      const usual = _usualSlotForEvent(eventId);
-      let pick = (usual != null && availableSlotIds.has(Number(usual))) ? Number(usual) : null;
-      if (pick == null) pick = [...availableSlotIds][0];
-      if (pick == null) return 'failed';
-      await submitBooking(eventId, [pick], btn);
-    } else {
-      await submitBooking(eventId, null, btn, studio && studio.has_layout === false ? { spaces: 1 } : {});
-    }
-    // The ✓ label contract plus a seat in state — never the CSS class alone
-    // (the optimistic wrapper sets .booked BEFORE the POST is answered).
-    const held = _myBookings[String(eventId)];
-    return (btn.textContent.indexOf('✓') !== -1 && held && !held.waitlisted) ? 'booked' : 'failed';
-  } catch (e) {
-    console.warn('[psycle] headless book failed:', eventId, e);
-    return 'failed';
-  }
 }
 
 // Psycle's own words for a booking it refused — what submitBooking has just

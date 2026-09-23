@@ -13,7 +13,7 @@
 //      to hold what the actor assumes about it
 //   C. copy that named the iPhone or its Live Activity: the welcome, the
 //      reminder rows (Android's countdown is a NOTIFICATION, and is called
-//      one), Settings, the token dialog, the waitlist "You're in" notice
+//      one), Settings, the waitlist "You're in" notice
 //   D. the bridge booted as 'android' (tests/suites/ios-bridge.js's harness):
 //      channels once, channelId + smallIcon + iconColor, the status-bar
 //      colour, nothing said about the iPhone app's own plugins when an Android
@@ -252,7 +252,7 @@ module.exports = async function (t) {
       console, Date: { now: () => st.now }, Number, String, Array, Object,
       document,
       KeyboardEvent: function (type, init) { this.type = type; this.key = init.key; this.bubbles = !!init.bubbles; this.cancelable = !!init.cancelable; },
-      _OVERLAYS: ['tokenDialog', 'bikeModal', 'syncPromptOverlay', 'classDetailOverlay', 'historyModalOverlay', 'instructorModalOverlay', 'yearReviewOverlay', 'settingsOverlay', 'diagOverlay'].map((id) => [id, null]),
+      _OVERLAYS: ['bikeModal', 'syncPromptOverlay', 'classDetailOverlay', 'historyModalOverlay', 'instructorModalOverlay', 'yearReviewOverlay', 'settingsOverlay', 'diagOverlay'].map((id) => [id, null]),
       _overlayIsOpen: (e) => !!e && e.isConnected && e.style.display !== 'none',
       _mbMoreState: () => (st.menu ? { btn: {} } : null),
       closeBookingMore(focusBack) { log.push('closeBookingMore(' + focusBack + ')'); st.menu = false; },
@@ -606,29 +606,13 @@ module.exports = async function (t) {
   }
 
   {
-    // Two strings that are not behind a pure block: the line under "Connect
-    // Psycle account" (static markup) and the waitlist "You're in" notice.
-    const html = t.readSource('psycle-finder.html');
-    ok(/<div id="tokenWorksOn"[^>]*>Works on iPhone and desktop\.<\/div>/.test(html) && html.indexOf('Works on your phone') === -1,
-      'psycle-finder.html keeps the line the iPhone app and the web always showed: "Works on iPhone and desktop."');
+    // One string that is not behind a pure block: the waitlist "You're in" notice.
     const cut = (opener) => {
       const lines = appSrc.split('\n');
       const from = lines.findIndex((l) => l.startsWith(opener));
       if (from === -1) throw new Error('18-android suite: cannot find "' + opener + '" (anchor moved?)');
       return lines.slice(from, lines.findIndex((l, i) => i > from && l === '}') + 1).join('\n');
     };
-    const tokenLine = (platform) => {
-      const els = { tokenInput: { value: 'x' }, saveTokenBtn: { disabled: false }, tokenDialog: { style: {} }, tokenWorksOn: { textContent: 'Works on iPhone and desktop.' } };
-      const ctx = t.vm.createContext({ document: { getElementById: (id) => els[id] || null } });
-      if (platform !== undefined) ctx._onboardPlatform = () => platform;
-      t.vm.runInContext(cut('function showTokenDialog('), ctx);
-      ctx.showTokenDialog();
-      return [els.tokenWorksOn.textContent, els.tokenDialog.style.display];
-    };
-    eq(tokenLine('android'), ['Works on your phone and on desktop.', 'flex'], 'the Android app rewords it as the dialog opens: "Works on your phone and on desktop."');
-    eq([tokenLine('ios'), tokenLine(''), tokenLine(undefined)], [['Works on iPhone and desktop.', 'flex'], ['Works on iPhone and desktop.', 'flex'], ['Works on iPhone and desktop.', 'flex']],
-      'the iPhone app, the web, and a page that cannot say: the markup\'s own words, untouched');
-
     const notice = (platform) => {
       const bodies = [];
       const ctx = t.vm.createContext({

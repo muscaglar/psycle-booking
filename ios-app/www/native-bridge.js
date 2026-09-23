@@ -240,7 +240,7 @@
     // Whose history that is (features.js): restored WITH it, or a storage
     // purge would hand the restored history to whoever is signed in next.
     'psycle_class_history_owner',
-    // Whose device data this is, and the other member's stashed rankings /
+    // Whose device data this is, and the other member's stashed
     // favourites / bike prefs (app.js, pure:data-owner). Without the stamp a
     // purge reads as a pre-stamp install ("adopt") on the next sign-in, and
     // the stash — hand-entered, not rebuildable from Psycle — is simply gone.
@@ -429,7 +429,6 @@
     return _calAckCovers(localStorage.getItem(CAL_OWNED_ACK_KEY), calId);
   }
   var PSYCLE_CAL_TITLE = 'Psycle';
-  var PSYCLE_CAL_COLOR = '#e94560';
   var PSYCLE_EVENT_MARKER = 'psycle-event-id:'; // stable owner tag in event notes for safe orphan removal
 
   function _loadCalMap() {

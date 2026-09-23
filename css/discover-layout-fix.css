@@ -65,8 +65,7 @@
 @media (min-width: 1024px) {
   #tab-discover .location-chips,
   #tab-discover #categoryPills,
-  #tab-discover .date-presets,
-  #tab-discover .instr-matches {
+  #tab-discover .date-presets {
     flex-wrap: wrap !important;
     overflow-x: visible;
   }

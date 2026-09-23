@@ -183,7 +183,6 @@ module.exports = async function (t) {
       fetchMyBookings: async () => { log.refetch++; return true; },
       _rereadBookingsForVerify: async () => true,
       loadWeeklyTemplate: () => [entry()],
-      _bookEventHeadless: async () => { throw new Error('the run never takes the book-OR-join path: a join happens only where its box was ticked'); },
     };
     log.wants = [];
     g._bookTemplateSeat = async (id, studioId, want) => {
@@ -322,6 +321,9 @@ module.exports = async function (t) {
     eq([await w.run(), w.log.posts], ['clash', []], 'a class overlapping one booked earlier in the same run is skipped');
     w = seatWorld({ data: {}, slots: [2] }, { clash: { kind: 'travel' } });
     eq(await w.run(), 'booked', 'a tight change of location is the member\'s own template — still booked');
+    w = seatWorld({ data: {}, slots: [2] });
+    w.world._clashFor = () => { throw new Error('odd cache shape'); };
+    eq([await w.run(), w.log.posts.length], ['booked', 1], 'the clash lookup is advisory: if it throws, the shown spot is booked as before');
     w = seatWorld({ data: {}, slots: [2] }, { getOk: false });
     eq([await w.run(), w.log.posts], ['failed', []], 'the class could not be read → failed, nothing posted');
   }

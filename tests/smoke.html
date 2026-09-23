@@ -214,10 +214,6 @@
 
   // ── PsycleAPI surface ──
   checkMember('PsycleAPI', 'categorizeError', 'function');
-  checkMember('PsycleAPI', 'validate', 'function');
-  checkMember('PsycleAPI', 'field', 'function');
-  checkMember('PsycleAPI', 'parseJson', 'function');
-  checkMember('PsycleAPI', 'getWaitlists', 'function');
   checkMember('PsycleAPI', 'SCHEMAS', 'object');
 
   // ── PsycleDiag surface ──
@@ -235,11 +231,6 @@
     var catNet = window.PsycleAPI && window.PsycleAPI.categorizeError(new TypeError('Failed to fetch'));
     checkEqual('categorizeError(TypeError "Failed to fetch").type === "network"', catNet && catNet.type, 'network');
   } catch (e) { line(false, 'categorizeError pure check threw: ' + (e && e.message)); }
-
-  try {
-    var vBad = window.PsycleAPI && window.PsycleAPI.validate('event', { id: 1 });
-    checkEqual('validate("event",{id:1}).ok === false', vBad && vBad.ok, false);
-  } catch (e) { line(false, 'validate pure check threw: ' + (e && e.message)); }
 
   try {
     var faceted = window.PsycleFacets && window.PsycleFacets.run(

@@ -391,7 +391,7 @@ module.exports = async function (t) {
     const evt = (start, o) => Object.assign({ id: 20, start_at: start, duration: 45, _typeName: 'Ride', _locName: 'Bank' }, o || {});
     const WITH = { includePlaces: true };
     eq([p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld() }, cacheOf()), p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld() }, cacheOf(), {})], [null, null],
-      'default unchanged: a place is ignored (the headless sweep and the join dialog stay on seats)');
+      'default unchanged: a place is ignored (the usual-week run and the join dialog stay on seats)');
     const c = p._findClash(evt('2026-09-21 07:15:00'), { 10: placeHeld() }, cacheOf(), WITH);
     eq([c && c.kind, c && c.place, c && c.eventId], ['overlap', true, '10'], 'opted in: the overlapping place is reported, flagged place:true');
     eq(p._clashLabel(c), "You're also on the waitlist for the 07:00 Ride at Oxford Circus. If Psycle books you in, you'd hold both.", 'said as a possibility ("also on the waitlist for the…"), never "Clashes with your…"');
@@ -420,8 +420,8 @@ module.exports = async function (t) {
     const sheetSrc = grab('window.openClassDetail = function (eventId) {', '};');
     ok(/_clashFor\(eventId, null, \{ includePlaces: true \}\)/.test(sheetSrc) && /clash\.kind === 'overlap' && !clash\.place \? 'cds-avail-full' : 'cds-avail-waitlist'/.test(sheetSrc),
       'the class sheet opts in, and a place gets the amber ink — never the red "full" one');
-    ok(/_clashFor\(eventId\)\)/.test(grab('async function confirmJoinWaitlist(')) && /_clashFor\(eventId, evtData\)/.test(grab('async function _bookEventHeadless(')),
-      'confirmJoinWaitlist and _bookEventHeadless stay on the default (a place must never make "Book my week" skip a class)');
+    ok(/_clashFor\(eventId\)\)/.test(grab('async function confirmJoinWaitlist(')) && /_clashFor\(eventId, evtData\)/.test(grab('async function _bookTemplateSeat(')),
+      'confirmJoinWaitlist and _bookTemplateSeat stay on the default (a place must never make the usual-week run skip a class)');
   }
 
   // ── R2-26: the shared "starts in…" phrase ─────────────────────────────────

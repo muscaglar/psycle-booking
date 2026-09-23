@@ -398,9 +398,9 @@
 
   // A dialog, sheet or panel is up. Every one of them is a modal dialog (it says
   // so with aria-modal — tests/suites/a11y.js counts them, so not spelt out here);
-  // seven are built on open and removed on close, the two that live in the page
-  // (token dialog, seat picker) are switched by an inline `display` on their
-  // wrapper — read off the style attribute, so asking costs no layout.
+  // seven are built on open and removed on close, the one that lives in the page
+  // (the seat picker) is switched by an inline `display` on its wrapper — read
+  // off the style attribute, so asking costs no layout.
   function _pillDialogUp() {
     var nodes = document.querySelectorAll('[aria-modal="true"]');
     for (var i = 0; i < nodes.length; i++) {
@@ -1697,26 +1697,6 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast('Bug report downloaded', 'success');
-  };
-
-  window.copyBugReport = function () {
-    var report = buildBugReport();
-    var status = document.getElementById('bugReportStatus');
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(report).then(function () {
-        if (status) {
-          status.style.display = '';
-          status.style.color = '#5dba5d';
-          status.textContent = 'Copied to clipboard';
-          setTimeout(function () { status.style.display = 'none'; }, 3000);
-        }
-        toast('Bug report copied to clipboard', 'success');
-      }).catch(function () {
-        _fallbackCopy(report, status);
-      });
-    } else {
-      _fallbackCopy(report, status);
-    }
   };
 
   // Returns whether the text really reached the clipboard, so a caller with

@@ -85,7 +85,7 @@ There are no `--z-*` tokens. The ladder, read off the sheets:
 | 200 | `.modal-overlay` — the picker, the class sheet's ROOT, the sync prompt |
 | 210 | `.class-detail-sheet` (the inner sheet) |
 | 250 | `.history-modal`, `.instructor-modal`, `.year-review-modal` |
-| 300 | `.settings-overlay`, `.token-dialog` |
+| 300 | `.settings-overlay` |
 | 320 | `.diag-overlay` |
 | 998 | `.usual-week-overlay` |
 | 999 | `.toast` |

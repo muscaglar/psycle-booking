@@ -107,8 +107,6 @@ NEVER a one-tap spend: `saveWeekAsTemplate` stores the real seats held over the 
 
   Afterwards "Choose again" (offered for taken / opened / stale) books nothing: it re-plans the same dates with fresh spots shown, for the member to confirm. It keeps WHAT was ticked, not where (`_uwTickOf` → `_uwKeepTick`, `pure:usual-week-sheet`): a tick survives only on a row that is still the same class, in the same state, still (not) a top-up / a cover class — and a top-up only for the same ask; anything else starts by the rule every fresh row starts by, so a seat that went while the class filled never comes back as a PRE-TICKED waitlist join, nor a class just booked at one seat as a pre-ticked "add 1 more". A kept row comes back at the member's OWN seat count (not the saved one), and their "Change spot" pick stands only for that class at that count.
 
-  (`_bookEventHeadless` — book-OR-join on an auto-picked seat — has no caller.)
-
 ### The sheet counts as a dialog
 
 - The sheet (`#usualWeekSheet`, own Escape/Tab handler) counts as a dialog in app.js's `_dialogOpen()` / `_ownKeysOverlayUp()`, so background dialogs ("Spot opened", waitlist "You're in", the offline-booking ask, the sync prompt) wait for it rather than open over — or under — a run. So do BOTH iOS asks — the first-booking class-reminder ask (a run emits `booking:complete` per seat, with the sheet still up) and the Monday-reminder offer — through the bridge's `ASK_BLOCKING_IDS`.

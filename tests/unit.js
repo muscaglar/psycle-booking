@@ -9,7 +9,7 @@
  * "resilience layer" modules in that shimmed global:
  *
  *     js/security.js   (escapeHTML)
- *     js/api-client.js (PsycleAPI: categorizeError, validate, field, parseJson, SCHEMAS)
+ *     js/api-client.js (PsycleAPI: categorizeError, SCHEMAS)
  *     js/diagnostic.js (PsycleDiag: record, checkContract, captureContract)
  *
  * plus ios-app/www/native-bridge.js, which (with no window.Capacitor) bails
@@ -399,8 +399,10 @@ async function run() {
   eq(API.categorizeError(403).type, 'auth', 'bare 403 → auth');
   eq(API.categorizeError(500).type, 'server', 'bare 500 → server');
 
-  // ── validate ────────────────────────────────────────────────────────────
-  section('PsycleAPI.validate (js/api-client.js)');
+  // ── PsycleDiag.record + checkContract ────────────────────────────────────
+  section('PsycleDiag.record + checkContract (js/diagnostic.js)');
+  ok(typeof Diag === 'object' && Diag, 'window.PsycleDiag exists');
+
   const completeEvent = {
     id: 1,
     start_at: '2026-06-14T10:00:00Z',
@@ -410,69 +412,8 @@ async function run() {
     duration: 45,
     is_fully_booked: false,
   };
-  const vOk = API.validate('event', completeEvent);
-  ok(vOk.ok === true, "validate('event', complete) → ok:true");
-  eq(vOk.missing, [], 'complete event has no missing fields');
-
   const missingStart = Object.assign({}, completeEvent);
   delete missingStart.start_at;
-  const vBad = API.validate('event', missingStart);
-  ok(vBad.ok === false, "validate('event', missing start_at) → ok:false");
-  ok(vBad.missing.indexOf('start_at') !== -1, "missing list includes 'start_at'");
-
-  // ── field ───────────────────────────────────────────────────────────────
-  section('PsycleAPI.field (js/api-client.js)');
-  const nested = { a: { b: { c: 42 } } };
-  eq(API.field(nested, 'a.b.c', 'FB'), 42, 'field returns nested value when present');
-  eq(API.field(nested, 'a.b.x', 'FB'), 'FB', 'field returns fallback when leaf absent (no throw)');
-  eq(API.field(nested, 'a.z.c', 'FB'), 'FB', 'field returns fallback when middle absent (no throw)');
-  eq(API.field(null, 'a.b', 'FB'), 'FB', 'field on null root returns fallback (no throw)');
-  eq(API.field(nested, ['a', 'b', 'c'], 'FB'), 42, 'field accepts array path');
-
-  // ── parseJson ────────────────────────────────────────────────────────────
-  section('PsycleAPI.parseJson (js/api-client.js)');
-
-  // Fake Response: HTML content-type (the corsproxy error-page case).
-  function fakeResponse(body, contentType) {
-    return {
-      headers: {
-        get(name) {
-          return String(name).toLowerCase() === 'content-type' ? contentType : null;
-        },
-      },
-      text() {
-        return Promise.resolve(body);
-      },
-    };
-  }
-
-  let htmlSchemaErr = null;
-  try {
-    await API.parseJson(fakeResponse('<html><body>Proxy error</body></html>', 'text/html; charset=utf-8'));
-  } catch (e) {
-    htmlSchemaErr = e;
-  }
-  ok(htmlSchemaErr !== null, 'parseJson rejects an HTML-content-type response');
-  ok(htmlSchemaErr && htmlSchemaErr.psycleError && htmlSchemaErr.psycleError.type === 'schema',
-    "HTML response → categorized 'schema' error");
-
-  // Sanity: valid JSON still parses.
-  const parsed = await API.parseJson(fakeResponse('{"hello":"world"}', 'application/json'));
-  eq(parsed, { hello: 'world' }, 'parseJson parses valid JSON');
-
-  // HTML body even WITHOUT a content-type is still rejected as schema.
-  let htmlNoCt = null;
-  try {
-    await API.parseJson(fakeResponse('<!DOCTYPE html><html></html>', ''));
-  } catch (e) {
-    htmlNoCt = e;
-  }
-  ok(htmlNoCt && htmlNoCt.psycleError && htmlNoCt.psycleError.type === 'schema',
-    'HTML body without content-type → schema error');
-
-  // ── PsycleDiag.record + checkContract ────────────────────────────────────
-  section('PsycleDiag.record + checkContract (js/diagnostic.js)');
-  ok(typeof Diag === 'object' && Diag, 'window.PsycleDiag exists');
 
   // Start from a clean slate so prior records don't leak between assertions.
   fakeLocalStorage.clear();

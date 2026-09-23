@@ -397,7 +397,6 @@ header span { color: var(--text-faint); }
    Deliberately NOT on small UI labels (tab buttons, etc.) — display
    faces belong at headline sizes, body face everywhere else. */
 .stat-value, .cost-value, .explore-map-stat-value { font-family: var(--font-display); }
-.class-time { font-family: var(--font-display); }
 .modal-title, .instructor-name-title { font-family: var(--font-display); }
 .reco-class, .discover-empty-title { font-family: var(--font-display); }
 /* The 12px uppercase section eyebrows (.insights-title, .cost-title, …) are
@@ -407,13 +406,13 @@ header span { color: var(--text-faint); }
    numerals carry real weight — 800 here, 900 (--weight-black) where a
    Crisp component makes the time or a numeral the hero. */
 header h1, .stat-value, .cost-value, .explore-map-stat-value,
-.class-time, .modal-title, .instructor-name-title, .reco-class,
+.modal-title, .instructor-name-title, .reco-class,
 .discover-empty-title {
   font-weight: var(--weight-extrabold);
 }
-/* Times and counts line up in a column: tabular figures wherever the display
+/* Counts line up in a column: tabular figures wherever the display
    face sets a numeral. */
-.stat-value, .cost-value, .explore-map-stat-value, .class-time {
+.stat-value, .cost-value, .explore-map-stat-value {
   font-variant-numeric: tabular-nums;
 }
 
@@ -482,8 +481,6 @@ select:focus, input:focus { border-color: var(--accent); }
   border-left-color: var(--booked-border);
 }
 
-.class-time { color: var(--text-heading); }
-.class-type { color: var(--text); }
 .class-instructor { color: var(--text-muted); }
 .class-location { color: var(--text-faint); }
 
@@ -529,12 +526,6 @@ select:focus, input:focus { border-color: var(--accent); }
 .bike-legend { color: var(--text-faint); }
 
 /* Inputs */
-.days-control input[type="number"] {
-  background: var(--bg-input);
-  border-color: var(--border-light);
-  color: var(--text);
-}
-
 .instr-box {
   background: var(--bg-input);
   border-color: var(--border-light);
@@ -578,25 +569,7 @@ select:focus, input:focus { border-color: var(--accent); }
 }
 
 /* Auth */
-.auth-pill .user-name { color: var(--text-muted); }
-.auth-pill .user-name strong { color: var(--text); }
 .auth-pill a { color: var(--accent); }
-
-/* Token dialog */
-.token-dialog { background: var(--modal-overlay); }
-.token-input {
-  background: var(--bg-input);
-  border-color: var(--border-light);
-  color: var(--text);
-}
-.token-input:focus { border-color: var(--accent); }
-.token-cmd {
-  background: var(--bg-deep);
-  border-color: var(--border-subtle);
-}
-.token-cmd:hover { border-color: var(--text-off); }
-.token-step { color: var(--text-muted); }
-.token-step-num { background: var(--accent); }
 
 /* Booking buttons */
 .book-btn { background: var(--accent); }
@@ -628,7 +601,6 @@ select:focus, input:focus { border-color: var(--accent); }
   border-color: var(--border);
   color: var(--text-muted);
 }
-.up-cancel { border-color: var(--border); color: var(--text-dim); }
 
 /* Stats cards */
 .stat-card, .cost-card, .reco-card {
@@ -687,15 +659,6 @@ select:focus, input:focus { border-color: var(--accent); }
   color: var(--text-muted);
 }
 
-/* My Bookings day headers */
-.mb-day-header {
-  color: var(--accent);
-  border-bottom-color: var(--border);
-}
-
-/* Rebook button */
-.rebook-btn { border-color: var(--border); }
-
 /* Calendar action buttons */
 .cal-btn {
   border-color: var(--border);
@@ -711,11 +674,6 @@ select:focus, input:focus { border-color: var(--accent); }
 /* Skeleton in light mode */
 :is([data-theme="light"], [data-theme="cloud"]) .mb-skeleton {
   background: var(--skeleton-base);
-}
-
-/* Type section headers */
-.type-section-header {
-  border-bottom-color: var(--section-border);
 }
 
 #strengthSubPills {
@@ -821,18 +779,6 @@ select:focus, input:focus { border-color: var(--accent); }
 .sk-type  { width: 62%; height: 16px; }
 .sk-instr { width: 44%; height: 13px; }
 .sk-loc   { width: 52%; height: 12px; }
-
-.skeleton-meta {
-  display: flex;
-  gap: var(--space-3);
-  margin-top: var(--space-1);
-}
-
-.sk-badge {
-  width: 48px;
-  height: 16px;
-  border-radius: var(--radius-sm);
-}
 
 .sk-button {
   width: 100%;
@@ -974,15 +920,6 @@ select:focus, input:focus { border-color: var(--accent); }
 
 /* ── features.css: History Modal ─────────────────────────────────── */
 
-.history-btn {
-  border-color: var(--border-light);
-  color: var(--text-muted);
-}
-.history-btn:hover {
-  background: var(--bg-input);
-  color: var(--text-heading);
-}
-
 :is([data-theme="light"], [data-theme="cloud"]) .history-modal {
   background: var(--modal-overlay);
 }
@@ -1100,8 +1037,6 @@ select:focus, input:focus { border-color: var(--accent); }
 /* ── styles.css: Misc light mode fixes ───────────────────────────── */
 
 .controls-toggle { color: var(--text-dim); }
-.header-subtitle { color: var(--text-dim); }
-.disconnect-link { color: var(--text-ghost); }
 
 /* Ink is Cloud's --badge-full-text, which sits on this same pink: 5.1:1 for
    the small bold "CANCEL BOOKING" label (the old #c73650 was 4.4:1). */
@@ -1147,11 +1082,6 @@ select:focus, input:focus { border-color: var(--accent); }
 :is([data-theme="light"], [data-theme="cloud"]) .bike-slot.taken.pref-prefer text { fill: #8ac08a !important; }
 :is([data-theme="light"], [data-theme="cloud"]) .bike-slot.taken.pref-avoid text { fill: #e0a0a0 !important; }
 
-/* ── styles.css: Subscription bar extras ─────────────────────────── */
-
-:is([data-theme="light"], [data-theme="cloud"]) .sub-bar-name { color: var(--accent); }
-:is([data-theme="light"], [data-theme="cloud"]) .sub-bar-count { color: var(--text-muted); }
-
 /* ── styles.css: Instructor dropdown shadow fix ──────────────────── */
 
 :is([data-theme="light"], [data-theme="cloud"]) .instr-dropdown {
@@ -1165,7 +1095,6 @@ select:focus, input:focus { border-color: var(--accent); }
 /* ── styles.css: Upcoming panel extras ───────────────────────────── */
 
 :is([data-theme="light"], [data-theme="cloud"]) .upcoming-header h2 { color: var(--text-muted); }
-:is([data-theme="light"], [data-theme="cloud"]) .up-cancel:hover { background: #f5f5f5; }
 
 /* ── tabs.css: Membership status ─────────────────────────────────── */
 

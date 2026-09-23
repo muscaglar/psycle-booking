@@ -25,7 +25,7 @@
     }
   }
   set('psycle_saved_filters', { instructorIds: [], locationIds: [], categories: [], strengthSubs: [], reformerSubs: [], timeBands: [], availableOnly: false, dateQuickMode: 'week' }); // its existence ends the first-run favourites pre-selection
-  set('psycle_class_history', hist); set('psycle_instructor_tiers', { 101: 'S', 102: 'A', 104: 'A', 103: 'B' }); set('psycle_fav_instructors', [101, 104]);
+  set('psycle_class_history', hist); set('psycle_fav_instructors', [101, 104]);
 
   (0, eval)(await fetch('/tests/tools/fake-psycle.js', { cache: 'reload' }).then((r) => r.text()));
   const H = window.__H;

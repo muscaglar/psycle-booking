@@ -45,12 +45,12 @@ What keeps it low, most effective first:
 2. **GitHub skips what a push cannot have changed** (`changes` in ci.yml, tests/suites/25-ci-cost.js): no macOS
    compile for a push with no native iOS input in it (23 of those 52 pushes), no Android build for one that changes
    neither the Android project nor the web app (12 of 52). A push to a branch with a pull request runs once, not twice.
-3. **Optional, the owner's, in Xcode** (Report navigator → Cloud → the workflow → Edit Workflow → Start
-   Conditions → Branch Changes → Files and Folders): start a build only when something under `ios-app/` changes.
-   It saves the archive for a push of documents or tests alone (5 of those 52), and nothing else — nearly every
-   change to the app changes `ios-app/www/`. Label names move between Xcode versions.
-4. **Deliberate uploads only**: replace Branch Changes with a Tag condition (`ios-v*`), below. Nothing is built
+3. **Deliberate uploads only**: replace Branch Changes with a Tag condition (`ios-v*`), below. Nothing is built
    until a tag is pushed.
+
+Considered and declined by the owner (2026-09-23, "seems pointless"): an Xcode Cloud "Files and Folders" start
+condition that builds only when `ios-app/` changes. Nearly every change to the app changes `ios-app/www/`, so it
+would have saved 5 of those 52 archives. Do not propose it again.
 
 ## One-time Xcode Cloud setup (in Xcode, ~10 minutes)
 

@@ -3,8 +3,8 @@
 //   • PsycleFacets.run (js/facets.js, loaded as-is) — the filter match and the
 //     live counts on every instructor / studio / category control,
 //   • js/app.js's pure:core blocks — class type → category and seat noun, the
-//     /bookings seat parser, the local-day helpers behind "book my week", and
-//     the recent-search signature.
+//     /bookings seat parser, the local-day helpers (localDateStr,
+//     parsePsycleDate), and the recent-search signature.
 // The two meet in _buildFacetClasses (cat = getCategory(type).key), so a wrong
 // category is a wrong pill count AND a class hidden behind a filter.
 // The runner is pinned to America/New_York: dates are built with the local
@@ -166,21 +166,6 @@ module.exports = function (t) {
   eq([core.parsePsycleDate(''), core.parsePsycleDate(null), core.parsePsycleDate(undefined)], [null, null, null], 'nothing to parse → null');
   // V8 parses the space form anyway; iOS WebKit answers Invalid Date, so the swap itself is what matters.
   ok(/function parsePsycleDate\(v\) \{\s*return v \? new Date\(String\(v\)\.replace\(' ', 'T'\)\) : null;/.test(appSrc), '…and the space is swapped for a T before parsing (iOS WebKit rejects the space form)');
-
-  const fri = (h, m) => new Date(2026, 8, 18, h, m);
-  eq([5, 6, 0, 1, 4].map((d) => core._upcomingWeekdayDate(d, fri(9, 0))), ['2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-24'],
-    '_upcomingWeekdayDate: today counts as day 0, then the next six days');
-  eq(core._upcomingWeekdayDate('0', fri(9, 0)), '2026-09-20', 'a weekday stored as a string works');
-  eq(core._upcomingWeekdayDate(5, fri(6, 0), 7 * 60 + 30), '2026-09-18', "today's 07:30 class, asked at 06:00 → today");
-  eq(core._upcomingWeekdayDate(5, fri(9, 0), 7 * 60 + 30), '2026-09-25', "today's 07:30 class, asked at 09:00 → it has gone: NEXT Friday, not this morning's class");
-  eq(core._upcomingWeekdayDate(5, fri(7, 30), 7 * 60 + 30), '2026-09-25', 'asked on the minute it starts → next week');
-  eq(core._upcomingWeekdayDate(4, fri(9, 0), 7 * 60 + 30), '2026-09-24', 'the class time only matters for today\'s weekday');
-  eq(core._upcomingWeekdayDate(5, late), '2026-09-18', 'late evening: still the device\'s Friday, not UTC\'s Saturday');
-  eq([core._upcomingWeekdayDate(5, new Date(2026, 8, 28, 12, 0)), core._upcomingWeekdayDate(1, new Date(2026, 9, 31, 12, 0))], ['2026-10-02', '2026-11-02'],
-    'across a month end, and across the night the clocks go back (a 25-hour day)');
-  const asked = fri(9, 0);
-  core._upcomingWeekdayDate(1, asked);
-  eq(asked.getTime(), fri(9, 0).getTime(), 'the date passed in is not moved');
 
   t.section('_searchSignature (js/app.js pure:core): recent searches dedupe whatever order they were built in');
   const sig = core._searchSignature;

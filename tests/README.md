@@ -66,14 +66,6 @@ with no `window.Capacitor` it bails at once, but first exports its pure London r
 - **`PsycleAPI.categorizeError`** maps `{status:401}` → `auth`, `{status:429}` →
   `rate-limit`, `{status:503}` → `server`, `TypeError('Failed to fetch')` →
   `network`, an `AbortError` → `timeout`; each returns a non-empty `userMessage`.
-- **`PsycleAPI.validate('event', …)`** returns `ok:true` for a complete event and
-  `ok:false` with `start_at` listed in `missing` when that field is absent.
-- **`PsycleAPI.field(obj, 'a.b.c', fallback)`** returns the nested value when
-  present and the fallback (without throwing) when any segment is absent; also
-  accepts an array path.
-- **`PsycleAPI.parseJson`** rejects an HTML-content-type response (the corsproxy
-  error-page case) — and an HTML body with no content-type — as a `schema` error,
-  while still parsing valid JSON.
 - **`PsycleDiag.record` + `checkContract`** — after recording a complete `event`
   shape, `checkContract` reports no missing-required drift; after recording one
   missing the required `start_at`, the drift surfaces in `missingRequired`.
@@ -187,7 +179,7 @@ python3 -m http.server 8080 --bind 127.0.0.1
 - **Dozens of checks**: the search / booking / render pipeline, the filter core (`PsycleFacets`), the waitlist
   functions, the Discover Time-row handlers, the weekly template, recent searches and insights, diagnostics, the
   `PsycleAPI` / `PsycleDiag` method surfaces, `PsycleState` / `PsycleEvents`, and a few pure checks (`escapeHTML`,
-  `categorizeError`, `validate`, `PsycleFacets.run`).
+  `categorizeError`, `PsycleFacets.run`).
 
 The result is written as a big **PASS / FAIL** banner in the page and as the
 `document.title` (`SMOKE: PASS` or `SMOKE: FAIL`), so it can be read by a human

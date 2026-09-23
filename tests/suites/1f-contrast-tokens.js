@@ -254,7 +254,6 @@ module.exports = function (t) {
     ['.cds-detail-row', 'color', '--text'],
     ['.cds-avail', 'color', '--badge-highlight-text'],
     ['.cds-avail-full', 'color', '--badge-full-text'],
-    ['.cds-duration-badge', 'background', '--accent-soft'],
     ['.bc-detail', 'color', '--text-muted'],
     ['.bc-btn-secondary', 'background', '--bg-input'],
     ['.modal-subtitle-line:first-child', 'color', '--text-muted'],
@@ -290,9 +289,9 @@ module.exports = function (t) {
     const r = contrast(tk[ink], tk['--badge-waitlist-bg']);
     t.ok(r >= 4.5, id + ': warning banner copy ' + ink + ' ' + tk[ink] + ' on --badge-waitlist-bg is ' + r.toFixed(2) + ':1 (≥4.5)');
   });
-  // Accent-on-accent-soft chips: 10–12px bold labels (countdown, class
-  // duration, booked seat). Held to AA on the premium themes, like the inks.
-  ['.mb-countdown', '.cds-duration-badge', '.bc-slot'].forEach((chip) => {
+  // Accent-on-accent-soft chips: 10–12px bold labels (countdown, booked
+  // seat). Held to AA on the premium themes, like the inks.
+  ['.mb-countdown', '.bc-slot'].forEach((chip) => {
     t.ok((decl(chip, 'color') || '').indexOf('var(--accent,') === 0 && (decl(chip, 'background') || '').indexOf('var(--accent-soft') === 0,
       chip + ' is an --accent on --accent-soft chip at source');
     ['cloud', 'graphite'].forEach((id) => {

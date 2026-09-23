@@ -5,7 +5,7 @@ Read this before you change anything that books, cancels or spends credits. Skip
 1. *Wait for bookings.* With no `currentUser`, or `_bookingsLoadState !== 'loaded'`, every card reads "Book" —
    held classes included. The tap stays on '…' while the session is re-checked and a `/bookings` snapshot is really
    applied (`_rereadBookingsForVerify`). A class that turns out to be held is shown as held, never re-booked. Signed
-   out → a "Sign in to book" confirm (never the developer token dialog).
+   out → a "Sign in to book" confirm.
 2. *Latest tap wins.* The busy flag is per button; `bookClass._seq` + `overtaken()` is asked after every await on
    the way to a picker or confirm. An overtaken tap hands its button back (`putBack`) and fails silently. A picker
    someone else opened is never replaced.
@@ -56,11 +56,11 @@ with no duration counts as 45 minutes. An overlap outranks a travel squeeze. Adv
 the confirm's `warn` text or the picker and never blocks. With `{includePlaces:true}` an overlapping waitlist
 PLACE is reported as `place:true` (a real seat always outranks it): the class sheet and `bookClass`'s booking
 confirms + picker opt in (`bookClashLine`); joining a waitlist and the usual-week plan and run (`planWeeklyTemplate`,
-`_bookTemplateSeat` — and the caller-less `_bookEventHeadless`) stay seats-only — a place must never make the
+`_bookTemplateSeat`) stay seats-only — a place must never make the
 usual-week run skip a class. (`templateSpotsFor`'s clash LINE, shown in the choose-only picker, does include
 places: it is a sentence, and skips nothing.)
 
-**No-layout studios**: 8 of Psycle's 19 studios have `has_layout:false`. Psycle's own client books those with `slots: <count>` (a number, not an array) and the server rejects a slot-less body ("Booking slot required"), so `bookClass` (after an explicit "Book this class?" / "Book another space?" confirm — there is no picker step) and `_bookEventHeadless` pass `{spaces: 1}` to `submitBooking` ONLY when `_studioMap[studioId].has_layout === false` is positively known (an unknown studio never gets a guessed count — and since September 2026 never gets a confirm either). `/bookings` returns one slot-less record per space: `fetchMyBookings` keeps every id in `bookingIds`, the card shows "N spaces", and `_bookingIdsFor` cancels them all. The offline queue carries `spaces` for replay but a COUNT body is never auto-retried (a re-send after a lost response would book another space) — replay re-reads `/bookings` to decide. The usual-week sheet books them the same way since wave 13 (`_bookTemplateSeat`, `{spaces: n}` for the count the row showed — still for `has_layout === false` ONLY, never a guessed count, never retried). Not yet exercised live — watch the error log for `POST /bookings` on a first no-layout booking.
+**No-layout studios**: 8 of Psycle's 19 studios have `has_layout:false`. Psycle's own client books those with `slots: <count>` (a number, not an array) and the server rejects a slot-less body ("Booking slot required"), so `bookClass` (after an explicit "Book this class?" / "Book another space?" confirm — there is no picker step) passes `{spaces: 1}` to `submitBooking` ONLY when `_studioMap[studioId].has_layout === false` is positively known (an unknown studio never gets a guessed count — and since September 2026 never gets a confirm either). `/bookings` returns one slot-less record per space: `fetchMyBookings` keeps every id in `bookingIds`, the card shows "N spaces", and `_bookingIdsFor` cancels them all. The offline queue carries `spaces` for replay but a COUNT body is never auto-retried (a re-send after a lost response would book another space) — replay re-reads `/bookings` to decide. The usual-week sheet books them the same way since wave 13 (`_bookTemplateSeat`, `{spaces: n}` for the count the row showed — still for `has_layout === false` ONLY, never a guessed count, never retried). Not yet exercised live — watch the error log for `POST /bookings` on a first no-layout booking.
 
 **Which control cancels what** (each whole-cancel dialog is titled only "Cancel this booking?" and does not say how many seats go):
 

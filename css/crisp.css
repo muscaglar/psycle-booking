@@ -832,8 +832,7 @@ header .theme-toggle:focus-visible { outline: var(--focus-ring); outline-offset:
 
 /* The panel's pill rows. */
 #tab-discover .location-chips,
-#tab-discover #categoryPills,
-#tab-discover .instr-matches { gap: var(--space-2); padding: calc(var(--space-1) / 2); }
+#tab-discover #categoryPills { gap: var(--space-2); padding: calc(var(--space-1) / 2); }
 .loc-chip,
 .cat-pill,
 .sub-pill {
@@ -3852,7 +3851,7 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 .cc-swatch:focus-visible { outline: var(--focus-ring); outline-offset: calc(var(--focus-offset) * -1); }
 .cc-reset { justify-self: start; }
 
-/* Settings rows, sign out, rankings. */
+/* Settings rows, sign out, favourite instructors. */
 .ms-row { min-height: var(--tap-lg); border-bottom: var(--hairline) solid var(--line); }
 .ms-row-sub { font-size: var(--type-caption); color: var(--text-muted); }
 .ms-row-chev { color: var(--text-ghost); }
@@ -3873,9 +3872,7 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 #tab-membership .favs-group-label { font-size: var(--type-caption); letter-spacing: 0; text-transform: none; color: var(--text-ghost); }
 #tab-membership .favs-list { gap: 0; }
 #tab-membership .favs-list-short { max-height: calc(var(--space-12) * 7); padding: 0; border: 0; border-radius: 0; background: none; }
-/* Two lines on a phone: the name gets the width it needs (it was cut to a
-   first name and an ellipsis beside six buttons), the six ranks a full row of
-   fingertip-sized tiles under it. One line again where there is room. */
+/* The name gets the width it needs; the star wraps under it on a narrow phone. */
 #tab-membership .favs-row { flex-wrap: wrap; row-gap: var(--space-2); padding: var(--space-4) 0; border-bottom: var(--hairline) solid var(--line); }
 #tab-membership .favs-row:last-child { border-bottom: 0; }
 #tab-membership .favs-name { flex: 1 1 calc(100% - var(--tap-min) - var(--space-4)); font-size: var(--type-body); font-weight: var(--weight-semibold); }

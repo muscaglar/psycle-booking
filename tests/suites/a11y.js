@@ -1,7 +1,7 @@
 'use strict';
 // Accessibility outside the Discover list: the toast / live-region helpers,
 // what a picker seat tells a screen reader, and the ONE key handler + focus
-// stack that look after the nine sheets and panels — run as the REAL code
+// stack that look after the eight sheets and panels — run as the REAL code
 // (sliced out of js/app.js) against a small fake DOM. Plus source contracts
 // for the static attributes the handling depends on.
 module.exports = async function (t) {
@@ -292,16 +292,14 @@ module.exports = async function (t) {
         querySelector: (sel) => { if (sel !== '.onboard-overlay') throw new Error('fake DOM: ' + sel); return doc.tourUp ? {} : null; },
         addEventListener: (type, fn) => { doc.listeners.push(type); if (type === 'keydown') doc.keydown = fn; if (type === 'keyup') doc.keyup = fn; },
       },
-      closeTokenDialog: () => { log.closers.push('token'); els.tokenDialog.style.display = 'none'; },
       closeBikePicker: () => { log.closers.push('bike'); els.bikeModal.style.display = 'none'; },
       _dismissSyncPrompt: () => { log.closers.push('sync'); els.syncPromptOverlay.remove(); },
     });
     ctx.window = ctx;
     ctx.closeSettings = () => { log.closers.push('settings'); els.settingsOverlay.remove(); };
     ctx.closeDiagnostics = () => { log.closers.push('diag'); els.diagOverlay.remove(); };
-    // The two static dialogs exist (hidden) before the block runs, as in the page.
+    // The one static dialog exists (hidden) before the block runs, as in the page.
     const seat = (cls) => node({ kind: 'seat', classes: ['bike-slot', cls] });
-    mount(overlay('tokenDialog', ['close', 'input', 'connect'])).style.display = 'none';
     mount(overlay('bikeModal', ['close', 'cancel', 'confirm'])).style.display = 'none';
     t.vm.runInContext(ovSrc, ctx, { filename: 'js/app.js[overlays]' });
     const key = (k, o) => {
@@ -328,8 +326,8 @@ module.exports = async function (t) {
   {
     const w = world();
     eq(w.doc.listeners, ['keydown', 'keyup'], 'ONE keydown listener on document (plus the keyup half of Space) — not one per dialog');
-    eq(w.doc.observed, [['body', { childList: true }], ['tokenDialog', { attributes: true, attributeFilter: ['style'] }], ['bikeModal', { attributes: true, attributeFilter: ['style'] }]],
-      'the observer watches <body> children plus the style of the two static dialogs — nothing deeper');
+    eq(w.doc.observed, [['body', { childList: true }], ['bikeModal', { attributes: true, attributeFilter: ['style'] }]],
+      'the observer watches <body> children plus the style of the one static dialog — nothing deeper');
   }
 
   // Escape closes only the top-most overlay, through its own closer.
@@ -516,10 +514,9 @@ module.exports = async function (t) {
   // Tab stays inside the top overlay.
   {
     const w = world();
-    const tok = w.els.tokenDialog;
-    tok.style.display = 'flex';
+    const tok = w.mount(w.overlay('settingsOverlay', ['close', 'input', 'connect']));
     w.tick();
-    ok(w.doc.activeElement === tok.panel, 'the token dialog opens on its panel, not its input (no iOS keyboard pops)');
+    ok(w.doc.activeElement === tok.panel, 'an overlay with an input opens on its panel, not its input (no iOS keyboard pops)');
     let e = w.key('Tab', { shiftKey: true });
     ok(e.defaultPrevented && w.doc.activeElement === tok.ctl.connect, 'Shift+Tab from the panel wraps to the last control instead of walking out backwards');
     e = w.key('Tab');
@@ -533,7 +530,7 @@ module.exports = async function (t) {
     e = w.key('Tab');
     ok(e.defaultPrevented && w.doc.activeElement === tok.ctl.close, 'focus that got outside is pulled back in');
     w.key('Escape');
-    eq(w.log.closers, ['token'], 'Escape closes it via closeTokenDialog');
+    eq(w.log.closers, ['settings'], 'Escape closes it via its own closer');
     e = w.key('Tab');
     ok(!e.defaultPrevented, 'no overlay: Tab is untouched');
   }
@@ -571,12 +568,12 @@ module.exports = async function (t) {
       pw.ctx.showHistorySyncPrompt();
       eq([pw.appended, pw.timers.length, pw.timers[0] && pw.timers[0][1]], [[], 1, 3000], '#' + id + ' is open: nothing is mounted under it — it comes back in 3s');
     });
-    let pw = promptWorld({ tokenDialog: 'flex', bikeModal: 'none' });
+    let pw = promptWorld({ bikeModal: 'flex' });
     pw.ctx.showHistorySyncPrompt();
-    eq(pw.appended, [], 'the token dialog (static markup, shown by display) counts as open too');
-    pw = promptWorld({ tokenDialog: 'none', bikeModal: 'none' });
+    eq(pw.appended, [], 'the seat picker (static markup, shown by display) counts as open too');
+    pw = promptWorld({ bikeModal: 'none' });
     pw.ctx.showHistorySyncPrompt();
-    eq([pw.appended, pw.timers.length], [['syncPromptOverlay'], 0], 'the two static dialogs sitting hidden in the page hold nothing up: the prompt mounts');
+    eq([pw.appended, pw.timers.length], [['syncPromptOverlay'], 0], 'the static dialog sitting hidden in the page holds nothing up: the prompt mounts');
     pw.ctx.showHistorySyncPrompt();
     eq(pw.appended.length, 1, '…once (the prompt itself is in the registry, and is never its own reason to wait)');
     // The panel closes, the deferred call runs: now it shows.
@@ -680,11 +677,11 @@ module.exports = async function (t) {
     });
     dialogs += (src.match(/role="dialog" aria-modal="true"/g) || []).length;
   });
-  // The nine sheets / panels + confirmModal + the first-run tour + the "Your
+  // The eight sheets / panels + confirmModal + the first-run tour + the "Your
   // usual week" sheet (tabs.js; it keeps its own Escape handler and focus trap,
   // so it is not in the key handler's list below).
-  eq(dialogs, 12, 'every sheet and panel says it is a modal dialog');
-  ['tokenDialog', 'bikeModal', 'syncPromptOverlay', 'classDetailOverlay', 'historyModalOverlay', 'instructorModalOverlay',
+  eq(dialogs, 11, 'every sheet and panel says it is a modal dialog');
+  ['bikeModal', 'syncPromptOverlay', 'classDetailOverlay', 'historyModalOverlay', 'instructorModalOverlay',
     'yearReviewOverlay', 'settingsOverlay', 'diagOverlay'].forEach((id) => {
     ok(ovSrc.indexOf("['" + id + "'") !== -1, 'the key handler knows #' + id);
   });

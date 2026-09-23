@@ -1,7 +1,7 @@
 'use strict';
 // API-drift diagnostics are actually wired (js/api-client.js, js/diagnostic.js,
-// js/app.js): api-client called a PsycleDiag.noteSample that never existed, and
-// app.js only ever recorded the waitlist resources — so the safe-mode banner
+// js/app.js): response shapes reach the schema log from js/app.js _recordShape,
+// which once recorded only the waitlist resources — so the safe-mode banner
 // could not fire for bookings, events or the profile, and bug reports carried
 // no shape data for them. The modules run here in a vm like tests/unit.js.
 module.exports = async function (t) {
@@ -38,19 +38,16 @@ module.exports = async function (t) {
   // ── Every PsycleDiag member the callers name exists ──────────────────────
   t.section('Diagnostics wiring: every PsycleDiag.<name> a caller uses is exported by js/diagnostic.js');
   let sb = makeSandbox();
-  for (const [file, source] of [['js/api-client.js', apiSrc], ['js/app.js', appSrc], ['js/settings.js', t.readSource('js/settings.js')]]) {
+  for (const [file, source] of [['js/app.js', appSrc], ['js/settings.js', t.readSource('js/settings.js')]]) {
     const names = Array.from(new Set((stripComments(source).match(/PsycleDiag\.([A-Za-z_]\w*)/g) || []).map((m) => m.split('.')[1])));
     t.ok(names.length > 0, file + ' references PsycleDiag (' + names.join(', ') + ')');
     names.forEach((name) => t.ok(typeof sb.PsycleDiag[name] === 'function', file + ': PsycleDiag.' + name + ' is a function on the real module'));
   }
   t.ok(!/noteSample\s*\(/.test(stripComments(apiSrc)), 'api-client.js no longer calls the noteSample that never existed');
 
-  // ── The typed getters reach the schema log again ─────────────────────────
-  t.section('Diagnostics wiring: a PsycleAPI getter records the response shape (field names only)');
-  const textRes = (body) => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify(body) });
-  sb.apiFetch = async () => textRes({ data: [{ id: 9001, event_id: 212203, slot: 7, customer_email: 'ada@example.com' }] });
-  const rows = await sb.PsycleAPI.getBookings('limit=200');
-  t.eq(rows.length, 1, 'getBookings still resolves to the unwrapped rows');
+  // ── A recorded sample keeps names, never values ──────────────────────────
+  t.section('Diagnostics wiring: a recorded sample stores field names only');
+  sb.PsycleDiag.record('booking', { id: 9001, event_id: 212203, slot: 7, customer_email: 'ada@example.com' });
   let shapes = sb.PsycleDiag.getDiagnostics().liveShapes;
   t.eq(shapes.booking && shapes.booking.fields, ['customer_email', 'event_id', 'id', 'slot'], 'the booking shape is in the schema log');
   t.ok(sb.localStorage.getItem('psycle_api_schema_log').indexOf('ada@example.com') === -1 && sb.localStorage.getItem('psycle_api_schema_log').indexOf('212203') === -1,
@@ -106,7 +103,6 @@ module.exports = async function (t) {
   t.ok(d.contract && ['profile', 'booking', 'event'].every((k) => d.contract.shapes[k]), 'the first healthy bookings:loaded captures all three kinds as the contract');
   t.eq(sb.PsycleAPI.SCHEMAS.profile.required, ['id'], 'SCHEMAS.profile: only id is required');
   t.ok(['subscriptions', 'stats'].every((f) => sb.PsycleAPI.SCHEMAS.profile.optional.indexOf(f) !== -1), 'SCHEMAS.profile: subscriptions and stats are tracked as optional (app.js reads both with fallbacks)');
-  t.eq(sb.PsycleAPI.validate('profile', creditPackProfile), { ok: true, missing: [] }, 'validate: that profile is complete');
   // Control — the same path DOES raise it when a field the app cannot do without goes.
   sb = makeSandbox();
   const broken = Object.assign({}, liveBooking); delete broken.event_id;

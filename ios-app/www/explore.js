@@ -490,7 +490,7 @@
 
     if (data.noRefs) {
       setHtml(container, '<div class="explore-title">You might like</div>' +
-        '<div class="explore-empty">Star or rank a few instructors on the Membership tab to get suggestions.</div>');
+        '<div class="explore-empty">Star a few instructors on the Membership tab to get suggestions.</div>');
       container.style.display = '';
       return;
     }

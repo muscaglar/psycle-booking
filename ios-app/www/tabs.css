@@ -148,10 +148,6 @@
    Weekly Calendar View
    ═══════════════════════════════════════════════════════════════════ */
 
-.week-view {
-  padding: var(--space-5) var(--space-9) var(--space-7);
-}
-
 .week-header {
   display: flex;
   align-items: center;
@@ -554,30 +550,6 @@
 
 /* ── Class Type Distribution ─────────────────────────────────────── */
 
-.class-type-bars { display: flex; flex-direction: column; gap: var(--space-3); }
-
-.ct-row {
-  display: flex; align-items: center; gap: var(--space-3);
-}
-.ct-label {
-  font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text, #f0f0f0);
-  min-width: 70px; text-align: right;
-}
-.ct-bar-wrap {
-  flex: 1; height: var(--space-8); background: var(--bg-deep, #0d0d0d);
-  border-radius: var(--radius-sm); overflow: hidden;
-}
-.ct-bar {
-  height: 100%; border-radius: var(--radius-sm); min-width: var(--space-1);
-  transition: width 0.4s ease-out;
-}
-.ct-count {
-  font-size: var(--text-base); font-weight: var(--weight-bold); color: var(--text-heading, #fff);
-  min-width: 28px; text-align: right;
-}
-.ct-pct {
-  font-size: var(--text-sm); color: var(--text-ghost, #555); min-width: var(--space-10);
-}
 .ct-gaps {
   margin-top: var(--space-4); font-size: var(--text-base); color: var(--text-ghost, #555);
   font-style: italic;
@@ -777,26 +749,6 @@
 
 .streak-section { padding: 0 var(--space-9) var(--space-7); }
 
-.streak-title {
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim, #888);
-  margin-bottom: var(--space-5);
-}
-
-.streak-cards {
-  display: flex;
-  gap: var(--space-4);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: var(--space-1);
-}
-
-.streak-cards::-webkit-scrollbar { display: none; }
-
 .streak-card {
   background: var(--bg-panel, #111);
   border: 1px solid var(--border, #222);
@@ -917,11 +869,6 @@
   color: var(--text-heading, #fff);
 }
 
-.year-review-btn-sub {
-  font-size: var(--text-base);
-  color: var(--text-dim, #888);
-}
-
 .year-review-modal {
   position: fixed;
   inset: 0;
@@ -977,13 +924,6 @@
    Weekly template buttons (Feature 5)
    ═══════════════════════════════════════════════════════════════════ */
 
-.week-template-bar {
-  display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-5);
-}
-
 .week-template-btn {
   background: none;
   border: 1px solid var(--border-light, #333);
@@ -1012,16 +952,6 @@
 .week-template-btn.week-template-book:hover {
   background: var(--accent, #e94560);
   color: var(--accent-ink, #fff);
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Profile Tab Divider (between Insights and Explore sections)
-   ═══════════════════════════════════════════════════════════════════ */
-
-.profile-divider {
-  height: 1px;
-  background: var(--border, #222);
-  margin: var(--space-7) var(--space-9) var(--space-8);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1066,7 +996,6 @@
      to the right of every section around them. */
   .reco-section { padding: 0 var(--space-7) var(--space-7); }
   .heatmap-section { padding: 0 var(--space-7) var(--space-8); }
-  .ct-label { min-width: 56px; font-size: var(--text-sm); }
   .week-add-slot { font-size: var(--text-2xs); padding: var(--space-2) 2px; }
   .week-template-btn { flex: 1 1 100%; text-align: center; }
 }
@@ -1151,19 +1080,6 @@
   font-weight: var(--weight-bold);
   color: var(--accent);
   margin-top: var(--space-7);
-}
-
-.membership-account {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-7);
-  margin-bottom: var(--space-7);
-}
-
-.membership-detail {
-  font-size: var(--text-md);
-  color: var(--text);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1295,8 +1211,6 @@
    Membership: App section rows + about block
    ═══════════════════════════════════════════════════════════════════ */
 
-.app-section { padding: var(--space-5) var(--space-9); }
-
 .app-row {
   display: flex;
   align-items: center;
@@ -1335,12 +1249,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.app-row-chevron {
-  font-size: var(--text-3xl);
-  color: var(--text-ghost, #555);
-  line-height: 1;
 }
 
 .app-row-switch {
@@ -1424,16 +1332,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    Theme picker (Membership → App)
    ═══════════════════════════════════════════════════════════════════ */
-
-.theme-picker { padding: 0 0 var(--space-6); }
-
-.theme-picker-label {
-  font-size: var(--text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint, #666);
-  margin-bottom: var(--space-3);
-}
 
 .theme-chips {
   display: grid;

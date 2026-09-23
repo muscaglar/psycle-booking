@@ -96,8 +96,8 @@ module.exports = function (t) {
     });
     ok(/font-family:'Sofia Sans'[^}]*src:url\('fonts\/sofia-sans\.woff2'\) format\('woff2'\), url\('sofia-sans\.woff2'\) format\('woff2'\)/.test(login),
       'login.html loads the body face with a second, flat source (it is copied as-is into the iOS www/, which has no fonts/ folder)');
-    const rule = noComments(themeCss).match(/\.stat-value, \.cost-value, \.explore-map-stat-value, \.class-time \{\s*font-variant-numeric:\s*tabular-nums;/);
-    ok(!!rule, 'times and counts in the display face use tabular figures');
+    const rule = noComments(themeCss).match(/\.stat-value, \.cost-value, \.explore-map-stat-value \{\s*font-variant-numeric:\s*tabular-nums;/);
+    ok(!!rule, 'counts in the display face use tabular figures');
   }
 
   // ── Tokens ───────────────────────────────────────────────────────────────

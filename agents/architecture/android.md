@@ -38,7 +38,7 @@ Read this when you touch ios-app/android/, an `IS_ANDROID` branch of ios-app/www
 - `IS_ANDROID` guards only what Android ALONE has: `_ensureAndroidChannels` / `_forAndroid` (channels, small icon, tint), `StatusBar.setBackgroundColor` in `updateStatusBar`, the deleted-row filter in `_listNativeEvents`, what `handleNotificationAction` refuses of a tap that may be forged ("Notifications" below), the class countdown's switch (`_androidCountdownSwitch`, `_androidCountdownFlipped`: one more key through the `AppGroupPreferences` twin, "The class countdown" below), and three strings (`_classReminderBody`, the class-reminder ask's body, "Android Settings" in the Monday offer's toast).
 
 ### Platform checks in the web layer
-- The web layer asks the platform itself, each time with its own small `getPlatform() === 'android'` test (the modules are IIFEs or sliced by suites, so there is no shared helper): `_swSkippedHere` and `_onboardPlatform` (js/app.js — also read by `showTokenDialog`), `_reminderAndroid`, `_osSettingsWords` and `_shareAsTextOnAndroid` (js/tabs.js), `diagPlatform` (js/settings.js), and `getDiagnosticReport` (the bridge; it asks again because owner-tools.js runs it alone).
+- The web layer asks the platform itself, each time with its own small `getPlatform() === 'android'` test (the modules are IIFEs or sliced by suites, so there is no shared helper): `_swSkippedHere` and `_onboardPlatform` (js/app.js), `_reminderAndroid`, `_osSettingsWords` and `_shareAsTextOnAndroid` (js/tabs.js), `diagPlatform` (js/settings.js), and `getDiagnosticReport` (the bridge; it asks again because owner-tools.js runs it alone).
 
 ## Back
 Without the @capacitor/app plugin Capacitor leaves Back to Android, which FINISHES the activity: one stray swipe would close the app under an open sheet. The plugin is not installed, by decision (a new plugin is a new iOS pod). The contract instead:
@@ -136,7 +136,7 @@ Without the @capacitor/app plugin Capacitor leaves Back to Android, which FINISH
 
   The welcome does not list it (a welcome is one sentence a page). The iPhone's three sentences are what they were, to the letter (18-android.js). A refused permission points at "Android Settings" (`_osSettingsWords`).
 
-  Elsewhere: the line under "Connect Psycle account" (`showTokenDialog` rewords `#tokenWorksOn`; the markup keeps "Works on iPhone and desktop."). The waitlist "You're in" notice (`_announceAllocations`) is ONE sentence on every platform again — "your calendar/widget" — now that Android has a widget; 18-android.js fails if a platform branch returns.
+  Elsewhere: the waitlist "You're in" notice (`_announceAllocations`) is ONE sentence on every platform again — "your calendar/widget" — now that Android has a widget; 18-android.js fails if a platform branch returns.
 
 ## Status bar, system bars, launch
 

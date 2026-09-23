@@ -134,7 +134,7 @@ module.exports = function (t) {
     t.section('Bug report: names the build, waits for it, and the cancel toast points nowhere');
     t.ok(/sections\.push\('Build: ' \+ \(window\.APP_VERSION \|\| 'unknown'\)\);/.test(slice(settingsSrc, '  function buildBugReport() {', '  window.downloadBugReport = async function () {', 'buildBugReport')),
       'buildBugReport prints a Build: line from window.APP_VERSION');
-    const dl = slice(settingsSrc, '  window.downloadBugReport = async function () {', '  window.copyBugReport = function () {', 'downloadBugReport');
+    const dl = slice(settingsSrc, '  window.downloadBugReport = async function () {', '  function _fallbackCopy(text, status, what) {', 'downloadBugReport');
     t.ok(dl.indexOf('await resolveAppVersion()') !== -1 && dl.indexOf('await resolveAppVersion()') < dl.indexOf('buildBugReport()'),
       'downloadBugReport resolves the build id BEFORE it builds the report');
     const cancelToast = (/toast\('(Share cancelled[^']*)'/.exec(dl) || [])[1] || '';
@@ -235,7 +235,7 @@ module.exports = function (t) {
 
     c = copyWorld({ exec: true });
     t.eq(c.ctx._fallbackCopy('x', null), true, '_fallbackCopy returns true on success');
-    t.eq(c.log.toasts[0], ['Bug report copied to clipboard', 'success'], 'and copyBugReport\'s wording is unchanged when no label is passed');
+    t.eq(c.log.toasts[0], ['Bug report copied to clipboard', 'success'], 'and with no label passed the toast keeps its default wording, "Bug report"');
 
     // ════════════════════════════════════════════════════════════════════
     // iOS bridge report

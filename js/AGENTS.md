@@ -34,7 +34,7 @@ In LOAD order. Symbol index of `<file>`: `agents/index/symbols/<file>.md` — [s
 | tabs.js | tabs, Stats, Membership, the usual-week card and sheet; wraps `renderMyBookings` |
 | settings.js | Settings, the favourite-instructors list, `importSettings`; wraps `showBikePicker` |
 | explore.js | instructor suggestions, history sync |
-| api-client.js | `PsycleAPI`: typed getters, schemas |
+| api-client.js | `PsycleAPI`: `SCHEMAS`, `categorizeError` |
 | diagnostic.js | `PsycleDiag`: API drift, safe mode |
 
 ## After you edit

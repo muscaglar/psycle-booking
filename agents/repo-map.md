@@ -38,7 +38,7 @@ psycle-booking/
 │   ├── tabs.js             # 4-tab navigation, Stats sub-pages + insights rendering, share card, Membership (incl. the Class colours control), "Your usual week" card + confirm sheet
 │   ├── settings.js         # Settings panel, favourite instructors, bike prefs, next-class pill, calendar-sync UI, export/import, bug report, diagnostics
 │   ├── explore.js          # Instructor suggestions, history sync + weekly top-up, instructor map
-│   ├── api-client.js       # window.PsycleAPI — typed getters, schema validation, error categorisation
+│   ├── api-client.js       # window.PsycleAPI — response schemas (the drift baseline), error categorisation
 │   └── diagnostic.js       # window.PsycleDiag — API drift detection, safe-mode banner, diagnostics
 │
 ├── css/                    # All stylesheets — tokenised design system (link order = this order)
@@ -120,7 +120,7 @@ tabs.js → settings.js → explore.js → api-client.js → diagnostic.js
 (the native builds only — the iPhone app and the Android app: native-bridge.js is injected last, just before </body>)
 ```
 Later modules monkey-patch earlier ones. Don't reorder. facets.js loads before app.js, which calls
-`PsycleFacets`. api-client/diagnostic load last (everything they wrap exists); diagnostic reads PsycleAPI.SCHEMAS.
+`PsycleFacets`. api-client/diagnostic load last, api-client first: diagnostic reads PsycleAPI.SCHEMAS.
 tests/suites/shell.js fails `npm test` if a js/*.js file is not loaded exactly once, if a tag is not deferred, or
 if tests/smoke.html's list drifts from the page's.
 

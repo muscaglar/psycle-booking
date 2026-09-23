@@ -482,55 +482,6 @@ module.exports = async function (t) {
     ok(/studio && studio\.has_layout === false \? \{ spaces: 1 \} : \{\}/.test(grab(appSrc, 'async function bookClass(')), 'the count body stays exclusive to has_layout === false');
   }
 
-  // The third path to a booking: "Book my week". fetchDay's render() has just
-  // replaced the studio record with the LIST response's (has_layout, no map).
-  t.section('Book my week: the headless path takes the seat map from the detail too');
-  {
-    const headWorld = (o) => {
-      const log = { posts: [], joins: [] };
-      const globals = {
-        window: {}, _myBookings: {}, console: { log() {}, warn() {}, info() {}, error: console.error },
-        _eventCache: { 77: { id: 77, start_at: '2026-09-21 07:15:00', duration: 45, studio_id: 4 } },
-        _studioMap: { 4: o.studio },
-        document: { createElement: () => ({ textContent: '', className: '', dataset: {} }) },
-        apiFetch: async () => ({ ok: true, status: 200, json: async () => Object.assign({ slots: o.slots, data: o.detail || {} }, o.envelope || {}) }),
-        _usualSlotForEvent: () => o.usual,
-        joinWaitlist: async (id) => { log.joins.push(id); return true; },
-        submitBooking: async (id, slots, b, opts) => {
-          log.posts.push([slots, opts]);
-          if (slots) { b.textContent = 'Bike ' + slots[0] + ' ✓'; globals._myBookings[String(id)] = { bookingId: 'A', slots, waitlisted: false }; }
-        },
-      };
-      const ctx = t.loadPure('js/app.js', 'clash', globals);
-      t.vm.runInContext([grab(appSrc, 'function _clashFor('), pureRegion(appSrc, 'book-fresh'), grab(appSrc, 'async function _bookEventHeadless(')].join('\n'), ctx, { filename: 'js/app.js[_bookEventHeadless]' });
-      return { ctx, log };
-    };
-    const listShaped = () => ({ has_layout: true, name: 'Studio 1' }); // what a list response's relations carry
-    const withMap = { relations: { studios: [{ id: 4, has_layout: true, layout: LAYOUT }] } };
-
-    let w = headWorld({ studio: listShaped(), slots: [7, 9], usual: 9, envelope: withMap });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.posts], ['booked', [[[9], undefined]]],
-      'a seat studio whose record lost its map: the seat is picked from the detail\'s own layout (it POSTed {event_id} alone — "Booking slot required" — and counted the entry as failed)');
-    eq(w.ctx._studioMap[4].layout, LAYOUT, '…and the map is kept for the next entry');
-
-    w = headWorld({ studio: listShaped(), slots: [7, 9] });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.posts], ['failed', []], 'no map to be had anywhere: failed WITHOUT sending a slot-less body Psycle would refuse');
-
-    w = headWorld({ studio: listShaped(), slots: [], detail: { is_waitlistable: true }, envelope: withMap });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.joins, w.log.posts], ['waitlisted', [77], []],
-      'no free seat in the recovered map (Psycle has not said "full" yet): the waitlist is joined — map-less, that branch was skipped');
-    w = headWorld({ studio: listShaped(), slots: [7], detail: { is_fully_booked: true, is_waitlistable: true } });
-    eq([await w.ctx._bookEventHeadless(77, 4), w.log.joins], ['waitlisted', [77]], 'a FULL class needs no map: it still joins the waitlist');
-
-    w = headWorld({ studio: { has_layout: false, name: 'Studio 2' }, slots: [] });
-    await w.ctx._bookEventHeadless(77, 4);
-    eq(w.log.posts, [[null, { spaces: 1 }]], 'has_layout === false: still booked by count, as before');
-    w = headWorld({ studio: undefined, slots: [] });
-    await w.ctx._bookEventHeadless(77, 4);
-    eq(w.log.posts, [[null, {}]], 'an unknown studio is never given a guessed count (as before)');
-    ok(/typeof _layoutFromEventDetail === 'function'/.test(grab(appSrc, 'async function _bookEventHeadless(')), 'the helper is typeof-guarded (booking.js and clash.js slice this function on its own)');
-  }
-
   // ── 6. Refresh / Clear filters ───────────────────────────────────────────
   t.section('Tap targets: the gap between Refresh and Clear filters is never Clear filters\'');
   {

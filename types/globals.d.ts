@@ -32,33 +32,19 @@ declare global {
   // declaring them here would trigger a spurious "Cannot redeclare block-scoped
   // variable" error. They are intentionally NOT redeclared in this file.
 
-  /** Typed API client (api-client.js). */
+  /** Response schemas and error categorisation (api-client.js). */
   var PsycleAPI: {
     SCHEMAS: Record<string, any>;
-    getInstructors(...args: any[]): Promise<any>;
-    getLocations(...args: any[]): Promise<any>;
-    getEventTypes(...args: any[]): Promise<any>;
-    getProfile(...args: any[]): Promise<any>;
-    getBookings(...args: any[]): Promise<any>;
-    getEvents(...args: any[]): Promise<any>;
-    getEventDetail(...args: any[]): Promise<any>;
-    createBooking(...args: any[]): Promise<any>;
-    deleteBooking(...args: any[]): Promise<any>;
-    field(...args: any[]): any;
     categorizeError(...args: any[]): any;
-    validate(...args: any[]): any;
-    parseJson(...args: any[]): any;
     [key: string]: any;
   };
 
   /** Diagnostic recorder + API contract checker (diagnostic.js). */
   var PsycleDiag: {
     record(...args: any[]): any;
-    noteMissingField(...args: any[]): any;
     captureContract(...args: any[]): any;
     checkContract(...args: any[]): any;
     enterSafeMode(...args: any[]): any;
-    exitSafeMode(...args: any[]): any;
     getDiagnostics(...args: any[]): any;
     [key: string]: any;
   };
@@ -261,7 +247,6 @@ declare global {
   function exportSettings(...args: any[]): any;
   function importSettings(...args: any[]): any;
   function downloadBugReport(...args: any[]): any;
-  function copyBugReport(...args: any[]): any;
   function replayOnboarding(...args: any[]): any;
 
   // Saved searches / presets (interactions.js, app.js)

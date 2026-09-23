@@ -253,7 +253,7 @@ module.exports = function (t) {
   ['.insights-title', '.explore-title', '.reco-title', '.heatmap-title', '.cost-title', '.week-title', '.mb-period-header'].forEach((sel) => {
     t.ok(display.split(',').map((s) => s.trim()).indexOf(sel) === -1, sel + ' stays on the body face');
   });
-  ['.stat-value', '.class-time', '.modal-title', '.discover-empty-title'].forEach((sel) => {
+  ['.stat-value', '.modal-title', '.discover-empty-title'].forEach((sel) => {
     t.ok(display.split(',').map((s) => s.trim()).indexOf(sel) !== -1, sel + ' keeps the display face (numerals / headlines)');
   });
 
