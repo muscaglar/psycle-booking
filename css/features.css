@@ -250,7 +250,7 @@
 
 /* ★ under the profile header: the Membership tab's own control (.favs-star — its look is
    css/crisp.css, 9e). Only its row is laid out here. */
-.instructor-rank {
+.instructor-fav {
   display: flex;
   align-items: center;
   gap: var(--space-4);

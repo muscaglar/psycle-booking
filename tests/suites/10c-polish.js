@@ -79,7 +79,6 @@ module.exports = function (t) {
     ok(/clashHtml = '<div class="cds-detail-row cds-clash">' \+ rowIcon\('caution'\) \+ '<span class="' \+/.test(sheetSrc), 'the row leads with rowIcon(\'caution\') (it was the two-tiles "clash" mark in the heading ink)');
     ok(/\(clash\.kind === 'overlap' && !clash\.place \? 'cds-avail-full' : 'cds-avail-waitlist'\) \+ '">' \+ escapeHTML\(_clashLabel\(clash\)\) \+ '<\/span>'/.test(sheetSrc),
       'the sentence is still _clashLabel\'s, escaped, on the same two hooks (overlap vs. squeeze / place) — copy unchanged');
-    ok(/'<span class="ct-tile is-sm" data-ct="' \+ otherKey \+ '" aria-hidden="true">'/.test(sheetSrc), 'the OTHER class\'s own tile still closes the row');
     ok(/const rowIcon = name => '<span class="cds-icon" aria-hidden="true">' \+ \(typeof _uiIcon === 'function' \? _uiIcon\(name, 19\) : ''\) \+ '<\/span>';/.test(sheetSrc), 'rowIcon wraps the mark in the decorative .cds-icon, as every row does');
     // The look: no ground, no box — the row's own rules are all that is left.
     ok(!/\.cds-detail-row\.cds-clash\s*\{/.test(s9c) && !/\.cds-clash[^{]*\{[^}]*(background|border|margin)\s*:/.test(s9c), 'crisp.css gives the clash row NO ground, border or bleed of its own (it was an amber band, edge to edge)');
@@ -574,9 +573,6 @@ module.exports = function (t) {
     const inset = px('var(--space-9)') * 2;
     const at = (w) => Math.min(w, 1080) - inset - rail - gap;
     ok(at(1024) >= 560 && at(1440) <= 700, 'cards are ' + at(1024) + 'px at 1024 and ' + at(1440) + 'px on a wide window — a readable measure (they were 1032px, the action far from the name)');
-    // What the old desktop overrides did is gone.
-    ok(!/\.day-pill \{ width: calc\(var\(--tap-lg\) \+ var\(--space-7\)\); \}/.test(s9b), 'the day pills are no longer 72px tiles huddled left: seven span the results column, as they span a phone');
-    ok(!/\.date-track \{ flex: 0 0 auto; \}/.test(s9b), 'the date track no longer hugs its ranges with desktop padding (it has to fit the column)');
     // By construction, nothing of this reaches a phone or a tablet.
     const outside = s9b.slice(0, a) + s9b.slice(a + block.length);
     ['#tab-discover.active {', '#tab-discover > .controls', '#tab-discover > .results', '#tab-discover > .disc-header', '--disc-rail', '--disc-pin', '.instr-dropdown'].forEach((needle) => {

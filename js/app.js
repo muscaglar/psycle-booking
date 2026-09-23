@@ -2235,7 +2235,7 @@ function updateFiltersSummary() {
   const el = document.getElementById('controlsSummary');
   if (!el) return;
   _followStarsInSummary();
-  // ★ Favs / S-A are only worth comparing against a multi-instructor filter.
+  // ★ Favs is only worth comparing against a multi-instructor filter.
   const many = selectedInstructors.size > 1;
   const chips = _filterSummaryChips({
     locationIds: [...selectedLocations], categories: [...selectedCategories],
@@ -8057,8 +8057,8 @@ function _paintDayGroup(host, day, m) {
     grid.className = 'class-grid';
     body.appendChild(grid);
   }
-  // The bare global eventCard both ways: features.js (notify bell) and
-  // performance.js wrap window.eventCard, and a captured reference skips them.
+  // The bare global eventCard both ways: features.js (the notify bell) wraps
+  // window.eventCard, and a captured reference skips it.
   const kids = Array.from(grid.children);
   if (!kids.length) {
     // An empty grid — every filter tap, renderFromWindow wipes #results first,

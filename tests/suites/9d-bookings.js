@@ -143,8 +143,6 @@ module.exports = function (t) {
     ok(/style="width:100%"/.test(fill) && /aria-hidden="true"/.test(fill), 'a plain fill is clamped to 100%');
     ok(p._mbUsageHtml({ num: '<b>', rest: '"x"', when: '<i>', bar: null }, esc).indexOf('<b>') === -1, 'every label goes through the escaper it is handed');
     ok(!/mb-usage-bar/.test(p._mbUsageHtml(m({ made: 3, max: 0 }), esc)), 'no cap → no bar at all');
-    ok(/_plural\(made, 'class', 'classes'\) \+ ' booked'/.test(appSrc), 'the uncapped count still goes through _plural (tests/suites/copy.js holds the same line)');
-    ok(!/Membership: \$\{escapeHTML\(planName\)\}/.test(appSrc) && !/<span class="mb-period-chevron">▼<\/span>/.test(appSrc), 'the old "Membership: <plan> · 8/12 classes" bar and its ▼ glyph are gone');
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -221,7 +219,6 @@ module.exports = function (t) {
     // it ended every card's first line: the place here always wraps).
     ok(/<div class="class-instructor cc-sub mb-meta"><span class="cc-who"><span class="instructor-link"[^>]*>Alex<\/span><\/span><span class="cc-loc class-location">Bank · Studio 1<\/span><\/div>/.test(c77),
       'meta: the shared line — who, then the place as one unit (it keeps the .class-location hook); no separator in the text');
-    ok(c77.indexOf('mb-sep') === -1 && c77.indexOf('mb-instr') === -1, '…and nothing of the old in-text separator is left');
     ok(w.cards[80].indexOf('cc-who') === -1 && w.cards[80].indexOf('cc-loc') === -1 && /<div class="class-instructor cc-sub mb-meta"><\/div>/.test(w.cards[80]),
       'nothing known about who / where: neither unit is printed — an EMPTY .cc-loc would still draw its separator');
     ok(w.cards[78].indexOf('STRENGTH: Lower Body &lt;b&gt;') !== -1 && w.cards[78].indexOf('<b>') === -1, 'API text is escaped — in the title and in the More button\'s name');
@@ -644,7 +641,7 @@ module.exports = function (t) {
     const cardInks = [];
     flat.replace(/(#tab-bookings \.my-booking-card[^{}]*)\{([^{}]*)\}/g, (m, sel, body) => { body.replace(/(?:^|;|\s)color:\s*([^;]+);/g, (mm, v) => { cardInks.push(v.trim()); return mm; }); return m; });
     eq([...new Set(cardInks)].filter((v) => !/^(var\(--ct-ink\)|var\(--ct-ink-2\)|var\(--ct-deep\)|var\(--ct-on-base\)|var\(--pill-ink\)|var\(--text\)|var\(--surface\)|var\(--danger-ink\)|inherit)$/.test(v)), [],
-      'on the card: the three guaranteed inks, white-on-base, a pill\'s own ink, and the ink/surface pair of a surface pill or rank tile — nothing else');
+      'on the card: the three guaranteed inks, white-on-base, a pill\'s own ink, and the ink/surface pair of a surface pill — nothing else');
     ok(/\.is-late \.mb-primary-btn\.booked \{ --pill-ink: var\(--danger\); --pill-line: var\(--danger\); \}/.test(css) && /\.badge\.late-cancel-note \{ background: var\(--danger\); color: var\(--danger-ink\); \}/.test(css),
       'red appears ONLY in the late-cancel window: the Cancel outline and the one badge');
     // "Leave waitlist" has no line of its own, so on a card that IS the surface it
@@ -662,7 +659,7 @@ module.exports = function (t) {
     ok(/display: grid;/.test(mbRoot) && !/background:|border-radius:|box-shadow:|(?:^|[\s;])color:|(?:^|[\s;])border:/.test(mbRoot),
       'the card root adds only its grid: surface, radius, ink, border and shadow come from the shared .class-card[data-ct]');
     ok(!/\.my-booking-card\.is-waitlisted \{/.test(css) && !/\.my-booking-card\.glow-mine-card \{/.test(css) && !/\.tier-badge/.test(css),
-      'no second copy of the dashed place, the glow or the rank tile (shared: crisp 9b.7; the rank look: 9e.5)');
+      'no second copy of the dashed place or the glow (shared: crisp 9b.7), and no grade badge');
   }
 
   t.section('9d: the calendar row carries no emoji');

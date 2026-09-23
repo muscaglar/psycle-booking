@@ -88,7 +88,6 @@ module.exports = function (t) {
     eq(shipped.filter((f) => themeCss.indexOf("../fonts/" + f) === -1), [], 'every fonts/*.woff2 that ships is used by a face (' + shipped.join(', ') + ')');
     ok(/^'Sofia Sans Condensed', /.test(root['--font-display']) && /^'Sofia Sans', /.test(root['--font-body']),
       '--font-display → Sofia Sans Condensed, --font-body → Sofia Sans (' + root['--font-display'] + ' · ' + root['--font-body'] + ')');
-    ok(!/Hanken|AppDisplay|Bricolage/.test(root['--font-display'] + root['--font-body']), 'the retired faces are out of both stacks');
     ['terminal', 'gameboy'].forEach((id) => ok(/^ui-monospace/.test(tokensOf(themeCss, '[data-theme="' + id + '"]')['--font-body'] || ''), id + ' keeps its mono body'));
     // Components never name a face: the two tokens are the only way in.
     ['styles', 'features', 'tabs', 'settings', 'explore', 'redesign', 'crisp'].forEach((name) => {

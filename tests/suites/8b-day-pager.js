@@ -131,7 +131,6 @@ module.exports = async function (t) {
       P._pagerOpensText(W._dayOpensMs('2026-11-19'), '2026-09-18'), P._pagerOpensText(null, TODAY), P._pagerOpensText(NaN, TODAY)],
     ['Booking usually opens Monday 28 September, 12:00', 'Booking usually opens Monday 28 September, 12:00', 'Booking usually opens today at 12:00', 'Booking usually opens Monday 26 October, 12:00', '', ''],
     'when it USUALLY opens (the observed model explains — it never promises: the API does not say, and some credit types book a batch early): the release Monday, by date (a bare "Monday" would read as the next one) — one batch is a Friday to the Thursday after; "today" on the day itself; a GMT release names its own Monday too');
-    ok(!/'Booking opens /.test(t.readSource('js/app.js')), 'no string in js/app.js states the opening as fact any more');
   }
 
   // ── Next / previous / the way off an empty day ───────────────────────────

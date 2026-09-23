@@ -122,8 +122,9 @@ Chosen by the owner from several rounds of concepts, with a product designer adv
   / the native mirror, every style and token. What an old device still holds is DELETED at launch
   (`RETIRED_STORAGE_KEYS` in js/app.js; `RETIRED_KEYS` in the bridge for the native copy), and a backup made before
   this still imports — its grades go nowhere. Suggestions run on favourites and booking history. Held by
-  tests/suites/9f-one-card.js ("the only mark on an instructor"), owner-tools.js, 8a-filters.js and
-  import-validate.js. "Most booked" in Stats stays: it counts the member's own habits and grades nobody. CLOSED —
+  tests/suites/9f-one-card.js ("the only mark on an instructor": the ONE guard that no grade rule, class, token or
+  function is left in any sheet or script), 8a-filters.js (two instructors who are not the favourites read as two
+  named chips) and import-validate.js (an old backup's grades are written nowhere). "Most booked" in Stats stays: it counts the member's own habits and grades nobody. CLOSED —
   do not bring back a rating, a rank or a negative flag for a person in any form.
 
 ## 4. Time zones

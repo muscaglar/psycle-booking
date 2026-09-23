@@ -311,13 +311,10 @@ module.exports = function (t) {
     t.ok(!!tag && /style="[^"]*display:\s*none/.test(tag[0]), '#' + id + ' still starts hidden via inline display:none');
   });
   // The Discover "— all studios" aside shows by default: #555 inline was
-  // ~2.5:1 on every dark theme (and the same literal sat in three JS strings).
+  // ~2.5:1 on every dark theme.
   const hintTag = /<span id="locationHint"[^>]*>/.exec(html);
   t.ok(!!hintTag && /class="label-hint"/.test(hintTag[0]) && !/#[0-9a-f]{3,6}/i.test(hintTag[0]), '#locationHint is class-styled (no inline hex)');
   t.ok((decl('.label-hint', 'color') || '').indexOf('var(--text-dim') === 0, '.label-hint reads --text-dim (got ' + decl('.label-hint', 'color') + ')');
-  ['js/app.js', 'js/settings.js', 'js/tabs.js'].forEach((file) => {
-    t.ok(!/style="[^"]*color:\s*#555/.test(t.readSource(file)), file + ' has no inline color:#555 left');
-  });
   // Wave 9 (Crisp Colour): the swatches are class-styled marks (.seat-key) —
   // no inline colour at all — and "Your pick" reads the very token the map's
   // selected seat is filled with (css/crisp.css; the class colour of the class

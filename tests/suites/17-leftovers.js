@@ -4,8 +4,7 @@
 //     (js/app.js calStep, pickCalDate),
 //   • the next-class pill kept the last class's words while hidden (js/settings.js updatePill),
 //   • the seat map scrolled sideways with no hint (css/crisp.css .bike-map-wrap),
-//   • values that bypassed the tokens in the older sheets (css/styles.css, css/theme.css),
-//   • the rule of a no-photo disc nothing prints any more.
+//   • values that bypassed the tokens in the older sheets (css/styles.css, css/theme.css).
 // The REAL functions, sliced out of source and run against small fakes; the CSS is
 // read as text. (The offline queue's two — the emptied status line and the seat
 // word an "Offline booking" dialog prints after a relaunch — are in offline-queue.js,
@@ -214,15 +213,10 @@ module.exports = async function (t) {
     const booked = rule(styles, '.book-btn.booked') || '';
     ok(/background:\s*var\(--booked-bg\);\s*color:\s*var\(--accent\);\s*border:\s*1px solid var\(--booked-border\);/.test(booked) && !/#[0-9a-f]{3,8}\b/i.test(booked),
       'css/styles.css .book-btn.booked: the theme\'s own booked colours, no fixed pink');
-    eq((theme.match(/(^|\n)\.book-btn\.booked\s*\{/g) || []).length, 0, 'css/theme.css: the copy of those literals is gone…');
-    ok(!/\[data-theme="graphite"\] \.book-btn\.booked/.test(theme), '…and with it the Graphite rule that existed only to undo them');
     ok(/:is\(\[data-theme="light"\], \[data-theme="cloud"\]\) \.book-btn\.booked \{/.test(theme), 'the light bases keep their own (tests/suites/2e-css-layout.js holds its contrast)');
     ['--booked-bg', '--booked-border', '--accent'].forEach((tok) => ok(new RegExp('\\n\\s*' + tok + ':').test(theme), tok + ' is defined in css/theme.css'));
     ok(/border-radius:\s*var\(--radius-sm\);/.test(rule(styles, '.book-btn') || ''), 'css/styles.css .book-btn: a radius token (Handheld zeroes it)');
     ok(/border-radius:\s*var\(--radius-4xl\) var\(--radius-4xl\) 0 0;/.test(rule(styles, '.class-detail-sheet') || ''), 'css/styles.css .class-detail-sheet: its top corners too');
-    const everywhere = ['css/styles.css', 'css/theme.css', 'css/crisp.css', 'css/features.css', 'css/redesign.css', 'js/app.js', 'js/features.js']
-      .map((f) => t.readSource(f)).join('\n');
-    ok(everywhere.indexOf('cds-photo-placeholder') === -1, 'the no-photo disc\'s rule went with the disc: with no photo the class sheet draws none (js/app.js openClassDetail)');
   }
 
   t.section('Date row: the calendar button grows into a pill when it carries a picked date');

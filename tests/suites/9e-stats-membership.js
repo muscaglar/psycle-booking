@@ -9,9 +9,9 @@
 //   2. pure:class-colour-control (js/tabs.js): what the control draws, from the
 //      REAL engine's palette (js/theme.js pure:class-colours), and the radio
 //      groups' keys. Then the shipped markup builder against that model.
-//   3. Colour means class type: no class or rank colour is named in tabs.js /
+//   3. Colour means class type: no class colour is named in tabs.js /
 //      explore.js any more — components say WHICH type (data-ct) and
-//      css/crisp.css colours them; the heatmap and the rank tiles stay neutral.
+//      css/crisp.css colours them; the heatmap stays neutral.
 //   4. The 9e section of css/crisp.css: contrast of every ink it puts on a
 //      fill, in every theme; fingertip targets; focus rings.
 //   5. The share images and login.html wear the new chrome and faces.
@@ -155,7 +155,6 @@ module.exports = function (t) {
       'the live preview IS the class card (.class-card.ct-card + data-ct, eventCard\'s own anatomy: .cc-head, .cc-sub, .cc-spots, the Book pill), so 9b.7 styles it — not a look-alike with rules of its own');
     ok(!/<button|role="button"|tabindex|onclick|data-id|data-event-id/.test((/<div class="cc-preview[\s\S]*?<\/div><\/div>/.exec(html) || [''])[0]) && /\.cc-preview \{\s*pointer-events: none;/.test(crispCss),
       '…decoration, with nothing to press: no button, no id the booking code could find, out of the pointer\'s reach');
-    ok(!/cc-preview-(when|ampm|mins|name|meta|what|book)/.test(html + crispCss), 'the look-alike parts (and their rules) are gone');
     // The time block is the shared builder's (js/app.js _ccTimeHTML) — typeof-guarded, as the pictogram is.
     ok(html.indexOf('cc-time') === -1 && /typeof _ccTimeHTML === 'function' \? _ccTimeHTML\(\{ hours: 18, mins: 30, duration: 45 \}\) : ''/.test(tabsSrc), 'evaluated without app.js the time block is absent; in the app it is _ccTimeHTML\'s');
     const withTime = t.vm.createContext({ escapeHTML: (x) => String(x), classPictogram: () => '', _ccTimeHTML: t.loadPure('js/app.js', 'class-type', { getCategory: () => null })._ccTimeHTML });
@@ -181,15 +180,13 @@ module.exports = function (t) {
   }
 
   // ── 3. Colour means class type ───────────────────────────────────────────
-  t.section('No class or rank colour is named in markup any more');
+  t.section('No class colour is named in markup');
   {
     const types = grab(tabsSrc, '  function renderClassTypeDistribution() {', '  }');
     ok(/class="ctd-seg" data-ct="' \+ c\.ct \+ '"/.test(types) && /class="ctd-item" data-ct="' \+ c\.ct \+ '"/.test(types) && !/\.color|background:/.test(types),
       'the class-type bar and its legend say which type (data-ct); css/crisp.css colours them');
     const card = grab(exploreSrc, '  function instrCard(profile, whyLabel) {', '  }');
     ok(/class="explore-type-tag" data-ct="' \+ ct \+ '"/.test(card) && !/style="color|cat\.color|#888/.test(card), 'instructor-card tags the same way (the base colour as text was ~2.5:1 on dark panels)');
-    ok(!/tierColors|tierKeys|explore-tier|explore-unranked|#b8860b|#2a7a2a/.test(exploreSrc),
-      'the instructor map has no grade bar, no legend and no "unranked" list: it counts instructors and names the most booked');
     const picker = grab(tabsSrc, '  function renderThemePicker() {', '  }');
     ok(/class="theme-swatch" data-theme="' \+ t\.id \+ '"/.test(picker) && !/style="background/.test(picker), 'a theme chip is drawn from that theme\'s OWN tokens (data-theme on the swatch) — no colour is copied into the markup');
     // …which only works while a theme's token block is a bare attribute selector
@@ -207,7 +204,6 @@ module.exports = function (t) {
     ok(section.length > 5000, 'the 9e section of css/crisp.css is there (' + section.length + ' bytes)');
     const heatRules = (section.match(/[^{}]*\.(?:hm-|heatmap-)[^{}]*\{[^}]*\}/g) || []).join('\n');
     ok(heatRules.length > 0 && !/--ct-/.test(heatRules), '…and none of its heatmap rules reads a class colour');
-    ok(!/\.tier-|\.active-[SABCDF]\b|--rank-/.test(section), 'the section holds no grade recipe: the star is the only mark on an instructor');
     ok(!/!important/.test(section), 'nothing in the section needs !important');
   }
 
@@ -233,12 +229,12 @@ module.exports = function (t) {
     eq(ids.length, 5, 'five themes in the registry');
     // [ink, ground, what it is, the floor] — every pair the 9e rules put together.
     const PAIRS = [
-      ['--bg-panel', '--text', 'rank S / a reached milestone: the surface on the ink', 4.5],
-      ['--text', '--bg-panel', 'rank A, the chosen theme chip, the main cost figure', 4.5],
-      ['--text-heading', '--border', 'rank B: the heading ink on the hairline fill', 4.5],
-      ['--text-muted', '--bg-deep', 'rank C, a later milestone, captions in a sunken well (cost tiles, forecast, Settings rows)', 4.5],
+      ['--bg-panel', '--text', 'a reached milestone: the surface on the ink', 4.5],
+      ['--text', '--bg-panel', 'the chosen theme chip, the main cost figure', 4.5],
+      ['--text-heading', '--border', 'the heading ink on the hairline fill (a class-type tag on Terminal)', 4.5],
+      ['--text-muted', '--bg-deep', 'a later milestone, captions in a sunken well (cost tiles, forecast, Settings rows)', 4.5],
       ['--text-muted', '--bg', 'muted text on the ground', 4.5],
-      ['--text-muted', '--bg-panel', 'rank D / F on a card; captions on a card', 4.5],
+      ['--text-muted', '--bg-panel', 'captions on a card', 4.5],
       ['--text-ghost', '--bg-panel', 'quiet labels on a card (This month, Longest, axis labels)', 4.5],
       ['--text-ghost', '--bg', 'quiet labels on the ground (section labels, about)', 4.5],
       ['--text', '--bg-input', 'a quiet action on the surface-2 fill (View classes, the search box)', 4.5],
@@ -316,7 +312,6 @@ module.exports = function (t) {
     ok(login.indexOf("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src https://psycle.codexfit.com; form-action 'none'; base-uri 'none';") !== -1,
       'the page\'s Content-Security-Policy is unchanged');
     ok(/<script data-framebust>[\s\S]*?window\.top\.location = window\.location;[\s\S]*?<\/script>/.test(login), 'the framebust is still there');
-    ok(!/AppDisplay|src:url\(data:/.test(login), 'the data-URI display face is gone');
     ok(/font-family:'Sofia Sans Condensed'[^}]*src:url\('fonts\/sofia-sans-condensed\.woff2'\) format\('woff2'\), url\('sofia-sans-condensed\.woff2'\) format\('woff2'\)/.test(login),
       'the display face loads the same two-source way as the body face (the page is copied as-is into the flat iOS www/)');
     const style = (/<style>([\s\S]*?)<\/style>/.exec(login) || [])[1] || '';

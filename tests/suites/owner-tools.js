@@ -1,7 +1,7 @@
 'use strict';
 // Owner tools: the build id in bug reports / diagnostics (js/settings.js +
-// the iOS bridge's getDiagnosticReport) and Discover's "S/A" tier quick filter
-// (js/app.js). Everything here runs the SHIPPED source — pure:<name> regions,
+// the iOS bridge's getDiagnosticReport) and Discover's ★ Favs quick filter
+// (psycle-finder.html). Everything here runs the SHIPPED source — pure:<name> regions,
 // or slices between anchor lines — against stub globals; nothing is copied.
 module.exports = function (t) {
   const settingsSrc = t.readSource('js/settings.js');
@@ -276,7 +276,5 @@ module.exports = function (t) {
     const favTag = (/<button[^>]*id="favBtn"[^>]*>/.exec(html) || [])[0] || '';
     const favName = (/aria-label="([^"]+)"/.exec(favTag) || [])[1] || '';
     t.ok(!!favName && /starred/i.test(favName), '★ Favs carries its own spoken name ("' + favName + '"), so the wrapping label\'s text is not read out on it');
-    t.ok(!/id="tierBtn"|applyTierFilter|S\/A/.test(html) && !/applyTierFilter|_topTierInstructorIds/.test(t.readSource('js/app.js') + t.readSource('js/interactions.js')),
-      'there is no grade filter: a star is the only mark a member can put on an instructor');
   })();
 };

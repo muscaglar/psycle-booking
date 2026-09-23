@@ -120,6 +120,8 @@ Purpose: the mistakes this repository has already paid for, most expensive first
 
 **B8. Widen a pinned pure helper with an opt-in option.** Add an option and a result field that appears only when it is set — `_findClash(…, {includePlaces: true})` → `place: true` is the precedent. Every exact-object assertion and every other caller keeps its answer, and the old default stays tested.
 
+**B9. A "dead code" finding is a claim until someone has tried to refute it.** A first audit of unused code and CSS was right about most of it and wrong in ways that would have shipped: it called a hidden dialog's styles dead while its markup was still in the page, gave line ranges that were off by one (one cut would have left `} else if` without its `if`, another would have crashed a suite), and had not looked at Swift or Java at all. What made the removal safe: a second reader told to prove each item REACHABLE, a third who listed every test and guide that names it, the cut dry-run on a scratch copy, and 47 screens compared to the pixel before and after. Avoid: deleting from a list. Recipe: `agents/playbooks.md` P16.
+
 ## C. Time
 
 **C1. `start_at` is a naive London wall-clock string.**

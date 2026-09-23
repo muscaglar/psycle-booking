@@ -124,7 +124,6 @@ module.exports = async function (t) {
 
     const explore = t.readSource('js/explore.js');
     ok(/window\.PSYCLE_HISTORY_MAX \|\| 2000/.test(explore) && !/merged\.length > 1000/.test(explore), 'the history sync reads the same cap (no second number)');
-    ok(!/history\.length > 500/.test(t.readSource('js/features.js')), 'the 500 is gone');
   }
 
   t.section('Instructor modal: "View schedule" lands on Discover (#31)');
@@ -142,9 +141,6 @@ module.exports = async function (t) {
     routed.sb._features_filterByInstructor(31);
     eq([asked, routed.log.calls, [...routed.sb.selectedInstructors]], [[{ instructorId: '31' }], [], ['1', '2']],
       'with _focusSearch present it is handed the instructor and nothing else is touched here (no second search, no second tab switch)');
-    const explore = t.readSource('js/explore.js');
-    ok(!/_explore_openSettingsForInstructor|explore-unranked/.test(explore), 'Stats has no "Unranked" list to prompt a grade with: the chips and their helper are gone');
-    ok(!/_features_filterByInstructor\([^)]*\);'\s*\+\s*\n\s*'window\.switchTab/.test(explore), 'the Explore card no longer switches tab a second time');
   }
 
   t.section('Haptics: no tick on programmatic searches, one on a seat pick (#94)');

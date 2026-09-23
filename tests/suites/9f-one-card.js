@@ -11,8 +11,8 @@
 // the card root wins again — two light-base rules in css/theme.css did exactly
 // that (they washed the class tint out of booked and past cards on Cloud and
 // Linen) and were removed. Nothing like them may come back.
-// Also held here: the other old-rule leaks the integration found, the one rank
-// recipe, and the two small handoffs taken (spoken rank tile, swipe tick).
+// Also held here: the other old-rule leaks the integration found, the one
+// canonical guard that no grade is left on a person, and the swipe tick.
 module.exports = function (t) {
   const { ok, eq } = t;
   const noComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -66,9 +66,6 @@ module.exports = function (t) {
       leaks.push(f + ': ' + sel);
     }));
     eq(leaks, [], 'nothing in the older sheets beats .class-card[data-ct] (0,2,0) on its surface, ink, radius, border or shadow');
-    const themeCss = noComments(t.readSource('css/theme.css'));
-    ok(!/\.my-booking-card\.is-booked\s*\{/.test(themeCss) && !/\.mb-past \.class-card\s*\{/.test(themeCss),
-      'the two light-base rules that washed the tint out of booked / past cards on Cloud and Linen are gone — not overridden');
   }
 
   t.section('9f: what the card shares is said once; My Bookings adds only its own');
@@ -82,7 +79,6 @@ module.exports = function (t) {
     // Both wearers print the same meta line.
     const app = t.readSource('js/app.js');
     eq((app.match(/<span class="cc-sub">|class="class-instructor cc-sub mb-meta"/g) || []).length, 3, 'eventCard, renderMyBookings and the saved copy all print the shared .cc-sub line');
-    ok(app.indexOf('mb-sep') === -1 && app.indexOf('mb-instr') === -1, 'no in-text separator is left anywhere (css draws the "·" and clips it on a wrap)');
   }
 
   t.section('9f: ONE time block and ONE title row — Discover, My Bookings, the saved copy and the Class colours preview');
@@ -114,7 +110,6 @@ module.exports = function (t) {
     ok(/_ccTimeHTML\(\{ hours: dt\.getHours\(\), mins: dt\.getMinutes\(\), duration: evt\.duration \}\)/.test(builders.eventCard) &&
       /_ccTimeHTML\(\{ hours: dt\.getHours\(\), mins: dt\.getMinutes\(\), duration: evt\.duration, dayHtml: dayLabel, hook: 'mb-when' \}\)/.test(builders.renderMyBookings),
       'Discover and My Bookings hand it the same reading of the same class — My Bookings adds its day and its grid hook, nothing else');
-    ok(/typeof _ccTimeHTML === 'function' \? _ccTimeHTML\(\{ hours: 18, mins: 30, duration: 45 \}\) : ''/.test(t.readSource('js/tabs.js')), 'the Class colours preview prints the same block');
     // The title row: tile + name, the name INLINE after the tile (a long name wraps the same way on both tabs).
     const title = (src) => (/<(?:span|div) class="cc-head[^"]*">\$\{[^}]+\}<span class="cc-name[^"]*"/.exec(src.replace(/<span class="ct-tile" aria-hidden="true">\$\{classPictogram\(ct, 18\)\}<\/span>/, '${tile}')) || [''])[0].replace(/ (mb-title|mb-name)/g, '').replace(/^<(span|div)/, '<x').replace(/\$\{[^}]+\}/, '${tile}');
     eq([title(builders.renderMyBookings), title(builders.saved)], [title(builders.eventCard), title(builders.eventCard)], 'the same title row in all three (hooks aside): ' + title(builders.eventCard));
@@ -124,7 +119,6 @@ module.exports = function (t) {
     const rule = (sel) => (new RegExp(sel.replace(/[.#[\]]/g, '\\$&') + ' \\{([^}]*)\\}').exec(s9d) || [])[1];
     eq((rule('#tab-bookings .my-booking-card .mb-when') || '').trim(), 'grid-column: 1;', '.mb-when: its grid column — size, ink and order are 9b.7\'s .cc-time');
     eq((rule('#tab-bookings .my-booking-card .mb-title') || '').replace(/\s+/g, ' ').trim(), 'margin: 0; padding-right: calc(var(--tap-min) - var(--space-2));', '.mb-title: room for the More button — no display:flex (the tile sat BESIDE a wrapped name here, UNDER it on Discover)');
-    ok(!/\.mb-time|\.mb-dur|\.class-time-ampm \{|--mb-when/.test(s9d.replace(/#usualWeek(Card|Sheet)[^{]*\{[^}]*\}/g, '')), 'no second set of time rules, and no time-column token, is left in crisp:9d-bookings');
     ok(/\.class-card\[data-ct\] \.cc-head \{ display: block; min-width: 0; \}/.test(s9b) && /\.class-card\[data-ct\] \.cc-time \{[^}]*min-width: 2\.4em;/.test(s9b), 'both are styled once, in 9b.7');
   }
 
@@ -161,7 +155,7 @@ module.exports = function (t) {
     const sheets = ['styles.css', 'theme.css', 'features.css', 'tabs.css', 'settings.css', 'explore.css', 'redesign.css', 'discover-layout-fix.css', 'crisp.css'];
     eq(sheets.filter((f) => gone.test(noComments(t.readSource('css/' + f)))), [], 'no sheet keeps a rule, a class or a token of the grades');
     const shipped = ['js/app.js', 'js/settings.js', 'js/features.js', 'js/explore.js', 'js/tabs.js', 'js/interactions.js', 'psycle-finder.html'];
-    eq(shipped.filter((f) => /tierBadgeHTML|setInstructorTier|getInstructorTier|tier-badge|tier-btn/.test(t.readSource(f))), [], '…and nothing shipped prints or sets one');
+    eq(shipped.filter((f) => /tierBadgeHTML|setInstructorTier|getInstructorTier|tier-badge|tier-btn|applyTierFilter|tierBtn|_topTierInstructorIds|explore-unranked|explore-tier|_explore_openSettingsForInstructor|tierColors|tierKeys|instructor-rank/.test(t.readSource(f))), [], '…and nothing shipped prints or sets one');
   }
 
   t.section('9f: one prefix, two meanings — ".cc-" is the class CARD (9b) and the class COLOURS control (9e)');

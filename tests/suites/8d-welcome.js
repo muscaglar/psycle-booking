@@ -590,5 +590,4 @@ module.exports = function (t) {
     /min-height:\s*var\(--tap-min\)/.test((rules.find((r) => r.sel === '.onboard-look') || { body: '' }).body), 'buttons are at least a fingertip tall');
   ok(/@media \(prefers-reduced-motion: reduce\) \{\s*\.onboard-overlay,\s*\.onboard-track,/.test(css), 'reduced motion: no fade, no slide');
   ok(/\.onboard-art \{[^}]*pointer-events:\s*none/.test(css), 'the miniatures cannot be pressed');
-  ok(!/onboard-card|onboard-icon|onboard-cta|onboardStepIn/.test(css + appSrc), 'nothing of the old four-card modal is left behind');
 };

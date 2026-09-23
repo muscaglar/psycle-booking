@@ -145,10 +145,10 @@ module.exports = function (t) {
   {
     const cardSrc = app.slice(app.indexOf('function eventCard(evt, instrMap, studioMap, locationMap, typeMap) {'), app.indexOf("// Feature 13's write, behind a trailing debounce"));
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const mk = (bookings, win) => {
+    const mk = (bookings) => {
       const ctx = t.loadPure('js/app.js', 'discover', {
         _myBookings: bookings || {}, _studioMap: { 7: { has_layout: true }, 8: { has_layout: false } },
-        escapeHTML: esc, instrLink: (n) => (n ? '<span class="instructor-link">' + esc(n) + '</span>' : ''), window: win || {},
+        escapeHTML: esc, instrLink: (n) => (n ? '<span class="instructor-link">' + esc(n) + '</span>' : ''), window: {},
         formatSlots: (l, s) => l + ' ' + s.join(' & '), slotLabel: () => 'Bike',
         classTypeKey: classType.classTypeKey, classPictogram: classType.classPictogram, _ccTimeHTML: classType._ccTimeHTML,
       });
@@ -170,11 +170,10 @@ module.exports = function (t) {
     ok(/<span class="cc-head"><span class="ct-tile" aria-hidden="true"><svg class="ct-pic" width="18" height="18"[^>]*aria-hidden="true"[^>]*>/.test(html), 'the title is led by the type\'s pictogram tile — decorative, the name says the class');
     ok(/<span class="cc-name" role="button" tabindex="0">RIDE: 45<\/span><\/span>/.test(html), '…and the name keeps its keyboard role');
     ok(/<span class="cc-sub"><span class="cc-who"><span class="instructor-link">Alex Stone<\/span><\/span><span class="cc-loc">Bank<\/span><\/span>/.test(html),
-      'meta line: instructor (+ rank) and the studio as ONE no-wrap unit — plain text, "Psycle " dropped');
+      'meta line: instructor and the studio as ONE no-wrap unit — plain text, "Psycle " dropped');
     const metaLine = (/<span class="cc-sub">[^]*?<\/span><\/span>/.exec(html) || [''])[0];
     ok(metaLine !== '' && metaLine.indexOf('·') === -1 && metaLine.indexOf('&middot;') === -1, 'no "·" in the meta line\'s markup: CSS draws it inside the studio\'s own unit, so a wrapped line never ends or starts on a bare dot');
     ok(/white-space:\s*nowrap/.test(rule(mine, '.class-card[data-ct] .cc-dur')), '…and the one "·" the card does print ("pm · 45 min") sits in a line that cannot wrap');
-    ok(!/cc-rule/.test(html), 'the old divider is gone');
     ok(/<\/span>\s*<span class="cc-spots" data-count>16 spots left<\/span>/.test(html) && html.indexOf('class="cc-sub"') < html.indexOf('class="cc-spots"'),
       'the availability line still FOLLOWS .cc-sub (the in-place sync inserts it "afterend" of that line)');
     ok(/<button class="book-btn"  data-event-id="501" data-studio-id="7"\s+onclick="event\.stopPropagation\(\);bookClass\(501, this, 7\)">Book<\/button>/.test(html), 'ONE action, exactly where it was: a plain "Book" button');
@@ -186,9 +185,6 @@ module.exports = function (t) {
       /<span class="cc-time-h">18:30<\/span>\s*<\/div>/.test(card(ctx, { duration: 0 })) && !/cc-dur/.test(card(ctx, { duration: 0 })), 'a class with no duration prints the time alone — no empty second line (it read "undefined min")');
     ok(!/cc-who/.test(card(ctx, { instructor_id: 404 })) && /<span class="cc-sub"><span class="cc-loc">Bank<\/span><\/span>/.test(card(ctx, { instructor_id: 404 })), 'no instructor: the studio alone, no empty unit before it');
     ok(/<span class="cc-sub"><span class="cc-who">[^]*?<\/span><\/span>/.test(card(ctx, { studio_id: 404 })) && !/cc-loc/.test(card(ctx, { studio_id: 404 })), 'no studio: the instructor alone');
-    // A grade tile used to ride after the name. Even if an older module still offered the hook, the card ignores it.
-    ctx = mk({}, { tierBadgeHTML: (id) => (id === 1 ? '<span class="tier-badge tier-S">S</span>' : '') });
-    ok(/<span class="cc-who"><span class="instructor-link">Alex Stone<\/span><\/span>/.test(card(ctx)) && !/tier-badge/.test(card(ctx)), 'the instructor\'s unit is the name alone: nothing grades a person on a card');
 
     // States — the label contract and the wrapper contract.
     ctx = mk({ 501: { bookingId: 9, slots: [12] } });

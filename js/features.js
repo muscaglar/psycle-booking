@@ -501,12 +501,10 @@
       profileHtml += `<a class="instructor-ig" href="https://instagram.com/${escapeHtml(instagram)}" target="_blank" rel="noopener">@${escapeHtml(instagram)}</a>`;
     }
     profileHtml += '</div></div>';
-    // ★ + S–F on a row of their own UNDER the header, the width of the modal:
-    // in the column beside the photo (~240px on a phone) six fingertip-sized
-    // tiles cannot fit. Only for a real instructor record: a name with no id
-    // has nothing to rank.
-    const rankHtml = instr ? instructorFavHtml(instr.id) : '';
-    if (rankHtml) profileHtml += `<div class="instructor-rank">${rankHtml}</div>`;
+    // The star, on a row of its own UNDER the header. Only for a real
+    // instructor record: a name with no id has nothing to star.
+    const favHtml = instr ? instructorFavHtml(instr.id) : '';
+    if (favHtml) profileHtml += `<div class="instructor-fav">${favHtml}</div>`;
 
     // Bio
     let bioHtml = '';
@@ -593,7 +591,7 @@
       window.toggleFavFromSettings(instr.id);
       // Repaint from the store that writer just changed (the tapped button is
       // replaced, so hand the focus to its successor).
-      const holder = overlay.querySelector('.instructor-rank');
+      const holder = overlay.querySelector('.instructor-fav');
       if (holder) {
         holder.innerHTML = instructorFavHtml(instr.id);
         const again = holder.querySelector('[data-instr-fav]');

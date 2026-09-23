@@ -43,7 +43,6 @@ module.exports = async function (t) {
     t.ok(names.length > 0, file + ' references PsycleDiag (' + names.join(', ') + ')');
     names.forEach((name) => t.ok(typeof sb.PsycleDiag[name] === 'function', file + ': PsycleDiag.' + name + ' is a function on the real module'));
   }
-  t.ok(!/noteSample\s*\(/.test(stripComments(apiSrc)), 'api-client.js no longer calls the noteSample that never existed');
 
   // ── A recorded sample keeps names, never values ──────────────────────────
   t.section('Diagnostics wiring: a recorded sample stores field names only');
@@ -120,7 +119,6 @@ module.exports = async function (t) {
   const auth = between('async function _checkAuthOnce(', 'const PROFILE_REFRESH_MIN_GAP_MS');
   t.ok(/_recordShape\('profile', currentUser\)/.test(auth) && auth.indexOf("_recordShape('profile'") < auth.indexOf('fetchMyBookings();'),
     "checkAuth samples the applied profile as 'profile' — before the bookings fetch whose bookings:loaded runs the first drift check");
-  t.ok(appSrc.indexOf('_recordWaitlistShape') === -1, 'the waitlist-only helper name is gone (renamed _recordShape, call sites included)');
   ['waitlist', 'waitlist-join', 'waitlist-offer'].forEach((kind) => t.ok(appSrc.indexOf("_recordShape('" + kind + "'") !== -1, "the '" + kind + "' sample is still taken"));
   const pureFrom = appSrc.indexOf('// ── waitlist:pure:start'), pureTo = appSrc.indexOf('// ── waitlist:pure:end');
   t.ok(appSrc.slice(pureFrom, pureTo).indexOf('_recordShape') === -1 && (hFrom < pureFrom || hFrom > pureTo), '_recordShape lives outside the DOM-free waitlist:pure block (it reads window)');

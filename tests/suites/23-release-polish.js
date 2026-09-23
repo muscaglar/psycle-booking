@@ -70,7 +70,6 @@ module.exports = async function (t) {
       ['Ann · Bank · Open Psync for the live countdown', 'Ann · Studio 1 · Open Psync for the live countdown', 'Open Psync for the live countdown'],
       'iPhone: instructor · place · what a tap is for — and with neither known it does not begin with a separator');
     eq([body(true, { instrName: 'Ann', locName: 'Bank' }), body(true, {})], ['Ann · Bank', ''], 'Android: the countdown arrives by itself, so nothing is asked for');
-    ok(!/_classReminderTail/.test(src), 'the old tail, glued on with a dash, is gone');
   }
 
   t.section('Release polish: the plan line never goes negative');

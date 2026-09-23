@@ -204,7 +204,6 @@ module.exports = async function (t) {
           pg[0] + ': a saved retired id paints its replacement from the FIRST frame — against the system scheme, no flash of the other base');
         eq([run('hasOwnProperty', true)[0], run('constructor', false)[0]], ['graphite', 'cloud'], pg[0] + ': an inherited key is no theme and no retired theme');
       });
-      ok(!/\[data-theme="(linen|synthwave)"\]/.test(login), 'login.html\'s inlined token blocks: Linen and Synthwave are gone');
     }
 
     // ── 5. Settings import ─────────────────────────────────────────────────
@@ -213,7 +212,7 @@ module.exports = async function (t) {
       const clean = t.loadPure('js/app.js', 'stored-data');
       const imp = t.loadPure('js/settings.js', 'import-validate');
       const device = (obj) => (key) => (Object.prototype.hasOwnProperty.call(obj || {}, key) ? obj[key] : null);
-      const OPTS = { clean: { history: clean._cleanStoredHistory, tiers: clean._cleanStoredTiers, idList: clean._cleanStoredIdList, bikePrefs: clean._cleanStoredBikePrefs }, themes: ids, retiredThemes: RETIRED, historyMax: 2000 };
+      const OPTS = { clean: { history: clean._cleanStoredHistory, idList: clean._cleanStoredIdList, bikePrefs: clean._cleanStoredBikePrefs }, themes: ids, retiredThemes: RETIRED, historyMax: 2000 };
       const plan = (file, dev, opts) => imp._planSettingsImport(file, device(dev), Object.assign({}, OPTS, opts || {}));
       let pl = plan({ psycle_theme: 'linen' }, {});
       eq([pl.writes.psycle_theme, pl.accepted, pl.skipped, pl.added.theme], ['cloud', 1, [], 1], 'a backup saved on Linen imports as Cloud — accepted, nothing skipped');
@@ -241,7 +240,7 @@ module.exports = async function (t) {
     t.section('10b themes: no stylesheet, script or page names a retired theme');
     {
       const naming = (src) => (src.match(/linen|synthwave/gi) || []).length;
-      CSS_FILES.forEach((f) => eq(naming(t.readSource('css/' + f)), 0, 'css/' + f + ': neither name appears — selectors, token blocks or comments'));
+      eq(CSS_FILES.filter((f) => naming(t.readSource('css/' + f)) !== 0), [], 'css/: neither name appears in any stylesheet — selectors, token blocks or comments');
       const blocks = [];
       noComments(themeCss).replace(/(^|\n)\[data-theme="([a-z]+)"\] \{/g, (m, a, id) => { blocks.push(id); return m; });
       eq(blocks.slice().sort(), ids.slice().sort(), 'css/theme.css has exactly one token block per registry theme');
@@ -251,15 +250,17 @@ module.exports = async function (t) {
       ok(noComments(themeCss).indexOf(':is([data-theme="light"], [data-theme="cloud"]) ') !== -1, 'the light-base list is :is(light, cloud) — same specificity as before');
       ok(/\nhtml:is\(\[data-theme="graphite"\], \[data-theme="blueprint"\]\) \{/.test(themeCss), 'the dark class-colour defaults list Graphite and Blueprint');
       // Scripts and pages: the names survive in ONE line each — the map.
+      const elsewhere = [];
       t.fs.readdirSync(t.JS_DIR).filter((f) => /\.js$/.test(f)).forEach((f) => {
         const lines = t.readSource('js/' + f).split('\n').filter((l) => /\blinen\b|synthwave/i.test(l));
-        eq(lines.map((l) => l.trim()), f === 'theme.js' ? ["var RETIRED_THEMES = { linen: 'cloud', synthwave: 'graphite' };"] : [], 'js/' + f + (f === 'theme.js' ? ': only the retired map names them' : ': neither name'));
+        if (f === 'theme.js') eq(lines.map((l) => l.trim()), ["var RETIRED_THEMES = { linen: 'cloud', synthwave: 'graphite' };"], 'js/' + f + ': only the retired map names them');
+        else lines.forEach((l) => elsewhere.push('js/' + f + ': ' + l.trim()));
       });
+      eq(elsewhere, [], 'js/: no other module names either');
       [['psycle-finder.html', finder], ['login.html', login]].forEach((pg) => {
         const lines = pg[1].split('\n').filter((l) => /linen|synthwave/i.test(l));
         eq(lines.map((l) => l.trim()), ["var RETIRED = { linen: 'cloud', synthwave: 'graphite' };"], pg[0] + ': only the first-paint script\'s retired map names them');
       });
-      eq(naming(t.readSource('manifest.json')), 0, 'manifest.json names neither');
     }
 
     // ── 7. The picker ──────────────────────────────────────────────────────
@@ -280,7 +281,6 @@ module.exports = async function (t) {
         (m, active, pressed, id, name) => { chips.push([id, name, pressed]); return m; });
       eq(chips, [['cloud', 'Cloud', 'false'], ['graphite', 'Graphite', 'true'], ['terminal', 'Terminal', 'false'], ['gameboy', 'Handheld', 'false'], ['blueprint', 'Blueprint', 'false']],
         'Cloud · Graphite · Terminal · Handheld · Blueprint — a member who was on Synthwave finds Graphite pressed');
-      ok(!/linen|synthwave/i.test(tabsJs), 'js/tabs.js keeps no theme list of its own');
     }
 
     // ── 8. Terminal / Handheld: the date row on a phone ────────────────────

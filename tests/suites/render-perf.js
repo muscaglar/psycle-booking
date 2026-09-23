@@ -471,7 +471,6 @@ module.exports = function (t) {
     ok(/>Re-sync<\/button>/.test(banner.html) && !/ disabled>/.test(banner.html), 'when the sync ends the idle button is back');
 
     const sync = expSrc.slice(expSrc.indexOf('window._explore_syncHistory = async function'), expSrc.indexOf('// MASTER RENDER'));
-    ok(!/getElementById\('syncHistoryBtn'\)/.test(sync), 'the sync no longer captures the banner button (a captured node is the detached one after a re-render)');
     const lastRender = sync.lastIndexOf('markDirtyAndMaybeRender();');
     ok(sync.lastIndexOf('_syncing = false;', lastRender) !== -1 && sync.lastIndexOf('_syncing = false;', lastRender) > sync.lastIndexOf('localStorage.setItem(HISTORY_KEY', lastRender),
       '_syncing is cleared BEFORE the final repaint, or the banner would be drawn busy for good');

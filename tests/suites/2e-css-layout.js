@@ -236,7 +236,6 @@ module.exports = function (t) {
   const off = live.match(/\.class-grid \.class-card:nth-child\(n\+9\),\s*\.day-group ~ \.day-group \.class-card \{ animation: none; \}/);
   t.ok(!!off, 'cards past the 8th, and every later day group, do not animate');
   t.ok(off && live.indexOf(off[0]) > live.indexOf('.class-grid .class-card:nth-child(n+6)'), 'the cap comes after the delay rules it overrides (same specificity)');
-  t.ok(!/\.class-grid \.class-card:nth-child/.test(noComments(styles)), 'the dead delay rules are gone from styles.css');
   t.ok(/@keyframes cardEnter/.test(styles), '@keyframes cardEnter stays (tabs.css / explore.css use it)');
   // The cap selector is a contract with render(): #results > .day-group … .class-grid > .class-card.
   t.ok(app.indexOf("group.className = 'day-group'") !== -1 && app.indexOf("grid.className = 'class-grid'") !== -1,
@@ -251,23 +250,22 @@ module.exports = function (t) {
   const reduced = live.slice(live.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
   t.ok(/\.class-grid \.class-card,/.test(reduced), 'reduced-motion still switches the entrance off entirely');
 
-  // ── Instructor modal: the ★ + S–F row ─────────────────────────────────────
-  // The six buttons are the Crisp rank tiles (css/crisp.css, 9e — the control's
-  // LOOK is held by tests/suites/9f-one-card.js). They were settings.css's
-  // 28×24px boxes in a ~131px column beside the photo, wrapping 4 + 2.
+  // ── Instructor modal: the favourite star's row ────────────────────────────
+  // The star is the Crisp one (css/crisp.css, 9e — the control's LOOK is held
+  // by tests/suites/9f-one-card.js). This section holds where its row sits and
+  // how the star lines up with the text above it.
   t.section('Instructor modal: the favourite star sits on its own line under the profile header');
   const features = t.readSource('css/features.css');
   const crispCss = t.readSource('css/crisp.css');
   const featuresJs = t.readSource('js/features.js');
-  const rankRow = ruleBody(features, '.instructor-rank') || '';
-  t.ok(/display:\s*flex/.test(rankRow) && !/flex-wrap/.test(rankRow), 'the star\'s row is one line');
+  const favRow = ruleBody(features, '.instructor-fav') || '';
+  t.ok(/display:\s*flex/.test(favRow) && !/flex-wrap/.test(favRow), 'the star\'s row is one line');
   // The row sits UNDER the profile header, the width of the modal — not in the column beside the photo.
   const headerEnd = featuresJs.indexOf("profileHtml += '</div></div>';");
-  const rankAt = featuresJs.indexOf('profileHtml += `<div class="instructor-rank">');
-  t.ok(headerEnd !== -1 && rankAt > headerEnd && rankAt < featuresJs.indexOf('    // Bio\n'), 'js/features.js prints .instructor-rank after the profile header closes, before the bio');
+  const favAt = featuresJs.indexOf('profileHtml += `<div class="instructor-fav">');
+  t.ok(headerEnd !== -1 && favAt > headerEnd && favAt < featuresJs.indexOf('    // Bio\n'), 'js/features.js prints .instructor-fav after the profile header closes, before the bio');
   const favRule = ruleBody(crispCss, '\n.favs-star') || '';
   t.ok(/width:\s*var\(--tap-min\)/.test(favRule) && /margin-left:\s*calc\(var\(--space-4\) \* -1\)/.test(favRule), 'the star is a --tap-min box pulled back by the row gap (its glyph lines up with the text above)');
-  t.ok(!/tier-btn/.test(features + crispCss + featuresJs), 'and it is alone there: no grade buttons beside it');
 
   // ── The one colour exception ──────────────────────────────────────────────
   t.section('Light bases: "Cancel booking" label contrast');

@@ -20,6 +20,7 @@ Rule → why → guard. A bare `name.js` is in suites/.
 | suites/ | One file per feature area | [agents/index/tests.md](../agents/index/tests.md): what each loads and slices · [test-sections.md](../agents/index/test-sections.md): every `t.section` title with its line · [pure-blocks.md](../agents/index/pure-blocks.md) |
 | smoke.html | Every module in production order, in a browser: title `SMOKE: PASS` | README.md §2 |
 | tools/fake-psycle.js | Rule 9 | Its header · README.md → "Driving the app against a stubbed API" |
+| tools/before-after.mjs | Capture 47 scenes of the real app on the fake server with the clock frozen, before and after a change, and compare them to the pixel: the proof that a CSS or dead-code clean-up moved nothing | its header · playbooks P16 |
 | tools/appstore-shots.mjs · tools/appstore-capture.html | Rebuild the six App Store screenshots on the fake server; `--play` = the same six as Google Play's 1080 × 1920, into ios-app/playstore-assets/ | playbooks P9 |
 
 README.md is the long form (≈ 6,200 tokens): read one section. No symbols file covers tests/.

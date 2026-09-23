@@ -397,8 +397,6 @@ module.exports = async function (t) {
 
   t.section('Notify: the bell says what it really does');
   ok(src.indexOf('Checked whenever Psync is open') !== -1, 'the toast says checks only run while the app is open (there is no server or background fetch behind the bell)');
-  ok(src.indexOf('You will be notified when a spot opens') === -1 && src.indexOf('enable browser notifications for push') === -1, 'the old promises are gone');
-  ok(src.indexOf('not supported in this browser') === -1, "no red \"not supported\" toast on every bell tap in the iOS app (its WebView has no Notification API)");
 
   // The REAL bell handler + requestNotificationPermission, beside the rest.
   t.section('Notify bell: the watch is saved at the tap, whatever the browser\'s permission prompt does');

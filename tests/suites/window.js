@@ -44,9 +44,8 @@ module.exports = async function (t) {
   t.eq(W._dayInRange('2026-09-30T06:30:00', TODAY, ''), true, 'an open end bounds only the start');
 
   // The predicate has to be IN render() and the facets, or Today inside the
-  // loaded week would list the whole week.
-  const renderSrc = appSrc.slice(appSrc.indexOf('function render(events, relations, filters, done) {'), appSrc.indexOf('// ── Studio multi-select chips'));
-  t.ok(/if \(!_dayInRange\(e\.start_at, filters\.startDate, filters\.endDateStr\)\) return false;/.test(renderSrc), "render()'s filter bounds the days to the selected range");
+  // loaded week would list the whole week. (render()'s line is held by
+  // discover.js, with the rest of render().)
   const facetSrc = appSrc.slice(appSrc.indexOf('function discoverFacets() {'), appSrc.indexOf('function refreshFacetCounts() {'));
   t.ok(/dateFilter: c => _dayInRange\(c\.start_at, startDate, endDateStr\)/.test(facetSrc), 'discoverFacets() counts only the selected days');
 
@@ -471,7 +470,6 @@ module.exports = async function (t) {
     t.ok(/_windowRenderedAt = Date\.now\(\);\s*render\(allEvents, relations, filters, true\);/.test(commit), "search(): its own render stamps _windowRenderedAt first, like renderFromWindow (unstamped, the first resume rebuilt the list with nothing started)");
     t.ok(tail.indexOf("removeAttribute('data-quiet')") !== -1 && tail.indexOf("removeAttribute('data-quiet')") < tail.indexOf("setStatus('<span class=\"spinner\"></span>Connecting…')"), 'search(): a fetched list animates in — the quiet flag of an earlier background re-render is taken off first');
     t.ok(/throw firstErr \|\| new Error\('All studios failed to load'\)/.test(tail), 'search(): "all studios failed" rethrows the real cause (so it can be classified)');
-    t.ok(!/tap Search to retry/.test(appSrc) && !/Check the console for details/.test(appSrc), 'no copy points at a Search button or the console any more');
   }
 
   // ── Roll-forward wiring ──────────────────────────────────────────────────
@@ -688,7 +686,7 @@ module.exports = async function (t) {
     t.eq(paint({ cards: false, quiet: true }), [false, ''], 'quiet, but "Checking…" / an empty state was up: the list still gets its entrance');
     t.eq(paint({ cards: true, wasQuiet: true }), [false, ''], 'a chip tap (not quiet) takes the flag off again');
     const inPlace = appSrc.slice(appSrc.indexOf('function _renderWindowInPlace(isRetry) {'), appSrc.indexOf('// The sequence number of the search()'));
-    t.ok(/renderFromWindow\(currentFilters\(\), true\);/.test(inPlace), '_renderWindowInPlace (refresh landed / resume / rank changed) renders quietly');
+    t.ok(/renderFromWindow\(currentFilters\(\), true\);/.test(inPlace), '_renderWindowInPlace (refresh landed / resume) renders quietly');
     const tabsCss = t.readSource('css/tabs.css').replace(/\/\*[\s\S]*?\*\//g, '');
     const quietAt = tabsCss.indexOf('#results[data-quiet] .class-card { animation: none; }');
     t.ok(quietAt !== -1 && quietAt > tabsCss.indexOf('.class-grid .class-card { animation: cardEnter'), 'css/tabs.css switches the entrance off under #results[data-quiet]');

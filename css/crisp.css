@@ -3895,7 +3895,7 @@ html[data-ct-intensity="off"] .habit-card .habit-find-btn { background: var(--su
 #tab-membership .favs-search:focus { box-shadow: inset 0 0 0 var(--hairline) var(--text); }
 /* The favourite star has ONE look, keyed on its own class: Membership's rows (js/settings.js) and the
    instructor profile (js/features.js instructorFavHtml) print the same button, and a host only says where it
-   sits (css/features.css .instructor-rank). A fingertip-sized hit area: it reaches up and down to --tap-min. */
+   sits (css/features.css .instructor-fav). A fingertip-sized hit area: it reaches up and down to --tap-min. */
 .favs-star { width: var(--tap-min); height: var(--tap-min); margin-left: calc(var(--space-4) * -1); font-size: var(--text-3xl); }
 .favs-star:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
 #tab-membership .about-block { border-top: 0; }

@@ -1,7 +1,7 @@
 # Playbooks — step-by-step checklists
 Purpose: the exact files, functions, commands and suites for the changes this repository sees most, so you do not have to rediscover them.
 
-- **Read this when** your task matches a heading below: read P0 and that one playbook — never the whole file (≈ 13,950 tokens).
+- **Read this when** your task matches a heading below: read P0 and that one playbook — never the whole file (≈ 14,750 tokens).
 - **Skip this when** you are only reading code, or the change is documentation only.
 - **Not restated here**: the traps behind these steps are in `agents/learnings.md` (cited as A1, D3 …); how a subsystem works is in `agents/architecture/<topic>.md`; line numbers are in `agents/index/` (start at `agents/index/README.md`).
 - Paths are repo-relative. A bare `name.js` under "Suites" is a file in `tests/suites/`. Commands run from the repo root unless they start with `cd`.
@@ -24,6 +24,7 @@ Purpose: the exact files, functions, commands and suites for the changes this re
 | P13 | Add a Membership → Appearance (or Settings) control | 350 |
 | P14 | Change the Android native project — and prove it | 2,500 |
 | P15 | Prepare an Android release — the owner cuts it | 600 |
+| P16 | Remove dead code or dead CSS — and prove nothing moved | 650 |
 
 **The rule over all of them:** `https://psycle.codexfit.com` is a real booking system. No test, script or browser check sends it a POST, PUT or DELETE — ever.
 
@@ -275,3 +276,16 @@ The runbook is ios-app/PLAY_STORE_DEPLOY.md (the owner's, steps 0 to 9); this is
 4. `npm run ci`; push the branch and read `android-build` (P14 step 5): the release is built from the same sources, so a debug build that does not compile is a release that will not either. Merging to `main` is the owner's word (hard rule 6) — and a push there also archives the iPhone app.
 5. **Hand over**: the commit on `main`, its `versionName` to type into "Run workflow", and what to read afterwards — the run's summary names the version, the bundle's sha256 and the SHA-256 fingerprint of the certificate that signed it, which must be the upload key's (Play Console → App integrity); the artifact `psync-release-aab-<name>-<code>` is kept 5 days; the upload to Internal testing is the runbook's step 7. A red run says why in ONE line (a missing secret is named; a wrong password or alias; an unsigned bundle is never kept): fix that, never the guard.
 6. **Graphics**: P9 step 5. **The on-device checklist** (ios-app/ANDROID.md) is walked by the owner on a build of the same commit before a first release.
+
+## P16. Remove dead code or dead CSS — and prove nothing moved
+
+Dead = nothing that SHIPS can reach it. A mention in tests/ or agents/ keeps nothing alive.
+
+1. **Prove it unreachable, by name, everywhere code can be reached from**: `git grep -n -w "<name>"` (use `-w`: this git's `-E` has no `\b`) over js/, the HTML shells, sw.js and ios-app/www/native-bridge.js — and ios-app/ios/ and ios-app/android/ (native code calls into the page by name: `window._psycleAndroidBack`). Read every hit: an inline handler inside a template string (`onclick="foo(${id}, this)"`), a name in a `wrapGlobal` / `window[name]` list and a name built by concatenation are all calls.
+2. **CSS: a rule is dead only when NO element can carry its class.** Hidden static markup counts — a dialog nothing opens still matches its rules, so its markup, its JavaScript and its CSS go TOGETHER. Beware a token inside another (`.class-time` / `.instructor-class-time`). In a selector list remove the dead selector, never the rule, and leave no comma before `{`: it silently kills the whole rule.
+3. **Capture BEFORE you cut**: `node tests/tools/before-after.mjs capture <dir>` (its header has the four commands; run it twice to learn which scenes are steady).
+4. **Cut by TEXT, bottom-up, and re-read both edges of every cut.** A line range from an audit is a hint: several have been off by one, and one would have left a syntax error. Keep what suites cut by: opener lines at column 0, `// ── pure:<name>:start` / `:end` in PAIRS, the closing `}` of a sliced function.
+5. **Tests**: a test of deleted code goes with the code. A test that ALSO guards something live is MOVED onto the live path, never dropped (a11y.js's Tab checks moved from the token dialog to Settings). tests/unit.js's built-in checks need the owner's word ([decisions.md](decisions.md) section 7).
+6. P0's loop. The guides too: 16-agents-docs.js fails while a guide still names a removed symbol.
+7. **Capture AFTER and compare**: every scene identical to the pixel, or a difference you can name. Then tests/smoke.html (`SMOKE: PASS`) and P8 on the flows beside the cut. `git grep` each removed name once more: only history files may still say it.
+

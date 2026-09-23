@@ -6,7 +6,8 @@
 //   • Escape on the inline date picker (js/app.js),
 //   • the next-class pill: the previous member's text after a sign-out, and the
 //     room the panels keep for it (js/settings.js + css/settings.css),
-//   • the usual-week card's two-line label (css/styles.css + js/tabs.js).
+//   • the usual-week card's two-line label (css/styles.css; the markup in
+//     js/tabs.js is pinned in 14b-usual-week-card.js).
 // The REAL functions, sliced out of source and run against small fakes.
 // (The retry / sign-out work has its own suite: retry-signout.js; the in-dialog
 // live region is in a11y.js.)
@@ -140,7 +141,7 @@ module.exports = async function (t) {
     const bad = (raw) => { const x = topUpWorld({ skipped: raw }); return x.ctx._topUpTooBig().count; };
     eq([bad('{not json'), bad('"61"'), bad(JSON.stringify({ at: iso(NOW), count: '<img src=x>' })), bad(JSON.stringify({ at: 'soon', count: 61 })), bad(JSON.stringify({ at: iso(NOW), count: -4 })), bad(JSON.stringify({ at: iso(NOW), count: 61.9 }))],
       [0, 0, 0, 0, 0, 61], 'a note that is not {at: a date, count: a positive number} offers nothing; the count is always a whole number');
-    const banner = exploreSrc.slice(exploreSrc.indexOf('  function renderSyncBanner('), exploreSrc.indexOf('  window._explore_openSettingsForInstructor = function'));
+    const banner = grab(exploreSrc, '  function renderSyncBanner(', '  }');
     ok(/var missing = _topUpTooBig\(\)\.count;/.test(banner) && /\(missing \? '<br><span>' \+ missing \+ ' past classes are not in it yet\. Tap Re-sync to import them\.<\/span>' : ''\)/.test(banner),
       'the synced banner says how many are missing, next to its existing Re-sync button (no new control, no API text in the line)');
   }
@@ -512,7 +513,5 @@ module.exports = async function (t) {
     ok(!/display:\s*block/.test(body) && !/\d+px|#[0-9a-f]{3,6}\b/i.test(body), '…still inline — both lines are line boxes of .usual-week-what — and no raw px or colours');
     ok(/\.usual-week-list \.usual-week-sep \{ display: none; \}/.test(css), 'the " · " that joined the two lines is dropped in the card');
     ok(/\.usual-week-what \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/.test(css), '.usual-week-what keeps nowrap + ellipsis, which now ends EACH of the two lines');
-    const tabsSrc = t.readSource('js/tabs.js');
-    ok(/'<span class="usual-week-where"><span class="usual-week-sep"> · <\/span>' \+ escapeHTML\(en\.locName\) \+ '<\/span>'/.test(tabsSrc), 'tabs.js gives the separator its own span — and still escapes the studio name');
   }
 };

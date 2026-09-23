@@ -84,7 +84,7 @@ module.exports = function (t) {
     'instructors: full names, in the order picked (the panel\'s own chips)');
   eq(chips({ instructorIds: ['77'] }), [{ kind: 'instructor', id: '77', label: 'Instructor' }], 'an instructor no longer on the list: a removable chip, not a bare id');
 
-  // ★ Favs / S-A
+  // ★ Favs
   eq(chips({ instructorIds: ['2', '1'], favouriteIds: ['1', '2'] }), [{ kind: 'favs', id: '', label: 'Favourites' }], '★ Favs on: the whole starred set is ONE chip');
   eq(chips({ instructorIds: ['1', '2'], favouriteIds: ['1', '2', '88'] }).map((c) => c.kind), ['favs'],
     '…also when a starred instructor has left Psycle (launch pre-selects only the ones still listed)');
@@ -92,8 +92,6 @@ module.exports = function (t) {
   eq(labels({ instructorIds: ['1', '2'], favouriteIds: ['1', '2', '3'] }), ['Alex Morgan', 'Blake Chen'], 'a subset of the stars is not "Favourites" (one was removed by hand): names');
   eq(labels({ instructorIds: ['1', '2', '4'], favouriteIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen', 'Dev Patel'], 'stars plus someone else: names');
   eq(labels({ instructorIds: ['1'], favouriteIds: ['1'] }), ['Alex Morgan'], 'one instructor is always a name, starred or not');
-  eq(chips({ instructorIds: ['3', '4'], favouriteIds: ['1'], topTierIds: ['4', '3'] }).map((c) => c.kind), ['instructor', 'instructor'],
-    'Favourites is the ONLY set that becomes one chip: a grade set handed in by an older caller is ignored, and the two are named');
   eq(labels({ instructorIds: ['1', '2'] }), ['Alex Morgan', 'Blake Chen'], 'no favourites passed (a single-instructor filter never asks): names');
 
   eq(chips({ instructorIds: ['2'], availableOnly: true, timeBands: ['day'], categories: ['RIDE'], locationIds: ['12'] }).map((c) => c.kind + ':' + c.label),
@@ -157,7 +155,7 @@ module.exports = function (t) {
     let w = world();
     w.ctx.updateFiltersSummary();
     eq([w.summary.innerHTML, w.count.textContent, w.count.hidden, w.bar.attrs['aria-label']], ['', '', true, 'Filters'], 'fresh launch, nothing on: no chips, no count, the bar is just "Filters"');
-    eq(w.calls, ['aria'], 'the date pills\' aria mirror still runs first (every date-row change ends up here) — and ranks are not read for an empty filter');
+    eq(w.calls, ['aria'], 'the date pills\' aria mirror still runs first (every date-row change ends up here) — and favourites are not read for an empty filter');
 
     w = world();
     w.ctx.selectedLocations.add('4'); w.ctx.selectedCategories.add('RIDE'); w.ctx.selectedTimeBands.add('evening');
@@ -389,7 +387,6 @@ module.exports = function (t) {
     ok(/height:\s*var\(--tap-min\)/.test(hit) && /left:\s*0/.test(hit) && /right:\s*0/.test(hit), 'bar, chips and "Clear" each get a --tap-min tall hit area, grown up and down only (never over a neighbour)');
     ok(/outline:\s*2px solid var\(--accent/.test(rule(redesign, '.controls-toggle:focus-visible, .filter-chip:focus-visible, .controls-clear:focus-visible')), 'a keyboard focus ring on all three');
     const crisp = noComments(t.readSource('css/crisp.css'));
-    ok(!/controls-chevron|controlsChevron/.test(redesign + crisp + html), 'no chevron rule or markup is left behind (nothing turns, so there is no motion to reduce)');
     ok(/\.controls:not\(\.filters-collapsed\) \.controls-toggle \{[^}]*background:\s*var\(--accent\);[^}]*color:\s*var\(--accent-ink\);/.test(crisp),
       'the BAR shows the state: open, it is lit — an accent fill labelled with --accent-ink (collapsed it is a quiet surface pill)');
     const mine = ['.controls-bar', '.controls-toggle', '.controls-count', '.controls-chevron', '.filter-chip', '.filter-chip-label', '.filter-chip-x', '.controls-clear'].map((s) => rule(redesign, s)).join('\n');

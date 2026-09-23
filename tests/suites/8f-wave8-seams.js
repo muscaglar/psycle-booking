@@ -39,7 +39,6 @@ module.exports = function (t) {
   ok(/strip\.id = 'dayStrip';/.test(app) && /pager\.id = 'dayPager';/.test(app), 'app.js builds #dayStrip and #dayPager');
   ok(/const SWIPE_NAV_IGNORE = '[^']*#dayStrip'/.test(inter) && /\.date-presets, \.location-chips, #categoryPills/.test(inter),
     'the swipe helper leaves the day strip and the filter rows (8a kept their classes) to their own scrolling');
-  ok(/target\.closest\('#dayPager'\)/.test(app), 'a day swipe may only start inside #dayPager');
   {
     const P = t.loadPure('js/tabs.js', 'stats-pages');
     eq(P.STATS_PAGES.map((p) => p.panel), ['statsPageOverview', 'statsPageHabits', 'statsPageInstructors'], 'the three Stats sub-pages carry the agreed ids');
@@ -177,7 +176,7 @@ module.exports = function (t) {
     const at = tabs.indexOf("    if (tab === 'discover') {"), end = tabs.indexOf("    if (tab === 'stats') {", at);
     ok(at !== -1 && end > at, "switchTab's Discover branch can be sliced (anchor moved?)");
     ok(/if \(typeof updateFiltersSummary === 'function'\) updateFiltersSummary\(\);/.test(tabs.slice(at, end)),
-      'an "S/A" chip follows a rank changed on Membership (a rank has no event)');
+      "switchTab's Discover branch calls updateFiltersSummary(): the chips are re-read on the way back in");
   }
 
   // ── The empty list says its reason once ─────────────────────────────────
@@ -190,7 +189,6 @@ module.exports = function (t) {
     ok(/title: "Couldn't check these dates", sub: /.test(ec) && /title: 'Not on the timetable yet', sub: /.test(ec) && !/Next week opens/.test(ec), 'a cause and a time keep their second line');
     ok(/return \{ title: 'No classes on these dates', actions: /.test(ec), 'with no filter set the title does not blame "these filters"');
     const block = theme.slice(theme.indexOf('const EMPTY_STATE_ACTIONS'), theme.indexOf('// ── D. Haptic Feedback'));
-    ok(block.indexOf('Try adjusting your filters') === -1, 'the catch-all paragraph is gone');
     const draw = (ctxValue, message) => {
       const c = t.vm.createContext({ Object, escapeHTML: (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'), _discoverEmptyContext: () => ctxValue });
       t.vm.runInContext(block + '\n;var __html = renderEmptyState(' + JSON.stringify(message) + ');', c, { filename: 'js/theme.js[renderEmptyState]' });

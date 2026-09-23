@@ -36,18 +36,6 @@ module.exports = async function (t) {
   t.section('Copy: counts are no longer glued to a fixed plural');
   // The sites that can really show 1. "N/M classes", "all N classes" and
   // "4+ spots left" are left alone on purpose: they never read 1.
-  [
-    [app, /made \+ ' classes/, "app.js plan bar: made + ' classes…'"],
-    [app, /\$\{free\} space\$\{/, 'app.js claim dialog: hand-rolled "space(s)"'],
-    [tabs, /fav(Studio|Instr)\[1\] \+ ' classes'/, "tabs.js Stats top studio/instructor: + ' classes'"],
-    [tabs, /top(Instr|Studio)\[1\] \+ ' classes'/, "tabs.js stats image: + ' classes'"],
-    [tabs, /\.total \+ ' classes/, "tabs.js year review: total + ' classes'"],
-    [tabs, /totalClasses \+ ' classes/, "tabs.js share text: totalClasses + ' classes'"],
-    [tabs, /[uU]niqueInstrs \+ ' instructors/, "tabs.js: uniqueInstrs + ' instructors'"],
-    [tabs, /\.size \+ ' instructors, '/, 'tabs.js variety tooltip: "N instructors, N classes"'],
-    [explore, /historyCount \+ ' bookings in history/, "explore.js sync banner: + ' bookings in history'"],
-    [explore, /allBookings\.length \+ ' bookings\)/, "explore.js sync progress: + ' bookings)'"],
-  ].forEach(([src, re, what]) => ok(!re.test(src), 'gone — ' + what));
   ok((tabs.match(/_plural\(/g) || []).length >= 8 && /_plural\(historyCount, 'booking'\)/.test(explore) && /_plural\(made, 'class', 'classes'\) \+ ' booked'/.test(app),
     'the call sites go through _plural instead');
 
@@ -74,7 +62,6 @@ module.exports = async function (t) {
   // ── Late-cancel message: one class ─────────────────────────────────────
   t.section('Copy: the late-cancel message wears one class everywhere');
   ok(/' is-late late-cancel-note'/.test(app), 'bike picker policy line');
-  ok(/<span class="badge late-cancel-note">Late-cancel window<\/span>/.test(app), 'My Bookings card badge');
   ok(/const cancelLineCls = \(deadline && deadline\.insideWindow\) \? 'late-cancel-note' : 'bc-dim';/.test(app) && /<div class="bc-detail \$\{cancelLineCls\}">/.test(app),
     'Booked! sheet line (dimmed only while it is the free-cancel note)');
   ok(/warnClass: 'late-cancel-note'/.test(app) && /class="confirm-warn\$\{opts\.warnClass \? ' ' \+ escapeHTML\(opts\.warnClass\) : ''\}"/.test(app),

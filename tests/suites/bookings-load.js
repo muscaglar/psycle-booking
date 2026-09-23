@@ -228,6 +228,4 @@ module.exports = async function (t) {
   t.ok(render.indexOf("_bookingsLoadState === 'failed'") < render.indexOf('Nothing booked<br>'), 'renderMyBookings: the failed state is decided before the confirmed-empty hero');
   t.ok(/currentUser && _bookingsLoadState === 'pending'/.test(render) && render.indexOf("_bookingsLoadState === 'pending'") < render.indexOf('Nothing booked<br>'),
     'renderMyBookings: a list still loading is decided before the confirmed-empty hero too — "Nothing booked" is left for the loaded state');
-  const auth = src.slice(src.indexOf('async function _checkAuthOnce('), src.indexOf('const PROFILE_REFRESH_MIN_GAP_MS'));
-  t.ok(!/fetchMyBookings\(\)\.then/.test(auth), 'checkAuth no longer paints "Nothing booked" itself when its /bookings fetch fails or is merely superseded');
 };

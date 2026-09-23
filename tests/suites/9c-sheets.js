@@ -381,7 +381,6 @@ module.exports = function (t) {
     const sheetSrc = grab('window.openClassDetail = function (eventId) {', '};');
     eq((sheetSrc.match(/glow-mine/g) || []).length, 3, 'in the sheet: Book, Claim spot and the seat you hold — never Join / Leave / Full / Attended');
     ok(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.class-detail-sheet, \.find-similar-popup \{ animation: none; \}/.test(section), 'reduced motion: the sheet and the popup do not slide');
-    ok(!/\.app-banner[^{]*\{[^}]*padding/.test(section), 'the banners\' own spacing is left alone (discover-layout-fix.css owns the desktop inset)');
     ok(/\.confirm-btn-danger \{ --pill-fill: var\(--surface\); --pill-ink: var\(--danger\); --pill-line: var\(--danger\); \}/.test(section) &&
       /\.confirm-btn-danger\.is-solid \{ --pill-fill: var\(--danger\); --pill-ink: var\(--danger-ink\);/.test(section), 'danger = outline on the surface; .is-solid = the filled pair');
     // (Wave 10c: the mark moved from a generated "!" tile into the markup — a line mark, like every other on these sheets.)

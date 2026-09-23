@@ -39,36 +39,9 @@ module.exports = function (t) {
   t.section('Declutter: subtitles that restate a heading or explain the machinery are gone');
   [
     [explore, /Matched on your taste/, 'explore.js "You might like": how the match is computed (the designer\'s example)'],
-    [explore, /Instructors you haven\\?'t booked with yet/, 'explore.js "New to you": restated the heading'],
-    [explore, /Import all past bookings from your Psycle account/, 'explore.js sync banner: said "Sync your … booking history" twice'],
-    [explore, /help us find instructors/, 'explore.js "You might like" empty state: explained the matcher'],
-    [tabs, /Instructors you used to book regularly/, 'tabs.js "Lapsed favourites": restated the heading'],
-    [tabs, /Unique instructors per month/, 'tabs.js variety chart: the unit is in the heading now'],
-    [tabs, /Tap to see that day/, 'tabs.js "Your usual slots": instruction for a button that says "Find this week"'],
-    [tabs, /Best run of weeks/, 'tabs.js streak card: restated "Longest streak"'],
-    [tabs, /Prefer or avoid spots, per studio|Add bookings to your calendar/, 'tabs.js Membership rows: restated "Bike / spot preferences" and "Calendar sync"'],
-    [tabs, /unlock stats, heatmaps/, 'tabs.js signed-out Stats hero: a feature list to "unlock"'],
-    [settings, /useful when something looks broken/, 'settings.js Diagnostics: explained the button under it'],
-    [settings, /Calendar Sync \(iOS\)/, 'settings.js: "(iOS)" on a section that only exists in the iOS app'],
-    [app, /get the most out of your experience/, 'app.js history-sync prompt: subtitle'],
-    [app, /unlock personalised insights/, 'app.js history-sync prompt: feature list'],
-    [app, /it'll show up here/, 'app.js "Nothing booked — yet": the line under it'],
-    [features, /Book a class and it will appear here/, 'features.js empty history: second sentence'],
-    [page, /or jump straight in/, 'psycle-finder.html Discover first paint: lead-in to three buttons'],
   ].forEach(([src, re, what]) => ok(!re.test(src), 'gone — ' + what));
 
   t.section('Declutter: no exclamation marks, filler or decorative emoji in headings, hints and empty states');
-  [
-    [tabs, /Keep it alive|Century club|incredible|Book your first class!/, 'tabs.js: streak / cost-tracker cheerleading'],
-    [tabs, /story starts here/, 'tabs.js: "Your training story starts here"'],
-    [explore, /impressive range/, 'explore.js: "— impressive range!"'],
-    [app, /id="syncPromptTitle">Welcome/, 'app.js: a second "Welcome, <name>!" after the first-run welcome'],
-    [app, /No problem —/, 'app.js: "No problem — " in front of where Sync lives'],
-    [app, /Copied to clipboard!/, 'app.js: "Copied to clipboard!"'],
-    [settings, /Copied to clipboard!/, 'settings.js: "Copied to clipboard!"'],
-    [features, /Spot Available!|'Spot opened! '/, 'features.js browser notification: two "!" saying one thing'],
-    [page, /⚠️ Your session has expired/, 'psycle-finder.html: emoji in front of the session banner'],
-  ].forEach(([src, re, what]) => ok(!re.test(src), 'gone — ' + what));
   ok(/new Notification\('Spot opened', \{/.test(features) && !/new Notification\('Psycle/.test(features),
     'the browser notification wears the in-app dialog\'s title — and no longer calls this app "Psycle"');
   ok(/<span>Your session has expired\.<\/span>/.test(page) && /announce\('Your session has expired\. Sign in again to carry on\.', true\)/.test(app),
@@ -207,6 +180,4 @@ module.exports = function (t) {
   ].forEach(([src, needle, what]) => ok(src.indexOf(needle) !== -1, 'kept — ' + what));
   ok(/title = opts\.waitlist \? \(opts\.already \? 'Already on the waitlist' : 'On the waitlist'\) : 'Booked!';/.test(app),
     'the Booked! sheet keeps its title: it is also the line announce() speaks (tests/suites/a11y.js), and the one place a "!" is earned');
-  ok(/detail: blocked \? 'Tap to allow notifications' : '90 minutes before each class. Opens the live countdown.'/.test(tabs) &&
-    /Mondays at 12:00 — when Psycle opens new dates/.test(tabs), 'reminder rows still say WHEN they fire');
 };

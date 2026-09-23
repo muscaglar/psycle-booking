@@ -64,11 +64,11 @@ One row per file; the generated index is one row, and agents/index/README.md lis
 | If your task or question is… | Read | ≈ tokens |
 |---|---|---|
 | a first visit: what is in agents/, and in what order | agents/README.md | 2,050 |
-| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md (grep it for the feature; read a section, not the file) | 10,050 |
-| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 8,400 |
+| "has the owner already decided this?" — before you change behaviour, copy, colour, time handling or the release flow | agents/decisions.md (grep it for the feature; read a section, not the file) | 10,650 |
+| picking the project up after a gap: the newest session-log entry, how to check what `main` holds, what is and is not proved, what is the owner's, your first hour | agents/HANDOVER.md | 7,750 |
 | "what next?" — candidate work, each with a size and a risk: propose from it, never start from it | agents/backlog.md | 5,750 |
-| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 12,300 |
-| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) | agents/playbooks.md | 14,100 |
+| anything risky: what has gone wrong here before (its first 20 lines, then the one section for your area) | agents/learnings.md | 12,650 |
+| a common change, as a checklist: P0 and the ONE playbook (its table of contents gives each one's size) — removing dead code or CSS is P16 | agents/playbooks.md | 14,750 |
 | what a word means (seat / space / place, record / entry, held / unverified): grep it there, or read §4 (≈ 1,250); a field shape → §1; a state machine → §3; the invariants → §5 — never the whole file | agents/ontology.md | 8,700 |
 | where a file is, the load order, "I want to… → edit this file" | agents/repo-map.md | 6,950 |
 | after a push to `main`: the Xcode Cloud check is missing, cancelled or failed; a TestFlight build did not arrive (checklist: playbooks P10; lesson: learnings G5) | ios-app/CICD.md → "Notes / gotchas" | 3,300 |

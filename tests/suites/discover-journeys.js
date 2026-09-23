@@ -509,7 +509,7 @@ module.exports = async function (t) {
   {
     const tabsSrc = t.readSource('js/tabs.js');
     const discover = tabsSrc.slice(tabsSrc.indexOf("discoverPanel.id = 'tab-discover';"), tabsSrc.indexOf('// ── My Bookings tab'));
-    t.ok(!/explore(New|Like)Section/.test(discover) && !/discoverExplore/.test(discover), 'the Discover panel no longer builds them (they sat below ~a week of every studio)');
+    t.ok(!/explore(New|Like)Section/.test(discover), 'the Discover panel no longer builds them (they sat below ~a week of every studio)');
     const sw = tabsSrc.slice(tabsSrc.indexOf('window.switchTab = function (tab, noHash) {'), tabsSrc.indexOf('// Deep links and back/forward'));
     t.ok(/if \(tab === 'stats'\) \{\s*renderInsights\(\);\s*if \(typeof renderExplore === 'function'\) renderExplore\(\);/.test(sw), "switchTab('stats') renders them");
     t.ok(!/if \(tab === 'discover'\) \{[^}]*renderExplore/.test(sw), "…and switchTab('discover') no longer does that work for a hidden panel");

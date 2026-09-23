@@ -26,20 +26,12 @@ module.exports = async function (t) {
 
   // ── Dead code ───────────────────────────────────────────────────────────
   t.section('Clean-up: deleted dead code stays deleted');
-  t.ok(!/_virtualMode|initVirtualScroll|_makePlaceholder|_hydrateCard|class-card-placeholder/.test(perfJs),
-    'performance.js: the switched-off virtual-scroll block is gone');
-  t.ok(!/window\.eventCard\s*=|window\.render\s*=/.test(perfJs), 'performance.js no longer wraps eventCard() / render() for nothing');
   t.ok(/function debounce\(/.test(perfJs) && /const CACHE_PREFIX = 'psycle_cache_';/.test(perfJs) && /const TTL_24H =/.test(perfJs),
-    '…while debounce and the static-list cache (CACHE_PREFIX / TTL_24H) stay');
-  t.ok(!/_swGenerateICS|_swGetCalendarData|_swIcs|_swSlot|psycle-calendar\.ics|GET_CALENDAR_DATA/.test(swSrc),
-    'sw.js: the drifted duplicate ICS generator and its /psycle-calendar.ics route are gone');
-  t.ok(!/getCalendarSubscriptionURL|GET_CALENDAR_DATA|psycle-calendar\.ics/.test(calJs),
-    'calendar.js: the caller-less webcal URL helper and the SW message listener are gone');
+    'performance.js: debounce and the static-list cache (CACHE_PREFIX / TTL_24H) are there');
   t.ok(!/navigator\.serviceWorker/.test(calJs), 'calendar.js no longer touches navigator.serviceWorker at load (the iOS register-only stub cannot trip it)');
   t.ok(/function generateICS\(/.test(calJs) && /function downloadICS\(/.test(calJs) && /function openICSInCalendar\(/.test(calJs) &&
     /function addToGoogleCalendar\(/.test(calJs) && /function renderCalendarActions\(/.test(calJs), '…and every live calendar entry point is still there');
-  t.ok(!/function onDiscoverSearch\(/.test(appJs), 'app.js: the caller-less onDiscoverSearch is gone');
-  t.ok(/window\.shareClass = function\s*\(/.test(appJs) && /;shareClass\(\$\{/.test(appJs), '…shareClass (wired back in, and called from a booking card) is NOT');
+  t.ok(/window\.shareClass = function\s*\(/.test(appJs) && /;shareClass\(\$\{/.test(appJs), 'app.js: shareClass is defined and called from a booking card');
   const lightBlocks = themeCss.replace(/\/\*[\s\S]*?\*\//g, '').match(/(^|\})\s*\[data-theme="light"\]\s*\{/g) || [];
   t.eq(lightBlocks.length, 0, 'theme.css: no standalone [data-theme="light"] token block (no such theme id)');
   // (":is(light, cloud, linen)" until Linen was retired in wave 10 — tests/suites/10b-themes.js.)
@@ -47,10 +39,8 @@ module.exports = async function (t) {
     '…the shared :is(light, cloud) component rules are untouched');
 
   t.section('Clean-up: the action log records what the dead wrappers claimed to');
-  t.ok(!/_origSwitchTabForLog|_origExportSettings|_origImportSettings/.test(relJs),
-    'reliability.js: the switchTab / export / import wrappers (installed before those functions existed) are gone');
   t.ok(/var _origToggleTheme = window\.toggleTheme;/.test(relJs) && /pushAction\('settings:theme_toggle'\)/.test(relJs),
-    '…the toggleTheme wrapper (theme.js loads first, so it attaches) stays');
+    'reliability.js: the toggleTheme wrapper is there (theme.js loads first, so it attaches)');
   {
     // Attaching is not enough: the header button has to GO THROUGH it. It was
     // bound to the original function object at theme.js load, so every tap on

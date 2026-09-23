@@ -145,8 +145,6 @@ module.exports = async function (t) {
   ok(/grid\.innerHTML = dayEvents\.map\(e => eventCard\(e, instrMap, studioMap, locationMap, typeMap\)\)\.join\(''\);/.test(renderSrc),
     'an empty day grid is one innerHTML — and calls the bare global eventCard, so the features.js / performance.js wrappers still apply');
   ok(/holder\.innerHTML = eventCard\(evt, instrMap, studioMap, locationMap, typeMap\);/.test(renderSrc), '…as does the merge path');
-  ok(!/querySelectorAll\('\[data-id\]'\)/.test(renderSrc) && !/dayEvents\.find\(/.test(renderSrc),
-    'the per-card grid re-query and the nested dayEvents.find are gone');
   ok(/_mergeInsertPoints\(kids\.map\(el => startById\.get\(el\.dataset\.id\)\), fresh\.map\(e => e\.start_at\)\)/.test(renderSrc),
     'cards already up are merged with the pure helper tested above');
   ok(/if \(!_dayInRange\(e\.start_at, filters\.startDate, filters\.endDateStr\)\) return false;/.test(renderSrc), "the wave-2 date bound is still in render()'s predicate");
@@ -431,7 +429,6 @@ module.exports = async function (t) {
     ok(!/cc-spots/.test(card(ctx, { capacity: undefined, occupancy: undefined })), 'no numbers → no line');
     html = card(ctx, { occupancy: 21, is_fully_booked: true, is_waitlistable: false });
     ok(/<span class="cc-spots">Fully booked<\/span>/.test(html) && !/Waitlist only/.test(html), 'full with no waitlist reads "Fully booked", not "Waitlist only" beside a Full button');
-    ok(/(<button class="book-btn"[^>]*>Full<\/button>)/.test(html), "…and the Full button still matches features.js's notify-bell regex (wrapper contract)");
     ok(/<span class="cc-spots">Waitlist open<\/span>/.test(card(ctx, { occupancy: 21, is_fully_booked: true, is_waitlistable: true })), 'full + waitlistable → "Waitlist open"');
     ok(/<span class="cc-name" role="button" tabindex="0">Ride &lt;45&gt;<\/span>/.test(html), 'the class name is a keyboard-reachable button, and still escaped');
     // role="button" put the name on the press rule's "something inside is
@@ -560,7 +557,6 @@ module.exports = async function (t) {
     ok(avail.indexOf('capacity_remaining != null') === -1 && !/duration/.test(avail.replace(/\/\/[^\n]*/g, '')), 'no capacity_remaining gate and no duplicate "45 min" fallback');
     ok(/_countsFresh\(evt\._countsAt, Date\.now\(\)\) \? _spotsLeft\(evt\) : null/.test(avail), 'the count comes from _spotsLeft, only while the cache entry is recent');
     ok(/Full · waitlist open/.test(avail) && />Full</.test(avail), 'full classes say which kind of full');
-    ok(sheet.indexOf('&#9898;') === -1, 'the blank pale circle icon is gone');
     ok(/_countsAt: dataAt,/.test(renderSrc), 'render() stamps each cache entry with the age of the numbers it just wrote');
   }
 

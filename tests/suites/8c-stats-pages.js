@@ -352,8 +352,8 @@ module.exports = function (t) {
     ok(init.indexOf('id="statsEmpty"') < init.indexOf('id="exploreSyncSection"') && init.indexOf('id="exploreSyncSection"') < init.indexOf('_statsPagesHtml('),
       'panel order: the hero, the global sync banner, then the switcher and its pages');
     ok(/_wireStatsPages\(statsPanel\);/.test(init), 'initTabs wires the keys and the section watcher once');
-    ok(/#tab-stats\.stats-signed-out > :not\(#statsEmpty\) \{ display: none !important; \}/.test(tabsCss),
-      'signed out, the rule that leaves only the hero still covers the switcher and the pages (direct children of #tab-stats)');
+    // Signed out, the rule in css/tabs.css that leaves only the hero reaches the direct children of #tab-stats
+    // (data-owner.js holds the rule itself): the switcher and the pages must be direct children.
     ok(/<div class="stats-switcher-bar">/.test(tabsSrc) && /'<div id="' \+ p\.panel \+ '" class="stats-page"/.test(tabsSrc), '…which they are: neither is nested in another wrapper');
   }
   {

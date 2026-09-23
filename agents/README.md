@@ -13,11 +13,11 @@ Every top-level file and folder, once. ≈ tokens = bytes ÷ 4, rounded: what th
 |---|---|---|
 | [../AGENTS.md](../AGENTS.md) | What is this repository, what must I never do, which commands prove a change, where next? Start here: its reading guide routes you by task. | 3,900 |
 | README.md | This file: what is in the folder, the order to read it in, how to keep it true. | 2,050 |
-| [decisions.md](decisions.md) | What has the owner already decided, and why? What is CLOSED and must not be re-offered? | 8,600 |
-| [HANDOVER.md](HANDOVER.md) | Where do things stand? The session log (newest first), how to check what `main` holds, what is and is not proved, what is the owner's, your first hour. | 8,400 |
+| [decisions.md](decisions.md) | What has the owner already decided, and why? What is CLOSED and must not be re-offered? | 10,650 |
+| [HANDOVER.md](HANDOVER.md) | Where do things stand? The session log (newest first), how to check what `main` holds, what is and is not proved, what is the owner's, your first hour. | 7,750 |
 | [backlog.md](backlog.md) | What could be done next? Candidate work with a size and a risk — propose from it, never start from it. | 5,750 |
-| [learnings.md](learnings.md) | What went wrong before, and which trap is my change about to step into? Its first 20 lines, then one section. | 12,300 |
-| [playbooks.md](playbooks.md) | How do I carry out a common task safely, step by step? P0 and the one playbook; its contents table gives each one's size. | 14,100 |
+| [learnings.md](learnings.md) | What went wrong before, and which trap is my change about to step into? Its first 20 lines, then one section. | 12,650 |
+| [playbooks.md](playbooks.md) | How do I carry out a common task safely, step by step? P0 and the one playbook; its contents table gives each one's size. | 14,750 |
 | [ontology.md](ontology.md) | What does this word mean here? The domain and code vocabulary, the state machines, the invariants. Grep it, or read one section (sizes in its opening lines). | 8,700 |
 | [repo-map.md](repo-map.md) | Where does X live? The file tree, the script load order, and "I want to… → edit this file". | 6,950 |
 | [architecture/](architecture/) | How does this mechanism work? One file per area — read only the one your task touches. | 64,500 in all |
